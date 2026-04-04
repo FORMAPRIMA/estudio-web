@@ -48,7 +48,7 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 28,
+    marginBottom: 20,
   },
   logo: { width: 130, height: 'auto' },
   headerTitle: {
@@ -77,7 +77,7 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 56,
-    paddingVertical: 28,
+    paddingVertical: 20,
     borderBottomWidth: 1,
     borderBottomColor: C.rule,
   },
@@ -91,21 +91,21 @@ const s = StyleSheet.create({
   // Intro letter
   introBlock: {
     paddingHorizontal: 56,
-    paddingVertical: 24,
+    paddingVertical: 18,
     borderBottomWidth: 1,
     borderBottomColor: C.rule,
   },
   introText: {
     fontSize: 8.5,
     color: C.soft,
-    lineHeight: 1.75,
+    lineHeight: 1.65,
   },
 
   // Intro summary box
   summaryBox: {
     backgroundColor: C.light,
-    padding: 16,
-    marginTop: 24,
+    padding: 12,
+    marginTop: 16,
     marginBottom: 8,
     flexDirection: 'row',
     gap: 0,
@@ -171,10 +171,10 @@ const s = StyleSheet.create({
 
   // Metodología de honorarios
   metodologiaBlock: {
-    marginTop: 16,
-    paddingTop: 14,
-    paddingBottom: 14,
-    paddingHorizontal: 14,
+    marginTop: 12,
+    paddingTop: 10,
+    paddingBottom: 10,
+    paddingHorizontal: 12,
     borderLeftWidth: 2,
     borderLeftColor: C.brand,
     backgroundColor: C.light,
