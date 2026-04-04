@@ -16,6 +16,9 @@ export const metadata: Metadata = {
   description:
     'Estudio de arquitectura e interiorismo con base en Ciudad de México. Proyectos residenciales, comerciales y de hospitalidad.',
   keywords: ['arquitectura', 'interiorismo', 'diseño', 'México', 'Forma Prima'],
+  icons: {
+    apple: '/apple-touch-icon.png',
+  },
 }
 
 export default function RootLayout({
