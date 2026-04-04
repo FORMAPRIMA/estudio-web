@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
       }
 
       const buffer = await renderToBuffer(
-        createElement(FacturaEmitidaPDF, { data: pdfData })
+        createElement(FacturaEmitidaPDF, { data: pdfData }) as any
       )
 
       zip.file(`${f.numero_completo}.pdf`, buffer)

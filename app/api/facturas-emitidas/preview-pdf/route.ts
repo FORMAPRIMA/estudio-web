@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
     }
 
     const buffer = await renderToBuffer(
-      createElement(FacturaEmitidaPDF, { data: pdfData })
+      createElement(FacturaEmitidaPDF, { data: pdfData }) as any
     )
 
     return new NextResponse(buffer, {
