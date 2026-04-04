@@ -212,3 +212,61 @@ export async function getAllParticipaciones() {
   if (error) return { error: error.message }
   return { data: data ?? [] }
 }
+
+// ── Fondo proyectos ───────────────────────────────────────────────────────────
+
+export async function saveFondoProyecto(data: {
+  id?: string
+  fondo_id: string
+  nombre: string
+  descripcion: string | null
+  monto_invertido: number
+  fecha_inversion: string
+  monto_retornado: number | null
+  fecha_retorno: string | null
+}): Promise<{ success: true } | { error: string }> {
+  const ctx = await requirePartner()
+  if ('error' in ctx) return { error: ctx.error ?? 'Sin acceso.' }
+
+  const payload: {
+    fondo_id: string
+    nombre: string
+    descripcion: string | null
+    monto_invertido: number
+    fecha_inversion: string
+    monto_retornado: number | null
+    fecha_retorno: string | null
+    id?: string
+  } = {
+    fondo_id:        data.fondo_id,
+    nombre:          data.nombre,
+    descripcion:     data.descripcion,
+    monto_invertido: data.monto_invertido,
+    fecha_inversion: data.fecha_inversion,
+    monto_retornado: data.monto_retornado,
+    fecha_retorno:   data.fecha_retorno,
+  }
+  if (data.id) payload.id = data.id
+
+  const { error } = await ctx.supabase
+    .from('fondo_proyectos')
+    .upsert(payload, { onConflict: 'id' })
+  if (error) return { error: error.message }
+
+  revalidatePath('/team/area-interna')
+  return { success: true }
+}
+
+export async function deleteFondoProyecto(id: string): Promise<{ success: true } | { error: string }> {
+  const ctx = await requirePartner()
+  if ('error' in ctx) return { error: ctx.error ?? 'Sin acceso.' }
+
+  const { error } = await ctx.supabase
+    .from('fondo_proyectos')
+    .delete()
+    .eq('id', id)
+  if (error) return { error: error.message }
+
+  revalidatePath('/team/area-interna')
+  return { success: true }
+}

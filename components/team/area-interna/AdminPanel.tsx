@@ -21,6 +21,8 @@ import {
 } from '@/app/actions/equipo'
 import { updateMemberCosts } from '@/app/actions/finanzas'
 import type { FondoPeriodo } from './FondoChart'
+import FondoTimeline from './FondoTimeline'
+import type { Proyecto as FondoProyecto } from './FondoTimeline'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -65,6 +67,7 @@ interface Props {
   allParticipaciones: Participacion[]
   allNominas:        NominaRecord[]
   periodos:          FondoPeriodo[]
+  proyectos:         FondoProyecto[]
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -317,138 +320,25 @@ function NominasTab({ allMembers, allNominas }: { allMembers: TeamMember[]; allN
 
 // ── Fondo tab ─────────────────────────────────────────────────────────────────
 
-function FondoTab({ periodos: initialPeriodos }: { periodos: FondoPeriodo[] }) {
-  const [periodos,  setPeriodos]  = useState<FondoPeriodo[]>(initialPeriodos)
-  const [form, setForm] = useState({
-    periodo: '', valor_total: '', rendimiento_pct: '', notas: '', fecha_referencia: '',
-  })
-  const [loading,  setLoading]   = useState(false)
-  const [error,    setError]     = useState<string | null>(null)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [editingId,  setEditingId]  = useState<string | null>(null)
-
-  const resetForm = () => setForm({ periodo: '', valor_total: '', rendimiento_pct: '', notas: '', fecha_referencia: '' })
-
-  const startEdit = (p: FondoPeriodo) => {
-    setEditingId(p.id)
-    setForm({
-      periodo:         p.periodo,
-      valor_total:     p.valor_total.toString(),
-      rendimiento_pct: p.rendimiento_pct?.toString() ?? '',
-      notas:           p.notas ?? '',
-      fecha_referencia: p.fecha_referencia,
-    })
-  }
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true); setError(null)
-    const res = await saveFondoPeriodo({
-      periodo:         form.periodo.trim(),
-      valor_total:     parseFloat(form.valor_total),
-      rendimiento_pct: form.rendimiento_pct ? parseFloat(form.rendimiento_pct) : null,
-      notas:           form.notas.trim(),
-      fecha_referencia: form.fecha_referencia,
-    })
-    if ('error' in res) { setError(res.error ?? null); setLoading(false); return }
-    resetForm(); setEditingId(null)
-    window.location.reload()
-  }
-
-  const handleDelete = async (id: string) => {
-    if (!confirm('¿Eliminar este período?')) return
-    setDeletingId(id)
-    await deleteFondoPeriodo(id)
-    setPeriodos(prev => prev.filter(p => p.id !== id))
-    setDeletingId(null)
-  }
-
-  const fmtQ = (p: string) => {
-    const [y, q] = p.split('-')
-    const LABELS: Record<string,string> = { 'Q1': 'Ene–Mar', 'Q2': 'Abr–Jun', 'Q3': 'Jul–Sep', 'Q4': 'Oct–Dic' }
-    return `${q} ${y} (${LABELS[q] ?? ''})`
-  }
-
+function FondoTab({ periodos, participaciones, allMembers, proyectos }: {
+  periodos:          FondoPeriodo[]
+  participaciones:   Participacion[]
+  allMembers:        TeamMember[]
+  proyectos:         FondoProyecto[]
+}) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      {/* Form */}
-      <div style={{ background: '#fff', border: '1px solid #ECEAE6', padding: '24px 28px' }}>
-        <p style={{ fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: '#BBB', fontWeight: 300, marginBottom: 20 }}>
-          {editingId ? 'Editar período' : 'Agregar período trimestral'}
-        </p>
-        <form onSubmit={submit} style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, alignItems: 'end' }}>
-          <div>
-            <label style={labelSt}>Período</label>
-            <input value={form.periodo} onChange={e => setForm(f => ({ ...f, periodo: e.target.value.toUpperCase() }))}
-              placeholder="2025-Q1" required pattern="\d{4}-Q[1-4]" style={inputSt} />
-          </div>
-          <div>
-            <label style={labelSt}>Fecha referencia</label>
-            <input type="date" value={form.fecha_referencia} onChange={e => setForm(f => ({ ...f, fecha_referencia: e.target.value }))} required style={inputSt} />
-          </div>
-          <div>
-            <label style={labelSt}>Valor total (€ EUR)</label>
-            <input type="number" value={form.valor_total} onChange={e => setForm(f => ({ ...f, valor_total: e.target.value }))}
-              required min={0} style={inputSt} placeholder="1000000" />
-          </div>
-          <div>
-            <label style={labelSt}>Rendimiento trimestral (%)</label>
-            <input type="number" value={form.rendimiento_pct} onChange={e => setForm(f => ({ ...f, rendimiento_pct: e.target.value }))}
-              step="0.01" style={inputSt} placeholder="+3.5" />
-          </div>
-          <div style={{ gridColumn: '2 / -1' }}>
-            <label style={labelSt}>Notas</label>
-            <input value={form.notas} onChange={e => setForm(f => ({ ...f, notas: e.target.value }))} style={inputSt} placeholder="Proyectos activos, contexto…" />
-          </div>
-          <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 12, alignItems: 'center' }}>
-            <button type="submit" disabled={loading} style={{ ...btnPrimary, opacity: loading ? 0.5 : 1 }}>
-              {loading ? 'Guardando…' : (editingId ? 'Actualizar' : 'Agregar período')}
-            </button>
-            {editingId && (
-              <button type="button" onClick={() => { resetForm(); setEditingId(null) }} style={btnGhost}>Cancelar</button>
-            )}
-            {error && <p style={{ fontSize: 11, color: '#C04828', fontWeight: 300 }}>{error}</p>}
-          </div>
-        </form>
-      </div>
-
-      {/* Period list */}
-      {periodos.length > 0 && (
-        <div style={{ background: '#fff', border: '1px solid #ECEAE6', overflow: 'hidden' }}>
-          {periodos.slice().reverse().map((p, i) => (
-            <div key={p.id} style={{
-              display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto',
-              gap: 16, alignItems: 'center',
-              padding: '13px 24px',
-              borderBottom: i < periodos.length - 1 ? '1px solid #F0EEE8' : 'none',
-              background: editingId === p.id ? '#FAFAF8' : '#fff',
-            }}>
-              <div>
-                <p style={{ fontSize: 9, color: '#AAA', fontWeight: 300, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Período</p>
-                <p style={{ fontSize: 13, color: '#1A1A1A', fontWeight: 300 }}>{fmtQ(p.periodo)}</p>
-              </div>
-              <div>
-                <p style={{ fontSize: 9, color: '#AAA', fontWeight: 300, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Valor total</p>
-                <p style={{ fontSize: 13, color: '#1A1A1A', fontWeight: 300 }}>{fmtMXN(p.valor_total)}</p>
-              </div>
-              <div>
-                <p style={{ fontSize: 9, color: '#AAA', fontWeight: 300, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Rendimiento</p>
-                <p style={{ fontSize: 13, fontWeight: 300, color: p.rendimiento_pct != null ? (p.rendimiento_pct >= 0 ? '#1D9E75' : '#D85A30') : '#AAA' }}>
-                  {p.rendimiento_pct != null ? `${p.rendimiento_pct > 0 ? '+' : ''}${p.rendimiento_pct}%` : '—'}
-                </p>
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => startEdit(p)} style={btnGhost}>Editar</button>
-                <button onClick={() => handleDelete(p.id)} disabled={deletingId === p.id}
-                  style={{ ...btnGhost, color: '#C04828', borderColor: '#F0D0C8' }}>
-                  {deletingId === p.id ? '…' : '×'}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+    <FondoTimeline
+      proyectos={proyectos}
+      participaciones={participaciones}
+      isPartner={true}
+      allMembers={allMembers.map(m => ({
+        id:        m.id,
+        nombre:    m.nombre,
+        apellido:  m.apellido,
+        avatar_url: m.avatar_url,
+        rol:       m.rol,
+      }))}
+    />
   )
 }
 
@@ -1117,7 +1007,7 @@ const TABS = [
 
 type TabId = typeof TABS[number]['id']
 
-export default function AdminPanel({ allMembers, allParticipaciones, allNominas, periodos }: Props) {
+export default function AdminPanel({ allMembers, allParticipaciones, allNominas, periodos, proyectos }: Props) {
   const [activeTab, setActiveTab] = useState<TabId>('equipo')
 
   return (
@@ -1156,7 +1046,7 @@ export default function AdminPanel({ allMembers, allParticipaciones, allNominas,
       {/* Content */}
       {activeTab === 'equipo'          && <EquipoTab allMembers={allMembers as TeamMember[]} />}
       {activeTab === 'nominas'         && <NominasTab allMembers={allMembers} allNominas={allNominas} />}
-      {activeTab === 'fondo'           && <FondoTab periodos={periodos} />}
+      {activeTab === 'fondo'           && <FondoTab periodos={periodos} participaciones={allParticipaciones} allMembers={allMembers} proyectos={proyectos} />}
       {activeTab === 'participaciones' && <ParticipacionesTab allMembers={allMembers} allParticipaciones={allParticipaciones} />}
     </div>
   )

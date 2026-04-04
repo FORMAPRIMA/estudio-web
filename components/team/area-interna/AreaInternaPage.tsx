@@ -8,6 +8,17 @@ import type { FondoPeriodo } from './FondoChart'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+export interface FondoProyecto {
+  id:               string
+  fondo_id:         string
+  nombre:           string
+  descripcion:      string | null
+  monto_invertido:  number
+  fecha_inversion:  string
+  monto_retornado:  number | null
+  fecha_retorno:    string | null
+}
+
 interface TeamMember {
   id:                 string
   nombre:             string
@@ -51,6 +62,7 @@ interface Props {
   allMembers:           TeamMember[]
   allParticipaciones:   Participacion2[]
   allNominas:           NominaRecord[]
+  allProyectos:         FondoProyecto[]
 }
 
 // ── Role labels & colors ──────────────────────────────────────────────────────
@@ -79,6 +91,7 @@ export default function AreaInternaPage({
   allMembers,
   allParticipaciones,
   allNominas,
+  allProyectos,
 }: Props) {
   const [authed,    setAuthed]    = useState(false)
   const [ready,     setReady]     = useState(false)
@@ -190,6 +203,8 @@ export default function AreaInternaPage({
             initialNominas={initialNominas}
             initialPeriodos={initialPeriodos}
             initialParticipacion={initialParticipacion}
+            allParticipaciones={allParticipaciones as any}
+            allProyectos={allProyectos}
           />
         ) : (
           <AdminPanel
@@ -197,6 +212,7 @@ export default function AreaInternaPage({
             allParticipaciones={allParticipaciones as any}
             allNominas={allNominas as any}
             periodos={initialPeriodos}
+            proyectos={allProyectos}
           />
         )}
       </div>

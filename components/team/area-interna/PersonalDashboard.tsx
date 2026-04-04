@@ -2,6 +2,8 @@
 
 import { useState, useTransition } from 'react'
 import FondoChart, { type FondoPeriodo } from './FondoChart'
+import FondoTimeline from './FondoTimeline'
+import type { Proyecto as FondoProyecto, Participacion as FondoParticipacion } from './FondoTimeline'
 import { getNominaSignedUrl } from '@/app/actions/area-interna'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -393,23 +395,18 @@ function VestingTimeline({ vesting }: { vesting: VestingInfo }) {
 function FondoSection({
   periodos,
   participacion,
+  proyectos,
+  allParticipaciones,
+  isPartner,
 }: {
-  periodos:      FondoPeriodo[]
-  participacion: Participacion | null
+  periodos:           FondoPeriodo[]
+  participacion:      Participacion | null
+  proyectos:          FondoProyecto[]
+  allParticipaciones: FondoParticipacion[]
+  isPartner:          boolean
 }) {
-  const lastPeriodo  = periodos.at(-1)
-  const vesting      = participacion
+  const vesting = participacion
     ? calcVesting(participacion.fecha_inicio_participacion)
-    : null
-  const valorTotal   = lastPeriodo?.valor_total ?? 0
-  const miPct        = participacion?.porcentaje_participacion ?? null
-  const miValorBruto = miPct !== null ? valorTotal * miPct / 100 : null
-  const miValorNeto  = (vesting && miValorBruto !== null)
-    ? miValorBruto * vesting.vestedPct / 100
-    : null
-
-  const totalReturn = periodos.length >= 2
-    ? ((periodos.at(-1)!.valor_total - periodos[0].valor_total) / periodos[0].valor_total * 100)
     : null
 
   return (
@@ -421,69 +418,27 @@ function FondoSection({
         Fondo de retención FP
       </p>
 
-      {/* KPI row */}
-      <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
-        gap: 1, marginBottom: 28,
-      }}>
-        {[
-          {
-            label: 'Valor del fondo',
-            value: lastPeriodo ? fmtMXN(valorTotal) : '—',
-            note:  lastPeriodo?.periodo,
-            color: '#1A1A1A',
-          },
-          {
-            label: 'Retorno acumulado',
-            value: totalReturn != null ? `${totalReturn > 0 ? '+' : ''}${totalReturn.toFixed(1)}%` : '—',
-            note:  periodos.length >= 2 ? `${periodos[0].periodo} → ${lastPeriodo?.periodo}` : undefined,
-            color: totalReturn != null ? (totalReturn >= 0 ? '#1D9E75' : '#D85A30') : '#888',
-          },
-          {
-            label: 'Mi participación',
-            value: miPct != null ? `${miPct}%` : '—',
-            note:  miValorBruto != null ? fmtMXN(miValorBruto) : undefined,
-            color: '#378ADD',
-          },
-          {
-            label: 'Mi valor accesible',
-            value: miValorNeto != null ? fmtMXN(miValorNeto) : (miPct == null ? '—' : '$0'),
-            note:  vesting ? `${vesting.vestedPct}% vested` : 'Sin participación',
-            color: vesting && !vesting.inCliff ? '#1D9E75' : '#E6B820',
-          },
-        ].map(kpi => (
-          <div key={kpi.label} style={{
-            background: '#FAFAF8', padding: '14px 16px',
-          }}>
-            <p style={{ fontSize: 9, color: '#BBB', fontWeight: 300, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>
-              {kpi.label}
-            </p>
-            <p style={{ fontSize: 20, fontWeight: 200, color: kpi.color, letterSpacing: '-0.02em', marginBottom: 3 }}>
-              {kpi.value}
-            </p>
-            {kpi.note && (
-              <p style={{ fontSize: 9, color: '#BBB', fontWeight: 300 }}>{kpi.note}</p>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {/* Chart */}
-      <div style={{ marginBottom: vesting ? 28 : 0 }} className="pd-fondo-chart">
-        <FondoChart data={periodos} userPct={miPct} />
-      </div>
-
       {/* Vesting timeline */}
       {vesting && <VestingTimeline vesting={vesting} />}
 
       {/* No participation message */}
       {!participacion && (
-        <div style={{ marginTop: 20, padding: '14px 18px', background: '#FAFAF8', border: '1px dashed #E0DED8' }}>
+        <div style={{ marginTop: 20, marginBottom: 20, padding: '14px 18px', background: '#FAFAF8', border: '1px dashed #E0DED8' }}>
           <p style={{ fontSize: 11, color: '#AAA', fontWeight: 300 }}>
             Aún no tienes participación asignada en el fondo. Consulta con un partner para más información.
           </p>
         </div>
       )}
+
+      {/* Fund Timeline */}
+      <div style={{ marginTop: vesting ? 28 : 0 }}>
+        <FondoTimeline
+          proyectos={proyectos}
+          participaciones={allParticipaciones}
+          isPartner={isPartner}
+          allMembers={[]}
+        />
+      </div>
     </div>
   )
 }
@@ -495,6 +450,8 @@ interface Props {
   initialNominas:       Nomina[]
   initialPeriodos:      FondoPeriodo[]
   initialParticipacion: Participacion | null
+  allParticipaciones:   FondoParticipacion[]
+  allProyectos:         FondoProyecto[]
 }
 
 export default function PersonalDashboard({
@@ -502,12 +459,21 @@ export default function PersonalDashboard({
   initialNominas,
   initialPeriodos,
   initialParticipacion,
+  allParticipaciones,
+  allProyectos,
 }: Props) {
+  const isPartner = currentUser.rol === 'fp_partner'
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 860 }} className="pd-root">
       <SeniorityCard user={currentUser} />
       <NominasSection nominas={initialNominas} />
-      <FondoSection periodos={initialPeriodos} participacion={initialParticipacion} />
+      <FondoSection
+        periodos={initialPeriodos}
+        participacion={initialParticipacion}
+        proyectos={allProyectos}
+        allParticipaciones={allParticipaciones}
+        isPartner={isPartner}
+      />
     </div>
   )
 }

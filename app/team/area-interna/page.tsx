@@ -31,6 +31,7 @@ export default async function Page() {
     allMembersRes,
     allPartesRes,
     allNominasRes,
+    allProyectosRes,
   ] = await Promise.allSettled([
     supabase.from('nominas')
       .select('id, user_id, periodo, pdf_path, pdf_url, created_at')
@@ -64,6 +65,12 @@ export default async function Page() {
           .select('id, user_id, periodo, pdf_path, pdf_url, created_at, profiles(nombre, apellido, rol)')
           .order('periodo', { ascending: false })
       : Promise.resolve({ data: [] }),
+
+    isPartner
+      ? admin.from('fondo_proyectos')
+          .select('*')
+          .order('fecha_inversion')
+      : Promise.resolve({ data: [] }),
   ])
 
   const nominas       = nominasRes.status       === 'fulfilled' ? (nominasRes.value.data        ?? []) : []
@@ -72,6 +79,7 @@ export default async function Page() {
   const allMembers    = allMembersRes.status    === 'fulfilled' ? ((allMembersRes.value as any).data ?? []) : []
   const allPartes     = allPartesRes.status     === 'fulfilled' ? ((allPartesRes.value as any).data  ?? []) : []
   const allNominas    = allNominasRes.status    === 'fulfilled' ? ((allNominasRes.value as any).data ?? []) : []
+  const allProyectos  = allProyectosRes.status  === 'fulfilled' ? ((allProyectosRes.value as any).data ?? []) : []
 
   return (
     <AreaInternaPage
@@ -90,6 +98,7 @@ export default async function Page() {
       allMembers={allMembers}
       allParticipaciones={allPartes}
       allNominas={allNominas}
+      allProyectos={allProyectos}
     />
   )
 }
