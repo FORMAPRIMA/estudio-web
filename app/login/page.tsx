@@ -45,7 +45,7 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="text-center mb-16">
           <Link href="/" className="inline-block hover:opacity-70 transition-opacity">
-            <img src="/FORMA_PRIMA_NEGRO.png" alt="Forma Prima" style={{ height: 28, width: 'auto' }} />
+            <img src="/FORMA_PRIMA_NEGRO.png" alt="Forma Prima" style={{ height: 56, width: 'auto' }} />
           </Link>
         </div>
 
