@@ -314,34 +314,62 @@ function TabDocumentosYPagos({
               const ib = SECCION_ORDER.indexOf(b as typeof SECCION_ORDER[number])
               return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib)
             }).map(([seccion, facts]) => (
-              <div key={seccion} className="fp-table-wrap" style={{ background: '#fff', borderRadius: 12, border: '1px solid #E8E6E0', overflow: 'hidden' }}>
+              <div key={seccion} style={{ background: '#fff', borderRadius: 12, border: '1px solid #E8E6E0', overflow: 'hidden' }}>
+                {/* Section header */}
                 <div style={{ padding: '13px 22px', background: '#F8F7F4', borderBottom: '1px solid #E8E6E0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#1A1A1A' }}>{seccion}</span>
                   <span style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>{fmtMoney(facts.reduce((s, f) => s + f.monto, 0))}</span>
                 </div>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <tbody>
-                    {facts.map((f, i) => {
-                      const st = FACTURA_STATUS[f.status] ?? { label: f.status, color: '#888', bg: '#F4F4F4' }
-                      return (
-                        <tr key={f.id} style={{ borderBottom: i < facts.length - 1 ? '1px solid #F5F4F1' : 'none' }}>
-                          <td style={{ padding: '13px 22px', fontSize: 13, color: '#1A1A1A' }}>{f.concepto}</td>
-                          <td style={{ padding: '13px 12px', textAlign: 'center' }}>
-                            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '3px 9px', borderRadius: 4, background: st.bg, color: st.color, whiteSpace: 'nowrap' }}>
-                              {st.label}
-                            </span>
-                          </td>
-                          <td style={{ padding: '13px 12px', fontSize: 11, color: '#AAA', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                            {f.fecha_pago_acordada ? fmtShort(f.fecha_pago_acordada) : '—'}
-                          </td>
-                          <td style={{ padding: '13px 22px', fontSize: 14, fontWeight: 600, color: '#1A1A1A', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                            {fmtMoney(f.monto)}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+
+                {/* Desktop table */}
+                <div className="cp-invoice-table">
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <tbody>
+                      {facts.map((f, i) => {
+                        const st = FACTURA_STATUS[f.status] ?? { label: f.status, color: '#888', bg: '#F4F4F4' }
+                        return (
+                          <tr key={f.id} style={{ borderBottom: i < facts.length - 1 ? '1px solid #F5F4F1' : 'none' }}>
+                            <td style={{ padding: '13px 22px', fontSize: 13, color: '#1A1A1A' }}>{f.concepto}</td>
+                            <td style={{ padding: '13px 12px', textAlign: 'center' }}>
+                              <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '3px 9px', borderRadius: 4, background: st.bg, color: st.color, whiteSpace: 'nowrap' }}>
+                                {st.label}
+                              </span>
+                            </td>
+                            <td style={{ padding: '13px 12px', fontSize: 11, color: '#AAA', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                              {f.fecha_pago_acordada ? fmtShort(f.fecha_pago_acordada) : '—'}
+                            </td>
+                            <td style={{ padding: '13px 22px', fontSize: 14, fontWeight: 600, color: '#1A1A1A', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                              {fmtMoney(f.monto)}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile cards */}
+                <div className="cp-invoice-cards">
+                  {facts.map((f, i) => {
+                    const st = FACTURA_STATUS[f.status] ?? { label: f.status, color: '#888', bg: '#F4F4F4' }
+                    return (
+                      <div key={f.id} style={{ padding: '14px 18px', borderBottom: i < facts.length - 1 ? '1px solid #F5F4F1' : 'none' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 8 }}>
+                          <p style={{ fontSize: 13, color: '#1A1A1A', margin: 0, flex: 1, lineHeight: 1.35 }}>{f.concepto}</p>
+                          <p style={{ fontSize: 16, fontWeight: 600, color: '#1A1A1A', margin: 0, whiteSpace: 'nowrap' }}>{fmtMoney(f.monto)}</p>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '3px 9px', borderRadius: 4, background: st.bg, color: st.color }}>
+                            {st.label}
+                          </span>
+                          {f.fecha_pago_acordada && (
+                            <span style={{ fontSize: 10, color: '#AAA' }}>{fmtShort(f.fecha_pago_acordada)}</span>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             ))}
           </div>
@@ -468,24 +496,33 @@ function groupPartidasForGantt(partidas: Partida[]): { label: string; color: str
 function GanttReadOnly({ partidas }: { partidas: Partida[] }) {
   const [tooltip, setTooltip] = useState<GanttTooltipInfo | null>(null)
   const dates = partidas.flatMap(p => [p.fecha_inicio, p.fecha_fin].filter(Boolean) as string[])
+  const groups = groupPartidasForGantt(partidas)
 
-  if (dates.length === 0) {
-    const groups = groupPartidasForGantt(partidas)
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {groups.map((g, gi) => {
-          const allDone = g.items.every(p => p.completado)
-          return (
-            <div key={gi} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 18px', background: '#fff', borderRadius: 8, border: '1px solid #E8E6E0' }}>
-              <div style={{ width: 8, height: 8, borderRadius: '50%', background: allDone ? '#CCC' : g.color, flexShrink: 0 }} />
-              <span style={{ fontSize: 13, color: allDone ? '#AAA' : '#1A1A1A', textDecoration: allDone ? 'line-through' : 'none', flex: 1 }}>{g.label}</span>
-              {allDone && <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#1D9E75', background: '#EEF8F4', padding: '2px 8px', borderRadius: 3 }}>Completado</span>}
-            </div>
-          )
-        })}
-      </div>
-    )
-  }
+  // Card list — always rendered; used as the only view when no dates,
+  // and as the mobile-only view when dates exist (cp-gantt-mobile hides on desktop)
+  const cardList = (
+    <div className={dates.length > 0 ? 'cp-gantt-mobile' : undefined} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {groups.map((g, gi) => {
+        const allDone = g.items.every(p => p.completado)
+        const fi = g.items.find(p => p.fecha_inicio)?.fecha_inicio ?? null
+        const ff = [...g.items].reverse().find(p => p.fecha_fin)?.fecha_fin ?? null
+        return (
+          <div key={gi} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 18px', background: '#fff', borderRadius: 8, border: '1px solid #E8E6E0' }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: allDone ? '#CCC' : g.color, flexShrink: 0 }} />
+            <span style={{ fontSize: 13, color: allDone ? '#AAA' : '#1A1A1A', textDecoration: allDone ? 'line-through' : 'none', flex: 1 }}>{g.label}</span>
+            {(fi || ff) && !allDone && (
+              <span style={{ fontSize: 10, color: '#AAA', whiteSpace: 'nowrap' }}>
+                {fi ? fmtShort(fi) : ''}{fi && ff ? ' → ' : ''}{ff ? fmtShort(ff) : ''}
+              </span>
+            )}
+            {allDone && <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#1D9E75', background: '#EEF8F4', padding: '2px 8px', borderRadius: 3, flexShrink: 0 }}>Completado</span>}
+          </div>
+        )
+      })}
+    </div>
+  )
+
+  if (dates.length === 0) return cardList
 
   const minD = dates.reduce((a, b) => a < b ? a : b)
   const maxD = dates.reduce((a, b) => a > b ? a : b)
@@ -505,13 +542,11 @@ function GanttReadOnly({ partidas }: { partidas: Partida[] }) {
     cur.setMonth(cur.getMonth() + 1)
   }
 
-  const groups = groupPartidasForGantt(partidas)
-
   return (
     <>
-    <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #E8E6E0', padding: '24px 28px', overflowX: 'auto' }}>
+    {/* Desktop gantt chart */}
+    <div className="cp-gantt-desktop" style={{ background: '#fff', borderRadius: 12, border: '1px solid #E8E6E0', padding: '24px 28px', overflowX: 'auto' }}>
       <div style={{ minWidth: 560 }}>
-        {/* Month headers */}
         <div style={{ position: 'relative', height: 22, marginLeft: 200, marginBottom: 10 }}>
           {months.map((m, i) => (
             <div key={i} style={{ position: 'absolute', left: `${m.left}%`, fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#BBB' }}>{m.label}</div>
@@ -522,7 +557,6 @@ function GanttReadOnly({ partidas }: { partidas: Partida[] }) {
             </div>
           )}
         </div>
-        {/* Grouped rows */}
         {groups.map((g, gi) => {
           const allDone = g.items.every(p => p.completado)
           return (
@@ -558,6 +592,10 @@ function GanttReadOnly({ partidas }: { partidas: Partida[] }) {
         })}
       </div>
     </div>
+
+    {/* Mobile card list */}
+    {cardList}
+
     <GanttTooltip info={tooltip} />
     </>
   )

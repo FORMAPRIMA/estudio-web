@@ -15,9 +15,11 @@ div:hover > .tt-avatar-overlay {
 ═══════════════════════════════════════════════════════════════ */
 
 /* ── Default (desktop) hidden states for mobile-only elements ── */
-.pap-mobile-view { display: none; }
-.fkb-mobile-view { display: none; }
-.cbd-mobile-list { display: none; }
+.pap-mobile-view  { display: none; }
+.fkb-mobile-view  { display: none; }
+.cbd-mobile-list  { display: none; }
+.cp-invoice-cards { display: none; }
+.cp-gantt-mobile  { display: none; }
 
 @media (max-width: 768px) {
 
@@ -187,6 +189,14 @@ div:hover > .tt-avatar-overlay {
   .cp-visit-grid iframe {
     height: 420px !important;
   }
+
+  /* Invoice table → cards */
+  .cp-invoice-table { display: none !important; }
+  .cp-invoice-cards { display: block !important; }
+
+  /* Gantt chart → phase card list */
+  .cp-gantt-desktop { display: none !important; }
+  .cp-gantt-mobile  { display: flex !important; flex-direction: column !important; gap: 8px !important; }
 
   /* ── Time Tracker ────────────────────────────────────────── */
 
