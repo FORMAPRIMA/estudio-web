@@ -401,35 +401,64 @@ export function PropuestaPDF({ data }: { data: PropuestaPDFData }) {
 
           {/* Metodología de honorarios */}
           {(() => {
-            const pemServices = baseServicios.filter(sid => SERVICIOS_CONFIG[sid].tipo === 'pem')
-            const includesDO  = pemServices.includes('direccion_obra' as ServicioId)
-            if (pemServices.length === 0) return null
+            const pemServices   = baseServicios.filter(sid => SERVICIOS_CONFIG[sid].tipo === 'pem')
+            const ratioServices = baseServicios.filter(sid => SERVICIOS_CONFIG[sid].tipo === 'ratio')
+            const includesDO    = pemServices.includes('direccion_obra' as ServicioId)
+            if (pemServices.length === 0 && ratioServices.length === 0) return null
 
             const pctBase = data.porcentaje_pem
+            const hasBoth = pemServices.length > 0 && ratioServices.length > 0
 
             return (
               <View style={s.metodologiaBlock}>
                 <Text style={s.metodologiaTitle}>Metodología de cálculo de honorarios</Text>
-                <Text style={s.metodologiaText}>
-                  {`Los honorarios profesionales del presente encargo se calculan aplicando un porcentaje del ${pctBase}% sobre el Presupuesto de Ejecución Material (PEM) objetivo, determinado en ${fmtEur(pem)} en función de la superficie del proyecto (${data.m2.toLocaleString('es-ES')} m² × ${fmtEur(data.costo_m2)}/m²). Este criterio vincula directamente la retribución del Estudio al alcance y valor real de la obra, garantizando transparencia y proporcionalidad.`}
-                </Text>
-                <Text style={{ ...s.metodologiaText, marginTop: 4 }}>
-                  El total de honorarios se distribuye entre las fases contratadas de la siguiente forma:
-                </Text>
-                {pemServices.map(sid => {
-                  const cfg    = SERVICIOS_CONFIG[sid]
-                  const importe = breakdown[sid] ?? 0
-                  const pctFase = Math.round(cfg.pem_split * 100)
-                  return (
-                    <Text key={sid} style={s.metodologiaBullet}>
-                      {`· ${cfg.label}  —  ${pctFase}% de los honorarios PEM  (${fmtEur(importe)} + IVA)`}
+
+                {/* PEM-based services */}
+                {pemServices.length > 0 && (
+                  <>
+                    <Text style={s.metodologiaText}>
+                      {hasBoth
+                        ? `Las fases de proyecto y dirección de obra se calculan aplicando un porcentaje del ${pctBase}% sobre el Presupuesto de Ejecución Material (PEM) objetivo, determinado en ${fmtEur(pem)} (${data.m2.toLocaleString('es-ES')} m² × ${fmtEur(data.costo_m2)}/m²). Este criterio vincula la retribución del Estudio al valor real de la obra, garantizando transparencia y proporcionalidad.`
+                        : `Los honorarios profesionales del presente encargo se calculan aplicando un porcentaje del ${pctBase}% sobre el Presupuesto de Ejecución Material (PEM) objetivo, determinado en ${fmtEur(pem)} (${data.m2.toLocaleString('es-ES')} m² × ${fmtEur(data.costo_m2)}/m²). Este criterio vincula directamente la retribución del Estudio al alcance y valor real de la obra, garantizando transparencia y proporcionalidad.`}
                     </Text>
-                  )
-                })}
-                {includesDO && (
-                  <Text style={s.metodologiaAlert}>
-                    {'Revisión de PEM a la liquidación de obra: Con carácter previo al último pago de la Dirección Estética de Obra, las partes realizarán una revisión del coste real de ejecución material. En caso de que el PEM definitivo supere el objetivo de cálculo, el importe del último pago de dirección de obra se ajustará proporcionalmente al alza. No procederá reducción de honorarios por variación a la baja del PEM.'}
-                  </Text>
+                    <Text style={{ ...s.metodologiaText, marginTop: 4 }}>
+                      {hasBoth ? 'Distribución de las fases de arquitectura:' : 'El total de honorarios se distribuye entre las fases contratadas de la siguiente forma:'}
+                    </Text>
+                    {pemServices.map(sid => {
+                      const cfg     = SERVICIOS_CONFIG[sid]
+                      const importe = breakdown[sid] ?? 0
+                      const pctFase = Math.round(cfg.pem_split * 100)
+                      return (
+                        <Text key={sid} style={s.metodologiaBullet}>
+                          {`· ${cfg.label}  —  ${pctFase}% de los honorarios PEM  (${fmtEur(importe)} + IVA)`}
+                        </Text>
+                      )
+                    })}
+                    {includesDO && (
+                      <Text style={s.metodologiaAlert}>
+                        {'Revisión de PEM a la liquidación de obra: Con carácter previo al último pago de la Dirección Estética de Obra, las partes realizarán una revisión del coste real de ejecución material. En caso de que el PEM definitivo supere el objetivo de cálculo, el importe del último pago de dirección de obra se ajustará proporcionalmente al alza. No procederá reducción de honorarios por variación a la baja del PEM.'}
+                      </Text>
+                    )}
+                  </>
+                )}
+
+                {/* Ratio (interiorismo) services */}
+                {ratioServices.length > 0 && (
+                  <>
+                    <Text style={{ ...s.metodologiaText, marginTop: pemServices.length > 0 ? 8 : 0 }}>
+                      {hasBoth
+                        ? `Los honorarios de interiorismo (${ratioServices.map(sid => SERVICIOS_CONFIG[sid].label).join(' y ')}) quedan expresamente excluidos del sistema de cálculo basado en PEM. Se determinan mediante una estimación de horas de dedicación del equipo en función del tamaño y complejidad del proyecto, aplicando la tarifa horaria del Estudio según el perfil del equipo asignado.`
+                        : `Los honorarios del presente encargo corresponden a servicios de interiorismo y se calculan de forma independiente al Presupuesto de Ejecución Material. Se determinan mediante una estimación de horas de dedicación del equipo en función del tamaño y complejidad del proyecto, aplicando la tarifa horaria del Estudio según el perfil del equipo asignado.`}
+                    </Text>
+                    {ratioServices.map(sid => {
+                      const importe = breakdown[sid] ?? 0
+                      return (
+                        <Text key={sid} style={s.metodologiaBullet}>
+                          {`· ${SERVICIOS_CONFIG[sid].label}  —  ${fmtEur(importe)} + IVA`}
+                        </Text>
+                      )
+                    })}
+                  </>
                 )}
               </View>
             )

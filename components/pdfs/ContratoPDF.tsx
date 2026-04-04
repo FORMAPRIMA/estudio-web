@@ -474,10 +474,36 @@ export function ContratoPDF({ data }: { data: ContratoPDFData }) {
           </Text>
 
           {/* Criterio de cálculo */}
-          <Text style={{ ...s.subClauseTitle, marginTop: 12 }}>Criterio de cálculo de honorarios</Text>
-          <Text style={s.bodyText}>
-            Los honorarios acordados han sido determinados mediante la aplicación de un porcentaje profesional sobre el Presupuesto de Ejecución Material (en adelante, «PEM») objetivo de la obra, entendido éste como el coste estimado de los trabajos de construcción, sin incluir gastos generales del promotor, honorarios técnicos ni tributos. Dicho criterio vincula la retribución del Estudio al alcance real del encargo y al valor de la obra proyectada, distribuyendo el total de honorarios entre las distintas fases del encargo en proporción al peso relativo de cada servicio sobre el conjunto de la prestación profesional.
-          </Text>
+          {(() => {
+            const hasPem          = data.servicios_contrato.some(s => ['anteproyecto', 'proyecto_ejecucion', 'direccion_obra'].includes(s.id))
+            const hasInteriorismo = data.servicios_contrato.some(s => ['interiorismo', 'gestion_interiorismo'].includes(s.id))
+            const interiorismoNames = data.servicios_contrato
+              .filter(s => ['interiorismo', 'gestion_interiorismo'].includes(s.id))
+              .map(s => s.label)
+            if (!hasPem && !hasInteriorismo) return null
+            return (
+              <>
+                <Text style={{ ...s.subClauseTitle, marginTop: 12 }}>Criterio de cálculo de honorarios</Text>
+                {hasPem && (
+                  <Text style={s.bodyText}>
+                    {hasInteriorismo
+                      ? 'Los honorarios correspondientes a las fases de proyecto y dirección de obra han sido determinados mediante la aplicación de un porcentaje profesional sobre el Presupuesto de Ejecución Material (en adelante, «PEM») objetivo de la obra, entendido éste como el coste estimado de los trabajos de construcción, sin incluir gastos generales del promotor, honorarios técnicos ni tributos. Dicho criterio vincula la retribución del Estudio al alcance real del encargo y al valor de la obra proyectada, distribuyendo el total de honorarios entre dichas fases en proporción al peso relativo de cada servicio.'
+                      : 'Los honorarios acordados han sido determinados mediante la aplicación de un porcentaje profesional sobre el Presupuesto de Ejecución Material (en adelante, «PEM») objetivo de la obra, entendido éste como el coste estimado de los trabajos de construcción, sin incluir gastos generales del promotor, honorarios técnicos ni tributos. Dicho criterio vincula la retribución del Estudio al alcance real del encargo y al valor de la obra proyectada, distribuyendo el total de honorarios entre las distintas fases del encargo en proporción al peso relativo de cada servicio sobre el conjunto de la prestación profesional.'}
+                  </Text>
+                )}
+                {hasInteriorismo && (
+                  <>
+                    <Text style={{ ...s.subClauseTitle, marginTop: 10 }}>
+                      {`Honorarios de ${interiorismoNames.join(' y ')}`}
+                    </Text>
+                    <Text style={s.bodyText}>
+                      {`Con carácter expreso, los honorarios correspondientes a los servicios de ${interiorismoNames.join(' y ')} quedan excluidos del sistema de cálculo basado en porcentaje sobre el PEM. Su determinación responde a una metodología independiente, consistente en la estimación de horas de dedicación del equipo técnico del Estudio en función del tamaño, complejidad y alcance del encargo, a las que se aplica la tarifa horaria profesional vigente según el perfil de los profesionales asignados. Los importes acordados para estas fases quedan fijados en la tabla de hitos de pago del presente Contrato y no están sujetos a revisión por variación del Presupuesto de Ejecución Material de la obra.`}
+                    </Text>
+                  </>
+                )}
+              </>
+            )
+          })()}
           {(() => {
             const includesDO = data.servicios_contrato.some(s => s.id === 'direccion_obra')
             if (!includesDO) return null
