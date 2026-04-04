@@ -204,6 +204,86 @@ div:hover > .tt-avatar-overlay {
     align-items: flex-start !important;
   }
 
+  /* ── Captación pages: Leads, Propuestas, Contratos ───────── */
+
+  .captacion-header {
+    padding: 16px 16px 16px !important;
+  }
+
+  .captacion-filters {
+    padding: 12px 16px !important;
+    flex-wrap: wrap !important;
+  }
+
+  .captacion-search {
+    padding: 10px 16px !important;
+  }
+
+  .captacion-search input {
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  .captacion-table-section {
+    padding: 12px 16px 24px !important;
+  }
+
+  .captacion-action-row {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+
+  /* Lead edit form: 4-col → 2-col on mobile */
+  .lead-edit-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px 14px !important;
+  }
+
+  /* Plantilla de propuestas: sidebar + editor */
+  .plantilla-layout {
+    grid-template-columns: 1fr !important;
+    min-height: unset !important;
+  }
+
+  .plantilla-sidebar {
+    border-right: none !important;
+    border-bottom: 1px solid #E8E6E0 !important;
+    display: flex !important;
+    flex-direction: row !important;
+    overflow-x: auto !important;
+    padding-top: 8px !important;
+    padding-bottom: 4px !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+  }
+
+  .plantilla-sidebar::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .plantilla-sidebar-label {
+    display: none !important;
+  }
+
+  .plantilla-tab-btn {
+    width: auto !important;
+    flex-shrink: 0 !important;
+    min-width: 110px !important;
+    border-left: none !important;
+    border-bottom: 3px solid transparent !important;
+    border-top: none !important;
+    padding: 8px 14px 10px !important;
+  }
+
+  .plantilla-tab-btn[data-active="true"] {
+    border-bottom-color: #D85A30 !important;
+  }
+
+  .plantilla-editor {
+    padding: 20px 16px !important;
+    max-width: none !important;
+  }
+
 }
 
 @layer base {

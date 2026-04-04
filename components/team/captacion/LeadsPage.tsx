@@ -64,7 +64,7 @@ const TD: React.CSSProperties = {
 
 const FIELD: React.CSSProperties = {
   background: '#FFF8F0', border: '1px solid #E8913A',
-  borderRadius: 4, padding: '4px 8px', fontSize: 12,
+  borderRadius: 4, padding: '4px 8px', fontSize: 16,
   color: '#1A1A1A', fontFamily: 'inherit', outline: 'none', width: '100%',
 }
 
@@ -131,7 +131,7 @@ function LeadEditForm({
   const save = (field: string, value: unknown) => onUpdate(field, value)
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px 28px' }}>
+    <div className="lead-edit-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px 28px' }}>
 
       {/* Lead info */}
       <LF label="Estado">
@@ -377,11 +377,11 @@ export default function LeadsPage({ leads: initial }: { leads: Lead[] }) {
     <div style={{ fontFamily: "'Inter', system-ui, sans-serif", minHeight: '100vh', background: '#F8F7F4' }}>
 
       {/* Header */}
-      <div style={{ padding: '40px 40px 24px', borderBottom: '1px solid #E8E6E0', background: '#fff' }}>
+      <div className="captacion-header" style={{ padding: '40px 40px 24px', borderBottom: '1px solid #E8E6E0', background: '#fff' }}>
         <p style={{ fontSize: 10, color: '#AAA', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>
           Captación
         </p>
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
           <h1 style={{ fontSize: 28, fontWeight: 200, color: '#1A1A1A', margin: 0, letterSpacing: '-0.01em' }}>
             Leads
           </h1>
@@ -404,7 +404,7 @@ export default function LeadsPage({ leads: initial }: { leads: Lead[] }) {
         )}
 
         {/* Estado pills */}
-        <div style={{ display: 'flex', gap: 8, marginTop: 20, flexWrap: 'wrap' }}>
+        <div className="captacion-filters" style={{ display: 'flex', gap: 8, marginTop: 20, flexWrap: 'wrap' }}>
           <button
             onClick={() => setEstadoFilter('')}
             style={{
@@ -437,7 +437,7 @@ export default function LeadsPage({ leads: initial }: { leads: Lead[] }) {
       </div>
 
       {/* Search */}
-      <div style={{ padding: '16px 40px', background: '#fff', borderBottom: '1px solid #E8E6E0' }}>
+      <div className="captacion-search" style={{ padding: '16px 40px', background: '#fff', borderBottom: '1px solid #E8E6E0' }}>
         <input
           type="search"
           placeholder="Buscar por nombre, email, ciudad…"
@@ -452,7 +452,7 @@ export default function LeadsPage({ leads: initial }: { leads: Lead[] }) {
       </div>
 
       {/* Table */}
-      <div style={{ padding: '24px 40px' }}>
+      <div className="captacion-table-section" style={{ padding: '24px 40px' }}>
         <div className="fp-table-wrap" style={{ background: '#fff', border: '1px solid #E8E6E0', borderRadius: 8, overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>

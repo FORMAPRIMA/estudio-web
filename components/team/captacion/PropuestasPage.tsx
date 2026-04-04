@@ -81,7 +81,7 @@ export default function PropuestasPage({
   return (
     <div style={{ fontFamily: "'Inter', system-ui, sans-serif", minHeight: '100vh', background: '#F8F7F4' }}>
       {/* Header */}
-      <div style={{ padding: '40px 40px 32px', borderBottom: '1px solid #E8E6E0', background: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+      <div className="captacion-header" style={{ padding: '40px 40px 32px', borderBottom: '1px solid #E8E6E0', background: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 16 }}>
         <div>
           <p style={{ fontSize: 10, color: '#AAA', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>
             Captación
@@ -104,7 +104,7 @@ export default function PropuestasPage({
       </div>
 
       {/* Filters */}
-      <div style={{ padding: '20px 40px', display: 'flex', gap: 8 }}>
+      <div className="captacion-filters" style={{ padding: '20px 40px', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {['all', 'borrador', 'enviada', 'aceptada', 'rechazada'].map(s => (
           <button
             key={s}
@@ -124,7 +124,7 @@ export default function PropuestasPage({
       </div>
 
       {/* Table */}
-      <div style={{ padding: '0 40px 40px' }}>
+      <div className="captacion-table-section" style={{ padding: '0 40px 40px' }}>
         {filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '80px 0', color: '#AAA', fontSize: 14 }}>
             No hay propuestas{filterStatus !== 'all' ? ` en estado "${STATUS_LABEL[filterStatus]}"` : ''}
@@ -201,7 +201,7 @@ export default function PropuestasPage({
         >
           <div
             onClick={e => e.stopPropagation()}
-            style={{ background: '#fff', borderRadius: 8, width: 480, maxHeight: '70vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
+            style={{ background: '#fff', borderRadius: 8, width: 'min(480px, 92vw)', maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
           >
             <div style={{ padding: '24px 24px 0' }}>
               <h3 style={{ fontSize: 16, fontWeight: 400, margin: '0 0 4px', color: '#1A1A1A' }}>Nueva propuesta</h3>
@@ -211,7 +211,7 @@ export default function PropuestasPage({
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Buscar lead…"
-                style={{ width: '100%', padding: '8px 12px', border: '1px solid #E8E6E0', borderRadius: 4, fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
+                style={{ width: '100%', padding: '8px 12px', border: '1px solid #E8E6E0', borderRadius: 4, fontSize: 16, outline: 'none', boxSizing: 'border-box' }}
               />
             </div>
             <div style={{ overflowY: 'auto', flex: 1, padding: '8px 0' }}>

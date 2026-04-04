@@ -260,7 +260,7 @@ function NuevoServicioModal({
     >
       <div
         onClick={e => e.stopPropagation()}
-        style={{ background: '#fff', borderRadius: 8, width: 420, padding: '28px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
+        style={{ background: '#fff', borderRadius: 8, width: 'min(420px, 92vw)', padding: '24px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
       >
         <h3 style={{ fontSize: 16, fontWeight: 400, margin: '0 0 6px', color: '#1A1A1A' }}>Nuevo servicio contratable</h3>
         <p style={{ fontSize: 12, color: '#AAA', margin: '0 0 20px', lineHeight: 1.5 }}>
@@ -278,7 +278,7 @@ function NuevoServicioModal({
             style={{
               width: '100%', boxSizing: 'border-box' as const,
               padding: '8px 10px', border: '1px solid #E8E6E0', borderRadius: 4,
-              fontSize: 13, outline: 'none', fontFamily: "'Inter', system-ui, sans-serif",
+              fontSize: 16, outline: 'none', fontFamily: "'Inter', system-ui, sans-serif",
             }}
             placeholder="Ej. Consultoría, Fotografía de obra…"
           />
@@ -338,7 +338,7 @@ export default function PlantillaPropuestasPage({
   return (
     <div style={{ fontFamily: "'Inter', system-ui, sans-serif", minHeight: '100vh', background: '#F8F7F4' }}>
       {/* Header */}
-      <div style={{ padding: '40px 40px 32px', borderBottom: '1px solid #E8E6E0', background: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+      <div className="captacion-header" style={{ padding: '40px 40px 32px', borderBottom: '1px solid #E8E6E0', background: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 16 }}>
         <div>
           <p style={{ fontSize: 10, color: '#AAA', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>Captación</p>
           <h1 style={{ fontSize: 28, fontWeight: 200, color: '#1A1A1A', margin: 0, letterSpacing: '-0.01em' }}>Plantilla de propuestas</h1>
@@ -355,11 +355,11 @@ export default function PlantillaPropuestasPage({
       </div>
 
       {/* Body */}
-      <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr', minHeight: 'calc(100vh - 160px)' }}>
+      <div className="plantilla-layout" style={{ display: 'grid', gridTemplateColumns: '240px 1fr', minHeight: 'calc(100vh - 160px)' }}>
         {/* Left tabs */}
-        <div style={{ borderRight: '1px solid #E8E6E0', background: '#fff', paddingTop: 20 }}>
+        <div className="plantilla-sidebar" style={{ borderRight: '1px solid #E8E6E0', background: '#fff', paddingTop: 20 }}>
           {/* Base services */}
-          <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#CCC', padding: '0 20px 8px' }}>
+          <div className="plantilla-sidebar-label" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#CCC', padding: '0 20px 8px' }}>
             Servicios base
           </div>
           {servicios.filter(s => !s.isCustom).map(s => (
@@ -369,7 +369,7 @@ export default function PlantillaPropuestasPage({
           {/* Custom services */}
           {servicios.some(s => s.isCustom) && (
             <>
-              <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#CCC', padding: '16px 20px 8px', borderTop: '1px solid #F0EEE8', marginTop: 8 }}>
+              <div className="plantilla-sidebar-label" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#CCC', padding: '16px 20px 8px', borderTop: '1px solid #F0EEE8', marginTop: 8 }}>
                 Servicios personalizados
               </div>
               {servicios.filter(s => s.isCustom).map(s => (
@@ -380,7 +380,7 @@ export default function PlantillaPropuestasPage({
         </div>
 
         {/* Editor */}
-        <div style={{ padding: '32px 40px', maxWidth: 760 }}>
+        <div className="plantilla-editor" style={{ padding: '32px 40px', maxWidth: 760 }}>
           {currentEntry ? (
             <ServicioEditor
               key={selected}
@@ -409,6 +409,8 @@ function TabButton({ entry, active, onClick, isCustom }: { entry: ServicioEntry;
   return (
     <button
       onClick={onClick}
+      data-active={active ? 'true' : 'false'}
+      className="plantilla-tab-btn"
       style={{
         width: '100%', textAlign: 'left', background: active ? '#F8F7F4' : 'none',
         border: 'none', borderLeft: `3px solid ${active ? '#D85A30' : 'transparent'}`,

@@ -125,7 +125,7 @@ export default function ContratosPage({
     <div style={{ fontFamily: "'Inter', system-ui, sans-serif", minHeight: '100vh', background: '#F8F7F4' }}>
 
       {/* Header */}
-      <div style={{ padding: '40px 40px 24px', borderBottom: '1px solid #E8E6E0', background: '#fff' }}>
+      <div className="captacion-header" style={{ padding: '40px 40px 24px', borderBottom: '1px solid #E8E6E0', background: '#fff' }}>
         <p style={{ fontSize: 10, color: '#AAA', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>
           Captación
         </p>
@@ -135,7 +135,7 @@ export default function ContratosPage({
           </h1>
 
           {/* New contrato */}
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div className="captacion-action-row" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <button
               onClick={() => setShowModal(true)}
               style={{ height: 36, padding: '0 20px', background: '#D85A30', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}
@@ -166,7 +166,7 @@ export default function ContratosPage({
         </div>
 
         {/* Status pills */}
-        <div style={{ display: 'flex', gap: 8, marginTop: 20, flexWrap: 'wrap' }}>
+        <div className="captacion-filters" style={{ display: 'flex', gap: 8, marginTop: 20, flexWrap: 'wrap' }}>
           <button
             onClick={() => setStatusFilter('')}
             style={{ fontSize: 10, fontWeight: statusFilter === '' ? 700 : 400, background: statusFilter === '' ? '#1A1A1A' : '#F0EEE8', color: statusFilter === '' ? '#fff' : '#888', border: 'none', borderRadius: 12, padding: '4px 12px', cursor: 'pointer' }}
@@ -188,7 +188,7 @@ export default function ContratosPage({
       </div>
 
       {/* Search */}
-      <div style={{ padding: '16px 40px', background: '#fff', borderBottom: '1px solid #E8E6E0' }}>
+      <div className="captacion-search" style={{ padding: '16px 40px', background: '#fff', borderBottom: '1px solid #E8E6E0' }}>
         <input
           type="search"
           placeholder="Buscar por número, cliente, proyecto…"
@@ -199,7 +199,7 @@ export default function ContratosPage({
       </div>
 
       {/* List */}
-      <div style={{ padding: '24px 40px' }}>
+      <div className="captacion-table-section" style={{ padding: '24px 40px' }}>
         <div className="fp-table-wrap" style={{ background: '#fff', border: '1px solid #E8E6E0', borderRadius: 8, overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
@@ -285,8 +285,8 @@ export default function ContratosPage({
         display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
       }} onClick={() => setShowModal(false)}>
         <div style={{
-          background: '#fff', borderRadius: 8, padding: '32px 36px', width: 480,
-          boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+          background: '#fff', borderRadius: 8, padding: '28px 24px', width: 'min(480px, 92vw)',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.2)', maxHeight: '90vh', overflowY: 'auto',
         }} onClick={e => e.stopPropagation()}>
           <h2 style={{ fontSize: 16, fontWeight: 600, color: '#1A1A1A', margin: '0 0 6px' }}>
             Crear contrato desde propuesta
