@@ -110,38 +110,53 @@ const btnGhost: React.CSSProperties = {
 // ── Nóminas tab ───────────────────────────────────────────────────────────────
 
 function NominasTab({ allMembers, allNominas }: { allMembers: TeamMember[]; allNominas: NominaRecord[] }) {
-  const fileRef = useRef<HTMLInputElement>(null)
-  const [selUserId, setSelUserId] = useState('')
-  const [periodo,   setPeriodo]   = useState('')
-  const [file,      setFile]      = useState<File | null>(null)
-  const [loading,   setLoading]   = useState(false)
-  const [error,     setError]     = useState<string | null>(null)
-  const [success,   setSuccess]   = useState(false)
+  const fileRef      = useRef<HTMLInputElement>(null)
+  const [nominas,    setNominas]    = useState<NominaRecord[]>(allNominas)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [viewingId,  setViewingId]  = useState<string | null>(null)
 
-  const [nominas, setNominas] = useState<NominaRecord[]>(allNominas)
+  // Upload form state — one form, shown per-card inline
+  const [uploadForId, setUploadForId] = useState<string | null>(null)
+  const [periodo,     setPeriodo]     = useState('')
+  const [file,        setFile]        = useState<File | null>(null)
+  const [loading,     setLoading]     = useState(false)
+  const [uploadMsg,   setUploadMsg]   = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
+  const uploadFileRef = useRef<HTMLInputElement>(null)
 
-  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0] ?? null
-    setFile(f)
+  const ROL_ORDER: Record<string, number> = { fp_partner: 0, fp_manager: 1, fp_team: 2 }
+  const sortedMembers = [...allMembers].sort(
+    (a, b) => (ROL_ORDER[a.rol] ?? 3) - (ROL_ORDER[b.rol] ?? 3) || a.nombre.localeCompare(b.nombre)
+  )
+
+  // Group by user_id, sorted by period descending
+  const byUser: Record<string, NominaRecord[]> = {}
+  for (const n of nominas) {
+    if (!byUser[n.user_id]) byUser[n.user_id] = []
+    byUser[n.user_id].push(n)
+  }
+  for (const uid of Object.keys(byUser)) {
+    byUser[uid].sort((a, b) => b.periodo.localeCompare(a.periodo))
   }
 
-  const upload = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!selUserId || !periodo || !file) return
-    setLoading(true); setError(null); setSuccess(false)
+  const openUpload = (userId: string) => {
+    setUploadForId(userId); setPeriodo(''); setFile(null); setUploadMsg(null)
+    if (uploadFileRef.current) uploadFileRef.current.value = ''
+  }
+  const closeUpload = () => { setUploadForId(null); setUploadMsg(null) }
 
+  const handleUpload = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!uploadForId || !periodo || !file) return
+    setLoading(true); setUploadMsg(null)
     const formData = new FormData()
-    formData.append('userId',  selUserId)
+    formData.append('userId',  uploadForId)
     formData.append('periodo', periodo)
     formData.append('file',    file)
-
     const res = await uploadNomina(formData)
-    if ('error' in res) { setError(res.error ?? null); setLoading(false); return }
-
-    setSuccess(true)
-    setFile(null); setPeriodo(''); if (fileRef.current) fileRef.current.value = ''
+    if ('error' in res) { setUploadMsg({ type: 'err', text: res.error ?? 'Error al subir' }); setLoading(false); return }
+    setUploadMsg({ type: 'ok', text: 'Nómina subida.' })
+    setLoading(false)
+    // Optimistic: reload to get proper id/url from server
     window.location.reload()
   }
 
@@ -161,78 +176,141 @@ function NominasTab({ allMembers, allNominas }: { allMembers: TeamMember[]; allN
     window.open((res as any).url, '_blank', 'noopener,noreferrer')
   }
 
-  // Group by user
-  const byUser: Record<string, NominaRecord[]> = {}
-  for (const n of nominas) {
-    const key = n.user_id
-    if (!byUser[key]) byUser[key] = []
-    byUser[key].push(n)
-  }
-
+  // Hidden file input shared across all cards
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
-      {/* Upload form */}
-      <div style={{ background: '#fff', border: '1px solid #ECEAE6', padding: '24px 28px' }}>
-        <p style={{ fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: '#BBB', fontWeight: 300, marginBottom: 20 }}>
-          Subir nómina
-        </p>
-        <form onSubmit={upload} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, alignItems: 'end' }} className="ap-nominas-form">
-          <div>
-            <label style={labelSt}>Empleado</label>
-            <select value={selUserId} onChange={e => setSelUserId(e.target.value)} required style={selectSt}>
-              <option value="">Seleccionar…</option>
-              {allMembers.map(m => (
-                <option key={m.id} value={m.id}>{memberName(m)}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label style={labelSt}>Período (mes)</label>
-            <input
-              type="month" value={periodo}
-              onChange={e => setPeriodo(e.target.value.replace('-', '-').slice(0, 7))}
-              required style={inputSt}
-            />
-          </div>
-          <div>
-            <label style={labelSt}>Archivo PDF</label>
-            <input ref={fileRef} type="file" accept="application/pdf" onChange={handleFile} required style={{ ...inputSt, padding: '6px 12px', cursor: 'pointer' }} />
-          </div>
-          <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 12, alignItems: 'center' }}>
-            <button type="submit" disabled={loading || !selUserId || !periodo || !file} style={{ ...btnPrimary, opacity: loading || !selUserId || !periodo || !file ? 0.5 : 1, cursor: loading ? 'not-allowed' : 'pointer' }}>
-              {loading ? 'Subiendo…' : 'Subir nómina'}
-            </button>
-            {error   && <p style={{ fontSize: 11, color: '#C04828', fontWeight: 300 }}>{error}</p>}
-            {success && <p style={{ fontSize: 11, color: '#1D9E75', fontWeight: 300 }}>Nómina subida correctamente.</p>}
-          </div>
-        </form>
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <input ref={uploadFileRef} type="file" accept="application/pdf" style={{ display: 'none' }}
+        onChange={e => setFile(e.target.files?.[0] ?? null)} />
 
-      {/* List grouped by user */}
-      {allMembers.filter(m => byUser[m.id]?.length).map(m => (
-        <div key={m.id} style={{ background: '#fff', border: '1px solid #ECEAE6', padding: '20px 28px' }}>
-          <p style={{ fontSize: 11, color: '#555', fontWeight: 300, marginBottom: 14 }}>{memberName(m)}</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            {(byUser[m.id] ?? []).map(n => (
-              <div key={n.id} style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '9px 12px', background: '#FAFAF8',
-              }}>
-                <p style={{ fontSize: 13, color: '#444', fontWeight: 300 }}>{fmtPeriodo(n.periodo)}</p>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button onClick={() => openNomina(n)} disabled={viewingId === n.id} style={btnGhost}>
-                    {viewingId === n.id ? '…' : 'Ver'}
-                  </button>
-                  <button onClick={() => handleDelete(n.id)} disabled={deletingId === n.id}
-                    style={{ ...btnGhost, color: '#C04828', borderColor: '#F0D0C8' }}>
-                    {deletingId === n.id ? '…' : 'Eliminar'}
-                  </button>
+      {sortedMembers.map((m, idx) => {
+        const memberNominas = byUser[m.id] ?? []
+        const rc = ROLE_COLORS_EQ[m.rol] ?? { bg: '#eee', text: '#888', border: '#ccc' }
+        const isUploading = uploadForId === m.id
+
+        return (
+          <div key={m.id} style={{ background: '#fff', border: '1px solid #ECEAE6', borderRadius: 4 }}>
+            {/* Card header */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '18px 24px', borderBottom: memberNominas.length > 0 || isUploading ? '1px solid #F5F3EF' : 'none',
+              gap: 12, flexWrap: 'wrap',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                {/* Avatar */}
+                <div style={{
+                  width: 36, height: 36, borderRadius: '50%', flexShrink: 0, overflow: 'hidden',
+                  background: m.avatar_url ? '#F0EEE8' : AVATAR_PALETTE[idx % AVATAR_PALETTE.length],
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  {m.avatar_url
+                    ? <img src={m.avatar_url} alt={m.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    : <span style={{ fontSize: 13, color: '#fff', fontWeight: 600 }}>{mkInitialsEq(m.nombre, m.apellido)}</span>
+                  }
+                </div>
+                <div>
+                  <p style={{ fontSize: 14, fontWeight: 300, color: '#1A1A1A', margin: 0 }}>
+                    {memberName(m)}
+                  </p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3 }}>
+                    <span style={{
+                      fontSize: 8, fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase',
+                      padding: '1px 6px', background: rc.bg, color: rc.text, border: `1px solid ${rc.border}`,
+                    }}>
+                      {ROLE_LABELS_EQ[m.rol] ?? m.rol}
+                    </span>
+                    {memberNominas.length > 0 && (
+                      <span style={{ fontSize: 10, color: '#BBB', fontWeight: 300 }}>
+                        {memberNominas.length} nómina{memberNominas.length !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
-            ))}
+              <button
+                onClick={() => isUploading ? closeUpload() : openUpload(m.id)}
+                style={{
+                  ...btnGhost,
+                  color: isUploading ? '#AAA' : '#1A1A1A',
+                  borderColor: isUploading ? '#E8E6E0' : '#1A1A1A',
+                  fontSize: 9, padding: '6px 14px',
+                }}
+              >
+                {isUploading ? 'Cancelar' : '+ Subir nómina'}
+              </button>
+            </div>
+
+            {/* Upload form (inline per card) */}
+            {isUploading && (
+              <form onSubmit={handleUpload} style={{ padding: '16px 24px', borderBottom: memberNominas.length > 0 ? '1px solid #F5F3EF' : 'none', background: '#FAFAF8' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 12, alignItems: 'end' }} className="ap-nominas-form">
+                  <div>
+                    <label style={labelSt}>Período (mes)</label>
+                    <input type="month" value={periodo} onChange={e => setPeriodo(e.target.value)} required style={{ ...inputSt, fontSize: 13 }} />
+                  </div>
+                  <div>
+                    <label style={labelSt}>Archivo PDF</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <button
+                        type="button"
+                        onClick={() => uploadFileRef.current?.click()}
+                        style={{ ...btnGhost, whiteSpace: 'nowrap', fontSize: 9, padding: '8px 14px' }}
+                      >
+                        {file ? '✓ ' + file.name.slice(0, 24) + (file.name.length > 24 ? '…' : '') : 'Elegir PDF'}
+                      </button>
+                    </div>
+                  </div>
+                  <button type="submit" disabled={loading || !periodo || !file}
+                    style={{ ...btnPrimary, opacity: loading || !periodo || !file ? 0.5 : 1, whiteSpace: 'nowrap' }}>
+                    {loading ? 'Subiendo…' : 'Subir'}
+                  </button>
+                </div>
+                {uploadMsg && (
+                  <p style={{ fontSize: 11, color: uploadMsg.type === 'ok' ? '#1D9E75' : '#C04828', fontWeight: 300, marginTop: 10 }}>
+                    {uploadMsg.text}
+                  </p>
+                )}
+              </form>
+            )}
+
+            {/* Nóminas list */}
+            {memberNominas.length > 0 ? (
+              <div>
+                {memberNominas.map((n, ni) => (
+                  <div key={n.id} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '12px 24px',
+                    borderBottom: ni < memberNominas.length - 1 ? '1px solid #F5F3EF' : 'none',
+                    gap: 12,
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                      <span style={{ fontSize: 11, color: '#888', fontFamily: 'monospace', letterSpacing: '0.04em' }}>
+                        {n.periodo}
+                      </span>
+                      <span style={{ fontSize: 13, color: '#333', fontWeight: 300 }}>
+                        {fmtPeriodo(n.periodo)}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                      <button onClick={() => openNomina(n)} disabled={viewingId === n.id}
+                        style={{ ...btnGhost, fontSize: 9, padding: '5px 14px' }}>
+                        {viewingId === n.id ? '…' : 'Ver PDF'}
+                      </button>
+                      <button onClick={() => handleDelete(n.id)} disabled={deletingId === n.id}
+                        style={{ ...btnGhost, fontSize: 9, padding: '5px 14px', color: '#C04828', borderColor: '#F0D0C8' }}>
+                        {deletingId === n.id ? '…' : 'Eliminar'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : !isUploading ? (
+              <div style={{ padding: '20px 24px' }}>
+                <p style={{ fontSize: 12, color: '#CCC', fontWeight: 300 }}>Sin nóminas subidas</p>
+              </div>
+            ) : null}
           </div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
@@ -803,8 +881,8 @@ function EquipoTab({ allMembers: initialMembers }: { allMembers: TeamMember[] })
       />
 
       {/* Table */}
-      <div style={{ background: '#fff', border: '1px solid #ECEAE6', overflow: 'hidden' }} className="ap-table-wrap">
-        <div className="ap-table-scroll">
+      <div style={{ background: '#fff', border: '1px solid #ECEAE6' }} className="ap-table-wrap">
+        <div className="ap-table-scroll" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#FAFAF8' }}>
@@ -901,7 +979,7 @@ function EquipoTab({ allMembers: initialMembers }: { allMembers: TeamMember[] })
                   {/* Expanded edit row */}
                   {isExpanded && (
                     <tr key={`${m.id}-edit`}>
-                      <td colSpan={9} style={{ padding: '20px 24px', background: '#FAFAF8', borderBottom: '1px solid #ECEAE6' }}>
+                      <td colSpan={10} style={{ padding: '20px 24px', background: '#FAFAF8', borderBottom: '1px solid #ECEAE6' }}>
                         {/* Avatar upload */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18 }}>
                           <div
@@ -1042,7 +1120,7 @@ export default function AdminPanel({ allMembers, allParticipaciones, allNominas,
   const [activeTab, setActiveTab] = useState<TabId>('equipo')
 
   return (
-    <div style={{ maxWidth: 960 }}>
+    <div>
       {/* Section header */}
       <div style={{ marginBottom: 24 }}>
         <p style={{ fontSize: 9, color: '#CCC', fontWeight: 300, letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 6 }}>
