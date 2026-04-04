@@ -33,11 +33,11 @@ const ALL_NAV: (NavItem & { roles: FpRole[] })[] = [
     pinBottom: true,
   },
   // ── Captación (group) ─────────────────────────────────────────────────────
-  { href: '/team/captacion', label: 'Captación', roles: ['fp_partner'] },
-  { href: '/team/captacion/leads', label: 'Leads', roles: ['fp_partner'], isSubItem: true },
-  { href: '/team/captacion/propuestas', label: 'Propuestas', roles: ['fp_partner'], isSubItem: true },
-  { href: '/team/captacion/contratos', label: 'Contratos', roles: ['fp_partner'], isSubItem: true },
-  { href: '/team/captacion/plantilla-propuestas', label: 'Plantilla prop', roles: ['fp_partner'], isSubItem: true },
+  { href: '/team/captacion', label: 'Captación', roles: ['fp_partner', 'fp_manager'] },
+  { href: '/team/captacion/leads', label: 'Leads', roles: ['fp_partner', 'fp_manager'], isSubItem: true },
+  { href: '/team/captacion/propuestas', label: 'Propuestas', roles: ['fp_partner', 'fp_manager'], isSubItem: true },
+  { href: '/team/captacion/contratos', label: 'Contratos', roles: ['fp_partner', 'fp_manager'], isSubItem: true },
+  { href: '/team/captacion/plantilla-propuestas', label: 'Plantilla prop', roles: ['fp_partner', 'fp_manager'], isSubItem: true },
   // ──────────────────────────────────────────────────────────────────────────
   {
     href: '/team/proyectos',
@@ -71,12 +71,13 @@ const ALL_NAV: (NavItem & { roles: FpRole[] })[] = [
   // ── Finanzas macro ───────────────────────────────────────────────────────
   { href: '', label: 'Finanzas generales', roles: ['fp_partner'], isSection: true },
   { href: '/team/finanzas/macro/costes', label: 'Costes fijos/variables', roles: ['fp_partner'], isSubItem: true },
-  // ── Facturación ──────────────────────────────────────────────────────────
+  // ── Facturación: sección interna para fp_partner · grupo standalone para fp_manager ──
   { href: '', label: 'Facturación', roles: ['fp_partner'], isSection: true },
-  { href: '/team/finanzas/facturacion/dashboard', label: 'Dashboard general', roles: ['fp_partner'], isSubItem: true },
-  { href: '/team/finanzas/facturacion/control', label: 'Facturación por proyecto', roles: ['fp_partner'], isSubItem: true },
-  { href: '/team/finanzas/facturacion/emitidas', label: 'Facturas emitidas', roles: ['fp_partner'], isSubItem: true },
-  { href: '/team/finanzas/facturacion/empresa', label: 'Información empresa', roles: ['fp_partner'], isSubItem: true },
+  { href: '/team/finanzas/facturacion/control', label: 'Facturación', roles: ['fp_manager'], isGroup: true },
+  { href: '/team/finanzas/facturacion/dashboard', label: 'Dashboard general', roles: ['fp_partner', 'fp_manager'], isSubItem: true },
+  { href: '/team/finanzas/facturacion/control', label: 'Facturación por proyecto', roles: ['fp_partner', 'fp_manager'], isSubItem: true },
+  { href: '/team/finanzas/facturacion/emitidas', label: 'Facturas emitidas', roles: ['fp_partner', 'fp_manager'], isSubItem: true },
+  { href: '/team/finanzas/facturacion/empresa', label: 'Información empresa', roles: ['fp_partner', 'fp_manager'], isSubItem: true },
   // ── Clientes ─────────────────────────────────────────────────────────────
   // Parent for fp_partner / fp_manager — lands on base-datos
   {

@@ -18,7 +18,7 @@ export default async function Page({
 
   const { data: profile } = await supabase
     .from('profiles').select('rol').eq('id', user.id).single()
-  if (!profile || profile.rol !== 'fp_partner') redirect('/team/dashboard')
+  if (!profile || !['fp_partner', 'fp_manager'].includes(profile.rol)) redirect('/team/dashboard')
 
   const admin = createAdminClient()
 
