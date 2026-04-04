@@ -59,14 +59,16 @@ export default function ClientPortalGate({
       {/* Card */}
       <div style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: 400, padding: '0 24px' }}>
         {/* Logo */}
-        <div style={{ textAlign: 'center', marginBottom: 48 }}>
-          <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.25em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', margin: '0 0 6px' }}>
-            FORMA PRIMA
-          </p>
-          <div style={{ width: 32, height: 1, background: '#D85A30', margin: '0 auto' }} />
+        <div style={{ textAlign: 'center', marginBottom: 40 }}>
+          <img
+            src="/FORMA_PRIMA_BLANCO.png"
+            alt="Forma Prima"
+            style={{ height: 26, width: 'auto', objectFit: 'contain', opacity: 0.85 }}
+          />
+          <div style={{ width: 32, height: 1, background: '#D85A30', margin: '14px auto 0' }} />
         </div>
 
-        <div style={{
+        <div className="cpg-card" style={{
           background: 'rgba(255,255,255,0.04)', borderRadius: 16,
           border: '1px solid rgba(255,255,255,0.08)',
           backdropFilter: 'blur(20px)',

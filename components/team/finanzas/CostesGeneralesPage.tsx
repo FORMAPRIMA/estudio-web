@@ -304,7 +304,7 @@ function MonthRow({
 
       {/* Expanded content */}
       {open && (
-        <div style={{ background: '#FAFAF8', borderTop: '1px solid #F0EEE8' }}>
+        <div className="fp-table-wrap" style={{ background: '#FAFAF8', borderTop: '1px solid #F0EEE8' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#2A2A2A' }}>
@@ -678,7 +678,7 @@ export default function CostesGeneralesPage({
           <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', marginBottom: 12 }}>
             Costes de equipo
           </p>
-          <div style={{ background: '#fff', borderRadius: 8, border: '1px solid #E8E6E0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+          <div className="fp-table-wrap" style={{ background: '#fff', borderRadius: 8, border: '1px solid #E8E6E0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: '#1A1A1A' }}>
@@ -826,7 +826,7 @@ export default function CostesGeneralesPage({
           <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', marginBottom: 12 }}>
             Estimación costos fijos mensuales
           </p>
-          <div style={{ background: '#fff', borderRadius: 8, border: '1px solid #E8E6E0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+          <div className="fp-table-wrap" style={{ background: '#fff', borderRadius: 8, border: '1px solid #E8E6E0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: '#1A1A1A' }}>

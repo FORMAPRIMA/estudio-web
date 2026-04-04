@@ -1588,7 +1588,7 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
       <div style={{ maxWidth: 940 }}>
 
         {/* Header */}
-        <div style={{ marginBottom: 32, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+        <div className="tt-team-header" style={{ marginBottom: 32, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
           <div>
             <p style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', marginBottom: 6, fontWeight: 600 }}>
               Team análisis
@@ -1889,7 +1889,7 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
   return (
     <div style={{ fontFamily: "'Inter', 'system-ui', sans-serif", background: '#F8F7F4', minHeight: '100vh', color: '#222' }}>
       {/* Top bar */}
-      <div style={{
+      <div className="tt-topbar" style={{
         background: '#fff', borderBottom: '1px solid #E0DED8', padding: '0 28px',
         display: 'flex', alignItems: 'center', gap: 0, height: 48,
         position: 'sticky', top: 0, zIndex: 50,
@@ -1924,7 +1924,7 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
       </div>
 
       {/* Content */}
-      <div style={{ padding: '28px 28px', maxWidth: 1280, margin: '0 auto' }}>
+      <div className="tt-content" style={{ padding: '28px 28px', maxWidth: 1280, margin: '0 auto' }}>
         {view === 'weekly' && renderWeekly()}
         {view === 'dashboard' && renderAnalisis()}
         {view === 'team' && renderTeamAnalisis()}

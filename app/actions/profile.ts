@@ -9,11 +9,11 @@ export async function uploadAvatar(
   contentType: string
 ): Promise<{ url: string } | { error: string }> {
   const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) return { error: 'Sin sesión activa.' }
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Sin sesión activa.' }
 
   const ext = fileName.split('.').pop() ?? 'jpg'
-  const path = `${session.user.id}/avatar.${ext}`
+  const path = `${user.id}/avatar.${ext}`
   const buffer = Buffer.from(bytes)
 
   const { data, error } = await supabase.storage
@@ -31,7 +31,7 @@ export async function uploadAvatar(
   const { error: e2 } = await supabase
     .from('profiles')
     .update({ avatar_url: url })
-    .eq('id', session.user.id)
+    .eq('id', user.id)
 
   if (e2) return { error: e2.message }
 
@@ -43,13 +43,13 @@ export async function updateProfile(
   nombre: string
 ): Promise<{ success: true } | { error: string }> {
   const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) return { error: 'Sin sesión activa.' }
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Sin sesión activa.' }
 
   const { error } = await supabase
     .from('profiles')
     .update({ nombre: nombre.trim() })
-    .eq('id', session.user.id)
+    .eq('id', user.id)
 
   if (error) return { error: error.message }
 

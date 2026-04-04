@@ -130,7 +130,7 @@ export default function PropuestasPage({
             No hay propuestas{filterStatus !== 'all' ? ` en estado "${STATUS_LABEL[filterStatus]}"` : ''}
           </div>
         ) : (
-          <div style={{ background: '#fff', border: '1px solid #E8E6E0', borderRadius: 6, overflow: 'hidden' }}>
+          <div className="fp-table-wrap" style={{ background: '#fff', border: '1px solid #E8E6E0', borderRadius: 6, overflow: 'hidden' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid #E8E6E0' }}>

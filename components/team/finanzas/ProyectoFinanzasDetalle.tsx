@@ -250,7 +250,7 @@ export default function ProyectoFinanzasDetalle({
           {byEmployee.length === 0 ? (
             <EmptyState text="Sin horas registradas en este proyecto" />
           ) : (
-            <div style={{
+            <div className="fp-table-wrap" style={{
               background: '#fff', borderRadius: 8, border: '1px solid #E8E6E0',
               overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
             }}>
@@ -370,7 +370,7 @@ export default function ProyectoFinanzasDetalle({
                 })
               if (allSecs.length === 0) return <EmptyState text="Sin datos de sección — registra horas en fases o añade facturas" />
               return (
-                <div style={{ background: '#fff', borderRadius: 8, border: '1px solid #E8E6E0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+                <div className="fp-table-wrap" style={{ background: '#fff', borderRadius: 8, border: '1px solid #E8E6E0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr style={{ background: '#1A1A1A' }}>
@@ -449,7 +449,7 @@ export default function ProyectoFinanzasDetalle({
             byFase.length === 0 ? (
               <EmptyState text="No hay horas asociadas a fases en este proyecto" />
             ) : (
-              <div style={{ background: '#fff', borderRadius: 8, border: '1px solid #E8E6E0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+              <div className="fp-table-wrap" style={{ background: '#fff', borderRadius: 8, border: '1px solid #E8E6E0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: '#1A1A1A' }}>
@@ -525,7 +525,7 @@ export default function ProyectoFinanzasDetalle({
           {billingBySec.length === 0 ? (
             <EmptyState text="Sin facturas registradas · Usa el módulo de Facturación para añadirlas" />
           ) : (
-            <div style={{ background: '#fff', borderRadius: 8, border: '1px solid #E8E6E0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+            <div className="fp-table-wrap" style={{ background: '#fff', borderRadius: 8, border: '1px solid #E8E6E0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: '#1A1A1A' }}>
@@ -685,7 +685,7 @@ export default function ProyectoFinanzasDetalle({
           {costosVariables.length === 0 && !showAddForm ? (
             <EmptyState text="Sin costos variables registrados · Usa el botón «Agregar costo» para añadir suplidos, compras u otros gastos específicos de este proyecto" />
           ) : costosVariables.length > 0 ? (
-            <div style={{ background: '#fff', borderRadius: 8, border: '1px solid #E8E6E0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+            <div className="fp-table-wrap" style={{ background: '#fff', borderRadius: 8, border: '1px solid #E8E6E0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: '#1A1A1A' }}>

@@ -2,6 +2,205 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ═══════════════════════════════════════════════════════════════
+   ÁREA INTERNA FP — Mobile overrides
+   Breakpoint: < 768px
+   Estrategia: inline styles ganan en desktop (sin cambio).
+   En móvil, !important sobreescribe los inline styles.
+═══════════════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+
+  /* ── AreaInternaPage ──────────────────────────────────── */
+
+  .ai-header {
+    padding: 0 16px !important;
+  }
+
+  .ai-header-inner {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    min-height: auto !important;
+    padding: 12px 0 !important;
+  }
+
+  .ai-identity {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+  }
+
+  .ai-identity p {
+    font-size: 14px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .ai-tabs {
+    width: 100% !important;
+    margin-top: 4px !important;
+  }
+
+  .ai-tabs button {
+    flex: 1 !important;
+    padding: 8px 10px !important;
+    font-size: 9px !important;
+    letter-spacing: 0.08em !important;
+  }
+
+  .ai-content {
+    padding: 16px !important;
+  }
+
+  .ai-footer {
+    padding: 12px 16px !important;
+  }
+
+  /* ── PersonalDashboard ───────────────────────────────── */
+
+  .pd-root {
+    max-width: 100% !important;
+  }
+
+  .pd-fondo-chart {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .pd-fondo-chart svg {
+    min-width: 480px !important;
+  }
+
+  /* ── AdminPanel ──────────────────────────────────────── */
+
+  .ap-tabs {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+  }
+
+  .ap-tabs::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .ap-tabs button {
+    white-space: nowrap !important;
+    padding: 10px 14px 11px !important;
+    font-size: 9px !important;
+  }
+
+  .ap-table-scroll {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .ap-table-scroll table {
+    min-width: 680px !important;
+  }
+
+  .ap-nominas-form {
+    grid-template-columns: 1fr !important;
+  }
+
+  .ap-expand-grid {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  /* ── Table scroll wrapper (all pages) ───────────────────── */
+
+  .fp-table-wrap {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .fp-table-wrap table {
+    min-width: 580px !important;
+  }
+
+  /* ── Client Portal Gate ─────────────────────────────────── */
+
+  .cpg-card {
+    padding: 28px 20px !important;
+  }
+
+  /* ── Client Portal ───────────────────────────────────────── */
+
+  .cp-nav {
+    padding: 0 14px !important;
+    gap: 12px !important;
+  }
+
+  .cp-nav-tabs {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+  }
+
+  .cp-nav-tabs::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .cp-nav-code {
+    display: none !important;
+  }
+
+  .cp-hero-overlay {
+    padding: 0 20px 40px !important;
+  }
+
+  .cp-hero-scroll-hint {
+    display: none !important;
+  }
+
+  .cp-section-pad {
+    padding: 32px 16px !important;
+  }
+
+  .cp-metrics-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .cp-gallery {
+    columns: 2 140px !important;
+  }
+
+  .cp-visit-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .cp-footer {
+    padding: 20px 16px !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+  }
+
+  .cp-visit-grid iframe {
+    height: 420px !important;
+  }
+
+  /* ── Time Tracker ────────────────────────────────────────── */
+
+  .tt-topbar {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+  }
+
+  .tt-topbar::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .tt-content {
+    padding: 16px 14px !important;
+  }
+
+  .tt-team-header {
+    flex-wrap: wrap !important;
+    align-items: flex-start !important;
+  }
+
+}
+
 @layer base {
   html {
     scroll-behavior: smooth;

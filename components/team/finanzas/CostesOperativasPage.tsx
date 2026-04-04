@@ -225,7 +225,7 @@ export default function CostesOperativasPage({
           <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', marginBottom: 12 }}>
             Costes de equipo
           </p>
-          <div style={{
+          <div className="fp-table-wrap" style={{
             background: '#fff', borderRadius: 8, border: '1px solid #E8E6E0',
             overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
           }}>
@@ -416,7 +416,7 @@ export default function CostesOperativasPage({
           <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', marginBottom: 12 }}>
             Estimación costos fijos mensuales
           </p>
-          <div style={{
+          <div className="fp-table-wrap" style={{
             background: '#fff', borderRadius: 8, border: '1px solid #E8E6E0',
             overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
           }}>

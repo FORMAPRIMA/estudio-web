@@ -731,16 +731,18 @@ function VisitasSection({
           Sin visitas publicadas
         </div>
       ) : visitasPublicas.length > 0 ? (
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              {['Fecha', 'Título', 'Asistentes', 'Acta PDF', '', ''].map((h, i) => (
-                <th key={i} style={thStyle}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>{visitasPublicas.map(renderVisitaRow)}</tbody>
-        </table>
+        <div className="fp-table-wrap">
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                {['Fecha', 'Título', 'Asistentes', 'Acta PDF', '', ''].map((h, i) => (
+                  <th key={i} style={thStyle}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>{visitasPublicas.map(renderVisitaRow)}</tbody>
+          </table>
+        </div>
       ) : null}
     </div>
 
@@ -758,16 +760,18 @@ function VisitasSection({
           Sin actas internas
         </div>
       ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              {['Fecha', 'Título', 'Asistentes', 'Acta PDF', '', ''].map((h, i) => (
-                <th key={i} style={thStyle}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>{actasInternas.map(renderVisitaRow)}</tbody>
-        </table>
+        <div className="fp-table-wrap">
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                {['Fecha', 'Título', 'Asistentes', 'Acta PDF', '', ''].map((h, i) => (
+                  <th key={i} style={thStyle}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>{actasInternas.map(renderVisitaRow)}</tbody>
+          </table>
+        </div>
       )}
     </div>
     </>
@@ -1467,6 +1471,7 @@ function FacturacionTab({ facturas }: { facturas: Factura[] }) {
       {Object.entries(grouped).map(([seccion, facts]) => (
         <div key={seccion} style={S.card}>
           <p style={S.sectionTitle}>{seccion}</p>
+          <div className="fp-table-wrap">
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
@@ -1492,6 +1497,7 @@ function FacturacionTab({ facturas }: { facturas: Factura[] }) {
               })}
             </tbody>
           </table>
+          </div>
           <div style={{ marginTop: 10, textAlign: 'right', fontSize: 12, fontWeight: 600, color: '#1A1A1A' }}>
             Total sección: {fmtMoney(facts.reduce((s, f) => s + f.monto, 0))}
           </div>

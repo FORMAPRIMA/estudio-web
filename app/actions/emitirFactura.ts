@@ -10,6 +10,7 @@ import {
 import type { FacturaPDFData } from '@/components/pdfs/FacturaEmitidaPDF'
 import { calcTotals } from '@/lib/facturasUtils'
 import { sendEmail, wrapEmail } from '@/lib/email'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -20,7 +21,7 @@ export interface ExtraEmail {
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
-const PARTNERS_CC = ['jlorag@formaprima.es', 'ghidalgo@formaprima.es']
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 function eur(n: number) {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(n)
@@ -34,6 +35,10 @@ export async function emitirYEnviarFactura(
   extraEmails:  ExtraEmail[],
 ): Promise<{ id: string; numero_completo: string } | { error: string }> {
 
+  if (!emailCliente?.trim() || !EMAIL_RE.test(emailCliente.trim())) {
+    return { error: 'Email del cliente inválido o requerido.' }
+  }
+
   // 1 — Crear la factura
   const created = await createFacturaEmitida(input)
   if ('error' in created) return created
@@ -42,6 +47,12 @@ export async function emitirYEnviarFactura(
   try {
     // 2 — Config de estudio (banco, IBAN, SWIFT)
     const config = await getEstudioConfig()
+
+    // Partner emails from DB (avoid hardcoded list)
+    const adminForCC = createAdminClient()
+    const { data: partnerProfiles } = await adminForCC
+      .from('profiles').select('email').in('rol', ['fp_partner', 'fp_manager'])
+    const PARTNERS_CC = (partnerProfiles ?? []).map((p: { email: string }) => p.email).filter(Boolean)
 
     // 3 — Totales
     const totals  = calcTotals(input.items, input.tipo_iva, input.tipo_irpf)

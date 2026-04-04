@@ -414,7 +414,7 @@ export default function TasksUrgencia({ tasks: initialTasks }: Props) {
                     </span>
                   )}
                   <StatusBadge task={task} onUpdate={handleStatusUpdate} />
-                  <span className={`text-[9px] tracking-wider uppercase w-14 text-right shrink-0 ${task.prioridad > 0 ? pm.color : 'text-transparent select-none'}`}>
+                  <span className={`hidden sm:inline text-[9px] tracking-wider uppercase w-14 text-right shrink-0 ${task.prioridad > 0 ? pm.color : 'text-transparent select-none'}`}>
                     {task.prioridad > 0 ? pm.label : '·'}
                   </span>
                 </div>

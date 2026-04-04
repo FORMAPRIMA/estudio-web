@@ -8,13 +8,13 @@ export const metadata = { title: 'Equipo' }
 
 export default async function Page() {
   const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) redirect('/login')
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
 
   const { data: profile } = await supabase
     .from('profiles')
     .select('rol')
-    .eq('id', session.user.id)
+    .eq('id', user.id)
     .single()
 
   if (!profile || profile.rol !== 'fp_partner') redirect('/team/dashboard')
@@ -30,7 +30,7 @@ export default async function Page() {
   return (
     <EquipoPage
       initialMembers={(members ?? []) as TeamMemberFull[]}
-      currentUserId={session.user.id}
+      currentUserId={user.id}
     />
   )
 }

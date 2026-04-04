@@ -11,7 +11,7 @@ import { calcTotals } from '@/lib/facturasUtils'
 import { sendEmail, wrapEmail } from '@/lib/email'
 import type { ExtraEmail } from '@/app/actions/emitirFactura'
 
-const PARTNERS_CC = ['jlorag@formaprima.es', 'ghidalgo@formaprima.es']
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 function eur(n: number) {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(n)
@@ -39,9 +39,15 @@ export async function POST(req: NextRequest) {
       clientesAdicionales?: { nombre: string; apellidos: string | null; email: string | null; email_cc: string | null }[]
     }
 
-    if (!emailCliente?.trim()) {
-      return NextResponse.json({ error: 'Email del cliente requerido.' }, { status: 400 })
+    if (!emailCliente?.trim() || !EMAIL_RE.test(emailCliente.trim())) {
+      return NextResponse.json({ error: 'Email del cliente inválido o requerido.' }, { status: 400 })
     }
+
+    // ── Fetch partner emails dynamically from DB ─────────────────────────────
+    const adminForCC = createAdminClient()
+    const { data: partnerProfiles } = await adminForCC
+      .from('profiles').select('email').in('rol', ['fp_partner', 'fp_manager'])
+    const PARTNERS_CC = (partnerProfiles ?? []).map((p: { email: string }) => p.email).filter(Boolean)
 
     // ── 1. Crear factura ────────────────────────────────────────────────────
     const created = await createFacturaEmitida(input)

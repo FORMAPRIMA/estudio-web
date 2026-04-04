@@ -1095,7 +1095,7 @@ function BatchPDFModal({ facturas, onClose }: { facturas: FacturaEmitida[]; onCl
         </div>
 
         {/* List */}
-        <div style={{ overflowY: 'auto', flex: 1 }}>
+        <div style={{ overflowY: 'auto', flex: 1 }} className="fp-table-wrap">
           {visible.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '48px 24px', color: '#CCC', fontSize: 13 }}>Sin facturas con ese filtro</div>
           ) : (
@@ -1345,7 +1345,7 @@ export default function FacturasEmitidasPage({
             {query ? 'Sin resultados' : 'No hay facturas emitidas — pulsa "+ Nueva factura" para empezar'}
           </div>
         ) : (
-          <div style={{ background: '#fff', border: '1px solid #E8E6E0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)', borderRadius: 10 }}>
+          <div className="fp-table-wrap" style={{ background: '#fff', border: '1px solid #E8E6E0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)', borderRadius: 10 }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: '#1A1A1A' }}>

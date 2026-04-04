@@ -174,7 +174,7 @@ function NominasTab({ allMembers, allNominas }: { allMembers: TeamMember[]; allN
         <p style={{ fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: '#BBB', fontWeight: 300, marginBottom: 20 }}>
           Subir nómina
         </p>
-        <form onSubmit={upload} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, alignItems: 'end' }}>
+        <form onSubmit={upload} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, alignItems: 'end' }} className="ap-nominas-form">
           <div>
             <label style={labelSt}>Empleado</label>
             <select value={selUserId} onChange={e => setSelUserId(e.target.value)} required style={selectSt}>
@@ -760,7 +760,8 @@ function EquipoTab({ allMembers: initialMembers }: { allMembers: TeamMember[] })
       )}
 
       {/* Table */}
-      <div style={{ background: '#fff', border: '1px solid #ECEAE6', overflow: 'hidden' }}>
+      <div style={{ background: '#fff', border: '1px solid #ECEAE6', overflow: 'hidden' }} className="ap-table-wrap">
+        <div className="ap-table-scroll">
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#FAFAF8' }}>
@@ -842,7 +843,7 @@ function EquipoTab({ allMembers: initialMembers }: { allMembers: TeamMember[] })
                   {isExpanded && (
                     <tr key={`${m.id}-edit`}>
                       <td colSpan={7} style={{ padding: '20px 24px', background: '#FAFAF8', borderBottom: '1px solid #ECEAE6' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 14 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 14 }} className="ap-expand-grid">
                           {[
                             { key: 'nombre',            label: 'Nombre *' },
                             { key: 'apellido',           label: 'Apellido' },
@@ -901,6 +902,7 @@ function EquipoTab({ allMembers: initialMembers }: { allMembers: TeamMember[] })
             })}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   )
@@ -933,7 +935,7 @@ export default function AdminPanel({ allMembers, allParticipaciones, allNominas,
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', borderBottom: '1px solid #ECEAE6', marginBottom: 24 }}>
+      <div style={{ display: 'flex', borderBottom: '1px solid #ECEAE6', marginBottom: 24 }} className="ap-tabs">
         {TABS.map(t => (
           <button
             key={t.id}

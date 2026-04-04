@@ -469,7 +469,7 @@ function FondoSection({
       </div>
 
       {/* Chart */}
-      <div style={{ marginBottom: vesting ? 28 : 0 }}>
+      <div style={{ marginBottom: vesting ? 28 : 0 }} className="pd-fondo-chart">
         <FondoChart data={periodos} userPct={miPct} />
       </div>
 
@@ -504,7 +504,7 @@ export default function PersonalDashboard({
   initialParticipacion,
 }: Props) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 860 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 860 }} className="pd-root">
       <SeniorityCard user={currentUser} />
       <NominasSection nominas={initialNominas} />
       <FondoSection periodos={initialPeriodos} participacion={initialParticipacion} />

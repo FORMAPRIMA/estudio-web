@@ -123,16 +123,14 @@ export default async function TeamLayout({
 }) {
   const supabase = await createClient()
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
+  const { data: { user } } = await supabase.auth.getUser()
 
-  if (!session) redirect('/login')
+  if (!user) redirect('/login')
 
   const { data: profile } = await supabase
     .from('profiles')
     .select('nombre, rol')
-    .eq('id', session.user.id)
+    .eq('id', user.id)
     .single()
 
   if (!profile || !FP_ROLES.includes(profile.rol as FpRole)) redirect('/login')

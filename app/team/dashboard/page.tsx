@@ -35,13 +35,13 @@ function getInitials(nombre: string) {
 
 export default async function DashboardPage() {
   const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) redirect('/login')
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
 
   const { data: profile } = await supabase
     .from('profiles')
     .select('nombre, rol')
-    .eq('id', session.user.id)
+    .eq('id', user.id)
     .single()
 
   if (!profile) redirect('/login')
@@ -55,12 +55,12 @@ export default async function DashboardPage() {
       .select('id, tipo, nivel, titulo, contenido, fecha_activa, fecha_caducidad, autor:profiles!autor_id(nombre)')
       .lte('fecha_activa', today)
       .or(`fecha_caducidad.is.null,fecha_caducidad.gte.${today}`)
-      .or(`destinatario_id.is.null,destinatario_id.eq.${session.user.id}`)
+      .or(`destinatario_id.is.null,destinatario_id.eq.${user.id}`)
       .order('created_at', { ascending: false }),
     supabase
       .from('avisos_archivados')
       .select('aviso_id')
-      .eq('user_id', session.user.id),
+      .eq('user_id', user.id),
   ])
 
   const archivedIds = new Set((archivadosRaw ?? []).map((r: any) => r.aviso_id))
@@ -128,7 +128,7 @@ export default async function DashboardPage() {
       proyectos(nombre, codigo, status),
       catalogo_fases(numero, label)
     `)
-    .contains('responsable_ids', [session.user.id])
+    .contains('responsable_ids', [user.id])
 
   const tasks: DashboardTask[] = (tasksRaw ?? [])
     .map((t: any) => ({

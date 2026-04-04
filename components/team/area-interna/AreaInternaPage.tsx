@@ -107,20 +107,20 @@ export default function AreaInternaPage({
     .filter(Boolean).map(s => s![0].toUpperCase()).join('')
 
   return (
-    <div style={{ minHeight: '100vh', background: '#F2F2F0' }}>
+    <div style={{ minHeight: '100vh', background: '#F2F2F0' }} className="ai-page">
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <div style={{
         background: '#fff', borderBottom: '1px solid #ECEAE6',
         padding: '0 32px',
         position: 'sticky', top: 0, zIndex: 10,
-      }}>
+      }} className="ai-header">
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           minHeight: 64,
-        }}>
+        }} className="ai-header-inner">
           {/* Identity */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }} className="ai-identity">
             <div style={{
               width: 36, height: 36, borderRadius: '50%',
               background: roleColor, display: 'flex', alignItems: 'center',
@@ -158,7 +158,7 @@ export default function AreaInternaPage({
 
           {/* Tab toggle (partner only) */}
           {isPartner && (
-            <div style={{ display: 'flex', border: '1px solid #ECEAE6', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', border: '1px solid #ECEAE6', overflow: 'hidden' }} className="ai-tabs">
               {(['dashboard', 'admin'] as const).map((t, i) => (
                 <button
                   key={t}
@@ -183,7 +183,7 @@ export default function AreaInternaPage({
       </div>
 
       {/* ── Content ─────────────────────────────────────────────────────── */}
-      <div style={{ padding: '32px' }}>
+      <div style={{ padding: '32px' }} className="ai-content">
         {activeTab === 'dashboard' ? (
           <PersonalDashboard
             currentUser={currentUser}
@@ -202,7 +202,7 @@ export default function AreaInternaPage({
       </div>
 
       {/* ── Footer security note ─────────────────────────────────────────── */}
-      <div style={{ borderTop: '1px solid #ECEAE6', padding: '16px 32px', background: '#fff', marginTop: 16 }}>
+      <div style={{ borderTop: '1px solid #ECEAE6', padding: '16px 32px', background: '#fff', marginTop: 16 }} className="ai-footer">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
             <path d="M6 1L10 3V6.5C10 8.8 8.2 10.8 6 11C3.8 10.8 2 8.8 2 6.5V3L6 1Z"

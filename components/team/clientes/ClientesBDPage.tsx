@@ -573,7 +573,7 @@ export default function ClientesBDPage({ clientes: initial }: { clientes: Client
             {query ? 'Sin resultados para esa búsqueda' : 'No hay clientes — pulsa "Nuevo cliente" para empezar'}
           </div>
         ) : (
-          <div style={{ background: '#fff', borderRadius: 10, border: '1px solid #E8E6E0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+          <div className="fp-table-wrap" style={{ background: '#fff', borderRadius: 10, border: '1px solid #E8E6E0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: '#1A1A1A' }}>

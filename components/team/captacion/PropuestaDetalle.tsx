@@ -591,7 +591,7 @@ export default function PropuestaDetalle({
                 No hay fases de interiorismo configuradas en la plantilla de proyectos.
               </div>
             ) : (
-              <div style={{ marginBottom: 20 }}>
+              <div className="fp-table-wrap" style={{ marginBottom: 20 }}>
                 <Label>Horas objetivo por fase</Label>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginTop: 8 }}>
                   <thead>
@@ -627,7 +627,7 @@ export default function PropuestaDetalle({
 
             {/* 3. Distribución por seniority */}
             {totalHorasFases > 0 && (
-              <div style={{ marginBottom: 24 }}>
+              <div className="fp-table-wrap" style={{ marginBottom: 24 }}>
                 <Label>Distribución del coste por perfil</Label>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginTop: 8 }}>
                   <thead>

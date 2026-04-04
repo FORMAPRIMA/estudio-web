@@ -5,7 +5,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 // Also callable manually with CRON_SECRET header for testing
 export async function GET(req: NextRequest) {
   const secret = req.headers.get('x-cron-secret') ?? req.nextUrl.searchParams.get('secret')
-  if (process.env.CRON_SECRET && secret !== process.env.CRON_SECRET) {
+  const expected = process.env.CRON_SECRET
+  if (!expected || secret !== expected) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

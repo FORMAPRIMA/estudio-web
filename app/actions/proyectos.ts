@@ -30,11 +30,11 @@ export async function getProyectoImageUploadToken(
 ): Promise<{ token: string; path: string; publicUrl: string } | { error: string }> {
   try {
     const supabase = await createClient()
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) return { error: 'Sin sesión activa.' }
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'Sin sesión activa.' }
 
     const ext = fileName.split('.').pop() ?? 'jpg'
-    const storagePath = `${session.user.id}/${Date.now()}.${ext}`
+    const storagePath = `${user.id}/${Date.now()}.${ext}`
 
     const { data, error } = await supabase.storage
       .from('proyecto-imagenes')
@@ -58,8 +58,8 @@ export async function createProyecto(input: CreateProyectoInput) {
   try {
     const supabase = await createClient()
 
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) return { error: 'Sin sesión activa. Recarga la página.' }
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'Sin sesión activa. Recarga la página.' }
 
     const slug = `${input.nombre.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')}-${Date.now()}`
 
@@ -75,7 +75,7 @@ export async function createProyecto(input: CreateProyectoInput) {
         superficie_util: input.superficie_util,
         cliente_id: input.cliente_ids[0] ?? null,
         status: 'activo',
-        created_by: session.user.id,
+        created_by: user.id,
         ubicacion: input.direccion || '-',
         año: new Date().getFullYear(),
         tipologia: '-',
@@ -135,8 +135,13 @@ export async function createProyecto(input: CreateProyectoInput) {
 
 export async function updateProyectoStatus(id: string, status: string) {
   const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) return { error: 'Sin sesión activa.' }
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Sin sesión activa.' }
+
+  const { data: profile } = await supabase.from('profiles').select('rol').eq('id', user.id).single()
+  if (!profile || !['fp_manager', 'fp_partner'].includes(profile.rol)) {
+    return { error: 'Sin permisos.' }
+  }
 
   const { error } = await supabase.from('proyectos').update({ status }).eq('id', id)
   if (error) return { error: error.message }
@@ -164,8 +169,13 @@ export async function updateProyecto(
   }
 ) {
   const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) return { error: 'Sin sesión activa.' }
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Sin sesión activa.' }
+
+  const { data: profile } = await supabase.from('profiles').select('rol').eq('id', user.id).single()
+  if (!profile || !['fp_manager', 'fp_partner'].includes(profile.rol)) {
+    return { error: 'Sin permisos.' }
+  }
 
   const updatePayload: Record<string, unknown> = {
     nombre: data.nombre,
@@ -199,8 +209,13 @@ export async function addProyectoFase(
   responsables: string[]
 ) {
   const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) return { error: 'Sin sesión activa.' }
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Sin sesión activa.' }
+
+  const { data: profile } = await supabase.from('profiles').select('rol').eq('id', user.id).single()
+  if (!profile || !['fp_manager', 'fp_partner'].includes(profile.rol)) {
+    return { error: 'Sin permisos.' }
+  }
 
   // Get proyecto superficie + fase ratio to compute horas_objetivo
   const { data: proyecto, error: eProyecto } = await supabase
@@ -236,13 +251,13 @@ export async function addProyectoFase(
 
 export async function deleteProyectoFase(pfId: string, proyectoId: string) {
   const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) return { error: 'Sin sesión activa.' }
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Sin sesión activa.' }
 
   const { data: profile } = await supabase
     .from('profiles')
     .select('rol')
-    .eq('id', session.user.id)
+    .eq('id', user.id)
     .single()
 
   if (!profile || !['fp_manager', 'fp_partner'].includes(profile.rol)) {
@@ -281,8 +296,8 @@ export async function deleteProyectoFase(pfId: string, proyectoId: string) {
 
 export async function iniciarFase(pfId: string, proyectoId: string, faseId: string) {
   const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) return { error: 'Sin sesión activa.' }
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Sin sesión activa.' }
 
   // Fetch proyecto, fase info, and responsables in parallel
   const [{ data: proyecto }, { data: catalogoFase }, { data: pf }] = await Promise.all([
@@ -348,14 +363,14 @@ export async function iniciarFase(pfId: string, proyectoId: string, faseId: stri
 
 export async function deleteProyecto(id: string) {
   const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) return { error: 'Sin sesión activa.' }
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Sin sesión activa.' }
 
   // Verify caller is manager or partner
   const { data: profile } = await supabase
     .from('profiles')
     .select('rol')
-    .eq('id', session.user.id)
+    .eq('id', user.id)
     .single()
 
   if (!profile || !['fp_manager', 'fp_partner'].includes(profile.rol)) {
@@ -388,8 +403,8 @@ export async function addProyectoCliente(
 ): Promise<{ success: true } | { error: string }> {
   try {
     const supabase = await createClient()
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) return { error: 'Sin sesión activa.' }
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'Sin sesión activa.' }
 
     const { error } = await supabase
       .from('proyecto_clientes')
@@ -409,8 +424,8 @@ export async function removeProyectoCliente(
 ): Promise<{ success: true } | { error: string }> {
   try {
     const supabase = await createClient()
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) return { error: 'Sin sesión activa.' }
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'Sin sesión activa.' }
 
     const { error } = await supabase
       .from('proyecto_clientes')
@@ -433,8 +448,8 @@ export async function updateProyectoClienteRol(
 ): Promise<{ success: true } | { error: string }> {
   try {
     const supabase = await createClient()
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) return { error: 'Sin sesión activa.' }
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'Sin sesión activa.' }
 
     const { error } = await supabase
       .from('proyecto_clientes')

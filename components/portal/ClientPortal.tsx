@@ -127,7 +127,7 @@ function TabInicio({ proyecto, renders, portal }: {
         {/* Gradient overlay */}
         <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.3) 50%, rgba(0,0,0,0.1) 100%)', pointerEvents: 'none' }} />
         {/* Project info overlay */}
-        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '0 60px 52px' }}>
+        <div className="cp-hero-overlay" style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '0 60px 52px' }}>
           {proyecto.codigo && (
             <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', margin: '0 0 10px' }}>
               {proyecto.codigo}
@@ -152,7 +152,7 @@ function TabInicio({ proyecto, renders, portal }: {
           </div>
         </div>
         {/* Scroll hint */}
-        <div style={{ position: 'absolute', bottom: 52, right: 60, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, opacity: 0.4 }}>
+        <div className="cp-hero-scroll-hint" style={{ position: 'absolute', bottom: 52, right: 60, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, opacity: 0.4 }}>
           <div style={{ width: 1, height: 40, background: '#fff' }} />
           <span style={{ fontSize: 8, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#fff', writingMode: 'vertical-rl' }}>scroll</span>
         </div>
@@ -161,7 +161,7 @@ function TabInicio({ proyecto, renders, portal }: {
       {/* Below-fold info */}
       {portal?.floorfy_url && (
         <div style={{ background: '#fff', borderTop: '1px solid #E8E6E0' }}>
-          <div style={{ maxWidth: 1100, margin: '0 auto', padding: '56px 60px' }}>
+          <div className="cp-section-pad" style={{ maxWidth: 1100, margin: '0 auto', padding: '56px 60px' }}>
             <STitle>Tour virtual 3D</STitle>
             <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid #E8E6E0' }}>
               <iframe src={portal.floorfy_url} style={{ width: '100%', height: 520, border: 'none', display: 'block' }} allowFullScreen />
@@ -264,7 +264,7 @@ function TabDocumentosYPagos({
   }
 
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '56px 60px' }}>
+    <div className="cp-section-pad" style={{ maxWidth: 1100, margin: '0 auto', padding: '56px 60px' }}>
 
       {/* ── Documentos ── */}
       {hasDocs && (
@@ -282,7 +282,7 @@ function TabDocumentosYPagos({
           <STitle>Facturación</STitle>
 
           {/* Summary metrics */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, marginBottom: 24 }}>
+          <div className="cp-metrics-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, marginBottom: 24 }}>
             {[
               { label: 'Total del proyecto', value: fmtMoney(total),    color: '#1A1A1A', sub: `${facturas.length} partida${facturas.length !== 1 ? 's' : ''}` },
               { label: 'Importe cobrado',    value: fmtMoney(pagado),   color: '#1D9E75', sub: `${Math.round(pct)}% completado` },
@@ -314,7 +314,7 @@ function TabDocumentosYPagos({
               const ib = SECCION_ORDER.indexOf(b as typeof SECCION_ORDER[number])
               return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib)
             }).map(([seccion, facts]) => (
-              <div key={seccion} style={{ background: '#fff', borderRadius: 12, border: '1px solid #E8E6E0', overflow: 'hidden' }}>
+              <div key={seccion} className="fp-table-wrap" style={{ background: '#fff', borderRadius: 12, border: '1px solid #E8E6E0', overflow: 'hidden' }}>
                 <div style={{ padding: '13px 22px', background: '#F8F7F4', borderBottom: '1px solid #E8E6E0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#1A1A1A' }}>{seccion}</span>
                   <span style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>{fmtMoney(facts.reduce((s, f) => s + f.monto, 0))}</span>
@@ -367,9 +367,9 @@ function TabGaleria({ renders }: { renders: Render[] }) {
   }
 
   return (
-    <div style={{ maxWidth: 1200, margin: '0 auto', padding: '56px 60px' }}>
+    <div className="cp-section-pad" style={{ maxWidth: 1200, margin: '0 auto', padding: '56px 60px' }}>
       <STitle>Galería de renders</STitle>
-      <div style={{ columns: '3 280px', gap: 12 }}>
+      <div className="cp-gallery" style={{ columns: '3 280px', gap: 12 }}>
         {renders.map(r => (
           <div key={r.id}
             onClick={() => setLightbox({ url: r.url, nombre: r.nombre })}
@@ -567,7 +567,7 @@ function TabObra({ visitas, partidas }: { visitas: Visita[]; partidas: Partida[]
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '56px 60px', display: 'flex', flexDirection: 'column', gap: 52 }}>
+    <div className="cp-section-pad" style={{ maxWidth: 1100, margin: '0 auto', padding: '56px 60px', display: 'flex', flexDirection: 'column', gap: 52 }}>
 
       {partidas.length > 0 && (
         <section>
@@ -650,7 +650,7 @@ function TabVisitasObra({ visitas }: { visitas: Visita[] }) {
   const hasTour = Boolean(selected.floorfy_url)
 
   return (
-    <div style={{ maxWidth: 1200, margin: '0 auto', padding: '56px 60px' }}>
+    <div className="cp-section-pad" style={{ maxWidth: 1200, margin: '0 auto', padding: '56px 60px' }}>
       <STitle>Visitas de obra</STitle>
 
       {/* Sub-tabs: one per visit */}
@@ -698,7 +698,7 @@ function TabVisitasObra({ visitas }: { visitas: Visita[] }) {
 
       {/* PDF + Floorfy */}
       {hasPdf || hasTour ? (
-        <div style={{ display: 'grid', gridTemplateColumns: hasPdf && hasTour ? '1fr 1fr' : '1fr', gap: 28 }}>
+        <div className="cp-visit-grid" style={{ display: 'grid', gridTemplateColumns: hasPdf && hasTour ? '1fr 1fr' : '1fr', gap: 28 }}>
           {hasPdf && (
             <div>
               <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#AAA', marginBottom: 12 }}>
@@ -785,7 +785,7 @@ export default function ClientPortal({
     <div style={{ fontFamily: "'Inter', system-ui, sans-serif", minHeight: '100vh', background: '#F8F7F4', color: '#1A1A1A' }}>
 
       {/* ── Fixed top nav ── */}
-      <nav style={{
+      <nav className="cp-nav" style={{
         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
         height: NAV_H, background: '#111110',
         borderBottom: '1px solid rgba(255,255,255,0.06)',
@@ -795,7 +795,7 @@ export default function ClientPortal({
         <FPLogo />
 
         {/* Tabs */}
-        <div style={{ display: 'flex', flex: 1, gap: 0, height: '100%' }}>
+        <div className="cp-nav-tabs" style={{ display: 'flex', flex: 1, gap: 0, height: '100%' }}>
           {visibleTabs.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)} style={{
               padding: '0 18px', height: '100%', background: 'none', border: 'none', cursor: 'pointer',
@@ -803,7 +803,7 @@ export default function ClientPortal({
               letterSpacing: '0.06em',
               color: tab === t.id ? '#fff' : 'rgba(255,255,255,0.35)',
               borderBottom: tab === t.id ? `2px solid #D85A30` : '2px solid transparent',
-              transition: 'all 0.15s', whiteSpace: 'nowrap',
+              transition: 'all 0.15s', whiteSpace: 'nowrap', flexShrink: 0,
             }}
               onMouseEnter={e => { if (tab !== t.id) (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.7)' }}
               onMouseLeave={e => { if (tab !== t.id) (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.35)' }}
@@ -815,7 +815,7 @@ export default function ClientPortal({
 
         {/* Project code */}
         {proyecto.codigo && (
-          <span style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.2)', flexShrink: 0 }}>
+          <span className="cp-nav-code" style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.2)', flexShrink: 0 }}>
             {proyecto.codigo}
           </span>
         )}
@@ -832,7 +832,7 @@ export default function ClientPortal({
 
       {/* ── Footer ── */}
       {tab !== 'inicio' && (
-        <footer style={{ borderTop: '1px solid #E8E6E0', padding: '28px 60px', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 60 }}>
+        <footer className="cp-footer" style={{ borderTop: '1px solid #E8E6E0', padding: '28px 60px', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 60 }}>
           <img src="/FORMA_PRIMA_NEGRO.png" alt="Forma Prima" style={{ height: 20, width: 'auto', objectFit: 'contain' }} />
           <p style={{ fontSize: 10, color: '#CCC', margin: 0 }}>Portal privado · {proyecto.nombre}</p>
         </footer>
