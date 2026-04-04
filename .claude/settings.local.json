@@ -6,7 +6,10 @@
       "Bash(find /Users/joseloragonzalez/estudio-web/components -name \"*.tsx\" -exec grep -l \"toggle\\\\|switch\" {} \\\\;)",
       "Bash(npm run:*)",
       "Bash(node:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ]
   }
 }
