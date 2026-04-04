@@ -427,23 +427,18 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
     return () => window.removeEventListener('keydown', handler)
   }, [])
 
-  // Close dropdown on page scroll (but not when scrolling inside the panel).
-  // Delay attachment to avoid immediate close caused by iOS keyboard appearing.
+  // Close dropdown on page scroll (desktop only — on mobile the keyboard
+  // appearance triggers scroll, so we rely solely on the backdrop tap).
   useEffect(() => {
-    if (!openCell) return
+    if (!openCell || isMobile) return
     const handler = (e: Event) => {
       const panel = document.getElementById('tt-dropdown-panel')
       if (panel && panel.contains(e.target as Node)) return
       setOpenCell(null)
     }
-    const timer = setTimeout(() => {
-      window.addEventListener('scroll', handler, true)
-    }, 400)
-    return () => {
-      clearTimeout(timer)
-      window.removeEventListener('scroll', handler, true)
-    }
-  }, [openCell])
+    window.addEventListener('scroll', handler, true)
+    return () => window.removeEventListener('scroll', handler, true)
+  }, [openCell, isMobile])
 
   // ── Cell operations ──
 
@@ -1192,9 +1187,12 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
                             const rect = e.currentTarget.getBoundingClientRect()
                             const panelH = 340
                             const panelW = 284
-                            const top = rect.bottom + 4 + panelH > window.innerHeight
-                              ? rect.top - panelH - 4
-                              : rect.bottom + 4
+                            // On mobile always render above the cell so keyboard doesn't cover it
+                            const top = isMobile
+                              ? Math.max(4, rect.top - panelH - 4)
+                              : (rect.bottom + 4 + panelH > window.innerHeight
+                                  ? rect.top - panelH - 4
+                                  : rect.bottom + 4)
                             const left = rect.left + panelW > window.innerWidth
                               ? window.innerWidth - panelW - 8
                               : rect.left
@@ -1976,7 +1974,7 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
             {/* Search input */}
             <div style={{ padding: '9px 12px', borderBottom: '1px solid #EDEAE4', flexShrink: 0 }}>
               <input
-                autoFocus={!isMobile}
+                autoFocus
                 value={dropSearch}
                 onChange={(e) => setDropSearch(e.target.value)}
                 placeholder="Buscar proyecto o código..."
