@@ -42,8 +42,9 @@ export default function PropuestasPage({
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState<string>('all')
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [localPropuestas, setLocalPropuestas] = useState(propuestas)
 
-  const filtered = propuestas.filter(p =>
+  const filtered = localPropuestas.filter(p =>
     filterStatus === 'all' ? true : p.status === filterStatus
   )
 
@@ -63,10 +64,8 @@ export default function PropuestasPage({
 
   async function handleDelete(id: string) {
     if (!confirm('¿Eliminar esta propuesta?')) return
-    setDeletingId(id)
+    setLocalPropuestas(prev => prev.filter(p => p.id !== id))
     await deletePropuesta(id)
-    setDeletingId(null)
-    router.refresh()
   }
 
   const filteredLeads = leads.filter(l => {

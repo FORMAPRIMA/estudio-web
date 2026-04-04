@@ -338,7 +338,6 @@ export default function LeadsPage({ leads: initial }: { leads: Lead[] }) {
       if ('error' in res) {
         alert(`Error al guardar: ${res.error}`)
       }
-      router.refresh()
     })
   }
 
@@ -347,7 +346,6 @@ export default function LeadsPage({ leads: initial }: { leads: Lead[] }) {
     setLeads(prev => prev.filter(l => l.id !== id))
     startTransition(async () => {
       await deleteLead(id)
-      router.refresh()
     })
   }
 

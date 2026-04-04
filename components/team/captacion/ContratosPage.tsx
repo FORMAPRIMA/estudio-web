@@ -100,7 +100,6 @@ export default function ContratosPage({
     setContratos(prev => prev.filter(c => c.id !== id))
     startTransition(async () => {
       await deleteContrato(id)
-      router.refresh()
     })
   }
 
