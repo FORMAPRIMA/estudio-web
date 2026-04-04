@@ -62,7 +62,9 @@ const IVA_RATE = 0.21
 
 const PRECIO_HORA_COMERCIAL: Record<string, number> = {
   socio:  150,
-  senior: 150,
+  lead:   150,
+  senior: 100,
+  semi:   100,
   junior:  60,
 }
 

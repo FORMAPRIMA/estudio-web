@@ -86,7 +86,7 @@ export const SERVICIO_IDS = Object.keys(SERVICIOS_CONFIG) as ServicioId[]
 export const PRECIO_HORA: Record<string, number> = {
   junior: 60,
   semi:   100,
-  senior: 150,
+  senior: 100,
   lead:   150,
   socio:  150,
 }
