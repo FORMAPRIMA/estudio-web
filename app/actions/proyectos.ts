@@ -81,6 +81,7 @@ export async function createProyecto(input: CreateProyectoInput) {
         tipologia: '-',
         slug,
         estado: 'activo',
+        origen: 'post_plataforma',
       })
       .select('id, nombre, codigo')
       .single()
@@ -120,6 +121,7 @@ export async function createProyecto(input: CreateProyectoInput) {
         responsables: input.fasesResponsables[fase.id] ?? [],
         horas_objetivo,
         fase_status: 'en_espera',
+        origen: 'post_plataforma',
       })
       if (e2) return { error: `[proyecto_fases F${fase.numero}] ${e2.message}` }
     }
@@ -237,7 +239,7 @@ export async function addProyectoFase(
 
   const { data: pf, error: e1 } = await supabase
     .from('proyecto_fases')
-    .insert({ proyecto_id: proyectoId, fase_id: faseId, responsables, horas_objetivo, fase_status: 'en_espera' })
+    .insert({ proyecto_id: proyectoId, fase_id: faseId, responsables, horas_objetivo, fase_status: 'en_espera', origen: 'post_plataforma' })
     .select('id, horas_objetivo')
     .single()
 
@@ -346,6 +348,7 @@ export async function iniciarFase(pfId: string, proyectoId: string, faseId: stri
     responsable_ids: pf.responsables,
     orden_urgencia: pt.orden,
     prioridad: 0,
+    origen: 'post_plataforma',
   }))
 
   const { data: insertedTasks, error: e2 } = await supabase

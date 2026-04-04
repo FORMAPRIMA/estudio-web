@@ -183,7 +183,7 @@ export default function ProyectoFinanzasDetalle({
     <div style={{ fontFamily: "'Inter', system-ui, sans-serif", minHeight: '100vh', background: '#F8F7F4' }}>
 
       {/* Header */}
-      <div style={{ padding: '40px 40px 32px', borderBottom: '1px solid #E8E6E0', background: '#fff' }}>
+      <div className="pfdet-header" style={{ padding: '40px 40px 32px', borderBottom: '1px solid #E8E6E0', background: '#fff' }}>
         {/* Breadcrumb */}
         <button
           onClick={() => router.push('/team/finanzas/operativas/proyectos')}
@@ -198,9 +198,9 @@ export default function ProyectoFinanzasDetalle({
           ← Análisis de proyectos
         </button>
 
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24, marginBottom: 28 }}>
+        <div className="pfdet-title-row" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24, marginBottom: 28 }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6, flexWrap: 'wrap' }}>
               <h1 style={{ fontSize: 28, fontWeight: 200, color: '#1A1A1A', margin: 0, letterSpacing: '-0.01em' }}>
                 {proyecto.nombre}
               </h1>
@@ -225,7 +225,7 @@ export default function ProyectoFinanzasDetalle({
         </div>
 
         {/* Summary metrics */}
-        <div style={{ display: 'flex', gap: 0, background: '#F8F7F4', borderRadius: 8, border: '1px solid #E8E6E0', overflow: 'hidden' }}>
+        <div className="pfdet-summary" style={{ display: 'flex', gap: 0, background: '#F8F7F4', borderRadius: 8, border: '1px solid #E8E6E0', overflow: 'hidden' }}>
           <SummaryBox label="Horas invertidas" value={totalHoras > 0    ? `${fmtH.format(totalHoras)} h`     : '—'} />
           <SummaryBox label="Coste empresa"     value={totalCosto > 0    ? `€ ${fmtE.format(totalCosto)}`     : '—'} accent />
           <SummaryBox label="Total contratado"  value={totalAcordado > 0 ? `€ ${fmtE.format(totalAcordado)}` : '—'} color={totalAcordado > 0 ? '#1D9E75' : undefined} />
@@ -240,7 +240,7 @@ export default function ProyectoFinanzasDetalle({
       </div>
 
       {/* Content */}
-      <div style={{ padding: '32px 40px', display: 'flex', flexDirection: 'column', gap: 36 }}>
+      <div className="pfdet-content" style={{ padding: '32px 40px', display: 'flex', flexDirection: 'column', gap: 36 }}>
 
         {/* By employee */}
         <section>
@@ -794,7 +794,7 @@ function SummaryBox({ label, value, accent, color, placeholder, last }: {
 }) {
   const textColor = color ?? (accent ? '#D85A30' : (placeholder ? '#CCC' : '#1A1A1A'))
   return (
-    <div style={{
+    <div className="pfdet-summary-box" style={{
       flex: 1, padding: '18px 24px',
       borderRight: last ? 'none' : '1px solid #E8E6E0',
       background: '#fff',

@@ -526,6 +526,7 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
       categoria_interna,
       proyecto_id,
       es_extra: isExtraSlot(h),
+      origen: 'post_plataforma',
     }, { onConflict: 'user_id,fecha,hora_inicio' })
 
     setSaving(false)

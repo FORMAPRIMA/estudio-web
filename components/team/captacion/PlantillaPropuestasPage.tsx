@@ -102,7 +102,7 @@ function ServicioEditor({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <div className="plantilla-editor-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
           <div style={{ fontSize: 10, color: '#AAA', marginBottom: 4 }}>
             ID: <code style={{ background: '#F0EEE8', padding: '1px 6px', borderRadius: 3, fontSize: 10 }}>{entry.id}</code>
@@ -195,12 +195,14 @@ function ServicioEditor({
         {pago.length === 0 && <div style={{ fontSize: 12, color: '#CCC', fontStyle: 'italic', padding: '8px 0' }}>Sin hitos definidos</div>}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {pago.map((p, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div key={i} className="plantilla-hito-row" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <input value={p.label} onChange={e => setHitoLabel(i, e.target.value)}
                 style={{ ...inp(), flex: 1 }} placeholder="Descripción del hito…" />
-              <input type="number" value={p.pct} onChange={e => setHitoPct(i, e.target.value)}
-                style={{ ...inp(), width: 72, textAlign: 'right' as const }} min={0} max={100} />
-              <span style={{ fontSize: 12, color: '#AAA', flexShrink: 0 }}>%</span>
+              <div className="plantilla-hito-pct" style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                <input type="number" value={p.pct} onChange={e => setHitoPct(i, e.target.value)}
+                  style={{ ...inp(), width: 72, textAlign: 'right' as const }} min={0} max={100} />
+                <span style={{ fontSize: 12, color: '#AAA', flexShrink: 0 }}>%</span>
+              </div>
               <button onClick={() => removeHito(i)}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#CCC', fontSize: 16, padding: '0 4px', lineHeight: 1, flexShrink: 0 }}>×</button>
             </div>

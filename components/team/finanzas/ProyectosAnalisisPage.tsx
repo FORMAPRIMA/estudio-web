@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -33,6 +34,7 @@ const fmtE = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumF
 
 export default function ProyectosAnalisisPage({ cards }: { cards: ProyectoCard[] }) {
   const router = useRouter()
+  const [mobileCol, setMobileCol] = useState<string>(COLUMNS[0].status)
 
   const total = {
     horas:    cards.reduce((s, c) => s + c.totalHoras,    0),
@@ -40,15 +42,18 @@ export default function ProyectosAnalisisPage({ cards }: { cards: ProyectoCard[]
     acordado: cards.reduce((s, c) => s + c.totalAcordado, 0),
   }
 
+  const activeColMeta = COLUMNS.find(c => c.status === mobileCol) ?? COLUMNS[0]
+  const mobileCards   = cards.filter(c => c.status === mobileCol)
+
   return (
     <div style={{ fontFamily: "'Inter', system-ui, sans-serif", minHeight: '100vh', background: '#F8F7F4' }}>
 
       {/* Header */}
-      <div style={{ padding: '40px 40px 28px', borderBottom: '1px solid #E8E6E0', background: '#fff' }}>
+      <div className="pap-header" style={{ padding: '40px 40px 28px', borderBottom: '1px solid #E8E6E0', background: '#fff' }}>
         <p style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', marginBottom: 6, fontWeight: 600 }}>
           Finanzas operativas
         </p>
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 24 }}>
+        <div className="pap-header-title" style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 24 }}>
           <h1 style={{ fontSize: 28, fontWeight: 200, color: '#1A1A1A', margin: 0, letterSpacing: '-0.01em' }}>
             Análisis de proyectos
           </h1>
@@ -58,7 +63,7 @@ export default function ProyectosAnalisisPage({ cards }: { cards: ProyectoCard[]
         </div>
 
         {/* Summary strip */}
-        <div style={{ display: 'flex', gap: 32 }}>
+        <div className="pap-summary" style={{ display: 'flex', gap: 32 }}>
           <SummaryPill label="Total horas invertidas" value={`${fmtH.format(total.horas)} h`} />
           <SummaryPill label="Coste empresa total" value={`€ ${fmtE.format(total.costo)}`} accent />
           <SummaryPill label="Total contratado" value={total.acordado > 0 ? `€ ${fmtE.format(total.acordado)}` : '—'} color={total.acordado > 0 ? '#1D9E75' : undefined} />
@@ -70,8 +75,65 @@ export default function ProyectosAnalisisPage({ cards }: { cards: ProyectoCard[]
         </div>
       </div>
 
-      {/* Kanban */}
-      <div style={{
+      {/* ── Mobile: 4-button column selector + single-column cards ── */}
+      <div className="pap-mobile-view">
+        {/* Tab strip */}
+        <div className="pap-mobile-tabs" style={{ display: 'flex', background: '#fff', borderBottom: '1px solid #E8E6E0' }}>
+          {COLUMNS.map(col => {
+            const count  = cards.filter(c => c.status === col.status).length
+            const active = mobileCol === col.status
+            return (
+              <button
+                key={col.status}
+                onClick={() => setMobileCol(col.status)}
+                style={{
+                  flex: 1, padding: '12px 4px 10px', background: 'none', cursor: 'pointer',
+                  border: 'none', borderBottom: `2px solid ${active ? col.color : 'transparent'}`,
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+                  transition: 'border-color 0.15s',
+                }}
+              >
+                <div style={{ width: 7, height: 7, borderRadius: '50%', background: col.color }} />
+                <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: active ? '#1A1A1A' : '#AAA' }}>
+                  {col.label}
+                </span>
+                <span style={{ fontSize: 10, fontWeight: 600, color: '#fff', background: col.color, padding: '1px 7px', borderRadius: 10 }}>
+                  {count}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Column sub-header */}
+        {mobileCards.length > 0 && (
+          <div style={{ padding: '10px 16px 0', display: 'flex', gap: 12 }}>
+            <span style={{ fontSize: 10, color: '#AAA' }}>{fmtH.format(mobileCards.reduce((s, c) => s + c.totalHoras, 0))} h</span>
+            <span style={{ fontSize: 10, color: activeColMeta.color, fontWeight: 500 }}>
+              € {fmtE.format(mobileCards.reduce((s, c) => s + c.totalCosto, 0))}
+            </span>
+          </div>
+        )}
+
+        {/* Cards */}
+        <div style={{ padding: '12px 16px 32px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {mobileCards.length === 0 ? (
+            <div style={{ padding: '28px 20px', textAlign: 'center', border: '1px dashed #DDD', borderRadius: 8, fontSize: 11, color: '#CCC' }}>
+              Sin proyectos en esta categoría
+            </div>
+          ) : mobileCards.map(card => (
+            <KanbanCard
+              key={card.id}
+              card={card}
+              accentColor={activeColMeta.color}
+              onClick={() => router.push(`/team/finanzas/operativas/proyectos/${card.id}`)}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* ── Desktop: horizontal kanban ── */}
+      <div className="pap-desktop-kanban" style={{
         display: 'flex', gap: 20, padding: '28px 40px',
         overflowX: 'auto', alignItems: 'flex-start',
         minHeight: 'calc(100vh - 200px)',

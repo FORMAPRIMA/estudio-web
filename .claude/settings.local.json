@@ -9,7 +9,10 @@
       "Bash(npx tsc:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(find:*)",
+      "Bash(sed -n '28,42p' /Users/joseloragonzalez/estudio-web/supabase-schema.sql)",
+      "Bash(sed -n '398,410p' /Users/joseloragonzalez/estudio-web/supabase-schema.sql)"
     ]
   }
 }

@@ -14,6 +14,9 @@ div:hover > .tt-avatar-overlay {
    En móvil, !important sobreescribe los inline styles.
 ═══════════════════════════════════════════════════════════════ */
 
+/* ── Default (desktop) hidden states for mobile-only elements ── */
+.pap-mobile-view { display: none; }
+
 @media (max-width: 768px) {
 
   /* ── AreaInternaPage ──────────────────────────────────── */
@@ -347,6 +350,222 @@ div:hover > .tt-avatar-overlay {
     position: static !important;
   }
 
+  /* Propuesta detalle: header stacks vertically */
+  .pd-header {
+    flex-direction: column !important;
+    padding: 16px 16px 14px !important;
+    gap: 10px !important;
+    align-items: stretch !important;
+  }
+
+  .pd-header-title {
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+
+  .pd-header-title h1 {
+    font-size: 18px !important;
+    width: 100% !important;
+  }
+
+  .pd-header-num {
+    display: none !important;
+  }
+
+  /* Action buttons: full-width row, wrap */
+  .pd-header-actions {
+    flex-wrap: wrap !important;
+    width: 100% !important;
+    gap: 6px !important;
+  }
+
+  .pd-header-actions button {
+    flex: 1 !important;
+    min-width: 120px !important;
+    font-size: 12px !important;
+    padding: 10px 8px !important;
+    justify-content: center !important;
+    text-align: center !important;
+  }
+
+  /* Semanas input: remove minWidth on mobile */
+  .pd-semanas-input {
+    min-width: unset !important;
+    width: 100% !important;
+  }
+
+  /* ── Ratios objetivo: grid table → cards ────────────────── */
+
+  /* Hide the column-header row */
+  .ratios-row-header {
+    display: none !important;
+  }
+
+  /* Strip the group border; cards provide their own borders */
+  .ratios-group {
+    border: none !important;
+  }
+
+  /* Each fase row becomes a card: label top, input+save bottom */
+  .ratios-row {
+    display: grid !important;
+    grid-template-columns: 1fr auto !important;
+    grid-template-rows: auto auto !important;
+    column-gap: 12px !important;
+    row-gap: 12px !important;
+    padding: 16px !important;
+    background: #fff !important;
+    border-radius: 8px !important;
+    border: 1px solid #E8E6E0 !important;
+    margin-bottom: 8px !important;
+  }
+
+  /* F{n} badge: hide on mobile (section title provides context) */
+  .ratios-col-num {
+    display: none !important;
+  }
+
+  /* Fase name: full width, top row */
+  .ratios-col-label {
+    grid-column: 1 / 3 !important;
+    grid-row: 1 !important;
+    font-size: 15px !important;
+    align-self: center !important;
+  }
+
+  /* Input wrapper: left side of bottom row */
+  .ratios-col-input {
+    grid-column: 1 !important;
+    grid-row: 2 !important;
+    display: flex !important;
+    justify-content: flex-start !important;
+  }
+
+  .ratios-col-input input {
+    width: 100% !important;
+    text-align: left !important;
+    padding: 9px 10px !important;
+    font-size: 15px !important;
+  }
+
+  /* Save button: right side of bottom row */
+  .ratios-col-action {
+    grid-column: 2 !important;
+    grid-row: 2 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+  }
+
+  /* ── ProyectosAnalisisPage ───────────────────────────────── */
+
+  /* Hide desktop kanban, show mobile view */
+  .pap-desktop-kanban {
+    display: none !important;
+  }
+
+  .pap-mobile-view {
+    display: block !important;
+  }
+
+  /* Header: tighter padding */
+  .pap-header {
+    padding: 20px 16px 20px !important;
+  }
+
+  /* Title + project count: stack */
+  .pap-header-title {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 4px !important;
+    margin-bottom: 16px !important;
+  }
+
+  .pap-header-title h1 {
+    font-size: 22px !important;
+  }
+
+  /* Summary pills: 2-column grid */
+  .pap-summary {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 14px 8px !important;
+  }
+
+  /* ── ProyectoFinanzasDetalle ─────────────────────────────── */
+
+  .pfdet-header {
+    padding: 20px 16px 20px !important;
+  }
+
+  /* Title block: collapse space-between */
+  .pfdet-title-row {
+    flex-direction: column !important;
+    gap: 0 !important;
+    margin-bottom: 16px !important;
+  }
+
+  .pfdet-title-row h1 {
+    font-size: 20px !important;
+  }
+
+  /* Summary boxes: 2×2 grid instead of 4-in-a-row */
+  .pfdet-summary {
+    flex-wrap: wrap !important;
+  }
+
+  .pfdet-summary-box {
+    flex: 1 1 calc(50% - 1px) !important;
+    min-width: calc(50% - 1px) !important;
+    border-right: none !important;
+    border-bottom: 1px solid #E8E6E0 !important;
+    padding: 14px 16px !important;
+  }
+
+  /* Odd boxes get a right border to divide the 2 columns */
+  .pfdet-summary-box:nth-child(odd) {
+    border-right: 1px solid #E8E6E0 !important;
+  }
+
+  /* Last 2 boxes: no bottom border */
+  .pfdet-summary-box:nth-last-child(1),
+  .pfdet-summary-box:nth-last-child(2) {
+    border-bottom: none !important;
+  }
+
+  /* Content: tighter padding */
+  .pfdet-content {
+    padding: 16px !important;
+    gap: 24px !important;
+  }
+
+  /* ── PlantillaPropuestas: editor header + hitos ─────────── */
+
+  /* ServicioEditor header: stack type info + delete button */
+  .plantilla-editor-header {
+    flex-direction: column !important;
+    gap: 10px !important;
+    align-items: stretch !important;
+  }
+
+  .plantilla-editor-header button {
+    align-self: flex-start !important;
+  }
+
+  /* Hito de pago row: label input full-width, pct+delete below */
+  .plantilla-hito-row {
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+
+  .plantilla-hito-row > input:first-child {
+    flex: 1 1 100% !important;
+  }
+
+  .plantilla-hito-pct {
+    flex: 1 !important;
+  }
+
   /* ── Review page: 2-col → 1-col on mobile */
   .review-layout {
     grid-template-columns: 1fr !important;
@@ -357,6 +576,42 @@ div:hover > .tt-avatar-overlay {
 
   .finanzas-header {
     padding: 20px 16px 16px !important;
+  }
+
+  /* SectionMarginsCard: full width in the 2-col KPI grid */
+  .finanzas-section-kpi-card {
+    grid-column: 1 / -1 !important;
+    padding: 20px 20px !important;
+  }
+
+  /* Each section row: more breathing room */
+  .finanzas-seccion-row {
+    padding: 8px 0 !important;
+    border-bottom: 1px solid #F8F7F4 !important;
+  }
+
+  .finanzas-seccion-row:last-child {
+    border-bottom: none !important;
+  }
+
+  /* Section name row: stack name above amounts */
+  .finanzas-seccion-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 4px !important;
+    margin-bottom: 6px !important;
+  }
+
+  /* Amounts row: spread billing € and margin% apart */
+  .finanzas-seccion-amounts {
+    width: 100% !important;
+    justify-content: space-between !important;
+    gap: 0 !important;
+  }
+
+  .finanzas-seccion-amounts span:last-child {
+    min-width: unset !important;
+    font-size: 16px !important;
   }
 
   .finanzas-kpi-section {

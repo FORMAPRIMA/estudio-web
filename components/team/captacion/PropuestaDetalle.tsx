@@ -393,7 +393,7 @@ export default function PropuestaDetalle({
   return (
     <div style={{ fontFamily: "'Inter', system-ui, sans-serif", minHeight: '100vh', background: '#F8F7F4' }}>
       {/* ── Header ── */}
-      <div style={{
+      <div className="pd-header" style={{
         padding: '32px 40px 24px', background: '#fff',
         borderBottom: '1px solid #E8E6E0',
         display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
@@ -407,11 +407,11 @@ export default function PropuestaDetalle({
               ← Propuestas
             </button>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div className="pd-header-title" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <h1 style={{ fontSize: 24, fontWeight: 200, color: '#1A1A1A', margin: 0, letterSpacing: '-0.01em' }}>
               {titulo || 'Sin título'}
             </h1>
-            <span style={{ fontFamily: 'monospace', fontSize: 12, color: initial.numero === 'BORRADOR' ? '#CCC' : '#AAA', fontStyle: initial.numero === 'BORRADOR' ? 'italic' : 'normal' }}>
+            <span className="pd-header-num" style={{ fontFamily: 'monospace', fontSize: 12, color: initial.numero === 'BORRADOR' ? '#CCC' : '#AAA', fontStyle: initial.numero === 'BORRADOR' ? 'italic' : 'normal' }}>
               {initial.numero === 'BORRADOR' ? 'Sin número · se asignará al guardar' : initial.numero}
             </span>
             <span style={{
@@ -424,7 +424,7 @@ export default function PropuestaDetalle({
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div className="pd-header-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {sendOk && <span style={{ fontSize: 12, color: '#4CAF50' }}>Enviada correctamente</span>}
           {sendError && <span style={{ fontSize: 12, color: '#E57373' }}>{sendError}</span>}
           <button
@@ -986,6 +986,7 @@ export default function PropuestaDetalle({
                           }
                           return (
                             <input
+                              className="pd-semanas-input"
                               style={{ ...inputStyle(), width: 'auto', minWidth: 200 }}
                               value={semanas[sid] !== undefined ? semanas[sid] : (diasCalc ?? entry.semanas_default ?? '')}
                               onChange={e => setSemanas(prev => ({ ...prev, [sid]: e.target.value }))}

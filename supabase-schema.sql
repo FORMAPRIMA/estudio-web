@@ -619,3 +619,28 @@ CREATE POLICY "fp_manager+ all plantilla_tasks" ON public.plantilla_tasks
   USING     (public.get_my_rol() IN ('fp_manager', 'fp_partner'))
   WITH CHECK (public.get_my_rol() IN ('fp_manager', 'fp_partner'));
 
+
+-- ── MIGRATION: Origen label (previo/post plataforma) ──────────────────────────
+-- Tracks whether each record was created before or after the platform launch.
+-- "previo_a_plataforma" → back-filled on all rows that existed at migration time.
+-- "post_plataforma"     → default for every new row going forward.
+-- The column is NOT surfaced in the UI; it exists for auditing/analytics only.
+
+ALTER TABLE public.proyectos
+  ADD COLUMN IF NOT EXISTS origen TEXT NOT NULL DEFAULT 'post_plataforma';
+
+ALTER TABLE public.proyecto_fases
+  ADD COLUMN IF NOT EXISTS origen TEXT NOT NULL DEFAULT 'post_plataforma';
+
+ALTER TABLE public.tasks
+  ADD COLUMN IF NOT EXISTS origen TEXT NOT NULL DEFAULT 'post_plataforma';
+
+ALTER TABLE public.time_entries
+  ADD COLUMN IF NOT EXISTS origen TEXT NOT NULL DEFAULT 'post_plataforma';
+
+-- Back-fill: all rows created before this migration are "previo_a_plataforma"
+UPDATE public.proyectos    SET origen = 'previo_a_plataforma' WHERE origen = 'post_plataforma';
+UPDATE public.proyecto_fases SET origen = 'previo_a_plataforma' WHERE origen = 'post_plataforma';
+UPDATE public.tasks        SET origen = 'previo_a_plataforma' WHERE origen = 'post_plataforma';
+UPDATE public.time_entries SET origen = 'previo_a_plataforma' WHERE origen = 'post_plataforma';
+

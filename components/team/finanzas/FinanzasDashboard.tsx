@@ -410,7 +410,7 @@ function SectionMarginsCard({ kpis }: { kpis: KPIs }) {
   const sections = kpis.sectionMargins.filter(s => s.billingTotal > 0 || s.costTotal > 0)
 
   return (
-    <div style={{
+    <div className="finanzas-section-kpi-card" style={{
       background: '#fff', borderRadius: 12, border: '1px solid #E8E6E0',
       padding: '28px 32px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
       display: 'flex', flexDirection: 'column', minHeight: 160,
@@ -430,12 +430,12 @@ function SectionMarginsCard({ kpis }: { kpis: KPIs }) {
             const barPct  = s.margin !== null ? Math.min(100, Math.max(0, s.margin)) : 0
             const hasData = s.billingTotal > 0 || s.costTotal > 0
             return (
-              <div key={s.seccion}>
-                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
+              <div key={s.seccion} className="finanzas-seccion-row">
+                <div className="finanzas-seccion-header" style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
                   <span style={{ fontSize: 10, color: hasData ? '#555' : '#CCC', fontWeight: 500 }}>
                     {SECTION_SHORT[s.seccion] ?? s.seccion}
                   </span>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                  <div className="finanzas-seccion-amounts" style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
                     {hasData && (
                       <span style={{ fontSize: 9, color: '#BBB', fontVariantNumeric: 'tabular-nums' }}>
                         € {fmtE.format(s.billingTotal)}
