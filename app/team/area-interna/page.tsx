@@ -48,7 +48,7 @@ export default async function Page() {
 
     isPartner
       ? admin.from('profiles')
-          .select('id, nombre, apellido, email, rol, avatar_url, fecha_contratacion, telefono, direccion, fecha_nacimiento, notas, blocked, salario_mensual')
+          .select('id, nombre, apellido, email, rol, avatar_url, fecha_contratacion, telefono, direccion, fecha_nacimiento, notas, blocked, salario_mensual, seniority')
           .in('rol', ['fp_team', 'fp_manager', 'fp_partner'])
           .order('nombre')
       : Promise.resolve({ data: [] }),

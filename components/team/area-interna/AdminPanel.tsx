@@ -17,6 +17,7 @@ import {
   updateTeamMemberProfile,
   updateTeamMemberEmail,
   resetTeamMemberPassword,
+  uploadTeamMemberAvatar,
 } from '@/app/actions/equipo'
 import { updateMemberCosts } from '@/app/actions/finanzas'
 import type { FondoPeriodo } from './FondoChart'
@@ -37,6 +38,7 @@ interface TeamMember {
   notas:              string | null
   blocked:            boolean
   salario_mensual:    number | null
+  seniority:          string | null
 }
 
 interface NominaRecord {
@@ -568,6 +570,19 @@ const ROLE_COLORS_EQ: Record<string, { bg: string; text: string; border: string 
 }
 const AVATAR_PALETTE = ['#D85A30','#E8913A','#C9A227','#E6B820','#B8860B','#D4622A','#F0A500','#C07020']
 
+const SENIORITY_OPTIONS = [
+  { value: 'junior', label: 'Junior',      rate: 60  },
+  { value: 'semi',   label: 'Semi-senior', rate: 100 },
+  { value: 'senior', label: 'Senior',      rate: 100 },
+  { value: 'lead',   label: 'Lead',        rate: 150 },
+  { value: 'socio',  label: 'Socio/a',     rate: 150 },
+]
+
+function seniorityRate(s: string | null): number | null {
+  if (!s) return null
+  return SENIORITY_OPTIONS.find(o => o.value === s)?.rate ?? null
+}
+
 function mkInitialsEq(nombre: string, apellido?: string | null) {
   return [(nombre.trim()[0] ?? ''), (apellido?.trim()[0] ?? '')].join('').toUpperCase()
 }
@@ -588,6 +603,24 @@ function EquipoTab({ allMembers: initialMembers }: { allMembers: TeamMember[] })
   const [editMsg,  setEditMsg]  = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
   const [saving,   setSaving]   = useState(false)
 
+  // ── Avatar upload ──
+  const avatarInputRef = useRef<HTMLInputElement>(null)
+  const [avatarForId,  setAvatarForId]  = useState<string | null>(null)
+  const [avatarLoading, setAvatarLoading] = useState(false)
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !avatarForId) return
+    setAvatarLoading(true)
+    const bytes = new Uint8Array(await file.arrayBuffer())
+    const res = await uploadTeamMemberAvatar(avatarForId, bytes, file.name, file.type)
+    if ('error' in res) { setEditMsg({ type: 'err', text: res.error }); setAvatarLoading(false); return }
+    setMembers(prev => prev.map(x => x.id === avatarForId ? { ...x, avatar_url: res.url } : x))
+    setAvatarLoading(false)
+    setAvatarForId(null)
+    e.target.value = ''
+  }
+
   // ── Add form state ──
   const [addForm,  setAddForm]  = useState({ nombre: '', apellido: '', email: '', password: '', rol: 'fp_team' as 'fp_team' | 'fp_manager' | 'fp_partner' })
   const [addMsg,   setAddMsg]   = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
@@ -606,6 +639,7 @@ function EquipoTab({ allMembers: initialMembers }: { allMembers: TeamMember[] })
       fecha_contratacion: m.fecha_contratacion ?? '',
       notas:              m.notas ?? '',
       salario_mensual:    m.salario_mensual ?? undefined,
+      seniority:          m.seniority ?? '',
       newEmail:           m.email,
       newPassword:        '',
     })
@@ -628,12 +662,11 @@ function EquipoTab({ allMembers: initialMembers }: { allMembers: TeamMember[] })
     })
     if ('error' in res) { setEditMsg({ type: 'err', text: res.error }); setSaving(false); return }
 
-    // Update salary via finanzas action (also snapshots to salarios_historia)
-    const nuevoSalario = editForm.salario_mensual != null
-      ? Number(editForm.salario_mensual)
-      : null
-    if (nuevoSalario !== m.salario_mensual) {
-      const res4 = await updateMemberCosts(m.id, { salario_mensual: nuevoSalario })
+    // Update salary + seniority via finanzas action (also snapshots salary to historia)
+    const nuevoSalario  = editForm.salario_mensual != null ? Number(editForm.salario_mensual) : null
+    const nuevoSeniority = (editForm.seniority as string | undefined)?.trim() || null
+    if (nuevoSalario !== m.salario_mensual || nuevoSeniority !== m.seniority) {
+      const res4 = await updateMemberCosts(m.id, { salario_mensual: nuevoSalario, seniority: nuevoSeniority })
       if ('error' in res4) { setEditMsg({ type: 'err', text: res4.error }); setSaving(false); return }
     }
 
@@ -660,6 +693,7 @@ function EquipoTab({ allMembers: initialMembers }: { allMembers: TeamMember[] })
       fecha_contratacion: editForm.fecha_contratacion || null,
       notas:              (editForm.notas ?? '').trim() || null,
       salario_mensual:    nuevoSalario,
+      seniority:          nuevoSeniority,
       email:              editForm.newEmail ?? m.email,
     }
     setMembers(prev => prev.map(x => x.id === m.id ? updated : x))
@@ -759,6 +793,15 @@ function EquipoTab({ allMembers: initialMembers }: { allMembers: TeamMember[] })
         </div>
       )}
 
+      {/* Hidden avatar file input */}
+      <input
+        ref={avatarInputRef}
+        type="file"
+        accept="image/*"
+        style={{ display: 'none' }}
+        onChange={handleAvatarUpload}
+      />
+
       {/* Table */}
       <div style={{ background: '#fff', border: '1px solid #ECEAE6', overflow: 'hidden' }} className="ap-table-wrap">
         <div className="ap-table-scroll">
@@ -768,6 +811,8 @@ function EquipoTab({ allMembers: initialMembers }: { allMembers: TeamMember[] })
               <th style={thSt}>Nombre</th>
               <th style={thSt}>Email</th>
               <th style={thSt}>Rol</th>
+              <th style={thSt}>Seniority</th>
+              <th style={{ ...thSt, textAlign: 'right' }}>€/h</th>
               <th style={thSt}>Salario mensual</th>
               <th style={thSt}>Teléfono</th>
               <th style={thSt}>Contratación</th>
@@ -819,6 +864,20 @@ function EquipoTab({ allMembers: initialMembers }: { allMembers: TeamMember[] })
                         {ROLE_LABELS_EQ[m.rol] ?? m.rol}
                       </span>
                     </td>
+                    <td style={tdSt}>
+                      {m.seniority
+                        ? <span style={{ fontSize: 11, color: '#555', fontWeight: 300 }}>
+                            {SENIORITY_OPTIONS.find(o => o.value === m.seniority)?.label ?? m.seniority}
+                          </span>
+                        : <span style={{ color: '#CCC' }}>—</span>
+                      }
+                    </td>
+                    <td style={{ ...tdSt, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                      {seniorityRate(m.seniority) != null
+                        ? <span style={{ fontSize: 12, color: '#1A1A1A', fontWeight: 400 }}>€{seniorityRate(m.seniority)}</span>
+                        : <span style={{ color: '#CCC' }}>—</span>
+                      }
+                    </td>
                     <td style={{ ...tdSt, color: m.salario_mensual ? '#1A1A1A' : '#CCC' }}>
                       {m.salario_mensual != null
                         ? new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(m.salario_mensual)
@@ -842,7 +901,37 @@ function EquipoTab({ allMembers: initialMembers }: { allMembers: TeamMember[] })
                   {/* Expanded edit row */}
                   {isExpanded && (
                     <tr key={`${m.id}-edit`}>
-                      <td colSpan={7} style={{ padding: '20px 24px', background: '#FAFAF8', borderBottom: '1px solid #ECEAE6' }}>
+                      <td colSpan={9} style={{ padding: '20px 24px', background: '#FAFAF8', borderBottom: '1px solid #ECEAE6' }}>
+                        {/* Avatar upload */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18 }}>
+                          <div
+                            onClick={() => { setAvatarForId(m.id); setTimeout(() => avatarInputRef.current?.click(), 0) }}
+                            style={{ position: 'relative', width: 52, height: 52, borderRadius: '50%', cursor: 'pointer', flexShrink: 0, overflow: 'hidden', background: AVATAR_PALETTE[idx % AVATAR_PALETTE.length] }}
+                            title="Cambiar foto"
+                          >
+                            {m.avatar_url
+                              ? <img src={m.avatar_url} alt={m.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  <span style={{ fontSize: 16, color: '#fff', fontWeight: 600 }}>{mkInitialsEq(m.nombre, m.apellido)}</span>
+                                </div>
+                            }
+                            <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0)', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s' }}
+                              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,0,0,0.38)')}
+                              onMouseLeave={e => (e.currentTarget.style.background = 'rgba(0,0,0,0)')}
+                            >
+                              <span style={{ color: '#fff', fontSize: 16, opacity: 0 }}
+                                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '1' }}
+                                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '0' }}
+                              >✎</span>
+                            </div>
+                          </div>
+                          <div>
+                            <p style={{ fontSize: 11, color: '#888', fontWeight: 300, margin: 0 }}>
+                              {avatarLoading && avatarForId === m.id ? 'Subiendo foto…' : 'Haz clic en el avatar para cambiar la foto'}
+                            </p>
+                            <p style={{ fontSize: 10, color: '#CCC', fontWeight: 300, margin: '2px 0 0' }}>JPG, PNG · máx 5 MB</p>
+                          </div>
+                        </div>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 14 }} className="ap-expand-grid">
                           {[
                             { key: 'nombre',            label: 'Nombre *' },
@@ -873,6 +962,36 @@ function EquipoTab({ allMembers: initialMembers }: { allMembers: TeamMember[] })
                               <option value="fp_manager">FP Manager</option>
                               <option value="fp_partner">FP Partner</option>
                             </select>
+                          </div>
+                          <div>
+                            <label style={labelSt}>Seniority</label>
+                            <select
+                              value={(editForm.seniority as string) ?? ''}
+                              onChange={e => setEditForm(v => ({ ...v, seniority: e.target.value }))}
+                              style={selectSt}
+                            >
+                              <option value="">Sin asignar</option>
+                              {SENIORITY_OPTIONS.map(o => (
+                                <option key={o.value} value={o.value}>{o.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label style={labelSt}>Precio hora comercial</label>
+                            <div style={{
+                              ...inputSt, background: '#F5F3EF', color: '#888',
+                              display: 'flex', alignItems: 'center', gap: 6, cursor: 'default',
+                            }}>
+                              {seniorityRate((editForm.seniority as string) || null) != null
+                                ? <>
+                                    <span style={{ fontSize: 14, fontWeight: 400, color: '#1A1A1A', fontVariantNumeric: 'tabular-nums' }}>
+                                      €{seniorityRate((editForm.seniority as string) || null)}
+                                    </span>
+                                    <span style={{ fontSize: 10, color: '#AAA' }}>/hora</span>
+                                  </>
+                                : <span style={{ color: '#CCC', fontSize: 12 }}>Selecciona un seniority</span>
+                              }
+                            </div>
                           </div>
                           <div style={{ gridColumn: '2 / -1' }}>
                             <label style={labelSt}>Notas</label>
