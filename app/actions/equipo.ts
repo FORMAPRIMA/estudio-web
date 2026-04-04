@@ -127,6 +127,47 @@ export async function updateTeamMemberEmail(
   }
 }
 
+export async function uploadTeamMemberAvatar(
+  userId: string,
+  bytes: Uint8Array,
+  fileName: string,
+  contentType: string
+): Promise<{ url: string } | { error: string }> {
+  try {
+    await requirePartner()
+    const admin = createAdminClient()
+
+    const ext = fileName.split('.').pop() ?? 'jpg'
+    const path = `${userId}/avatar.${ext}`
+    const buffer = Buffer.from(bytes)
+
+    const { data, error } = await admin.storage
+      .from('avatares')
+      .upload(path, buffer, { upsert: true, contentType })
+
+    if (error || !data) return { error: error?.message ?? 'Error al subir imagen.' }
+
+    const { data: { publicUrl } } = admin.storage
+      .from('avatares')
+      .getPublicUrl(data.path)
+
+    const url = `${publicUrl}?t=${Date.now()}`
+
+    const { error: dbError } = await admin
+      .from('profiles')
+      .update({ avatar_url: url })
+      .eq('id', userId)
+
+    if (dbError) return { error: dbError.message }
+
+    revalidatePath('/team/equipo')
+    revalidatePath('/team', 'layout')
+    return { url }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
 export async function resetTeamMemberPassword(
   userId: string,
   newPassword: string

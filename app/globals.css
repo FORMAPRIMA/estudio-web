@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Avatar upload overlay — visible on hover */
+div:hover > .tt-avatar-overlay {
+  background: rgba(0,0,0,0.38) !important;
+}
+
 /* ═══════════════════════════════════════════════════════════════
    ÁREA INTERNA FP — Mobile overrides
    Breakpoint: < 768px

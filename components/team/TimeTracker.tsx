@@ -427,7 +427,8 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
     return () => window.removeEventListener('keydown', handler)
   }, [])
 
-  // Close dropdown on page scroll (but not when scrolling inside the panel)
+  // Close dropdown on page scroll (but not when scrolling inside the panel).
+  // Delay attachment to avoid immediate close caused by iOS keyboard appearing.
   useEffect(() => {
     if (!openCell) return
     const handler = (e: Event) => {
@@ -435,8 +436,13 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
       if (panel && panel.contains(e.target as Node)) return
       setOpenCell(null)
     }
-    window.addEventListener('scroll', handler, true)
-    return () => window.removeEventListener('scroll', handler, true)
+    const timer = setTimeout(() => {
+      window.addEventListener('scroll', handler, true)
+    }, 400)
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('scroll', handler, true)
+    }
   }, [openCell])
 
   // ── Cell operations ──
@@ -1970,7 +1976,7 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
             {/* Search input */}
             <div style={{ padding: '9px 12px', borderBottom: '1px solid #EDEAE4', flexShrink: 0 }}>
               <input
-                autoFocus
+                autoFocus={!isMobile}
                 value={dropSearch}
                 onChange={(e) => setDropSearch(e.target.value)}
                 placeholder="Buscar proyecto o código..."

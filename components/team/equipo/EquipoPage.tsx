@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useRef } from 'react'
 import {
   createTeamMember,
   blockTeamMember,
@@ -8,6 +8,7 @@ import {
   updateTeamMemberProfile,
   updateTeamMemberEmail,
   resetTeamMemberPassword,
+  uploadTeamMemberAvatar,
 } from '@/app/actions/equipo'
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -149,6 +150,9 @@ export default function EquipoPage({ initialMembers, currentUserId }: Props) {
   const [newEmail, setNewEmail] = useState('')
   const [emailMsg, setEmailMsg] = useState('')
   const [blockConfirm, setBlockConfirm] = useState(false)
+  const [avatarUploading, setAvatarUploading] = useState(false)
+  const [avatarError, setAvatarError] = useState('')
+  const avatarInputRef = useRef<HTMLInputElement>(null)
 
   const openMember = (m: TeamMemberFull) => {
     setSelected(m)
@@ -238,6 +242,21 @@ export default function EquipoPage({ initialMembers, currentUserId }: Props) {
       setEmailMsg('✓ Email actualizado.')
       setTimeout(() => setEmailMsg(''), 3000)
     })
+  }
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !selected) return
+    setAvatarError('')
+    setAvatarUploading(true)
+    const bytes = new Uint8Array(await file.arrayBuffer())
+    const res = await uploadTeamMemberAvatar(selected.id, bytes, file.name, file.type)
+    setAvatarUploading(false)
+    if ('error' in res) { setAvatarError(res.error); return }
+    const updated = { ...selected, avatar_url: res.url }
+    setSelected(updated)
+    setMembers(prev => prev.map(m => m.id === selected.id ? updated : m))
+    if (avatarInputRef.current) avatarInputRef.current.value = ''
   }
 
   const handleBlock = () => {
@@ -411,7 +430,30 @@ export default function EquipoPage({ initialMembers, currentUserId }: Props) {
             {/* Panel header */}
             <div style={{ padding: '28px 28px 20px', borderBottom: '1px solid #E8E6E0', background: '#fff', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <Avatar member={selected} size={52} idx={selectedIdx} />
+                {/* Clickable avatar — click to upload new photo */}
+                <div
+                  style={{ position: 'relative', cursor: 'pointer', flexShrink: 0 }}
+                  onClick={() => avatarInputRef.current?.click()}
+                  title="Cambiar foto de perfil"
+                >
+                  <Avatar member={selected} size={52} idx={selectedIdx} />
+                  <div className="tt-avatar-overlay" style={{
+                    position: 'absolute', inset: 0, borderRadius: '50%',
+                    background: avatarUploading ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    transition: 'background 0.15s',
+                    fontSize: 16, color: '#fff',
+                  }}>
+                    {avatarUploading ? '…' : '📷'}
+                  </div>
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={handleAvatarUpload}
+                  />
+                </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 18, fontWeight: 600, color: '#1A1A1A', lineHeight: 1.2 }}>
                     {selected.nombre}{selected.apellido ? ` ${selected.apellido}` : ''}
@@ -504,6 +546,7 @@ export default function EquipoPage({ initialMembers, currentUserId }: Props) {
 
               {/* Save */}
               <div>
+                {avatarError && <p style={{ fontSize: 12, color: '#D85A30', marginBottom: 8 }}>{avatarError}</p>}
                 {saveError && <p style={{ fontSize: 12, color: '#D85A30', marginBottom: 8 }}>{saveError}</p>}
                 {saveOk && <p style={{ fontSize: 12, color: '#1D9E75', marginBottom: 8 }}>✓ Cambios guardados.</p>}
                 <button style={btnPrimary} onClick={handleSave} disabled={isPending}>

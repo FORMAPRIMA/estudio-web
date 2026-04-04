@@ -356,31 +356,57 @@ export default function TasksUrgencia({ tasks: initialTasks }: Props) {
                 key={task.id}
                 className="flex items-stretch group hover:bg-ink/[0.03] transition-colors"
               >
-                {/* ── Project code strip ──────────────────────────── */}
+                {/* ── Project code strip — always visible ─────────── */}
                 <div
-                  className="w-1.5 sm:w-14 shrink-0 bg-ink/[0.06] flex items-center justify-center border-r border-ink/10 gap-0.5"
+                  className="w-14 shrink-0 bg-ink/[0.06] flex items-center justify-center border-r border-ink/10 gap-0.5"
                   style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
                 >
-                  <span className="hidden sm:block text-xs tracking-widest font-bold text-ink/60 select-none leading-none">
+                  <span className="text-xs tracking-widest font-bold text-ink/60 select-none leading-none">
                     {letters}
                   </span>
                   {rest && (
-                    <span className="hidden sm:block text-xs tracking-widest font-semibold text-ink/40 select-none leading-none">
+                    <span className="text-xs tracking-widest font-semibold text-ink/40 select-none leading-none">
                       {rest}
                     </span>
                   )}
                 </div>
 
-                {/* ── Clickable area ──────────────────────────────── */}
+                {/* ── Mobile card layout ──────────────────────────── */}
                 <Link
                   href={`/team/proyectos/${task.proyecto_id}`}
-                  className="flex-1 flex items-center gap-2 sm:gap-5 px-3 sm:px-5 py-4 min-w-0"
+                  className="sm:hidden flex-1 flex flex-col px-3 py-3 min-w-0 gap-1"
+                >
+                  <p className="text-sm font-normal text-ink leading-snug line-clamp-2">
+                    {task.titulo}
+                  </p>
+                  <p className="text-[10px] tracking-wider uppercase font-medium text-meta/60">
+                    F{task.fase_numero} · {task.fase_label}
+                  </p>
+                  <div className="flex items-center justify-between mt-1">
+                    <div className="flex items-center -space-x-2">
+                      {task.responsables.slice(0, 4).map(r => (
+                        <Avatar key={r.id} nombre={r.nombre} avatarUrl={r.avatar_url} />
+                      ))}
+                      {task.responsables.length > 4 && (
+                        <div className="w-7 h-7 rounded-full bg-ink/15 border-2 border-cream flex items-center justify-center shrink-0">
+                          <span className="text-[8px] font-semibold text-ink/60">+{task.responsables.length - 4}</span>
+                        </div>
+                      )}
+                    </div>
+                    <StatusBadge task={task} onUpdate={handleStatusUpdate} />
+                  </div>
+                </Link>
+
+                {/* ── Desktop row layout ──────────────────────────── */}
+                <Link
+                  href={`/team/proyectos/${task.proyecto_id}`}
+                  className="hidden sm:flex flex-1 items-center gap-5 px-5 py-4 min-w-0"
                 >
                   <span className="text-xs font-medium text-ink/30 tabular-nums w-4 shrink-0">
                     {i + 1}
                   </span>
 
-                  <span className="text-[10px] tracking-wider font-medium text-ink/50 shrink-0 hidden sm:block w-28 truncate">
+                  <span className="text-[10px] tracking-wider font-medium text-ink/50 shrink-0 w-28 truncate">
                     {task.codigo}
                   </span>
 
@@ -393,8 +419,7 @@ export default function TasksUrgencia({ tasks: initialTasks }: Props) {
                     </p>
                   </div>
 
-                  {/* Responsables with photos — hidden on mobile */}
-                  <div className="hidden sm:flex items-center -space-x-2 shrink-0">
+                  <div className="flex items-center -space-x-2 shrink-0">
                     {task.responsables.slice(0, 5).map(r => (
                       <Avatar key={r.id} nombre={r.nombre} avatarUrl={r.avatar_url} />
                     ))}
@@ -406,15 +431,15 @@ export default function TasksUrgencia({ tasks: initialTasks }: Props) {
                   </div>
                 </Link>
 
-                {/* ── Non-clickable right section ─────────────────── */}
-                <div className="flex items-center gap-2 sm:gap-3 pr-3 sm:pr-5 shrink-0">
+                {/* ── Desktop right section ────────────────────────── */}
+                <div className="hidden sm:flex items-center gap-3 pr-5 shrink-0">
                   {task.fecha_limite && (
                     <span className="text-[9px] tabular-nums text-ink/40 shrink-0 hidden md:block">
                       {fmtDate(task.fecha_limite)}
                     </span>
                   )}
                   <StatusBadge task={task} onUpdate={handleStatusUpdate} />
-                  <span className={`hidden sm:inline text-[9px] tracking-wider uppercase w-14 text-right shrink-0 ${task.prioridad > 0 ? pm.color : 'text-transparent select-none'}`}>
+                  <span className={`text-[9px] tracking-wider uppercase w-14 text-right shrink-0 ${task.prioridad > 0 ? pm.color : 'text-transparent select-none'}`}>
                     {task.prioridad > 0 ? pm.label : '·'}
                   </span>
                 </div>
