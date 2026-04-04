@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/facturas-cobrables",
+      "schedule": "0 8 * * *"
+    }
+  ]
+}
