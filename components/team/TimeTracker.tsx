@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import TimeTrackerTranslator from './TimeTrackerTranslator'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -151,7 +150,8 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
   const supabase = createClient()
 
   // ── State ──
-  const [view, setView] = useState<'weekly' | 'dashboard' | 'team' | 'translator'>('weekly')
+  const [view, setView] = useState<'weekly' | 'dashboard' | 'team'>('weekly')
+  const [isMobile, setIsMobile] = useState(false)
   const [currentMonday, setCurrentMonday] = useState(() => getMondayOf(todayStr()))
   const [viewingUserId, setViewingUserId] = useState(currentUserId)
 
@@ -199,6 +199,14 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
   })
   const [teamAnalysisYear, setTeamAnalysisYear] = useState(() => new Date().getFullYear())
   const [teamAnalysisGroupBy, setTeamAnalysisGroupBy] = useState<'person' | 'phase'>('phase')
+
+  // ── Mobile detection ──
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
 
   // ── Data loading ──
 
@@ -991,6 +999,10 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
   // ── VIEW: Weekly Grid ──
 
   const renderWeekly = () => {
+    const today = todayStr()
+    const displayDates = isMobile
+      ? (weekDates.includes(today) ? [today] : [weekDates[0]])
+      : weekDates
     return (
       <div>
         {/* Header bar */}
@@ -1116,15 +1128,16 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
 
         {/* Grid */}
         <div style={{ overflowX: 'auto', width: '100%' }}>
-          <table style={{ borderCollapse: 'collapse', fontSize: 11, width: '100%', minWidth: 700 }}>
+          <table style={{ borderCollapse: 'collapse', fontSize: 11, width: '100%', minWidth: isMobile ? 0 : 700 }}>
             <thead>
               <tr>
                 <th style={thStyle('#F8F7F4')}>H</th>
-                {weekDates.map((d, i) => {
+                {displayDates.map((d) => {
                   const isToday = d === todayStr()
+                  const dayIdx = weekDates.indexOf(d)
                   return (
-                    <th key={d} style={{ ...thStyle(isToday ? '#1D9E75' : '#F8F7F4'), color: isToday ? '#fff' : '#555', minWidth: 90 }}>
-                      <div style={{ fontWeight: 600 }}>{DOW[i]}</div>
+                    <th key={d} style={{ ...thStyle(isToday ? '#1D9E75' : '#F8F7F4'), color: isToday ? '#fff' : '#555', minWidth: isMobile ? 60 : 90 }}>
+                      <div style={{ fontWeight: 600 }}>{DOW[dayIdx >= 0 ? dayIdx : 0]}</div>
                       <div style={{ fontWeight: 300, opacity: 0.8, fontSize: 10 }}>
                         {new Date(d + 'T12:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
                       </div>
@@ -1146,7 +1159,7 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
                     }}>
                       {h}:00
                     </td>
-                    {weekDates.map((d) => {
+                    {displayDates.map((d) => {
                       const val = getCell(viewingUserId, d, h)
                       const isFailed = failedCells.has(cellKey(viewingUserId, d, h))
                       const disp = cellDisplay(val)
@@ -1897,9 +1910,8 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
         <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.04em', color: '#333', marginRight: 28 }}>
           TIME TRACKER
         </span>
-        {((['weekly', 'dashboard'] as const) as ('weekly' | 'dashboard' | 'team' | 'translator')[])
+        {((['weekly', 'dashboard'] as const) as ('weekly' | 'dashboard' | 'team')[])
           .concat(currentUserRole !== 'fp_team' ? ['team'] : [])
-          .concat(currentUserRole === 'fp_partner' ? ['translator'] : [])
           .map((tab) => (
             <button
               key={tab}
@@ -1915,8 +1927,7 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
             >
               {tab === 'weekly' ? 'Semana'
                 : tab === 'dashboard' ? 'Análisis Personal'
-                : tab === 'team' ? 'Team Análisis'
-                : 'Translator'}
+                : 'Team Análisis'}
             </button>
           ))
         }
@@ -1928,13 +1939,6 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
         {view === 'weekly' && renderWeekly()}
         {view === 'dashboard' && renderAnalisis()}
         {view === 'team' && renderTeamAnalisis()}
-        {view === 'translator' && (
-          <TimeTrackerTranslator
-            teamMembers={teamMembers}
-            proyectos={proyectos}
-            fases={fases}
-          />
-        )}
       </div>
 
       {/* Notes modal */}
@@ -1952,8 +1956,8 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
           <div style={{
             position: 'fixed',
             top: openCell.top,
-            left: openCell.left,
-            width: 284,
+            left: Math.max(8, openCell.left),
+            width: Math.min(284, window.innerWidth - 16),
             maxHeight: 340,
             zIndex: 999,
             background: '#fff',
@@ -1971,7 +1975,7 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
                 onChange={(e) => setDropSearch(e.target.value)}
                 placeholder="Buscar proyecto o código..."
                 style={{
-                  width: '100%', fontSize: 12, border: 'none', outline: 'none',
+                  width: '100%', fontSize: 16, border: 'none', outline: 'none',
                   background: 'transparent', color: '#222', fontFamily: 'inherit',
                   boxSizing: 'border-box',
                 }}

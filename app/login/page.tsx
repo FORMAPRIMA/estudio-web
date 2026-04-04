@@ -44,11 +44,8 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-16">
-          <Link
-            href="/"
-            className="text-xs tracking-ultra font-light uppercase text-ink hover:opacity-60 transition-opacity"
-          >
-            Forma Prima
+          <Link href="/" className="inline-block hover:opacity-70 transition-opacity">
+            <img src="/FORMA_PRIMA_NEGRO.png" alt="Forma Prima" style={{ height: 28, width: 'auto' }} />
           </Link>
         </div>
 

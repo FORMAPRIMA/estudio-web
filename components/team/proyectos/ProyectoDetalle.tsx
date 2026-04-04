@@ -962,12 +962,12 @@ function FaseRow({ pf, catalogo, faseTasks, faseProgress, responsableNames, canE
   return (
     <div className="border border-ink/10">
       {/* ── Header ────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-ink/8 bg-ink/[0.015]">
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 border-b border-ink/8 bg-ink/[0.015]">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
           <span className="text-[10px] tracking-widest uppercase font-light text-meta shrink-0">F{catalogo.numero}</span>
           <span className="text-[11px] font-light text-ink">{catalogo.label}</span>
           {responsableNames.length > 0 && (
-            <span className="text-[9px] text-meta/60 font-light truncate">· {responsableNames.join(', ')}</span>
+            <span className="text-[9px] text-meta/60 font-light truncate hidden sm:inline">· {responsableNames.join(', ')}</span>
           )}
           {/* Fase status badge */}
           <span className={`text-[8px] tracking-widest uppercase font-medium px-2 py-0.5 shrink-0 ${
@@ -979,10 +979,10 @@ function FaseRow({ pf, catalogo, faseTasks, faseProgress, responsableNames, canE
           </span>
         </div>
 
-        <div className="flex items-center gap-4 shrink-0">
+        <div className="flex items-center gap-3 shrink-0 flex-wrap">
           {/* Horas — only when iniciada */}
           {faseStatus === 'iniciada' && pf.horas_objetivo != null && (
-            <span className="text-[11px] font-light text-ink tabular-nums whitespace-nowrap">
+            <span className="text-[11px] font-light text-ink tabular-nums whitespace-nowrap hidden sm:inline">
               <span className="text-meta/50">0 hrs.</span>
               <span className="text-meta/30 mx-1">/</span>
               {pf.horas_objetivo} hrs.
@@ -990,7 +990,7 @@ function FaseRow({ pf, catalogo, faseTasks, faseProgress, responsableNames, canE
           )}
           {/* Progreso — only when iniciada */}
           {faseStatus === 'iniciada' && (
-            <div className="flex items-center gap-2">
+            <div className="hidden sm:flex items-center gap-2">
               <div className="w-16 h-[2px] bg-ink/10 rounded-full overflow-hidden">
                 <div className="h-full bg-ink/40 rounded-full transition-all duration-500" style={{ width: `${faseProgress}%` }} />
               </div>
@@ -1004,26 +1004,26 @@ function FaseRow({ pf, catalogo, faseTasks, faseProgress, responsableNames, canE
               disabled={starting}
               className="text-[9px] tracking-widest uppercase font-medium px-3 py-1.5 bg-ink text-cream hover:bg-ink/80 transition-colors disabled:opacity-40"
             >
-              {starting ? 'Iniciando…' : 'Iniciar fase →'}
+              {starting ? 'Iniciando…' : 'Iniciar →'}
             </button>
           )}
           {/* Eliminar fase */}
           {canEditProject && (
             confirmDelete ? (
               <div className="flex items-center gap-2">
-                <span className="text-[9px] text-red-500 font-light">¿Eliminar fase y sus tasks?</span>
+                <span className="text-[9px] text-red-500 font-light">¿Eliminar?</span>
                 <button
                   onClick={handleDelete}
                   disabled={deleting}
                   className="text-[9px] tracking-widest uppercase font-light text-red-500 hover:text-red-700 transition-colors disabled:opacity-40"
                 >
-                  {deleting ? '…' : 'Sí, eliminar'}
+                  {deleting ? '…' : 'Sí'}
                 </button>
                 <button
                   onClick={() => setConfirmDelete(false)}
                   className="text-[9px] tracking-widest uppercase font-light text-meta hover:text-ink transition-colors"
                 >
-                  Cancelar
+                  No
                 </button>
               </div>
             ) : (

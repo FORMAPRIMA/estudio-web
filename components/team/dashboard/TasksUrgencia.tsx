@@ -358,14 +358,14 @@ export default function TasksUrgencia({ tasks: initialTasks }: Props) {
               >
                 {/* ── Project code strip ──────────────────────────── */}
                 <div
-                  className="w-14 shrink-0 bg-ink/[0.06] flex items-center justify-center border-r border-ink/10 gap-0.5"
+                  className="w-1.5 sm:w-14 shrink-0 bg-ink/[0.06] flex items-center justify-center border-r border-ink/10 gap-0.5"
                   style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
                 >
-                  <span className="text-xs tracking-widest font-bold text-ink/60 select-none leading-none">
+                  <span className="hidden sm:block text-xs tracking-widest font-bold text-ink/60 select-none leading-none">
                     {letters}
                   </span>
                   {rest && (
-                    <span className="text-xs tracking-widest font-semibold text-ink/40 select-none leading-none">
+                    <span className="hidden sm:block text-xs tracking-widest font-semibold text-ink/40 select-none leading-none">
                       {rest}
                     </span>
                   )}
@@ -374,7 +374,7 @@ export default function TasksUrgencia({ tasks: initialTasks }: Props) {
                 {/* ── Clickable area ──────────────────────────────── */}
                 <Link
                   href={`/team/proyectos/${task.proyecto_id}`}
-                  className="flex-1 flex items-center gap-5 px-5 py-4 min-w-0"
+                  className="flex-1 flex items-center gap-2 sm:gap-5 px-3 sm:px-5 py-4 min-w-0"
                 >
                   <span className="text-xs font-medium text-ink/30 tabular-nums w-4 shrink-0">
                     {i + 1}
@@ -393,8 +393,8 @@ export default function TasksUrgencia({ tasks: initialTasks }: Props) {
                     </p>
                   </div>
 
-                  {/* Responsables with photos */}
-                  <div className="flex items-center -space-x-2 shrink-0">
+                  {/* Responsables with photos — hidden on mobile */}
+                  <div className="hidden sm:flex items-center -space-x-2 shrink-0">
                     {task.responsables.slice(0, 5).map(r => (
                       <Avatar key={r.id} nombre={r.nombre} avatarUrl={r.avatar_url} />
                     ))}
@@ -407,7 +407,7 @@ export default function TasksUrgencia({ tasks: initialTasks }: Props) {
                 </Link>
 
                 {/* ── Non-clickable right section ─────────────────── */}
-                <div className="flex items-center gap-3 pr-5 shrink-0">
+                <div className="flex items-center gap-2 sm:gap-3 pr-3 sm:pr-5 shrink-0">
                   {task.fecha_limite && (
                     <span className="text-[9px] tabular-nums text-ink/40 shrink-0 hidden md:block">
                       {fmtDate(task.fecha_limite)}
