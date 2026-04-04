@@ -129,21 +129,22 @@ export async function updateTeamMemberEmail(
 
 export async function uploadTeamMemberAvatar(
   userId: string,
-  bytes: Uint8Array,
-  fileName: string,
-  contentType: string
+  formData: FormData,
 ): Promise<{ url: string } | { error: string }> {
   try {
     await requirePartner()
     const admin = createAdminClient()
 
-    const ext = fileName.split('.').pop() ?? 'jpg'
+    const file = formData.get('file') as File | null
+    if (!file) return { error: 'No se recibió el archivo.' }
+
+    const ext = file.name.split('.').pop() ?? 'jpg'
     const path = `${userId}/avatar.${ext}`
-    const buffer = Buffer.from(bytes)
+    const buffer = Buffer.from(await file.arrayBuffer())
 
     const { data, error } = await admin.storage
       .from('avatares')
-      .upload(path, buffer, { upsert: true, contentType })
+      .upload(path, buffer, { upsert: true, contentType: file.type })
 
     if (error || !data) return { error: error?.message ?? 'Error al subir imagen.' }
 

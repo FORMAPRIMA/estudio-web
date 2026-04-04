@@ -249,8 +249,9 @@ export default function EquipoPage({ initialMembers, currentUserId }: Props) {
     if (!file || !selected) return
     setAvatarError('')
     setAvatarUploading(true)
-    const bytes = new Uint8Array(await file.arrayBuffer())
-    const res = await uploadTeamMemberAvatar(selected.id, bytes, file.name, file.type)
+    const formData = new FormData()
+    formData.append('file', file)
+    const res = await uploadTeamMemberAvatar(selected.id, formData)
     setAvatarUploading(false)
     if ('error' in res) { setAvatarError(res.error); return }
     const updated = { ...selected, avatar_url: res.url }

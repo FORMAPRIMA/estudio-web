@@ -690,8 +690,9 @@ function EquipoTab({ allMembers: initialMembers }: { allMembers: TeamMember[] })
     const file = e.target.files?.[0]
     if (!file || !avatarForId) return
     setAvatarLoading(true)
-    const bytes = new Uint8Array(await file.arrayBuffer())
-    const res = await uploadTeamMemberAvatar(avatarForId, bytes, file.name, file.type)
+    const formData = new FormData()
+    formData.append('file', file)
+    const res = await uploadTeamMemberAvatar(avatarForId, formData)
     if ('error' in res) { setEditMsg({ type: 'err', text: res.error }); setAvatarLoading(false); return }
     setMembers(prev => prev.map(x => x.id === avatarForId ? { ...x, avatar_url: res.url } : x))
     setAvatarLoading(false)
