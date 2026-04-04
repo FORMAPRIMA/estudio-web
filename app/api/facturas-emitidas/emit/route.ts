@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
       es_rectificativa: input.es_rectificativa ?? false,
     }
 
-    const pdfBuffer = await renderToBuffer(createElement(FacturaEmitidaPDF, { data: pdfData }))
+    const pdfBuffer = await renderToBuffer(createElement(FacturaEmitidaPDF, { data: pdfData }) as any)
 
     // ── 5. Distribuir emails ────────────────────────────────────────────────
     const valid    = (extraEmails ?? []).filter(e => e.email.trim())

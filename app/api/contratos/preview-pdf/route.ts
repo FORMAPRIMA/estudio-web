@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     notas:              contrato.notas ?? null,
   }
 
-  const buffer = await renderToBuffer(createElement(ContratoPDF, { data }))
+  const buffer = await renderToBuffer(createElement(ContratoPDF, { data }) as any)
   return new NextResponse(buffer as unknown as BodyInit, {
     headers: {
       'Content-Type':        'application/pdf',

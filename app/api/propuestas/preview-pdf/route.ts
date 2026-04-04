@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
 
     const data = await req.json() as PropuestaPDFData
 
-    const buffer = await renderToBuffer(createElement(PropuestaPDF, { data }))
+    const buffer = await renderToBuffer(createElement(PropuestaPDF, { data }) as any)
 
     return new NextResponse(buffer, {
       status: 200,

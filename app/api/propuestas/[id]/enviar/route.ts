@@ -86,7 +86,7 @@ export async function POST(
     }
 
     // Generate PDF
-    const buffer = await renderToBuffer(createElement(PropuestaPDF, { data: pdfData }))
+    const buffer = await renderToBuffer(createElement(PropuestaPDF, { data: pdfData }) as any)
 
     // Send email
     const clientName = lead.empresa ?? `${lead.nombre} ${lead.apellidos}`
