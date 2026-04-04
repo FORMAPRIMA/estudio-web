@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 
 const SECRET = process.env.PORTAL_SECRET ?? 'fp-portal-secret-2024'
 
-export function generatePortalToken(proyectoId: string): string {
+function generatePortalToken(proyectoId: string): string {
   return createHmac('sha256', SECRET).update(proyectoId).digest('hex')
 }
 
