@@ -133,11 +133,12 @@ export default function PropuestasPage({
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid #E8E6E0' }}>
-                  {['Nº', 'Título', 'Cliente', 'Fecha', 'Estado', ''].map(h => (
-                    <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA' }}>
-                      {h}
-                    </th>
-                  ))}
+                  <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA' }}>Nº</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA' }}>Título</th>
+                  <th className="captacion-col-hide" style={{ padding: '12px 16px', textAlign: 'left', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA' }}>Cliente</th>
+                  <th className="captacion-col-hide" style={{ padding: '12px 16px', textAlign: 'left', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA' }}>Fecha</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA' }}>Estado</th>
+                  <th className="captacion-col-hide" style={{ padding: '12px 16px' }} />
                 </tr>
               </thead>
               <tbody>
@@ -150,17 +151,23 @@ export default function PropuestasPage({
                     onMouseLeave={e => (e.currentTarget.style.background = '#fff')}
                   >
                     <td style={{ padding: '14px 16px', fontFamily: 'monospace', fontSize: 12, color: p.numero === 'BORRADOR' ? '#CCC' : '#AAA', fontStyle: p.numero === 'BORRADOR' ? 'italic' : 'normal' }}>
-                      {p.numero === 'BORRADOR' ? 'Sin número' : p.numero}
+                      {p.numero === 'BORRADOR' ? 'Sin nº' : p.numero}
                     </td>
                     <td style={{ padding: '14px 16px', color: '#1A1A1A', fontWeight: 400 }}>
-                      {p.titulo ?? <span style={{ color: '#CCC', fontStyle: 'italic' }}>Sin título</span>}
+                      <div>{p.titulo ?? <span style={{ color: '#CCC', fontStyle: 'italic' }}>Sin título</span>}</div>
+                      {p.leads && (
+                        <div className="captacion-col-show-mobile" style={{ fontSize: 11, color: '#888', marginTop: 2 }}>
+                          {[p.leads.nombre, p.leads.apellidos].filter(Boolean).join(' ')}
+                          {p.leads.empresa ? ` · ${p.leads.empresa}` : ''}
+                        </div>
+                      )}
                     </td>
-                    <td style={{ padding: '14px 16px', color: '#555' }}>
+                    <td className="captacion-col-hide" style={{ padding: '14px 16px', color: '#555' }}>
                       {p.leads
                         ? [p.leads.nombre, p.leads.apellidos].filter(Boolean).join(' ') + (p.leads.empresa ? ` · ${p.leads.empresa}` : '')
                         : <span style={{ color: '#CCC', fontStyle: 'italic' }}>Sin cliente</span>}
                     </td>
-                    <td style={{ padding: '14px 16px', color: '#888', whiteSpace: 'nowrap' }}>
+                    <td className="captacion-col-hide" style={{ padding: '14px 16px', color: '#888', whiteSpace: 'nowrap' }}>
                       {p.fecha_propuesta
                         ? new Date(p.fecha_propuesta).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
                         : '—'}
@@ -174,7 +181,7 @@ export default function PropuestasPage({
                         {STATUS_LABEL[p.status] ?? p.status}
                       </span>
                     </td>
-                    <td style={{ padding: '14px 16px', textAlign: 'right' }}>
+                    <td className="captacion-col-hide" style={{ padding: '14px 16px', textAlign: 'right' }}>
                       <button
                         onClick={e => { e.stopPropagation(); handleDelete(p.id) }}
                         disabled={deletingId === p.id}
@@ -195,28 +202,30 @@ export default function PropuestasPage({
       {/* Lead selector modal */}
       {showLeadModal && (
         <div
+          className="captacion-modal-overlay"
           onClick={() => setShowLeadModal(false)}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
         >
           <div
+            className="captacion-modal-box"
             onClick={e => e.stopPropagation()}
             style={{ background: '#fff', borderRadius: 8, width: 'min(480px, 92vw)', maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
           >
-            <div style={{ padding: '24px 24px 0' }}>
+            <div style={{ padding: '20px 20px 0' }}>
               <h3 style={{ fontSize: 16, fontWeight: 400, margin: '0 0 4px', color: '#1A1A1A' }}>Nueva propuesta</h3>
-              <p style={{ fontSize: 13, color: '#AAA', margin: '0 0 16px' }}>Selecciona un lead o crea la propuesta sin cliente.</p>
+              <p style={{ fontSize: 13, color: '#AAA', margin: '0 0 14px' }}>Selecciona un lead o crea la propuesta sin cliente.</p>
               <input
                 autoFocus
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Buscar lead…"
-                style={{ width: '100%', padding: '8px 12px', border: '1px solid #E8E6E0', borderRadius: 4, fontSize: 16, outline: 'none', boxSizing: 'border-box' }}
+                style={{ width: '100%', padding: '10px 12px', border: '1px solid #E8E6E0', borderRadius: 4, fontSize: 16, outline: 'none', boxSizing: 'border-box' }}
               />
             </div>
             <div style={{ overflowY: 'auto', flex: 1, padding: '8px 0' }}>
               <button
                 onClick={() => handleCreate(undefined)}
-                style={{ width: '100%', padding: '12px 24px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#AAA', fontStyle: 'italic', borderBottom: '1px solid #F0EEE8' }}
+                style={{ width: '100%', padding: '14px 20px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: '#AAA', fontStyle: 'italic', borderBottom: '1px solid #F0EEE8' }}
                 onMouseEnter={e => (e.currentTarget.style.background = '#FAFAF8')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'none')}
               >
@@ -226,7 +235,7 @@ export default function PropuestasPage({
                 <button
                   key={l.id}
                   onClick={() => handleCreate(l.id)}
-                  style={{ width: '100%', padding: '12px 24px', textAlign: 'left', background: 'none', border: 'none', borderBottom: '1px solid #F0EEE8', cursor: 'pointer', fontSize: 13 }}
+                  style={{ width: '100%', padding: '14px 20px', textAlign: 'left', background: 'none', border: 'none', borderBottom: '1px solid #F0EEE8', cursor: 'pointer', fontSize: 14 }}
                   onMouseEnter={e => (e.currentTarget.style.background = '#FAFAF8')}
                   onMouseLeave={e => (e.currentTarget.style.background = 'none')}
                 >
@@ -235,10 +244,10 @@ export default function PropuestasPage({
                 </button>
               ))}
             </div>
-            <div style={{ padding: '12px 24px', borderTop: '1px solid #E8E6E0' }}>
+            <div className="captacion-modal-actions" style={{ padding: '12px 20px', borderTop: '1px solid #E8E6E0', display: 'flex', justifyContent: 'flex-start' }}>
               <button
                 onClick={() => setShowLeadModal(false)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#AAA' }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#AAA', padding: '8px 0' }}
               >
                 Cancelar
               </button>

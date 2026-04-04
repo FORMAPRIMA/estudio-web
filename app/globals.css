@@ -207,11 +207,11 @@ div:hover > .tt-avatar-overlay {
   /* ── Captación pages: Leads, Propuestas, Contratos ───────── */
 
   .captacion-header {
-    padding: 16px 16px 16px !important;
+    padding: 16px 16px 12px !important;
   }
 
   .captacion-filters {
-    padding: 12px 16px !important;
+    padding: 10px 16px !important;
     flex-wrap: wrap !important;
   }
 
@@ -228,15 +228,54 @@ div:hover > .tt-avatar-overlay {
     padding: 12px 16px 24px !important;
   }
 
+  /* Header action row: stack vertically on mobile */
   .captacion-action-row {
-    flex-wrap: wrap !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .captacion-action-row button,
+  .captacion-action-row select {
+    width: 100% !important;
+    height: 40px !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Hide secondary table columns on mobile */
+  .captacion-col-hide {
+    display: none !important;
+  }
+
+  /* Lead edit form: 1-col on mobile */
+  .lead-edit-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  /* Lead / propuesta / contrato modal: bottom sheet on mobile */
+  .captacion-modal-overlay {
+    align-items: flex-end !important;
+  }
+
+  .captacion-modal-box {
+    width: 100% !important;
+    max-width: 100% !important;
+    border-radius: 16px 16px 0 0 !important;
+    max-height: 88vh !important;
+  }
+
+  /* Modal action buttons: stack full-width on mobile */
+  .captacion-modal-actions {
+    flex-direction: column-reverse !important;
     gap: 8px !important;
   }
 
-  /* Lead edit form: 4-col → 2-col on mobile */
-  .lead-edit-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
-    gap: 12px 14px !important;
+  .captacion-modal-actions button {
+    width: 100% !important;
+    height: 44px !important;
+    justify-content: center !important;
   }
 
   /* ── Review page: 2-col → 1-col on mobile */

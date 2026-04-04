@@ -134,17 +134,17 @@ export default function ContratosPage({
           </h1>
 
           {/* New contrato */}
-          <div className="captacion-action-row" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div className="captacion-action-row" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <button
               onClick={() => setShowModal(true)}
-              style={{ height: 36, padding: '0 20px', background: '#D85A30', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}
+              style={{ height: 40, padding: '0 20px', background: '#D85A30', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', whiteSpace: 'nowrap', fontFamily: 'inherit' }}
             >
               + Desde propuesta
             </button>
             <select
               value={newLeadId}
               onChange={e => setNewLeadId(e.target.value)}
-              style={{ height: 36, padding: '0 10px', fontSize: 11, border: '1px solid #E8E6E0', borderRadius: 4, background: '#fff', fontFamily: 'inherit', color: newLeadId ? '#1A1A1A' : '#AAA', outline: 'none' }}
+              style={{ height: 40, padding: '0 10px', fontSize: 12, border: '1px solid #E8E6E0', borderRadius: 4, background: '#fff', fontFamily: 'inherit', color: newLeadId ? '#1A1A1A' : '#AAA', outline: 'none', flex: 1 }}
             >
               <option value="">Sin lead asociado</option>
               {leads.map(l => (
@@ -155,7 +155,7 @@ export default function ContratosPage({
             </select>
             <button
               onClick={handleCreate}
-              style={{ height: 36, padding: '0 20px', background: '#1A1A1A', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}
+              style={{ height: 40, padding: '0 20px', background: '#1A1A1A', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', whiteSpace: 'nowrap', fontFamily: 'inherit' }}
               onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#333' }}
               onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '#1A1A1A' }}
             >
@@ -203,17 +203,19 @@ export default function ContratosPage({
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#F8F7F4' }}>
-                {(['N.º Contrato', 'Cliente', 'Proyecto', 'Total honorarios', 'Estado', 'F. envío', 'F. firma', ''] as string[]).map(h => (
-                  <th key={h} style={{ padding: '10px 16px', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', textAlign: 'left', borderBottom: '1px solid #E8E6E0', whiteSpace: 'nowrap' }}>
-                    {h}
-                  </th>
-                ))}
+                <th style={{ padding: '10px 16px', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', textAlign: 'left', borderBottom: '1px solid #E8E6E0', whiteSpace: 'nowrap' }}>N.º</th>
+                <th style={{ padding: '10px 16px', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', textAlign: 'left', borderBottom: '1px solid #E8E6E0' }}>Cliente / Proyecto</th>
+                <th className="captacion-col-hide" style={{ padding: '10px 16px', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', textAlign: 'left', borderBottom: '1px solid #E8E6E0', whiteSpace: 'nowrap' }}>Honorarios</th>
+                <th style={{ padding: '10px 16px', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', textAlign: 'left', borderBottom: '1px solid #E8E6E0' }}>Estado</th>
+                <th className="captacion-col-hide" style={{ padding: '10px 16px', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', textAlign: 'left', borderBottom: '1px solid #E8E6E0', whiteSpace: 'nowrap' }}>F. envío</th>
+                <th className="captacion-col-hide" style={{ padding: '10px 16px', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', textAlign: 'left', borderBottom: '1px solid #E8E6E0', whiteSpace: 'nowrap' }}>F. firma</th>
+                <th className="captacion-col-hide" style={{ padding: '10px 16px', borderBottom: '1px solid #E8E6E0' }} />
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={8} style={{ padding: '40px 0', textAlign: 'center', fontSize: 12, color: '#CCC', fontStyle: 'italic', borderBottom: 'none' }}>
+                  <td colSpan={7} style={{ padding: '40px 0', textAlign: 'center', fontSize: 12, color: '#CCC', fontStyle: 'italic', borderBottom: 'none' }}>
                     {contratos.length === 0 ? 'No hay contratos. Crea el primero.' : 'Sin resultados.'}
                   </td>
                 </tr>
@@ -233,34 +235,31 @@ export default function ContratosPage({
                     onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#FAFAF8' }}
                     onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
                   >
-                    <td style={{ padding: '12px 16px', fontSize: 12, verticalAlign: 'middle', borderBottom: '1px solid #F0EEE8', fontFamily: 'monospace', fontWeight: 600 }}>
+                    <td style={{ padding: '12px 16px', fontSize: 12, verticalAlign: 'middle', borderBottom: '1px solid #F0EEE8', fontFamily: 'monospace', fontWeight: 600, whiteSpace: 'nowrap' }}>
                       {c.numero ?? '—'}
                     </td>
                     <td style={{ padding: '12px 16px', fontSize: 12, verticalAlign: 'middle', borderBottom: '1px solid #F0EEE8' }}>
-                      {clienteLabel}
+                      <div style={{ fontWeight: 500 }}>{clienteLabel}</div>
+                      {c.proyecto_nombre && <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{c.proyecto_nombre}</div>}
                     </td>
-                    <td style={{ padding: '12px 16px', fontSize: 12, verticalAlign: 'middle', borderBottom: '1px solid #F0EEE8' }}>
-                      <div>{c.proyecto_nombre ?? <span style={{ color: '#CCC' }}>—</span>}</div>
-                      {c.proyecto_direccion && <div style={{ fontSize: 10, color: '#AAA' }}>{c.proyecto_direccion}</div>}
-                    </td>
-                    <td style={{ padding: '12px 16px', fontSize: 12, verticalAlign: 'middle', borderBottom: '1px solid #F0EEE8', fontWeight: total > 0 ? 500 : 400, color: total > 0 ? '#1A1A1A' : '#CCC' }}>
+                    <td className="captacion-col-hide" style={{ padding: '12px 16px', fontSize: 12, verticalAlign: 'middle', borderBottom: '1px solid #F0EEE8', fontWeight: total > 0 ? 500 : 400, color: total > 0 ? '#1A1A1A' : '#CCC', whiteSpace: 'nowrap' }}>
                       {total > 0 ? eur(total) : '—'}
                     </td>
                     <td style={{ padding: '12px 16px', verticalAlign: 'middle', borderBottom: '1px solid #F0EEE8' }}>
-                      <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: meta.color, background: meta.bg, padding: '2px 8px', borderRadius: 3 }}>
+                      <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: meta.color, background: meta.bg, padding: '2px 8px', borderRadius: 3, whiteSpace: 'nowrap' }}>
                         {meta.label}
                       </span>
                       {c.proyecto_id && (
-                        <div style={{ fontSize: 9, color: '#1D9E75', marginTop: 3 }}>✓ Proyecto creado</div>
+                        <div style={{ fontSize: 9, color: '#1D9E75', marginTop: 3 }}>✓ Proyecto</div>
                       )}
                     </td>
-                    <td style={{ padding: '12px 16px', fontSize: 11, color: '#888', verticalAlign: 'middle', borderBottom: '1px solid #F0EEE8' }}>
+                    <td className="captacion-col-hide" style={{ padding: '12px 16px', fontSize: 11, color: '#888', verticalAlign: 'middle', borderBottom: '1px solid #F0EEE8', whiteSpace: 'nowrap' }}>
                       {fmtDate(c.fecha_envio)}
                     </td>
-                    <td style={{ padding: '12px 16px', fontSize: 11, color: '#888', verticalAlign: 'middle', borderBottom: '1px solid #F0EEE8' }}>
+                    <td className="captacion-col-hide" style={{ padding: '12px 16px', fontSize: 11, color: '#888', verticalAlign: 'middle', borderBottom: '1px solid #F0EEE8', whiteSpace: 'nowrap' }}>
                       {fmtDate(c.fecha_firma)}
                     </td>
-                    <td style={{ padding: '0 8px', verticalAlign: 'middle', borderBottom: '1px solid #F0EEE8' }} onClick={e => e.stopPropagation()}>
+                    <td className="captacion-col-hide" style={{ padding: '0 8px', verticalAlign: 'middle', borderBottom: '1px solid #F0EEE8' }} onClick={e => e.stopPropagation()}>
                       <button
                         onClick={() => handleDelete(c.id)}
                         style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DDD', fontSize: 15, padding: '4px 6px', borderRadius: 3 }}
@@ -279,19 +278,21 @@ export default function ContratosPage({
 
     {/* ── Modal: crear contrato desde propuesta ── */}
     {showModal && (
-      <div style={{
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
-      }} onClick={() => setShowModal(false)}>
-        <div style={{
-          background: '#fff', borderRadius: 8, padding: '28px 24px', width: 'min(480px, 92vw)',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.2)', maxHeight: '90vh', overflowY: 'auto',
-        }} onClick={e => e.stopPropagation()}>
+      <div
+        className="captacion-modal-overlay"
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
+        onClick={() => setShowModal(false)}
+      >
+        <div
+          className="captacion-modal-box"
+          style={{ background: '#fff', borderRadius: 8, padding: '24px 20px', width: 'min(480px, 92vw)', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', maxHeight: '90vh', overflowY: 'auto' }}
+          onClick={e => e.stopPropagation()}
+        >
           <h2 style={{ fontSize: 16, fontWeight: 600, color: '#1A1A1A', margin: '0 0 6px' }}>
             Crear contrato desde propuesta
           </h2>
-          <p style={{ fontSize: 12, color: '#AAA', margin: '0 0 24px', lineHeight: 1.5 }}>
-            Selecciona una propuesta de honorarios. El contrato se pre-rellenará automáticamente con los datos del cliente, servicios contratados, honorarios e hitos de pago.
+          <p style={{ fontSize: 12, color: '#AAA', margin: '0 0 20px', lineHeight: 1.5 }}>
+            Selecciona una propuesta de honorarios. El contrato se pre-rellenará automáticamente con los datos del cliente, servicios, honorarios e hitos de pago.
           </p>
 
           <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', display: 'block', marginBottom: 6 }}>
@@ -300,7 +301,7 @@ export default function ContratosPage({
           <select
             value={selectedPropuesta}
             onChange={e => setSelectedPropuesta(e.target.value)}
-            style={{ width: '100%', height: 40, padding: '0 12px', fontSize: 13, border: '1px solid #E8E6E0', borderRadius: 4, background: '#fff', fontFamily: 'inherit', color: selectedPropuesta ? '#1A1A1A' : '#AAA', outline: 'none', marginBottom: 24 }}
+            style={{ width: '100%', height: 44, padding: '0 12px', fontSize: 14, border: '1px solid #E8E6E0', borderRadius: 4, background: '#fff', fontFamily: 'inherit', color: selectedPropuesta ? '#1A1A1A' : '#AAA', outline: 'none', marginBottom: 20, boxSizing: 'border-box' }}
           >
             <option value="">Seleccionar propuesta…</option>
             {propuestas.map(p => (
@@ -310,7 +311,7 @@ export default function ContratosPage({
             ))}
           </select>
 
-          <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', display: 'block', marginBottom: 6 }}>
+          <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', display: 'block', marginBottom: 8 }}>
             Tipo de cliente
           </label>
           <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
@@ -319,10 +320,11 @@ export default function ContratosPage({
                 key={tipo}
                 onClick={() => setTipoCliente(tipo)}
                 style={{
-                  flex: 1, height: 38, border: '1px solid', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 500,
+                  flex: 1, height: 44, border: '1px solid', borderRadius: 4, cursor: 'pointer', fontSize: 13, fontWeight: 500,
                   borderColor: tipoCliente === tipo ? '#1A1A1A' : '#E8E6E0',
                   background: tipoCliente === tipo ? '#1A1A1A' : '#fff',
                   color: tipoCliente === tipo ? '#fff' : '#888',
+                  fontFamily: 'inherit',
                 }}
               >
                 {tipo === 'fisica' ? 'Persona física' : 'Persona jurídica'}
@@ -330,10 +332,10 @@ export default function ContratosPage({
             ))}
           </div>
 
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <div className="captacion-modal-actions" style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
             <button
               onClick={() => setShowModal(false)}
-              style={{ height: 36, padding: '0 20px', background: '#F0EEE8', color: '#888', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}
+              style={{ height: 44, padding: '0 20px', background: '#F0EEE8', color: '#888', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 13, fontFamily: 'inherit' }}
             >
               Cancelar
             </button>
@@ -341,9 +343,9 @@ export default function ContratosPage({
               onClick={handleCreateFromPropuesta}
               disabled={!selectedPropuesta || creating}
               style={{
-                height: 36, padding: '0 24px', background: !selectedPropuesta || creating ? '#CCC' : '#D85A30',
-                color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600,
-                cursor: !selectedPropuesta || creating ? 'not-allowed' : 'pointer',
+                height: 44, padding: '0 24px', background: !selectedPropuesta || creating ? '#CCC' : '#D85A30',
+                color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 600,
+                cursor: !selectedPropuesta || creating ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
               }}
             >
               {creating ? 'Creando…' : 'Crear contrato'}

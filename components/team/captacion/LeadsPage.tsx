@@ -239,62 +239,48 @@ function LeadEditForm({
 
 function LeadRow({
   lead,
-  expanded,
-  onToggle,
-  onUpdate,
+  onClick,
   onDelete,
 }: {
   lead: Lead
-  expanded: boolean
-  onToggle: () => void
-  onUpdate: (field: string, value: unknown) => void
+  onClick: () => void
   onDelete: () => void
 }) {
   const meta = ESTADO_META[lead.estado_lead ?? 'nuevo'] ?? ESTADO_META.nuevo
 
   return (
-    <>
-      <tr
-        onClick={onToggle}
-        style={{ cursor: 'pointer' }}
-        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#FAFAF8' }}
-        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
-      >
-        <td style={{ ...TD, paddingLeft: 12 }}>
-          <span style={{ fontSize: 10, color: '#AAA', marginRight: 8 }}>{expanded ? '▾' : '▸'}</span>
-        </td>
-        <td style={TD}>
-          <div style={{ fontWeight: 500 }}>{lead.nombre} {lead.apellidos}</div>
-          {lead.empresa && <div style={{ fontSize: 11, color: '#888' }}>{lead.empresa}</div>}
-        </td>
-        <td style={TD}>{lead.email ?? <span style={{ color: '#CCC' }}>—</span>}</td>
-        <td style={TD}>{lead.telefono ?? <span style={{ color: '#CCC' }}>—</span>}</td>
-        <td style={TD}>{lead.ciudad ?? <span style={{ color: '#CCC' }}>—</span>}</td>
-        <td style={TD}>
-          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: meta.color, background: meta.bg, padding: '2px 8px', borderRadius: 3 }}>
-            {meta.label}
-          </span>
-        </td>
-        <td style={TD}>{lead.origen ?? <span style={{ color: '#CCC' }}>—</span>}</td>
-        <td style={TD}>{presupuestoLabel(lead.presupuesto_estimado) ?? <span style={{ color: '#CCC' }}>—</span>}</td>
-        <td style={{ ...TD, padding: '0 8px' }} onClick={e => e.stopPropagation()}>
-          <button
-            onClick={onDelete}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DDD', fontSize: 15, padding: '4px 6px', borderRadius: 3 }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#E53E3E' }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#DDD' }}
-          >×</button>
-        </td>
-      </tr>
-
-      {expanded && (
-        <tr>
-          <td colSpan={9} style={{ padding: '20px 24px 24px 40px', background: '#FAFAF8', borderBottom: '2px solid #E8E6E0' }}>
-            <LeadEditForm lead={lead} onUpdate={onUpdate} onClose={onToggle} />
-          </td>
-        </tr>
-      )}
-    </>
+    <tr
+      onClick={onClick}
+      style={{ cursor: 'pointer' }}
+      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#FAFAF8' }}
+      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+    >
+      <td style={{ ...TD, paddingLeft: 12 }}>
+        <span style={{ fontSize: 10, color: '#CCC' }}>›</span>
+      </td>
+      <td style={TD}>
+        <div style={{ fontWeight: 500 }}>{lead.nombre} {lead.apellidos}</div>
+        {lead.empresa && <div style={{ fontSize: 11, color: '#888' }}>{lead.empresa}</div>}
+      </td>
+      <td className="captacion-col-hide" style={TD}>{lead.email ?? <span style={{ color: '#CCC' }}>—</span>}</td>
+      <td className="captacion-col-hide" style={TD}>{lead.telefono ?? <span style={{ color: '#CCC' }}>—</span>}</td>
+      <td className="captacion-col-hide" style={TD}>{lead.ciudad ?? <span style={{ color: '#CCC' }}>—</span>}</td>
+      <td style={TD}>
+        <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: meta.color, background: meta.bg, padding: '2px 8px', borderRadius: 3 }}>
+          {meta.label}
+        </span>
+      </td>
+      <td className="captacion-col-hide" style={TD}>{lead.origen ?? <span style={{ color: '#CCC' }}>—</span>}</td>
+      <td className="captacion-col-hide" style={TD}>{presupuestoLabel(lead.presupuesto_estimado) ?? <span style={{ color: '#CCC' }}>—</span>}</td>
+      <td className="captacion-col-hide" style={{ ...TD, padding: '0 8px' }} onClick={e => e.stopPropagation()}>
+        <button
+          onClick={onDelete}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DDD', fontSize: 15, padding: '4px 6px', borderRadius: 3 }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#E53E3E' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#DDD' }}
+        >×</button>
+      </td>
+    </tr>
   )
 }
 
@@ -303,7 +289,7 @@ function LeadRow({
 export default function LeadsPage({ leads: initial }: { leads: Lead[] }) {
   const router = useRouter()
   const [leads, setLeads] = useState(initial)
-  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [editingLead, setEditingLead] = useState<Lead | null>(null)
   const [query, setQuery] = useState('')
   const [estadoFilter, setEstadoFilter] = useState('')
   const [addError, setAddError] = useState<string | null>(null)
@@ -319,7 +305,7 @@ export default function LeadsPage({ leads: initial }: { leads: Lead[] }) {
       setAddError(res.error)
       return
     }
-    setLeads(prev => [{
+    const newLead: Lead = {
       id: res.id, nombre: 'Nuevo lead', apellidos: null, empresa: null,
       email: null, email_cc: null, telefono: null, telefono_alt: null,
       nif_cif: null, documento_identidad: null, direccion: null,
@@ -327,12 +313,14 @@ export default function LeadsPage({ leads: initial }: { leads: Lead[] }) {
       direccion_facturacion: null, notas_facturacion: null, tipo_facturacion: null,
       notas: null, fecha_nacimiento: null, origen: null,
       estado_lead: 'nuevo', interes: null, presupuesto_estimado: null,
-    }, ...prev])
-    setExpandedId(res.id)
+    }
+    setLeads(prev => [newLead, ...prev])
+    setEditingLead(newLead)
   }
 
   const handleUpdate = (id: string, field: string, value: unknown) => {
     setLeads(prev => prev.map(l => l.id === id ? { ...l, [field]: value } : l))
+    setEditingLead(prev => prev?.id === id ? { ...prev, [field]: value } as Lead : prev)
     startTransition(async () => {
       const res = await updateLead(id, { [field]: value } as Parameters<typeof updateLead>[1])
       if ('error' in res) {
@@ -344,17 +332,9 @@ export default function LeadsPage({ leads: initial }: { leads: Lead[] }) {
   const handleDelete = (id: string) => {
     if (!confirm('¿Eliminar este lead?')) return
     setLeads(prev => prev.filter(l => l.id !== id))
+    if (editingLead?.id === id) setEditingLead(null)
     startTransition(async () => {
       await deleteLead(id)
-    })
-  }
-
-  const handleCreateContrato = (leadId: string) => {
-    startTransition(async () => {
-      const res = await createContrato(leadId)
-      if ('id' in res) {
-        router.push(`/team/captacion/contratos/${res.id}`)
-      }
     })
   }
 
@@ -457,13 +437,13 @@ export default function LeadsPage({ leads: initial }: { leads: Lead[] }) {
               <tr style={{ background: '#F8F7F4' }}>
                 <th style={{ ...TH, width: 28 }} />
                 <th style={TH}>Nombre / Empresa</th>
-                <th style={TH}>Email</th>
-                <th style={TH}>Teléfono</th>
-                <th style={TH}>Ciudad</th>
+                <th className="captacion-col-hide" style={TH}>Email</th>
+                <th className="captacion-col-hide" style={TH}>Teléfono</th>
+                <th className="captacion-col-hide" style={TH}>Ciudad</th>
                 <th style={TH}>Estado</th>
-                <th style={TH}>Origen</th>
-                <th style={TH}>Presupuesto</th>
-                <th style={{ ...TH, width: 40 }} />
+                <th className="captacion-col-hide" style={TH}>Origen</th>
+                <th className="captacion-col-hide" style={TH}>Presupuesto</th>
+                <th className="captacion-col-hide" style={{ ...TH, width: 40 }} />
               </tr>
             </thead>
             <tbody>
@@ -478,9 +458,7 @@ export default function LeadsPage({ leads: initial }: { leads: Lead[] }) {
                 <LeadRow
                   key={lead.id}
                   lead={lead}
-                  expanded={expandedId === lead.id}
-                  onToggle={() => setExpandedId(expandedId === lead.id ? null : lead.id)}
-                  onUpdate={(field, value) => handleUpdate(lead.id, field, value)}
+                  onClick={() => setEditingLead(lead)}
                   onDelete={() => handleDelete(lead.id)}
                 />
               ))}
@@ -491,6 +469,57 @@ export default function LeadsPage({ leads: initial }: { leads: Lead[] }) {
           {filtered.length} de {leads.length} leads
         </p>
       </div>
+
+      {/* ── Lead edit modal overlay ── */}
+      {editingLead && (
+        <div
+          className="captacion-modal-overlay"
+          onClick={() => setEditingLead(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <div
+            className="captacion-modal-box"
+            onClick={e => e.stopPropagation()}
+            style={{ background: '#fff', borderRadius: 8, width: 'min(700px, 96vw)', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
+          >
+            {/* Modal header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #E8E6E0', flexShrink: 0 }}>
+              <div>
+                <p style={{ fontSize: 9, color: '#AAA', textTransform: 'uppercase', letterSpacing: '0.1em', margin: '0 0 2px' }}>Lead</p>
+                <h2 style={{ fontSize: 16, fontWeight: 500, color: '#1A1A1A', margin: 0 }}>
+                  {editingLead.nombre}{editingLead.apellidos ? ` ${editingLead.apellidos}` : ''}
+                  {editingLead.empresa && <span style={{ fontWeight: 400, color: '#888', marginLeft: 8 }}>· {editingLead.empresa}</span>}
+                </h2>
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button
+                  onClick={() => handleDelete(editingLead.id)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#CCC', fontSize: 11, padding: '4px 8px', borderRadius: 3, fontFamily: 'inherit' }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#E53E3E' }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#CCC' }}
+                >
+                  Eliminar
+                </button>
+                <button
+                  onClick={() => setEditingLead(null)}
+                  style={{ background: 'none', border: '1px solid #E8E6E0', cursor: 'pointer', color: '#888', fontSize: 16, width: 32, height: 32, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit' }}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+            {/* Modal body — scrollable */}
+            <div style={{ overflowY: 'auto', flex: 1, padding: '20px 20px 24px' }}>
+              <LeadEditForm
+                key={editingLead.id}
+                lead={editingLead}
+                onUpdate={(field, value) => handleUpdate(editingLead.id, field, value)}
+                onClose={() => setEditingLead(null)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
