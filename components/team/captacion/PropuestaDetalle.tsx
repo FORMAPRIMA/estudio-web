@@ -464,7 +464,7 @@ export default function PropuestaDetalle({
       </div>
 
       {/* ── Body: two-column ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 24, padding: '32px 40px', maxWidth: 1400, margin: '0 auto' }}>
+      <div className="pd-body-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 24, padding: '32px 40px', maxWidth: 1400, margin: '0 auto' }}>
 
         {/* ── Left: form ── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
@@ -491,7 +491,7 @@ export default function PropuestaDetalle({
               )}
             </Field>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div className="pd-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <Field>
                 <Label>Título del proyecto</Label>
                 <input style={inputStyle()} value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="Ej. Reforma Calle Mayor…" />
@@ -523,7 +523,7 @@ export default function PropuestaDetalle({
 
           {/* Sección: Parámetros económicos */}
           <Section title="Parámetros económicos">
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+            <div className="pd-3col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
               <Field>
                 <Label>Superficie (m²)</Label>
                 <input
@@ -557,7 +557,7 @@ export default function PropuestaDetalle({
             {/* 1. Composición del equipo */}
             <div style={{ marginBottom: 24 }}>
               <Label>Composición del equipo</Label>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginTop: 8 }}>
+              <div className="pd-3col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginTop: 8 }}>
                 {[
                   { label: 'Junior', rate: PRECIO_HORA.junior, val: pctJunior, set: setPctJunior },
                   { label: 'Senior', rate: PRECIO_HORA.senior, val: pctSenior, set: setPctSenior },
@@ -695,7 +695,7 @@ export default function PropuestaDetalle({
                 const isModified = ov !== '' && Math.round(parseFloat(ov)) !== Math.round(autoCalc)
                 const diff = displayed - autoCalc
                 return (
-                  <div key={sid} style={{ display: 'grid', gridTemplateColumns: '1fr 220px', gap: 16, alignItems: 'start', marginBottom: 16, padding: '14px 16px', background: '#F8F7F4', borderRadius: 6, border: `1px solid ${isModified ? '#D85A30' : '#E8E6E0'}` }}>
+                  <div key={sid} className="pd-honorario-row" style={{ display: 'grid', gridTemplateColumns: '1fr 220px', gap: 16, alignItems: 'start', marginBottom: 16, padding: '14px 16px', background: '#F8F7F4', borderRadius: 6, border: `1px solid ${isModified ? '#D85A30' : '#E8E6E0'}` }}>
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 500, color: '#1A1A1A', marginBottom: 3 }}>{ptilla?.label ?? sid}</div>
                       {autoCalc > 0
@@ -1047,7 +1047,7 @@ export default function PropuestaDetalle({
         </div>
 
         {/* ── Right: resumen económico ── */}
-        <div style={{ position: 'sticky', top: 24, alignSelf: 'start' }}>
+        <div className="pd-sidebar" style={{ position: 'sticky', top: 24, alignSelf: 'start' }}>
           <div style={{ background: '#fff', border: '1px solid #E8E6E0', borderRadius: 8, overflow: 'hidden' }}>
             <div style={{ padding: '16px 20px', background: '#1A1A1A' }}>
               <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#888', marginBottom: 4 }}>
@@ -1151,12 +1151,14 @@ export default function PropuestaDetalle({
       {/* ── Lead modal ── */}
       {showLeadModal && (
         <div
+          className="captacion-modal-overlay"
           onClick={() => setShowLeadModal(false)}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
         >
           <div
+            className="captacion-modal-box"
             onClick={e => e.stopPropagation()}
-            style={{ background: '#fff', borderRadius: 8, width: 440, maxHeight: '65vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
+            style={{ background: '#fff', borderRadius: 8, width: 'min(440px, 92vw)', maxHeight: '65vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
           >
             <div style={{ padding: '20px 20px 0' }}>
               <h3 style={{ fontSize: 15, fontWeight: 400, margin: '0 0 12px', color: '#1A1A1A' }}>Seleccionar lead</h3>

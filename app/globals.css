@@ -278,6 +278,75 @@ div:hover > .tt-avatar-overlay {
     justify-content: center !important;
   }
 
+  /* ── Plantilla de propuestas: sidebar + editor → stacked ─── */
+
+  .plantilla-layout {
+    grid-template-columns: 1fr !important;
+    min-height: auto !important;
+  }
+
+  .plantilla-sidebar {
+    border-right: none !important;
+    border-bottom: 1px solid #E8E6E0 !important;
+    padding-top: 0 !important;
+    display: flex !important;
+    flex-direction: row !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+  }
+
+  .plantilla-sidebar::-webkit-scrollbar { display: none !important; }
+
+  /* Hide section labels in horizontal tab strip */
+  .plantilla-sidebar-label { display: none !important; }
+
+  /* Tabs become horizontal pills */
+  .plantilla-tab-btn {
+    width: auto !important;
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+    padding: 10px 14px !important;
+    border-left: none !important;
+    border-bottom: 3px solid transparent !important;
+    border-top: none !important;
+    border-right: none !important;
+  }
+
+  .plantilla-tab-btn[data-active="true"] {
+    border-bottom: 3px solid #D85A30 !important;
+    border-left: none !important;
+  }
+
+  .plantilla-editor {
+    padding: 20px 16px 32px !important;
+    max-width: 100% !important;
+  }
+
+  /* ── Propuesta detalle: grids → single column ────────────── */
+
+  .pd-body-grid {
+    grid-template-columns: 1fr !important;
+    padding: 16px !important;
+    gap: 0 !important;
+  }
+
+  .pd-2col,
+  .pd-3col {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .pd-honorario-row {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+
+  /* Right economic summary: no longer sticky */
+  .pd-sidebar {
+    position: static !important;
+  }
+
   /* ── Review page: 2-col → 1-col on mobile */
   .review-layout {
     grid-template-columns: 1fr !important;
