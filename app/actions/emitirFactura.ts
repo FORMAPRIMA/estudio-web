@@ -89,7 +89,7 @@ export async function emitirYEnviarFactura(
     }
 
     // 6 — Generar PDF
-    const pdfBuffer = await renderToBuffer(createElement(FacturaEmitidaPDF, { data: pdfData }))
+    const pdfBuffer = await renderToBuffer(createElement(FacturaEmitidaPDF, { data: pdfData }) as any)
 
     // 7 — Distribuir emails extra por tipo
     const valid = extraEmails.filter(e => e.email.trim())
