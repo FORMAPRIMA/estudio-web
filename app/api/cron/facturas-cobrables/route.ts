@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
   // Do them individually so the aviso logic stays consistent with manual status changes
   const results = await Promise.allSettled(
     candidatas.map(async (f) => {
-      const proyecto = f.proyectos as { nombre: string; codigo: string | null } | null
+      const proyecto = f.proyectos as unknown as { nombre: string; codigo: string | null } | null
       const proyLabel = proyecto
         ? `${proyecto.codigo ? proyecto.codigo + ' · ' : ''}${proyecto.nombre}`
         : 'proyecto'
