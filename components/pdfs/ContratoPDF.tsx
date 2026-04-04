@@ -132,6 +132,7 @@ const s = StyleSheet.create({
     color: C.soft,
     lineHeight: 1.65,
     marginBottom: 6,
+    textAlign: 'justify',
   },
   indented: {
     fontSize: 8.5,
@@ -139,6 +140,7 @@ const s = StyleSheet.create({
     lineHeight: 1.65,
     marginLeft: 14,
     marginBottom: 3,
+    textAlign: 'justify',
   },
   bullet: {
     fontSize: 8,
@@ -146,6 +148,7 @@ const s = StyleSheet.create({
     lineHeight: 1.6,
     marginLeft: 20,
     marginBottom: 2,
+    textAlign: 'justify',
   },
   groupLabel: {
     fontSize: 7.5,

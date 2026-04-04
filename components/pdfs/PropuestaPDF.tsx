@@ -40,7 +40,7 @@ const s = StyleSheet.create({
   // Header
   headerBlock: {
     backgroundColor: C.headerBg,
-    paddingTop: 32,
+    paddingTop: 22,
     paddingBottom: 0,
     paddingHorizontal: 56,
   },
@@ -48,7 +48,7 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 20,
+    marginBottom: 14,
   },
   logo: { width: 130, height: 'auto' },
   headerTitle: {
@@ -68,7 +68,7 @@ const s = StyleSheet.create({
   headerAccent: {
     height: 2,
     backgroundColor: C.brand,
-    marginTop: 20,
+    marginTop: 14,
     opacity: 0.7,
   },
 
@@ -77,7 +77,7 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 56,
-    paddingVertical: 20,
+    paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: C.rule,
   },
@@ -91,21 +91,21 @@ const s = StyleSheet.create({
   // Intro letter
   introBlock: {
     paddingHorizontal: 56,
-    paddingVertical: 18,
+    paddingVertical: 13,
     borderBottomWidth: 1,
     borderBottomColor: C.rule,
   },
   introText: {
     fontSize: 8.5,
     color: C.soft,
-    lineHeight: 1.65,
+    lineHeight: 1.55,
   },
 
   // Intro summary box
   summaryBox: {
     backgroundColor: C.light,
-    padding: 12,
-    marginTop: 16,
+    padding: 10,
+    marginTop: 12,
     marginBottom: 8,
     flexDirection: 'row',
     gap: 0,
@@ -171,10 +171,10 @@ const s = StyleSheet.create({
 
   // Metodología de honorarios
   metodologiaBlock: {
-    marginTop: 12,
-    paddingTop: 10,
-    paddingBottom: 10,
-    paddingHorizontal: 12,
+    marginTop: 8,
+    paddingTop: 8,
+    paddingBottom: 8,
+    paddingHorizontal: 10,
     borderLeftWidth: 2,
     borderLeftColor: C.brand,
     backgroundColor: C.light,
@@ -190,21 +190,21 @@ const s = StyleSheet.create({
   metodologiaText: {
     fontSize: 7.5,
     color: C.soft,
-    lineHeight: 1.65,
-    marginBottom: 4,
+    lineHeight: 1.55,
+    marginBottom: 3,
   },
   metodologiaBullet: {
     fontSize: 7.5,
     color: C.soft,
-    lineHeight: 1.6,
+    lineHeight: 1.5,
     marginLeft: 10,
-    marginBottom: 2,
+    marginBottom: 1,
   },
   metodologiaAlert: {
     fontSize: 7.5,
     color: C.ink,
-    lineHeight: 1.65,
-    marginTop: 6,
+    lineHeight: 1.55,
+    marginTop: 5,
     fontFamily: 'Helvetica-Oblique',
   },
 
