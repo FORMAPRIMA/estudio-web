@@ -599,7 +599,7 @@ export default function ReviewPage({ proyectos, tasks: initialTasks, members }: 
           <div style={{ fontSize: 13, color: '#BBB' }}>No hay proyectos activos</div>
         </div>
       ) : (
-        <div style={{ padding: '24px 32px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, alignItems: 'start' }}>
+        <div className="review-layout" style={{ padding: '24px 32px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, alignItems: 'start' }}>
           {/* Left column */}
           <div>
             {left.map((p) => (

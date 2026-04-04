@@ -245,6 +245,7 @@ export default function KanbanBoard({
   const [localProyectos, setLocalProyectos] = useState<ProyectoInterno[]>(initialProyectos)
   const [draggedId, setDraggedId] = useState<string | null>(null)
   const [dragOverCol, setDragOverCol] = useState<ProyectoStatus | null>(null)
+  const [mobileFilter, setMobileFilter] = useState<ProyectoStatus>('activo')
   const draggedFromStatus = useRef<ProyectoStatus | null>(null)
 
   const canEdit = currentUserRole === 'fp_partner' || currentUserRole === 'fp_manager'
@@ -314,14 +315,70 @@ export default function KanbanBoard({
         </div>
 
         {canEdit && (
-          <p className="text-[9px] text-meta/40 font-light tracking-widest uppercase mb-6">
+          <p className="hidden sm:block text-[9px] text-meta/40 font-light tracking-widest uppercase mb-6">
             Arrastra las tarjetas para cambiar su estado
           </p>
         )}
 
-        {/* Kanban grid — scroll horizontal en móvil, grid en desktop */}
-        <div className="flex gap-4 overflow-x-auto pb-4 lg:grid lg:grid-cols-4 lg:gap-6 lg:overflow-visible lg:pb-0">
+        {/* Mobile: status filter tabs */}
+        <div className="flex sm:hidden gap-2 mb-5 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>
+          {COLUMNS.map(col => {
+            const count = byStatus(col.status).length
+            const active = mobileFilter === col.status
+            return (
+              <button
+                key={col.status}
+                onClick={() => setMobileFilter(col.status)}
+                style={{
+                  flexShrink: 0,
+                  padding: '7px 16px',
+                  borderRadius: 20,
+                  fontSize: 11,
+                  fontWeight: 500,
+                  border: '1px solid',
+                  borderColor: active ? '#1A1A1A' : 'rgba(26,26,26,0.15)',
+                  background: active ? '#1A1A1A' : '#fff',
+                  color: active ? '#fff' : '#888',
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  letterSpacing: '0.02em',
+                }}
+              >
+                {col.label}{count > 0 ? ` · ${count}` : ''}
+              </button>
+            )
+          })}
+        </div>
 
+        {/* Mobile: single column view */}
+        <div className="block sm:hidden">
+          {(() => {
+            const col = COLUMNS.find(c => c.status === mobileFilter)!
+            return (
+              <KanbanColumn
+                status={col.status}
+                label={col.label}
+                proyectos={byStatus(col.status)}
+                progressByProject={progressByProject}
+                horasByProject={horasByProject}
+                horasIniciadasByProject={horasIniciadasByProject}
+                completedFaseKeys={completedFaseKeys}
+                canDrop={false}
+                isDragOver={false}
+                onDragOver={() => {}}
+                onDragLeave={() => {}}
+                onDrop={() => {}}
+                draggedId={null}
+                canDrag={false}
+                onDragStart={() => {}}
+                onDragEnd={() => {}}
+              />
+            )
+          })()}
+        </div>
+
+        {/* Desktop: horizontal scroll / 4-col grid */}
+        <div className="hidden sm:flex gap-4 overflow-x-auto pb-4 lg:grid lg:grid-cols-4 lg:gap-6 lg:overflow-visible lg:pb-0">
           {COLUMNS.map(col => (
             <KanbanColumn
               key={col.status}

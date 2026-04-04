@@ -239,6 +239,59 @@ div:hover > .tt-avatar-overlay {
     gap: 12px 14px !important;
   }
 
+  /* ── Review page: 2-col → 1-col on mobile */
+  .review-layout {
+    grid-template-columns: 1fr !important;
+    padding: 16px !important;
+  }
+
+  /* ── Finanzas Dashboard ──────────────────────────────────── */
+
+  .finanzas-header {
+    padding: 20px 16px 16px !important;
+  }
+
+  .finanzas-kpi-section {
+    padding: 16px 16px 0 !important;
+  }
+
+  .finanzas-kpi-strip {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    border-radius: 8px !important;
+  }
+
+  .finanzas-kpi-item {
+    flex: unset !important;
+    padding: 12px 14px !important;
+    border-right: none !important;
+    border-bottom: 1px solid #E8E6E0 !important;
+  }
+
+  .finanzas-kpi-item:nth-child(odd) {
+    border-right: 1px solid #E8E6E0 !important;
+  }
+
+  .finanzas-kpi-item:nth-last-child(1),
+  .finanzas-kpi-item:nth-last-child(2):nth-child(odd) {
+    border-bottom: none !important;
+  }
+
+  .finanzas-kpi-grid {
+    grid-template-columns: 1fr 1fr !important;
+    padding: 16px 16px 0 !important;
+    gap: 12px !important;
+  }
+
+  .finanzas-chart-wrap {
+    padding: 16px !important;
+  }
+
+  .finanzas-chart-scroll {
+    -webkit-overflow-scrolling: touch !important;
+    scroll-behavior: smooth !important;
+  }
+
   /* Plantilla de propuestas: sidebar + editor */
   .plantilla-layout {
     grid-template-columns: 1fr !important;

@@ -547,7 +547,7 @@ export default function FinanzasDashboard({ facturas, year, monthlyCosts, kpis }
     <div style={{ fontFamily: "'Inter', system-ui, sans-serif", minHeight: '100vh', background: '#F8F7F4' }}>
 
       {/* Header */}
-      <div style={{ padding: '40px 40px 32px', borderBottom: '1px solid #E8E6E0', background: '#fff' }}>
+      <div className="finanzas-header" style={{ padding: '40px 40px 32px', borderBottom: '1px solid #E8E6E0', background: '#fff' }}>
         <p style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', marginBottom: 6, fontWeight: 600 }}>
           Finanzas · {year}
         </p>
@@ -557,8 +557,8 @@ export default function FinanzasDashboard({ facturas, year, monthlyCosts, kpis }
       </div>
 
       {/* KPIs */}
-      <div style={{ padding: '24px 40px 0', background: '#fff', borderBottom: '1px solid #E8E6E0' }}>
-        <div style={{ display: 'flex', background: '#F8F7F4', borderRadius: 8, border: '1px solid #E8E6E0', overflow: 'hidden', marginBottom: 24 }}>
+      <div className="finanzas-kpi-section" style={{ padding: '24px 40px 0', background: '#fff', borderBottom: '1px solid #E8E6E0' }}>
+        <div className="finanzas-kpi-strip" style={{ display: 'flex', background: '#F8F7F4', borderRadius: 8, border: '1px solid #E8E6E0', overflow: 'hidden', marginBottom: 24 }}>
           {[
             { label: 'Contratado año',       value: `€ ${fmtE0.format(totalAnual)}`,    sub: `Obj. anual € ${fmtE0.format(targetAnual)}` },
             { label: 'Cobrado',              value: `€ ${fmtE0.format(totalCobrado)}`,  sub: `${pctObjetivo.toFixed(0)}% del objetivo anual`, color: '#1D9E75' },
@@ -566,7 +566,7 @@ export default function FinanzasDashboard({ facturas, year, monthlyCosts, kpis }
             { label: 'Enviadas pendientes',  value: totalEnviadas > 0 ? `€ ${fmtE0.format(totalEnviadas)}` : '—', color: '#E8913A' },
             { label: 'Impagadas',            value: totalImpagado > 0 ? `€ ${fmtE0.format(totalImpagado)}` : '—', color: totalImpagado > 0 ? '#E53E3E' : '#CCC' },
           ].map((kpi, i, arr) => (
-            <div key={kpi.label} style={{ flex: 1, padding: '16px 24px', borderRight: i < arr.length - 1 ? '1px solid #E8E6E0' : 'none' }}>
+            <div key={kpi.label} className="finanzas-kpi-item" style={{ flex: 1, padding: '16px 24px', borderRight: i < arr.length - 1 ? '1px solid #E8E6E0' : 'none' }}>
               <KpiBox {...kpi} />
             </div>
           ))}
@@ -574,7 +574,7 @@ export default function FinanzasDashboard({ facturas, year, monthlyCosts, kpis }
       </div>
 
       {/* KPI Grid — 4 slots, 2 filled */}
-      <div style={{ padding: '32px 40px 0', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 16 }}>
+      <div className="finanzas-kpi-grid" style={{ padding: '32px 40px 0', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 16 }}>
         <AvgProjectMarginCard kpis={kpis} />
         <SectionMarginsCard   kpis={kpis} />
         <PlaceholderCard label="KPI disponible" />
@@ -582,7 +582,7 @@ export default function FinanzasDashboard({ facturas, year, monthlyCosts, kpis }
       </div>
 
       {/* Chart */}
-      <div style={{ padding: '32px 40px' }}>
+      <div className="finanzas-chart-wrap" style={{ padding: '32px 40px' }}>
         <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #E8E6E0', padding: '28px 28px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, gap: 16, flexWrap: 'wrap' }}>
             <div>
@@ -590,12 +590,16 @@ export default function FinanzasDashboard({ facturas, year, monthlyCosts, kpis }
                 Facturación vs Costes
               </p>
               <p style={{ fontSize: 13, color: '#555', margin: 0, fontWeight: 300 }}>
-                Barra ancha = facturación por estado · Barra fina = costes totales del mes
+                Barra ancha = facturación · Barra fina = costes
               </p>
             </div>
             <Legend />
           </div>
-          <BillingChart facturas={facturas} year={year} monthlyCosts={monthlyCosts} />
+          <div className="finanzas-chart-scroll" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
+            <div style={{ minWidth: 600 }}>
+              <BillingChart facturas={facturas} year={year} monthlyCosts={monthlyCosts} />
+            </div>
+          </div>
         </div>
       </div>
 
