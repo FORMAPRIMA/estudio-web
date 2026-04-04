@@ -40,11 +40,11 @@ export default function PlataformaInternaPage({ proyectos }: { proyectos: Proyec
     <div style={{ fontFamily: "'Inter', system-ui, sans-serif", minHeight: '100vh', background: '#F8F7F4' }}>
 
       {/* Header */}
-      <div style={{ padding: '40px 40px 28px', borderBottom: '1px solid #E8E6E0', background: '#fff' }}>
+      <div className="pip-header" style={{ padding: '40px 40px 28px', borderBottom: '1px solid #E8E6E0', background: '#fff' }}>
         <p style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', marginBottom: 6, fontWeight: 600 }}>
           Clientes · Plataforma de obras
         </p>
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+        <div className="pip-header-title" style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
           <h1 style={{ fontSize: 28, fontWeight: 200, color: '#1A1A1A', margin: 0, letterSpacing: '-0.01em' }}>
             Gestión interna
           </h1>
@@ -55,7 +55,7 @@ export default function PlataformaInternaPage({ proyectos }: { proyectos: Proyec
       </div>
 
       {/* Grid */}
-      <div style={{ padding: '32px 40px' }}>
+      <div className="pip-grid-wrap" style={{ padding: '32px 40px' }}>
         {proyectos.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 24px', color: '#CCC', fontSize: 13 }}>
             No hay proyectos activos o en espera

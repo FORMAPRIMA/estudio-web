@@ -17,6 +17,7 @@ div:hover > .tt-avatar-overlay {
 /* ── Default (desktop) hidden states for mobile-only elements ── */
 .pap-mobile-view { display: none; }
 .fkb-mobile-view { display: none; }
+.cbd-mobile-list { display: none; }
 
 @media (max-width: 768px) {
 
@@ -811,6 +812,133 @@ div:hover > .tt-avatar-overlay {
   .fp-table-wrap {
     overflow-x: auto !important;
     -webkit-overflow-scrolling: touch !important;
+  }
+
+  /* ── ClientesBDPage ───────────────────────────────────── */
+
+  .cbd-desktop-table { display: none !important; }
+  .cbd-mobile-list { display: flex !important; flex-direction: column !important; gap: 10px !important; }
+
+  .cbd-header {
+    padding: 20px 16px 20px !important;
+  }
+
+  .cbd-header-title {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 4px !important;
+    margin-bottom: 16px !important;
+  }
+
+  .cbd-header-title h1 {
+    font-size: 22px !important;
+  }
+
+  .cbd-table-wrap {
+    padding: 16px !important;
+  }
+
+  /* ── PlataformaInternaPage ────────────────────────────── */
+
+  .pip-header {
+    padding: 20px 16px 20px !important;
+  }
+
+  .pip-header-title {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 4px !important;
+  }
+
+  .pip-header-title h1 {
+    font-size: 22px !important;
+  }
+
+  .pip-grid-wrap {
+    padding: 16px !important;
+  }
+
+  /* ── PlataformaInternaDetalle ─────────────────────────── */
+
+  .pid-header {
+    padding: 20px 16px 0 !important;
+  }
+
+  .pid-title-row {
+    flex-direction: column !important;
+    gap: 12px !important;
+    align-items: stretch !important;
+    padding-bottom: 16px !important;
+  }
+
+  .pid-title-row h1 {
+    font-size: 20px !important;
+  }
+
+  .pid-header-actions {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    margin-top: 0 !important;
+  }
+
+  .pid-header-actions button,
+  .pid-header-actions a {
+    text-align: center !important;
+    justify-content: center !important;
+  }
+
+  .pid-tab-nav {
+    padding: 0 !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+  }
+
+  .pid-tab-nav::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .pid-tab-nav button {
+    padding: 12px 14px !important;
+    font-size: 10px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .pid-content {
+    padding: 16px !important;
+  }
+
+  .pid-contratos-grid {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+
+  .pid-facturacion-summary {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .pid-visita-form-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .pid-cron-gen-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 12px !important;
+  }
+
+  .pid-cron-form-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .pid-render-pending {
+    flex-direction: column !important;
+  }
+
+  .pid-render-pending img {
+    width: 100% !important;
+    height: 140px !important;
+    flex-shrink: unset !important;
   }
 
 }

@@ -479,6 +479,215 @@ function ClienteRow({ cliente, isExpanded, onToggle }: {
   )
 }
 
+// ── ClienteMobileCard ─────────────────────────────────────────────────────────
+
+function ClienteMobileCard({ cliente, isExpanded, onToggle }: {
+  cliente:    Cliente
+  isExpanded: boolean
+  onToggle:   () => void
+}) {
+  const [, startTransition] = useTransition()
+
+  const [fields, setFields] = useState<FieldDraft>({
+    nombre:                cliente.nombre,
+    apellidos:             cliente.apellidos             ?? '',
+    documento_identidad:   cliente.documento_identidad   ?? '',
+    direccion:             cliente.direccion              ?? '',
+    ciudad:                cliente.ciudad                ?? '',
+    codigo_postal:         cliente.codigo_postal         ?? '',
+    pais:                  cliente.pais                  ?? '',
+    email:                 cliente.email                 ?? '',
+    email_cc:              cliente.email_cc              ?? '',
+    telefono:              cliente.telefono              ?? '',
+    telefono_alt:          cliente.telefono_alt          ?? '',
+    tipo_facturacion:      cliente.tipo_facturacion      ?? 'fisica',
+    empresa:               cliente.empresa               ?? '',
+    nif_cif:               cliente.nif_cif               ?? '',
+    direccion_facturacion: cliente.direccion_facturacion ?? '',
+    notas_facturacion:     cliente.notas_facturacion     ?? '',
+    notas:                 cliente.notas                 ?? '',
+    fecha_nacimiento:      cliente.fecha_nacimiento       ?? '',
+  })
+
+  const set = (key: keyof FieldDraft) => (v: string) =>
+    setFields(prev => ({ ...prev, [key]: v }))
+
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  const handleSave = async () => {
+    setSaveState('saving'); setSaveError(null)
+    let result: { success: true } | { error: string }
+    try {
+      result = await updateCliente(cliente.id, {
+        nombre:                fields.nombre.trim() || 'Nuevo cliente',
+        apellidos:             toNullable(fields.apellidos),
+        documento_identidad:   toNullable(fields.documento_identidad),
+        direccion:             toNullable(fields.direccion),
+        ciudad:                toNullable(fields.ciudad),
+        codigo_postal:         toNullable(fields.codigo_postal),
+        pais:                  toNullable(fields.pais),
+        email:                 toNullable(fields.email),
+        email_cc:              toNullable(fields.email_cc),
+        telefono:              toNullable(fields.telefono),
+        telefono_alt:          toNullable(fields.telefono_alt),
+        tipo_facturacion:      fields.tipo_facturacion,
+        empresa:               toNullable(fields.empresa),
+        nif_cif:               toNullable(fields.nif_cif),
+        direccion_facturacion: toNullable(fields.direccion_facturacion),
+        notas_facturacion:     toNullable(fields.notas_facturacion),
+        notas:                 toNullable(fields.notas),
+        fecha_nacimiento:      toNullable(fields.fecha_nacimiento),
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setSaveState('error'); setSaveError(msg); return
+    }
+    if ('error' in result) { setSaveState('error'); setSaveError(result.error); return }
+    setSaveState('saved')
+    setTimeout(() => setSaveState('idle'), 2500)
+  }
+
+  const handleDelete = () => {
+    if (!confirm(`¿Eliminar a ${fields.nombre || cliente.nombre}? Esta acción no se puede deshacer.`)) return
+    startTransition(async () => { await deleteCliente(cliente.id) })
+  }
+
+  const displayName = [fields.nombre, fields.apellidos].filter(Boolean).join(' ')
+
+  return (
+    <div style={{ background: '#fff', borderRadius: 10, border: '1px solid #E8E6E0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+      {/* Collapsed header */}
+      <div
+        onClick={onToggle}
+        style={{ padding: '14px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, background: isExpanded ? '#FAFAF8' : '#fff' }}
+      >
+        <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#D85A30', flexShrink: 0, transition: 'transform 0.15s', transform: isExpanded ? 'scale(1.5)' : 'scale(1)' }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 13, fontWeight: 500, color: '#1A1A1A', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {displayName || 'Nuevo cliente'}
+          </p>
+          {fields.empresa && <p style={{ fontSize: 10, color: '#888', margin: '1px 0 0' }}>{fields.empresa}</p>}
+          <div style={{ display: 'flex', gap: 10, marginTop: 4, flexWrap: 'wrap' }}>
+            {fields.email    && <span style={{ fontSize: 10, color: '#378ADD' }}>{fields.email}</span>}
+            {fields.telefono && <span style={{ fontSize: 10, color: '#666' }}>{fields.telefono}</span>}
+            {fields.nif_cif  && <span style={{ fontSize: 10, color: '#AAA', fontFamily: 'monospace' }}>{fields.nif_cif}</span>}
+          </div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5, flexShrink: 0 }}>
+          {cliente.proyectos.length > 0 && (
+            <span style={{ fontSize: 9, fontWeight: 600, background: '#F0EEE8', color: '#888', padding: '2px 7px', borderRadius: 10 }}>
+              {cliente.proyectos.length} proy.
+            </span>
+          )}
+          <span style={{ fontSize: 12, color: '#CCC' }}>{isExpanded ? '▲' : '▼'}</span>
+        </div>
+      </div>
+
+      {/* Expanded detail */}
+      {isExpanded && (
+        <div style={{ borderTop: '1px solid #F0EEE8' }}>
+
+          <div style={{ padding: '16px 16px 4px' }}>
+            <SectionHeader label="Datos personales" />
+            <FieldInput label="Nombre" value={fields.nombre} onChange={set('nombre')} />
+            <FieldInput label="Apellidos" value={fields.apellidos} onChange={set('apellidos')} placeholder="Sin apellidos" />
+            <FieldInput label="Pasaporte / DNI / NIE" value={fields.documento_identidad} onChange={set('documento_identidad')} placeholder="Sin documento" />
+            <FieldInput label="Fecha de nacimiento" value={fields.fecha_nacimiento} onChange={set('fecha_nacimiento')} type="date" />
+            <FieldInput label="Dirección residencial" value={fields.direccion} onChange={set('direccion')} placeholder="Sin dirección" />
+            <FieldInput label="Ciudad" value={fields.ciudad} onChange={set('ciudad')} placeholder="Sin ciudad" />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 10px' }}>
+              <FieldInput label="CP" value={fields.codigo_postal} onChange={set('codigo_postal')} placeholder="CP" />
+              <FieldInput label="País" value={fields.pais} onChange={set('pais')} placeholder="España" />
+            </div>
+          </div>
+
+          <div style={{ padding: '12px 16px 4px', borderTop: '1px solid #EDEBE7' }}>
+            <SectionHeader label="Contacto" />
+            <FieldInput label="Email principal" value={fields.email} onChange={set('email')} type="email" placeholder="Sin email" />
+            <FieldInput label="Email secundario" value={fields.email_cc} onChange={set('email_cc')} type="email" placeholder="Sin email CC" />
+            <FieldInput label="Teléfono principal" value={fields.telefono} onChange={set('telefono')} type="tel" placeholder="Sin teléfono" />
+            <FieldInput label="Teléfono alternativo" value={fields.telefono_alt} onChange={set('telefono_alt')} type="tel" placeholder="Sin teléfono alt." />
+          </div>
+
+          <div style={{ padding: '12px 16px 4px', borderTop: '1px solid #EDEBE7' }}>
+            <SectionHeader
+              label="Facturación"
+              right={<TipoToggle value={fields.tipo_facturacion} onChange={set('tipo_facturacion')} />}
+            />
+            <FieldInput
+              label={fields.tipo_facturacion === 'juridica' ? 'Razón social / Empresa' : 'Nombre para facturación'}
+              value={fields.empresa}
+              onChange={set('empresa')}
+              placeholder={fields.tipo_facturacion === 'juridica' ? 'Nombre de la empresa' : 'Nombre y apellidos'}
+            />
+            <FieldInput
+              label={fields.tipo_facturacion === 'juridica' ? 'CIF' : 'NIF / NIE'}
+              value={fields.nif_cif}
+              onChange={set('nif_cif')}
+              placeholder="Sin NIF/CIF"
+            />
+            <FieldInput label="Dirección fiscal" value={fields.direccion_facturacion} onChange={set('direccion_facturacion')} placeholder="Si difiere de la residencial" />
+            <FieldInput label="Notas de facturación" value={fields.notas_facturacion} onChange={set('notas_facturacion')} type="textarea" placeholder="Condiciones especiales…" />
+          </div>
+
+          <div style={{ padding: '12px 16px 4px', borderTop: '1px solid #EDEBE7' }}>
+            <SectionHeader label="Notas generales" />
+            <FieldInput label="" value={fields.notas} onChange={set('notas')} type="textarea" placeholder="Observaciones, preferencias…" />
+          </div>
+
+          {cliente.proyectos.length > 0 && (
+            <div style={{ padding: '12px 16px', borderTop: '1px solid #EDEBE7' }}>
+              <SectionHeader label="Proyectos asociados" />
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {cliente.proyectos.map(p => (
+                  <span key={p.id} style={{
+                    fontSize: 10, padding: '4px 10px',
+                    background: `${STATUS_COLOR[p.status] ?? '#999'}14`,
+                    color: STATUS_COLOR[p.status] ?? '#999',
+                    border: `1px solid ${STATUS_COLOR[p.status] ?? '#999'}2A`,
+                    fontWeight: 500, borderRadius: 3,
+                  }}>
+                    {p.codigo ? `${p.codigo} · ` : ''}{p.nombre}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 16px', borderTop: '1px solid #EDEBE7', background: '#F5F3EF' }}>
+            <button
+              onClick={handleDelete}
+              style={{ background: 'none', border: '1px solid #FCA5A5', borderRadius: 5, cursor: 'pointer', fontSize: 11, color: '#E53E3E', padding: '6px 12px' }}
+            >
+              Eliminar
+            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              {saveState === 'error' && saveError && <span style={{ fontSize: 11, color: '#E53E3E' }}>Error</span>}
+              {saveState === 'saved' && <span style={{ fontSize: 11, color: '#1D9E75' }}>✓ Guardado</span>}
+              <button
+                onClick={handleSave}
+                disabled={saveState === 'saving'}
+                style={{
+                  height: 34, padding: '0 20px',
+                  background: saveState === 'saved' ? '#1D9E75' : '#1A1A1A',
+                  color: '#fff', border: 'none', borderRadius: 5,
+                  cursor: saveState === 'saving' ? 'not-allowed' : 'pointer',
+                  fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase',
+                  opacity: saveState === 'saving' ? 0.6 : 1,
+                }}
+              >
+                {saveState === 'saving' ? 'Guardando…' : saveState === 'saved' ? '✓ Guardado' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function ClientesBDPage({ clientes: initial }: { clientes: Cliente[] }) {
@@ -525,11 +734,11 @@ export default function ClientesBDPage({ clientes: initial }: { clientes: Client
     <div style={{ fontFamily: "'Inter', system-ui, sans-serif", minHeight: '100vh', background: '#F8F7F4' }}>
 
       {/* Header */}
-      <div style={{ padding: '40px 40px 28px', borderBottom: '1px solid #E8E6E0', background: '#fff' }}>
+      <div className="cbd-header" style={{ padding: '40px 40px 28px', borderBottom: '1px solid #E8E6E0', background: '#fff' }}>
         <p style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', marginBottom: 6, fontWeight: 600 }}>
           Clientes
         </p>
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 24 }}>
+        <div className="cbd-header-title" style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 24 }}>
           <h1 style={{ fontSize: 28, fontWeight: 200, color: '#1A1A1A', margin: 0, letterSpacing: '-0.01em' }}>
             Base de datos
           </h1>
@@ -566,38 +775,53 @@ export default function ClientesBDPage({ clientes: initial }: { clientes: Client
         )}
       </div>
 
-      {/* Table */}
-      <div style={{ padding: '28px 40px' }}>
+      {/* Table / Cards */}
+      <div className="cbd-table-wrap" style={{ padding: '28px 40px' }}>
         {filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 24px', color: '#CCC', fontSize: 13 }}>
             {query ? 'Sin resultados para esa búsqueda' : 'No hay clientes — pulsa "Nuevo cliente" para empezar'}
           </div>
         ) : (
-          <div className="fp-table-wrap" style={{ background: '#fff', borderRadius: 10, border: '1px solid #E8E6E0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: '#1A1A1A' }}>
-                  <th style={{ ...TH, width: 32, paddingLeft: 8 }} />
-                  <th style={{ ...TH }}>Nombre / Empresa</th>
-                  <th style={{ ...TH, width: 130 }}>NIF / CIF</th>
-                  <th style={{ ...TH, width: 220 }}>Email</th>
-                  <th style={{ ...TH, width: 150 }}>Teléfono</th>
-                  <th style={{ ...TH, textAlign: 'center', width: 90 }}>Proyectos</th>
-                  <th style={{ ...TH, width: 40 }} />
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(c => (
-                  <ClienteRow
-                    key={c.id}
-                    cliente={c}
-                    isExpanded={expanded === c.id}
-                    onToggle={() => setExpanded(prev => prev === c.id ? null : c.id)}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <>
+            {/* Desktop table */}
+            <div className="cbd-desktop-table fp-table-wrap" style={{ background: '#fff', borderRadius: 10, border: '1px solid #E8E6E0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: '#1A1A1A' }}>
+                    <th style={{ ...TH, width: 32, paddingLeft: 8 }} />
+                    <th style={{ ...TH }}>Nombre / Empresa</th>
+                    <th style={{ ...TH, width: 130 }}>NIF / CIF</th>
+                    <th style={{ ...TH, width: 220 }}>Email</th>
+                    <th style={{ ...TH, width: 150 }}>Teléfono</th>
+                    <th style={{ ...TH, textAlign: 'center', width: 90 }}>Proyectos</th>
+                    <th style={{ ...TH, width: 40 }} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map(c => (
+                    <ClienteRow
+                      key={c.id}
+                      cliente={c}
+                      isExpanded={expanded === c.id}
+                      onToggle={() => setExpanded(prev => prev === c.id ? null : c.id)}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile cards */}
+            <div className="cbd-mobile-list">
+              {filtered.map(c => (
+                <ClienteMobileCard
+                  key={c.id}
+                  cliente={c}
+                  isExpanded={expanded === c.id}
+                  onToggle={() => setExpanded(prev => prev === c.id ? null : c.id)}
+                />
+              ))}
+            </div>
+          </>
         )}
       </div>
     </div>

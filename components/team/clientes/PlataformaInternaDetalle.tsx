@@ -199,7 +199,7 @@ function TabNav({ tabs, active, onChange }: {
   onChange: (id: string) => void
 }) {
   return (
-    <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #E8E6E0', background: '#fff', padding: '0 40px' }}>
+    <div className="pid-tab-nav" style={{ display: 'flex', gap: 0, borderBottom: '1px solid #E8E6E0', background: '#fff', padding: '0 40px' }}>
       {tabs.map(t => (
         <button
           key={t.id}
@@ -491,7 +491,7 @@ function RendersSection({ proyectoId, initialRenders }: { proyectoId: string; in
 
       {/* Pending upload — title form */}
       {pending && (
-        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', padding: '16px', background: '#F8F7F4', borderRadius: 8, border: '2px solid #D85A30', marginBottom: 16 }}>
+        <div className="pid-render-pending" style={{ display: 'flex', gap: 16, alignItems: 'flex-start', padding: '16px', background: '#F8F7F4', borderRadius: 8, border: '2px solid #D85A30', marginBottom: 16 }}>
           <img src={pending.preview} style={{ width: 120, height: 80, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }} />
           <div style={{ flex: 1 }}>
             <label style={S.label}>Título del render (habitación, espacio, descripción…)</label>
@@ -694,7 +694,7 @@ function VisitasSection({
 
       {showForm && (
         <div style={{ background: '#F8F7F4', borderRadius: 8, padding: '16px', marginBottom: 16, border: '1px solid #E8E6E0' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr 1fr', gap: 12, marginBottom: 12 }}>
+          <div className="pid-visita-form-grid" style={{ display: 'grid', gridTemplateColumns: 'auto 1fr 1fr', gap: 12, marginBottom: 12 }}>
             <div>
               <label style={S.label}>Fecha</label>
               <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} style={{ ...S.input, width: 'auto' }} />
@@ -1105,7 +1105,7 @@ function CronogramaSection({ proyectoId, initialPartidas }: { proyectoId: string
             Define la fecha de inicio y la duración total. Las 18 fases se escalarán automáticamente según sus rangos porcentuales.
             {partidas.length > 0 && <span style={{ color: '#D85A30', fontWeight: 600 }}> Esto reemplazará las {partidas.length} partidas existentes.</span>}
           </p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'auto auto 1fr', gap: 16, alignItems: 'end' }}>
+          <div className="pid-cron-gen-grid" style={{ display: 'grid', gridTemplateColumns: 'auto auto 1fr', gap: 16, alignItems: 'end' }}>
             <div>
               <label style={S.label}>Fecha de inicio</label>
               <input type="date" value={genFecha} onChange={e => setGenFecha(e.target.value)} style={{ ...S.input, width: 'auto' }} />
@@ -1140,7 +1140,7 @@ function CronogramaSection({ proyectoId, initialPartidas }: { proyectoId: string
 
       {showForm && (
         <div style={{ background: '#F8F7F4', borderRadius: 8, padding: '16px', marginBottom: 16, border: '1px solid #E8E6E0' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 12, alignItems: 'end' }}>
+          <div className="pid-cron-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 12, alignItems: 'end' }}>
             <div>
               <label style={S.label}>Partida</label>
               <input placeholder="Ej: Cimentación, Estructura…" value={nombre} onChange={e => setNombre(e.target.value)} style={S.input} />
@@ -1410,7 +1410,7 @@ function ContratosTab({ proyectoId, initialContratos }: { proyectoId: string; in
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ ...S.card }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 24 }}>
+        <div className="pid-contratos-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 24 }}>
           <ContratoFile label="Contrato de Arquitectura / Interiorismo" url={arqUrl} onUploaded={handleArqUploaded} storagePath={`${proyectoId}/contratos`} />
           <ContratoFile label="Contrato de Obra / Construcción" url={obraUrl} onUploaded={handleObraUploaded} storagePath={`${proyectoId}/contratos`} />
           <ContratoFile label="Presupuesto de Obra" url={presupuestoUrl} onUploaded={handlePresupuestoUploaded} storagePath={`${proyectoId}/contratos`} />
@@ -1454,7 +1454,7 @@ function FacturacionTab({ facturas }: { facturas: Factura[] }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Summary */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+      <div className="pid-facturacion-summary" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
         {[
           { label: 'Total facturado', value: fmtMoney(totalTotal), color: '#1A1A1A' },
           { label: 'Cobrado', value: fmtMoney(totalPagado), color: '#1D9E75' },
@@ -1540,7 +1540,7 @@ export default function PlataformaInternaDetalle({
     <div style={{ fontFamily: "'Inter', system-ui, sans-serif", minHeight: '100vh', background: '#F8F7F4' }}>
 
       {/* Header */}
-      <div style={{ padding: '40px 40px 0', background: '#fff' }}>
+      <div className="pid-header" style={{ padding: '40px 40px 0', background: '#fff' }}>
         <button
           onClick={() => router.push('/team/clientes/plataforma/interna')}
           style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: '#AAA', padding: 0, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 4 }}
@@ -1549,7 +1549,7 @@ export default function PlataformaInternaDetalle({
         >
           ← Plataforma interna
         </button>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24, paddingBottom: 20 }}>
+        <div className="pid-title-row" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24, paddingBottom: 20 }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
               <h1 style={{ fontSize: 28, fontWeight: 200, color: '#1A1A1A', margin: 0, letterSpacing: '-0.01em' }}>{proyecto.nombre}</h1>
@@ -1562,7 +1562,7 @@ export default function PlataformaInternaDetalle({
               {proyecto.cliente && <span style={{ fontSize: 12, color: '#888' }}>{proyecto.cliente}</span>}
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 8, flexShrink: 0, marginTop: 4 }}>
+          <div className="pid-header-actions" style={{ display: 'flex', gap: 8, flexShrink: 0, marginTop: 4 }}>
             <CopyPortalLink proyectoId={proyecto.id} />
             <button
               onClick={() => router.push('/team/clientes/plataforma/externa')}
@@ -1579,7 +1579,7 @@ export default function PlataformaInternaDetalle({
       <TabNav tabs={allTabs} active={tab} onChange={setTab} />
 
       {/* Content */}
-      <div style={{ padding: '32px 40px', maxWidth: 1000 }}>
+      <div className="pid-content" style={{ padding: '32px 40px', maxWidth: 1000 }}>
         {tab === 'portal' && <PortalTab proyecto={proyecto} portal={portal} titulares={titulares} isPrivileged={isPrivileged} renders={renders} visitas={visitas} partidas={partidas} />}
         {tab === 'contratos' && isPrivileged && <ContratosTab proyectoId={proyecto.id} initialContratos={contratos} />}
         {tab === 'facturacion' && isPrivileged && <FacturacionTab facturas={facturas} />}
