@@ -375,8 +375,8 @@ export function PropuestaPDF({ data }: { data: PropuestaPDFData }) {
             const cfgBase      = SERVICIOS_CONFIG[sid as ServicioId]
             const label_       = entry?.label ?? cfgBase?.label ?? sid
             const texto_       = entry?.texto ?? cfgBase?.texto ?? ''
-            const entregables_ = entry?.entregables ?? (cfgBase?.entregables as { grupo: string; items: string[] }[] ?? [])
-            const pago_        = entry?.pago ?? (cfgBase?.pago as { label: string; pct: number }[] ?? [])
+            const entregables_ = entry?.entregables ?? (cfgBase?.entregables as unknown as { grupo: string; items: string[] }[] ?? [])
+            const pago_        = entry?.pago ?? (cfgBase?.pago as unknown as { label: string; pct: number }[] ?? [])
             const precio       = breakdown[sid] ?? 0
             const semanas      = data.semanas[sid] ?? entry?.semanas_default ?? cfgBase?.semanas_default ?? ''
 

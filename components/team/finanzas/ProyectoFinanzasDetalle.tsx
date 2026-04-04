@@ -363,7 +363,7 @@ export default function ProyectoFinanzasDetalle({
             /* ── Section view: cost + billing + margin ── */
             (() => {
               const SORDER = ['Anteproyecto', 'Proyecto de ejecución', 'Obra', 'Interiorismo', 'Post venta']
-              const allSecs = [...new Set([...costBySec.map(s => s.seccion), ...billingBySec.map(b => b.seccion)])]
+              const allSecs = Array.from(new Set([...costBySec.map(s => s.seccion), ...billingBySec.map(b => b.seccion)]))
                 .sort((a, b) => {
                   const ia = SORDER.indexOf(a), ib = SORDER.indexOf(b)
                   return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib)

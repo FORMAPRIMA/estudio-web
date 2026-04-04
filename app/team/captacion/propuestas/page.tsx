@@ -29,8 +29,8 @@ export default async function Page() {
 
   return (
     <PropuestasPage
-      propuestas={(propuestas ?? []) as Parameters<typeof PropuestasPage>[0]['propuestas']}
-      leads={(leads ?? []) as Parameters<typeof PropuestasPage>[0]['leads']}
+      propuestas={(propuestas ?? []) as unknown as Parameters<typeof PropuestasPage>[0]['propuestas']}
+      leads={(leads ?? []) as unknown as Parameters<typeof PropuestasPage>[0]['leads']}
     />
   )
 }

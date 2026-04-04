@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition, Fragment } from 'react'
-import type { CSSProperties } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import {
   updateMemberCosts, addCostoFijo, updateCostoFijo, deleteCostoFijo, updateFinanzasConfig,
   addCostoVariable, updateCostoVariable, deleteCostoVariable,
@@ -215,7 +215,7 @@ function CostBreakdownBar({
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function Cell({ children, onClick, empty, align = 'left' }: {
-  children?: string; onClick: () => void; empty: boolean; align?: 'left' | 'right'
+  children?: ReactNode; onClick: () => void; empty: boolean; align?: 'left' | 'right'
 }) {
   return (
     <span

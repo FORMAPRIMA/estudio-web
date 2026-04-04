@@ -94,8 +94,8 @@ export default async function Page({ params }: { params: { id: string } }) {
     const pending  = pendingMap[key] ?? 0
     const fraction = total > 0 ? pending / total : 1
     const remaining = h * fraction
-    const cf  = pf.catalogo_fases as { seccion: string; label: string } | null
-    const pro = pf.proyectos      as { nombre: string } | null
+    const cf  = pf.catalogo_fases as unknown as { seccion: string; label: string } | null
+    const pro = pf.proyectos      as unknown as { nombre: string } | null
     const sec = (cf?.seccion ?? '').toLowerCase()
     const lbl = (cf?.label   ?? '').toLowerCase()
 

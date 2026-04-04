@@ -168,8 +168,8 @@ export function getServicioPlantilla(
   return {
     label:           db?.label           ?? cfg.label,
     texto:           db?.texto           ?? cfg.texto,
-    entregables:     db?.entregables     ?? (cfg.entregables as { grupo: string; items: string[] }[]),
+    entregables:     db?.entregables     ?? (cfg.entregables as unknown as { grupo: string; items: string[] }[]),
     semanas_default: db?.semanas_default ?? cfg.semanas_default,
-    pago:            db?.pago            ?? (cfg.pago as { label: string; pct: number }[]),
+    pago:            db?.pago            ?? (cfg.pago as unknown as { label: string; pct: number }[]),
   }
 }

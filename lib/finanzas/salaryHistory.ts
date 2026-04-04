@@ -42,7 +42,7 @@ export function hrsFacturablesAt(
   history: SalaryRecord[],
   fecha: string
 ): number {
-  const userIds = [...new Set(history.map(r => r.user_id))]
+  const userIds = Array.from(new Set(history.map(r => r.user_id)))
   return userIds.reduce((sum, userId) => {
     const record = history.find(
       r =>

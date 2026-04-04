@@ -54,7 +54,7 @@ export default async function Page() {
 
   const cards = (proyectos ?? []).map(p => {
     const s       = statsMap.get(p.id) ?? { totalAcordado: 0, totalCobrado: 0, totalEnviada: 0, totalCobrable: 0, totalImpagada: 0, count: 0 }
-    const cliente = p.clientes as { nombre: string } | null
+    const cliente = p.clientes as unknown as { nombre: string } | null
     return {
       id:            p.id,
       nombre:        p.nombre,

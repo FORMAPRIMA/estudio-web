@@ -85,7 +85,7 @@ export default async function Page({ params }: { params: { id: string } }) {
         codigo:      proyecto.codigo ?? null,
         imagen_url:  proyecto.imagen_url ?? null,
         status:      proyecto.status as string,
-        cliente:     (proyecto.clientes as { nombre: string } | null)?.nombre ?? null,
+        cliente:     (proyecto.clientes as unknown as { nombre: string } | null)?.nombre ?? null,
         direccion:   (proyecto as { direccion?: string | null }).direccion ?? null,
         constructor: proyectoConstructor,
       }}

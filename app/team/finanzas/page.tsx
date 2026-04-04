@@ -102,7 +102,7 @@ export default async function Page() {
   // fase_id → { proyecto_id, seccion }
   type PFRow = { id: string; proyecto_id: string; catalogo_fases: { seccion: string } | null }
   const faseLookup = new Map<string, { proyecto_id: string; seccion: string }>()
-  for (const pf of (allProjFases ?? []) as PFRow[]) {
+  for (const pf of (allProjFases ?? []) as unknown as PFRow[]) {
     if (pf.catalogo_fases?.seccion) {
       faseLookup.set(pf.id, { proyecto_id: pf.proyecto_id, seccion: pf.catalogo_fases.seccion })
     }
@@ -137,7 +137,7 @@ export default async function Page() {
 
   // Per-project margins (only projects with both billing > 0 and cost > 0)
   const projectMargins: number[] = []
-  for (const [proyId, billing] of billingByProject) {
+  for (const [proyId, billing] of Array.from(billingByProject)) {
     const cost = costByProject.get(proyId) ?? 0
     if (billing > 0 && cost > 0) {
       projectMargins.push((billing - cost) / billing * 100)

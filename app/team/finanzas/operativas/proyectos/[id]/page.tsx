@@ -108,7 +108,7 @@ export default async function Page({ params }: { params: { id: string } }) {
   }
   type FaseInfo = { label: string; seccion: string }
   const faseInfoMap = new Map<string, FaseInfo>()
-  for (const pf of (proyecto.proyecto_fases as PFRow[] ?? [])) {
+  for (const pf of (proyecto.proyecto_fases as unknown as PFRow[] ?? [])) {
     if (pf.catalogo_fases) {
       faseInfoMap.set(pf.id, {
         label:   `${pf.catalogo_fases.numero}. ${pf.catalogo_fases.label}`,
@@ -217,7 +217,7 @@ export default async function Page({ params }: { params: { id: string } }) {
       return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib)
     })
 
-  const cliente = proyecto.clientes as { nombre: string } | null
+  const cliente = proyecto.clientes as unknown as { nombre: string } | null
 
   return (
     <ProyectoFinanzasDetalle
@@ -237,7 +237,7 @@ export default async function Page({ params }: { params: { id: string } }) {
       repercusionHora={repercusion}
       byEmployee={Array.from(byEmployee.values()).sort((a, b) => b.costo - a.costo)}
       byFase={Array.from(byFase.values()).sort((a, b) => b.horas - a.horas)}
-      costosVariables={(costosVariablesProyecto ?? []) as CostoVariableRow[]}
+      costosVariables={(costosVariablesProyecto ?? []) as unknown as CostoVariableRow[]}
     />
   )
 }

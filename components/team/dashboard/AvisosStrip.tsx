@@ -380,7 +380,7 @@ export default function AvisosStrip({ avisos }: Props) {
   const visible = avisos.filter(a => !hidden.has(a.id))
 
   const handleArchivar = (id: string) => {
-    setHidden(prev => new Set([...prev, id]))
+    setHidden(prev => new Set([...Array.from(prev), id]))
     archivarAviso(id) // fire-and-forget
   }
 

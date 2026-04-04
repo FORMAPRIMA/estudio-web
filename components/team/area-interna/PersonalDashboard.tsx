@@ -193,7 +193,7 @@ function NominasSection({ nominas }: { nominas: Nomina[] }) {
     const result = await getNominaSignedUrl(nomina.pdf_path)
     setLoadingId(null)
     if ('error' in result) { alert(result.error); return }
-    window.open(result.url, '_blank', 'noopener,noreferrer')
+    window.open((result as any).url, '_blank', 'noopener,noreferrer')
   }
 
   return (

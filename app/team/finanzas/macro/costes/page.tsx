@@ -52,7 +52,7 @@ export default async function Page() {
       members={members ?? []}
       costosFijos={costosFijos ?? []}
       minoracion={minoracion}
-      costosVariables={(costosVariables ?? []).map(v => ({
+      costosVariables={((costosVariables ?? []) as any[]).map((v: any) => ({
         id:        v.id,
         año:       v.año,
         mes:       v.mes,

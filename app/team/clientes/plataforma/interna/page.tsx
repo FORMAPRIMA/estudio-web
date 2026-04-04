@@ -30,5 +30,5 @@ export default async function Page() {
     .in('status', ['activo', 'on_hold'])
     .order('nombre')
 
-  return <PlataformaInternaPage proyectos={proyectos ?? []} />
+  return <PlataformaInternaPage proyectos={(proyectos ?? []) as any} />
 }

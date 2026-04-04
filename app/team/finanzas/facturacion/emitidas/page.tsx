@@ -64,7 +64,7 @@ export default async function Page({
       .single()
 
     if (f) {
-      const proyecto = f.proyectos as {
+      const proyecto = f.proyectos as unknown as {
         id: string; nombre: string; codigo: string | null; direccion: string | null
         clientes: {
           id: string; nombre: string; apellidos: string | null; empresa: string | null

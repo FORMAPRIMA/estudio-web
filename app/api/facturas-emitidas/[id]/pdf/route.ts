@@ -87,7 +87,7 @@ export async function GET(
 
     const filename = `Factura-${f.numero_completo}.pdf`
 
-    return new NextResponse(buffer, {
+    return new NextResponse(buffer as unknown as BodyInit, {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',

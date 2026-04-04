@@ -136,7 +136,7 @@ function NominasTab({ allMembers, allNominas }: { allMembers: TeamMember[]; allN
     formData.append('file',    file)
 
     const res = await uploadNomina(formData)
-    if ('error' in res) { setError(res.error); setLoading(false); return }
+    if ('error' in res) { setError(res.error ?? null); setLoading(false); return }
 
     setSuccess(true)
     setFile(null); setPeriodo(''); if (fileRef.current) fileRef.current.value = ''
@@ -156,7 +156,7 @@ function NominasTab({ allMembers, allNominas }: { allMembers: TeamMember[]; allN
     const res = await getNominaSignedUrl(nomina.pdf_path)
     setViewingId(null)
     if ('error' in res) { alert(res.error); return }
-    window.open(res.url, '_blank', 'noopener,noreferrer')
+    window.open((res as any).url, '_blank', 'noopener,noreferrer')
   }
 
   // Group by user
@@ -270,7 +270,7 @@ function FondoTab({ periodos: initialPeriodos }: { periodos: FondoPeriodo[] }) {
       notas:           form.notas.trim(),
       fecha_referencia: form.fecha_referencia,
     })
-    if ('error' in res) { setError(res.error); setLoading(false); return }
+    if ('error' in res) { setError(res.error ?? null); setLoading(false); return }
     resetForm(); setEditingId(null)
     window.location.reload()
   }
@@ -416,7 +416,7 @@ function ParticipacionesTab({
       fecha_inicio_participacion: form.fecha_inicio,
       notas:                      form.notas.trim(),
     })
-    if ('error' in res) { setError(res.error); setLoading(false); return }
+    if ('error' in res) { setError(res.error ?? null); setLoading(false); return }
     resetForm()
     window.location.reload()
   }

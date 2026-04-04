@@ -54,7 +54,7 @@ function clamp(v: number, lo: number, hi: number) { return Math.max(lo, Math.min
 
 // ── Chart ─────────────────────────────────────────────────────────────────────
 
-function BillingChart({ facturas, year, monthlyCosts }: Props) {
+function BillingChart({ facturas, year, monthlyCosts }: Pick<Props, 'facturas' | 'year' | 'monthlyCosts'>) {
   const [tooltip, setTooltip] = useState<{
     x: number; y: number; month: string
     segments: { label: string; color: string; value: number }[]

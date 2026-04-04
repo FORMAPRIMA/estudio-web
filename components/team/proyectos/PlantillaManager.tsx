@@ -420,7 +420,7 @@ export default function PlantillaManager({ catalogoFases, initialTasks }: Props)
     for (const f of sortedFases) {
       if (!seen.has(f.seccion)) seen.add(f.seccion)
     }
-    return [...seen]
+    return Array.from(seen)
   }, [sortedFases])
 
   // ── Task helpers ──────────────────────────────────────────────────────────

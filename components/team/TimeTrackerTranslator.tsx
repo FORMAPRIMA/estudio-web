@@ -427,9 +427,9 @@ export default function TimeTrackerTranslator({ teamMembers, proyectos, fases }:
   // ── Resolution step ───────────────────────────────────────────────────────────
 
   function renderResolveStep() {
-    const uniqueUsers = [...new Set(rawEntries.map(e => e.user_nombre).filter(Boolean))] as string[]
-    const uniqueProyectos = [...new Set(rawEntries.map(e => e.proyecto_nombre).filter(Boolean))] as string[]
-    const faseKeys = [...new Set(rawEntries.filter(e => e.fase_label).map(e => `${e.proyecto_nombre ?? ''}||${e.fase_label ?? ''}`))]
+    const uniqueUsers = Array.from(new Set(rawEntries.map(e => e.user_nombre).filter(Boolean))) as string[]
+    const uniqueProyectos = Array.from(new Set(rawEntries.map(e => e.proyecto_nombre).filter(Boolean))) as string[]
+    const faseKeys = Array.from(new Set(rawEntries.filter(e => e.fase_label).map(e => `${e.proyecto_nombre ?? ''}||${e.fase_label ?? ''}`)))
 
     // Hours at stake per key
     const horasByUser: Record<string, number> = {}

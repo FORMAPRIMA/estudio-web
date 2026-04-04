@@ -116,7 +116,7 @@ export default async function Page() {
   const cards = (proyectos ?? []).map(p => {
     const s       = aggr.get(p.id) ?? { horas: 0, costo: 0 }
     const b       = billing.get(p.id) ?? { acordado: 0, cobrado: 0 }
-    const cliente = p.clientes as { nombre: string } | null
+    const cliente = p.clientes as unknown as { nombre: string } | null
     return {
       id:            p.id,
       nombre:        p.nombre,

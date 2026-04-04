@@ -750,7 +750,7 @@ export default function PropuestaDetalle({
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {serviciosPlantilla.map(entry => {
                 const sid     = entry.id
-                const checked = servicios.includes(sid)
+                const checked = servicios.includes(sid as any)
                 const isManual = entry.tipo === 'manual'
                 const tipoBadge = entry.tipo === 'pem'
                   ? `${(entry.pem_split * 100).toFixed(0)}% PEM`
@@ -761,7 +761,7 @@ export default function PropuestaDetalle({
                     borderRadius: 6, padding: '12px 16px', cursor: 'pointer',
                     background: checked ? '#F8F7F4' : '#fff', transition: 'all 0.15s',
                   }}
-                    onClick={() => toggleServicio(sid)}
+                    onClick={() => toggleServicio(sid as any)}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -993,7 +993,6 @@ export default function PropuestaDetalle({
                             />
                           )
                         })()}
-                        />
                       </div>
                     )}
 

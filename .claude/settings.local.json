@@ -3,7 +3,8 @@
     "allow": [
       "Bash(cp -r /Users/joseloragonzalez/estudio-web/estudio-web/estudio-web/estudio-web/. /Users/joseloragonzalez/estudio-web/)",
       "Bash(rm -rf /Users/joseloragonzalez/estudio-web/estudio-web)",
-      "Bash(find /Users/joseloragonzalez/estudio-web/components -name \"*.tsx\" -exec grep -l \"toggle\\\\|switch\" {} \\\\;)"
+      "Bash(find /Users/joseloragonzalez/estudio-web/components -name \"*.tsx\" -exec grep -l \"toggle\\\\|switch\" {} \\\\;)",
+      "Bash(npm run:*)"
     ]
   }
 }
