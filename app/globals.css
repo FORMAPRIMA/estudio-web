@@ -16,6 +16,7 @@ div:hover > .tt-avatar-overlay {
 
 /* ── Default (desktop) hidden states for mobile-only elements ── */
 .pap-mobile-view { display: none; }
+.fkb-mobile-view { display: none; }
 
 @media (max-width: 768px) {
 
@@ -698,6 +699,118 @@ div:hover > .tt-avatar-overlay {
   .plantilla-editor {
     padding: 20px 16px !important;
     max-width: none !important;
+  }
+
+  /* ── FacturacionKanbanPage ────────────────────────────── */
+
+  .fkb-desktop-kanban { display: none !important; }
+  .fkb-mobile-view { display: block !important; }
+
+  .fkb-header {
+    padding: 20px 16px 20px !important;
+  }
+
+  .fkb-header-title {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 4px !important;
+    margin-bottom: 16px !important;
+  }
+
+  .fkb-header-title h1 {
+    font-size: 22px !important;
+  }
+
+  .fkb-summary {
+    flex-wrap: wrap !important;
+    border-radius: 6px !important;
+  }
+
+  .fkb-summary-stat {
+    flex: 1 1 calc(50% - 1px) !important;
+    min-width: calc(50% - 1px) !important;
+    padding: 14px 16px !important;
+    border-right: none !important;
+    border-bottom: 1px solid #E8E6E0 !important;
+  }
+
+  .fkb-summary-stat:nth-child(odd) {
+    border-right: 1px solid #E8E6E0 !important;
+  }
+
+  .fkb-summary-stat:nth-last-child(1),
+  .fkb-summary-stat:nth-last-child(2) {
+    border-bottom: none !important;
+  }
+
+  /* ── FacturacionProyectoDetalle ───────────────────────── */
+
+  .fpdet-header {
+    padding: 20px 16px 20px !important;
+  }
+
+  .fpdet-title-row {
+    flex-direction: column !important;
+    gap: 12px !important;
+    align-items: stretch !important;
+    margin-bottom: 16px !important;
+  }
+
+  .fpdet-title-row h1 {
+    font-size: 20px !important;
+  }
+
+  .fpdet-summary {
+    flex-wrap: wrap !important;
+    border-radius: 6px !important;
+  }
+
+  .fpdet-summary-box {
+    flex: 1 1 calc(50% - 1px) !important;
+    min-width: calc(50% - 1px) !important;
+    padding: 14px 16px !important;
+    border-right: none !important;
+    border-bottom: 1px solid #E8E6E0 !important;
+  }
+
+  .fpdet-summary-box:nth-child(odd) {
+    border-right: 1px solid #E8E6E0 !important;
+  }
+
+  .fpdet-summary-box:nth-last-child(1),
+  .fpdet-summary-box:nth-last-child(2) {
+    border-bottom: none !important;
+  }
+
+  .fpdet-content {
+    padding: 16px !important;
+    gap: 20px !important;
+  }
+
+  .fpdet-cliente-grid {
+    grid-template-columns: 1fr !important;
+    padding: 16px !important;
+    gap: 12px 0 !important;
+  }
+
+  .fpdet-grand-total {
+    flex-direction: column !important;
+    gap: 16px !important;
+    padding: 16px !important;
+    align-items: stretch !important;
+  }
+
+  .fpdet-grand-total > div {
+    text-align: left !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: baseline !important;
+  }
+
+  /* Make factura tables scroll horizontally on mobile */
+  .fp-table-wrap {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
   }
 
 }

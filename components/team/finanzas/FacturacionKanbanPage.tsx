@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -34,6 +35,7 @@ const fmtE = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumF
 
 export default function FacturacionKanbanPage({ cards }: { cards: FacturacionCard[] }) {
   const router = useRouter()
+  const [mobileCol, setMobileCol] = useState<string>(COLUMNS[0].status)
 
   const totals = {
     acordado: cards.reduce((s, c) => s + c.totalAcordado, 0),
@@ -42,15 +44,18 @@ export default function FacturacionKanbanPage({ cards }: { cards: FacturacionCar
     impagada: cards.reduce((s, c) => s + c.totalImpagada, 0),
   }
 
+  const activeColMeta = COLUMNS.find(c => c.status === mobileCol) ?? COLUMNS[0]
+  const mobileCards   = cards.filter(c => c.status === mobileCol)
+
   return (
     <div style={{ fontFamily: "'Inter', system-ui, sans-serif", minHeight: '100vh', background: '#F8F7F4' }}>
 
       {/* Header */}
-      <div style={{ padding: '40px 40px 28px', borderBottom: '1px solid #E8E6E0', background: '#fff' }}>
+      <div className="fkb-header" style={{ padding: '40px 40px 28px', borderBottom: '1px solid #E8E6E0', background: '#fff' }}>
         <p style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', marginBottom: 6, fontWeight: 600 }}>
           Facturación
         </p>
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 24 }}>
+        <div className="fkb-header-title" style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 24 }}>
           <h1 style={{ fontSize: 28, fontWeight: 200, color: '#1A1A1A', margin: 0, letterSpacing: '-0.01em' }}>
             Facturación por proyecto
           </h1>
@@ -59,8 +64,8 @@ export default function FacturacionKanbanPage({ cards }: { cards: FacturacionCar
           </span>
         </div>
 
-        {/* Global summary */}
-        <div style={{ display: 'flex', gap: 0, background: '#F8F7F4', borderRadius: 8, border: '1px solid #E8E6E0', overflow: 'hidden' }}>
+        {/* Global summary — 4 KPI boxes */}
+        <div className="fkb-summary" style={{ display: 'flex', gap: 0, background: '#F8F7F4', borderRadius: 8, border: '1px solid #E8E6E0', overflow: 'hidden' }}>
           <HeaderStat label="Total contratado"  value={`€ ${fmtE.format(totals.acordado)}`} accent />
           <HeaderStat label="Total cobrado"      value={`€ ${fmtE.format(totals.cobrado)}`}  color="#1D9E75" />
           <HeaderStat label="Pendiente de cobro" value={`€ ${fmtE.format(totals.enviada)}`}  color="#E8913A" />
@@ -68,8 +73,65 @@ export default function FacturacionKanbanPage({ cards }: { cards: FacturacionCar
         </div>
       </div>
 
-      {/* Kanban */}
-      <div style={{
+      {/* ── Mobile: 4-button column selector + single-column cards ── */}
+      <div className="fkb-mobile-view">
+        {/* Tab strip */}
+        <div style={{ display: 'flex', background: '#fff', borderBottom: '1px solid #E8E6E0' }}>
+          {COLUMNS.map(col => {
+            const count  = cards.filter(c => c.status === col.status).length
+            const active = mobileCol === col.status
+            return (
+              <button
+                key={col.status}
+                onClick={() => setMobileCol(col.status)}
+                style={{
+                  flex: 1, padding: '12px 4px 10px', background: 'none', cursor: 'pointer',
+                  border: 'none', borderBottom: `2px solid ${active ? col.color : 'transparent'}`,
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+                  transition: 'border-color 0.15s',
+                }}
+              >
+                <div style={{ width: 7, height: 7, borderRadius: '50%', background: col.color }} />
+                <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: active ? '#1A1A1A' : '#AAA' }}>
+                  {col.label}
+                </span>
+                <span style={{ fontSize: 10, fontWeight: 600, color: '#fff', background: col.color, padding: '1px 7px', borderRadius: 10 }}>
+                  {count}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Column sub-header */}
+        {mobileCards.length > 0 && (
+          <div style={{ padding: '10px 16px 0' }}>
+            <span style={{ fontSize: 10, color: activeColMeta.color, fontWeight: 500 }}>
+              € {fmtE.format(mobileCards.reduce((s, c) => s + c.totalAcordado, 0))} contratado
+            </span>
+          </div>
+        )}
+
+        {/* Cards */}
+        <div style={{ padding: '12px 16px 32px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {mobileCards.length === 0 ? (
+            <div style={{ padding: '28px 20px', textAlign: 'center', border: '1px dashed #DDD', borderRadius: 8, fontSize: 11, color: '#CCC' }}>
+              Sin proyectos en esta categoría
+            </div>
+          ) : mobileCards.map(card => (
+            <FacturacionCard
+              key={card.id}
+              card={card}
+              accentColor={activeColMeta.color}
+              gradient={activeColMeta.gradient}
+              onClick={() => router.push(`/team/finanzas/facturacion/control/${card.id}`)}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* ── Desktop: horizontal kanban ── */}
+      <div className="fkb-desktop-kanban" style={{
         display: 'flex', gap: 20, padding: '28px 40px',
         overflowX: 'auto', alignItems: 'flex-start',
         minHeight: 'calc(100vh - 220px)',
@@ -252,7 +314,7 @@ function MCell({ label, value, bold, color }: { label: string; value: string; bo
 
 function HeaderStat({ label, value, accent, color, last }: { label: string; value: string; accent?: boolean; color?: string; last?: boolean }) {
   return (
-    <div style={{ flex: 1, padding: '16px 22px', borderRight: last ? 'none' : '1px solid #E8E6E0', background: '#fff' }}>
+    <div className="fkb-summary-stat" style={{ flex: 1, padding: '16px 22px', borderRight: last ? 'none' : '1px solid #E8E6E0', background: '#fff' }}>
       <p style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#BBB', margin: '0 0 5px' }}>
         {label}
       </p>

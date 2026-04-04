@@ -234,7 +234,7 @@ export default function FacturacionProyectoDetalle({
     <div style={{ fontFamily: "'Inter', system-ui, sans-serif", minHeight: '100vh', background: '#F8F7F4' }}>
 
       {/* Header */}
-      <div style={{ padding: '40px 40px 32px', borderBottom: '1px solid #E8E6E0', background: '#fff' }}>
+      <div className="fpdet-header" style={{ padding: '40px 40px 32px', borderBottom: '1px solid #E8E6E0', background: '#fff' }}>
         <button
           onClick={() => router.push('/team/finanzas/facturacion/control')}
           style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: '#AAA', padding: 0, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 4 }}
@@ -244,7 +244,7 @@ export default function FacturacionProyectoDetalle({
           ← Facturación por proyecto
         </button>
 
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24, marginBottom: 24 }}>
+        <div className="fpdet-title-row" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24, marginBottom: 24 }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
               <h1 style={{ fontSize: 28, fontWeight: 200, color: '#1A1A1A', margin: 0, letterSpacing: '-0.01em' }}>
@@ -289,7 +289,7 @@ export default function FacturacionProyectoDetalle({
         )}
 
         {/* Summary */}
-        <div style={{ display: 'flex', gap: 0, background: '#F8F7F4', borderRadius: 8, border: '1px solid #E8E6E0', overflow: 'hidden' }}>
+        <div className="fpdet-summary" style={{ display: 'flex', gap: 0, background: '#F8F7F4', borderRadius: 8, border: '1px solid #E8E6E0', overflow: 'hidden' }}>
           <SummaryBox label="Total contratado" value={`€ ${fmtE0.format(totalAcordado)}`} accent />
           <SummaryBox label="Cobrado"     value={totalCobrado  > 0 ? `€ ${fmtE0.format(totalCobrado)}`  : '—'} color="#1D9E75" />
           <SummaryBox label="Enviadas"    value={totalEnviada  > 0 ? `€ ${fmtE0.format(totalEnviada)}`  : '—'} color="#E8913A" />
@@ -298,7 +298,7 @@ export default function FacturacionProyectoDetalle({
       </div>
 
       {/* Content */}
-      <div style={{ padding: '28px 40px', display: 'flex', flexDirection: 'column', gap: 28 }}>
+      <div className="fpdet-content" style={{ padding: '28px 40px', display: 'flex', flexDirection: 'column', gap: 28 }}>
 
         {/* Cliente */}
         {cliente && (
@@ -322,7 +322,7 @@ export default function FacturacionProyectoDetalle({
                 Ver ficha completa →
               </button>
             </div>
-            <div style={{ background: '#fff', borderRadius: 8, border: '1px solid #E8E6E0', padding: '20px 24px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px 32px' }}>
+            <div className="fpdet-cliente-grid" style={{ background: '#fff', borderRadius: 8, border: '1px solid #E8E6E0', padding: '20px 24px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px 32px' }}>
               {([
                 { key: 'nombre',               label: 'Nombre' },
                 { key: 'apellidos',            label: 'Apellidos' },
@@ -467,7 +467,7 @@ export default function FacturacionProyectoDetalle({
 
         {/* Grand total */}
         {facturas.length > 0 && (
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 40, padding: '20px 24px', background: '#fff', borderRadius: 8, border: '1px solid #E8E6E0' }}>
+          <div className="fpdet-grand-total" style={{ display: 'flex', justifyContent: 'flex-end', gap: 40, padding: '20px 24px', background: '#fff', borderRadius: 8, border: '1px solid #E8E6E0' }}>
             <div style={{ textAlign: 'right' }}>
               <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', margin: '0 0 4px' }}>Total contratado</p>
               <p style={{ fontSize: 20, fontWeight: 600, color: '#1A1A1A', margin: 0, fontVariantNumeric: 'tabular-nums' }}>€ {fmtE0.format(totalAcordado)}</p>
@@ -1118,7 +1118,7 @@ function ClienteField({ label, value, editing, onCommit }: { label: string; valu
 
 function SummaryBox({ label, value, accent, color, last }: { label: string; value: string; accent?: boolean; color?: string; last?: boolean }) {
   return (
-    <div style={{ flex: 1, padding: '16px 22px', borderRight: last ? 'none' : '1px solid #E8E6E0', background: '#fff' }}>
+    <div className="fpdet-summary-box" style={{ flex: 1, padding: '16px 22px', borderRight: last ? 'none' : '1px solid #E8E6E0', background: '#fff' }}>
       <p style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#BBB', margin: '0 0 5px' }}>{label}</p>
       <p style={{ fontSize: 20, fontWeight: 300, color: color ?? (accent ? '#D85A30' : '#1A1A1A'), margin: 0, fontVariantNumeric: 'tabular-nums' }}>{value}</p>
     </div>
