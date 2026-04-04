@@ -169,6 +169,45 @@ const s = StyleSheet.create({
   totalFinalLabel: { fontSize: 10, fontFamily: 'Helvetica-Bold', color: C.hInk },
   totalFinalValue: { fontSize: 10, fontFamily: 'Helvetica-Bold', color: C.brand },
 
+  // Metodología de honorarios
+  metodologiaBlock: {
+    marginTop: 16,
+    paddingTop: 14,
+    paddingBottom: 14,
+    paddingHorizontal: 14,
+    borderLeftWidth: 2,
+    borderLeftColor: C.brand,
+    backgroundColor: C.light,
+  },
+  metodologiaTitle: {
+    fontSize: 6.5,
+    fontFamily: 'Helvetica-Bold',
+    color: C.brand,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    marginBottom: 6,
+  },
+  metodologiaText: {
+    fontSize: 7.5,
+    color: C.soft,
+    lineHeight: 1.65,
+    marginBottom: 4,
+  },
+  metodologiaBullet: {
+    fontSize: 7.5,
+    color: C.soft,
+    lineHeight: 1.6,
+    marginLeft: 10,
+    marginBottom: 2,
+  },
+  metodologiaAlert: {
+    fontSize: 7.5,
+    color: C.ink,
+    lineHeight: 1.65,
+    marginTop: 6,
+    fontFamily: 'Helvetica-Oblique',
+  },
+
   // Notas
   notasBlock: { marginTop: 24, paddingTop: 16, borderTopWidth: 1, borderTopColor: C.rule },
   notasTitle: { fontSize: 7, fontFamily: 'Helvetica-Bold', color: C.mid, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 6 },
@@ -359,6 +398,42 @@ export function PropuestaPDF({ data }: { data: PropuestaPDFData }) {
               </Text>
             </View>
           </View>
+
+          {/* Metodología de honorarios */}
+          {(() => {
+            const pemServices = baseServicios.filter(sid => SERVICIOS_CONFIG[sid].tipo === 'pem')
+            const includesDO  = pemServices.includes('direccion_obra' as ServicioId)
+            if (pemServices.length === 0) return null
+
+            const pctBase = data.porcentaje_pem
+
+            return (
+              <View style={s.metodologiaBlock}>
+                <Text style={s.metodologiaTitle}>Metodología de cálculo de honorarios</Text>
+                <Text style={s.metodologiaText}>
+                  {`Los honorarios profesionales del presente encargo se calculan aplicando un porcentaje del ${pctBase}% sobre el Presupuesto de Ejecución Material (PEM) objetivo, determinado en ${fmtEur(pem)} en función de la superficie del proyecto (${data.m2.toLocaleString('es-ES')} m² × ${fmtEur(data.costo_m2)}/m²). Este criterio vincula directamente la retribución del Estudio al alcance y valor real de la obra, garantizando transparencia y proporcionalidad.`}
+                </Text>
+                <Text style={{ ...s.metodologiaText, marginTop: 4 }}>
+                  El total de honorarios se distribuye entre las fases contratadas de la siguiente forma:
+                </Text>
+                {pemServices.map(sid => {
+                  const cfg    = SERVICIOS_CONFIG[sid]
+                  const importe = breakdown[sid] ?? 0
+                  const pctFase = Math.round(cfg.pem_split * 100)
+                  return (
+                    <Text key={sid} style={s.metodologiaBullet}>
+                      {`· ${cfg.label}  —  ${pctFase}% de los honorarios PEM  (${fmtEur(importe)} + IVA)`}
+                    </Text>
+                  )
+                })}
+                {includesDO && (
+                  <Text style={s.metodologiaAlert}>
+                    {'Revisión de PEM a la liquidación de obra: Con carácter previo al último pago de la Dirección Estética de Obra, las partes realizarán una revisión del coste real de ejecución material. En caso de que el PEM definitivo supere el objetivo de cálculo, el importe del último pago de dirección de obra se ajustará proporcionalmente al alza. No procederá reducción de honorarios por variación a la baja del PEM.'}
+                  </Text>
+                )}
+              </View>
+            )
+          })()}
         </View>
 
         <Footer />

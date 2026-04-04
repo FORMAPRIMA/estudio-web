@@ -473,6 +473,36 @@ export function ContratoPDF({ data }: { data: ContratoPDFData }) {
             {`. A esta cantidad se le deberá incrementar el IVA correspondiente.`}
           </Text>
 
+          {/* Criterio de cálculo */}
+          <Text style={{ ...s.subClauseTitle, marginTop: 12 }}>Criterio de cálculo de honorarios</Text>
+          <Text style={s.bodyText}>
+            Los honorarios acordados han sido determinados mediante la aplicación de un porcentaje profesional sobre el Presupuesto de Ejecución Material (en adelante, «PEM») objetivo de la obra, entendido éste como el coste estimado de los trabajos de construcción, sin incluir gastos generales del promotor, honorarios técnicos ni tributos. Dicho criterio vincula la retribución del Estudio al alcance real del encargo y al valor de la obra proyectada, distribuyendo el total de honorarios entre las distintas fases del encargo en proporción al peso relativo de cada servicio sobre el conjunto de la prestación profesional.
+          </Text>
+          {(() => {
+            const includesDO = data.servicios_contrato.some(s => s.id === 'direccion_obra')
+            if (!includesDO) return null
+            return (
+              <>
+                <Text style={{ ...s.subClauseTitle, marginTop: 10 }}>Revisión del PEM y liquidación definitiva de honorarios de dirección de obra</Text>
+                <Text style={s.bodyText}>
+                  Dado que los honorarios correspondientes a la fase de Dirección Estética de Obra se calculan sobre el PEM objetivo establecido al inicio del encargo, y habida cuenta de que el coste real de ejecución puede variar a lo largo del proceso constructivo, las Partes acuerdan expresamente el siguiente mecanismo de liquidación:
+                </Text>
+                <Text style={{ ...s.indented, marginTop: 2 }}>
+                  a. Con carácter previo al devengo y facturación del último hito de pago de la fase de Dirección Estética de Obra, el Estudio llevará a cabo una verificación del coste real de ejecución material de la obra, en coordinación con el Constructor y sobre la base de la certificación final o del presupuesto de obra liquidado.
+                </Text>
+                <Text style={{ ...s.indented, marginTop: 3 }}>
+                  b. En el supuesto de que el PEM definitivo resultase superior al objetivo de partida empleado como base de cálculo, el importe del último hito de honorarios de la Dirección Estética de Obra será revisado al alza de forma proporcional a dicha variación, de modo que los honorarios reflejen fielmente el alcance real de la prestación realizada.
+                </Text>
+                <Text style={{ ...s.indented, marginTop: 3 }}>
+                  c. Queda expresamente excluida cualquier revisión a la baja de los honorarios pactados en el presente Contrato. En ningún caso la reducción del PEM definitivo respecto al objetivo inicial dará lugar a una minoración de los honorarios ya devengados ni de los pendientes de facturación.
+                </Text>
+                <Text style={{ ...s.bodyText, marginTop: 6 }}>
+                  Esta cláusula constituye un acuerdo expreso entre las Partes orientado a garantizar la equidad retributiva del Estudio ante variaciones de alcance durante la ejecución, sin que ello suponga en ningún caso un menoscabo para el Cliente en términos de calidad o dedicación del servicio prestado.
+                </Text>
+              </>
+            )
+          })()}
+
           <Text style={{ ...s.bodyText, marginTop: 8 }}>A continuación se fijan los siguientes hitos de pago:</Text>
 
           {/* Payment table */}
