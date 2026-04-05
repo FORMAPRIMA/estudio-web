@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { TEMPLATE_DEFAULT } from '@/app/team/fp-execution/template/templateData'
 import type { Capitulo } from '@/app/team/fp-execution/template/types'
 
@@ -10,7 +10,9 @@ interface FileItem { id: string; name: string; size: number }
 
 interface UploadZone {
   id: string
-  files: FileItem[]
+  pdf: FileItem | null
+  dwg: FileItem | null
+  textFile: FileItem | null
   coveredSubIds: string[]
   partnerIds: string[]
 }
@@ -23,6 +25,7 @@ interface ExecutionProject {
   ciudad: string
   descripcion: string
   linkedProjectId?: string
+  activeSubIds: string[]
   generalFiles: FileItem[]
   chapterZones: Record<string, UploadZone[]>
 }
@@ -32,7 +35,10 @@ export interface Partner { id: string; nombre: string }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const emptyZone = (): UploadZone => ({ id: crypto.randomUUID(), files: [], coveredSubIds: [], partnerIds: [] })
+const emptyZone = (): UploadZone => ({
+  id: crypto.randomUUID(), pdf: null, dwg: null, textFile: null,
+  coveredSubIds: [], partnerIds: [],
+})
 
 function initChapterZones(): Record<string, UploadZone[]> {
   const z: Record<string, UploadZone[]> = {}
@@ -40,28 +46,49 @@ function initChapterZones(): Record<string, UploadZone[]> {
   return z
 }
 
-// After updating coverage in any zone, keep array length correct:
-// always ends with exactly one empty zone when subs remain uncovered.
-function normalizeZones(chapter: Capitulo, zones: UploadZone[]): UploadZone[] {
+function initActiveSubIds(): string[] {
+  return TEMPLATE_DEFAULT.flatMap(c => c.subcapitulos.map(s => s.id))
+}
+
+function normalizeZones(chapter: Capitulo, zones: UploadZone[], activeSubIds: string[]): UploadZone[] {
+  const activeSubs = chapter.subcapitulos.filter(s => activeSubIds.includes(s.id))
   const allCovered = new Set(zones.flatMap(z => z.coveredSubIds))
   let lastWithCoverage = -1
   zones.forEach((z, i) => { if (z.coveredSubIds.length > 0) lastWithCoverage = i })
   const trimmed = [...zones.slice(0, Math.max(1, lastWithCoverage + 1))]
-  if (allCovered.size < chapter.subcapitulos.length) {
+  if (allCovered.size < activeSubs.length) {
     if (trimmed[trimmed.length - 1].coveredSubIds.length > 0) trimmed.push(emptyZone())
   }
   return trimmed
 }
 
-// Zone N sees only subs not yet claimed by zones 0..N-1
-function getAvailableSubs(chapter: Capitulo, zones: UploadZone[], idx: number) {
+function getAvailableSubs(chapter: Capitulo, zones: UploadZone[], idx: number, activeSubIds: string[]) {
   const coveredBefore = new Set(zones.slice(0, idx).flatMap(z => z.coveredSubIds))
-  return chapter.subcapitulos.filter(s => !coveredBefore.has(s.id))
+  return chapter.subcapitulos.filter(s => activeSubIds.includes(s.id) && !coveredBefore.has(s.id))
 }
 
-function isChapterDone(chapter: Capitulo, zones: UploadZone[]): boolean {
+function isChapterDone(chapter: Capitulo, zones: UploadZone[], activeSubIds: string[]): boolean {
+  const activeSubs = chapter.subcapitulos.filter(s => activeSubIds.includes(s.id))
+  if (activeSubs.length === 0) return true
   const covered = new Set(zones.flatMap(z => z.coveredSubIds))
-  return chapter.subcapitulos.every(s => covered.has(s.id))
+  return activeSubs.every(s => covered.has(s.id))
+}
+
+function getActiveChapters(activeSubIds: string[]): Capitulo[] {
+  return TEMPLATE_DEFAULT.filter(c => c.subcapitulos.some(s => activeSubIds.includes(s.id)))
+}
+
+function getSteps(activeSubIds: string[]): WizardStep[] {
+  return [
+    { key: 'info',     label: 'Información del proyecto', short: 'Proyecto'      },
+    { key: 'template', label: 'Configurar template',      short: 'Template'      },
+    { key: 'general',  label: 'Documentación general',    short: 'Doc. general'  },
+    ...getActiveChapters(activeSubIds).map(c => ({
+      key: c.id,
+      label: `${c.numero}. ${c.nombre}`,
+      short: `${c.numero}. ${c.nombre.split(' ').slice(0, 2).join(' ')}`,
+    })),
+  ]
 }
 
 function fmtSize(b: number) {
@@ -81,8 +108,11 @@ const inputSt: React.CSSProperties = {
   padding: '9px 12px', fontSize: 13, color: '#1A1A1A', fontWeight: 300,
   outline: 'none', borderRadius: 3, boxSizing: 'border-box',
 }
+const stepH2: React.CSSProperties = {
+  fontSize: 22, fontWeight: 200, color: '#1A1A1A', marginBottom: 20, letterSpacing: '-0.01em',
+}
 
-// ─── FileDropZone ─────────────────────────────────────────────────────────────
+// ─── FileDropZone (multi-file, used in GeneralStep) ───────────────────────────
 
 function FileDropZone({ files, onAdd, onRemove, accept = '.pdf,.dwg,.jpg,.jpeg,.png,.mp4' }: {
   files: FileItem[]
@@ -139,6 +169,67 @@ function FileDropZone({ files, onAdd, onRemove, accept = '.pdf,.dwg,.jpg,.jpeg,.
   )
 }
 
+// ─── SingleFileSlot (one file per slot, specific format) ─────────────────────
+
+function SingleFileSlot({ label, accept, extLabel, file, onSet, onRemove }: {
+  label: string
+  accept: string
+  extLabel: string
+  file: FileItem | null
+  onSet: (f: FileItem) => void
+  onRemove: () => void
+}) {
+  const ref = useRef<HTMLInputElement>(null)
+  const [drag, setDrag] = useState(false)
+
+  const process = (raw: FileList | null) => {
+    if (!raw || raw.length === 0) return
+    onSet({ id: crypto.randomUUID(), name: raw[0].name, size: raw[0].size })
+  }
+
+  if (file) {
+    return (
+      <div style={{ border: '1px solid #E8E6E0', borderRadius: 4, padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#FAFAF8' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 9, background: '#1A1A1A', color: '#fff', padding: '2px 6px', borderRadius: 2, textTransform: 'uppercase', letterSpacing: '0.05em', flexShrink: 0 }}>
+            {extLabel}
+          </span>
+          <span style={{ fontSize: 12, color: '#333' }}>{file.name}</span>
+          <span style={{ fontSize: 11, color: '#AAA' }}>{fmtSize(file.size)}</span>
+        </div>
+        <button onClick={onRemove} style={{ background: 'none', border: 'none', color: '#BBB', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0, flexShrink: 0 }}>×</button>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <div
+        onClick={() => ref.current?.click()}
+        onDragOver={e => { e.preventDefault(); setDrag(true) }}
+        onDragLeave={() => setDrag(false)}
+        onDrop={e => {
+          e.preventDefault(); setDrag(false)
+          process(e.dataTransfer.files)
+        }}
+        style={{
+          border: `1.5px dashed ${drag ? '#1A1A1A' : '#D4D0C8'}`, borderRadius: 4,
+          padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10,
+          cursor: 'pointer', background: drag ? '#F8F7F4' : '#fff', transition: 'all 0.15s',
+        }}
+      >
+        <span style={{ fontSize: 9, background: '#E8E6E0', color: '#666', padding: '2px 6px', borderRadius: 2, textTransform: 'uppercase', letterSpacing: '0.05em', flexShrink: 0 }}>
+          {extLabel}
+        </span>
+        <span style={{ fontSize: 12, color: '#AAA' }}>
+          {label} — <span style={{ color: '#1A1A1A', textDecoration: 'underline' }}>seleccionar</span>
+        </span>
+      </div>
+      <input ref={ref} type="file" accept={accept} style={{ display: 'none' }} onChange={e => process(e.target.files)} />
+    </div>
+  )
+}
+
 // ─── PartnerSelector ──────────────────────────────────────────────────────────
 
 function PartnerSelector({ partners, selected, onChange }: {
@@ -175,12 +266,12 @@ function PartnerSelector({ partners, selected, onChange }: {
 
 // ─── ZoneCard ─────────────────────────────────────────────────────────────────
 
-function ZoneCard({ zone, zoneIndex, chapter, zones, partners, onUpdate }: {
+function ZoneCard({ zone, zoneIndex, chapter, zones, partners, activeSubIds, onUpdate }: {
   zone: UploadZone; zoneIndex: number; chapter: Capitulo
-  zones: UploadZone[]; partners: Partner[]
+  zones: UploadZone[]; partners: Partner[]; activeSubIds: string[]
   onUpdate: (z: UploadZone) => void
 }) {
-  const availableSubs = getAvailableSubs(chapter, zones, zoneIndex)
+  const availableSubs = getAvailableSubs(chapter, zones, zoneIndex, activeSubIds)
   const allChecked = availableSubs.length > 0 && availableSubs.every(s => zone.coveredSubIds.includes(s.id))
 
   const toggleSub = (id: string) => {
@@ -217,15 +308,35 @@ function ZoneCard({ zone, zoneIndex, chapter, zones, partners, onUpdate }: {
       </div>
 
       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {/* Files */}
+        {/* Specific file slots */}
         <div>
           <span style={labelSt}>Documentación</span>
-          <FileDropZone
-            accept=".pdf,.dwg"
-            files={zone.files}
-            onAdd={f => onUpdate({ ...zone, files: [...zone.files, ...f] })}
-            onRemove={id => onUpdate({ ...zone, files: zone.files.filter(f => f.id !== id) })}
-          />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <SingleFileSlot
+              label="Plano PDF"
+              accept=".pdf"
+              extLabel="PDF"
+              file={zone.pdf}
+              onSet={f => onUpdate({ ...zone, pdf: f })}
+              onRemove={() => onUpdate({ ...zone, pdf: null })}
+            />
+            <SingleFileSlot
+              label="Archivo DWG"
+              accept=".dwg"
+              extLabel="DWG"
+              file={zone.dwg}
+              onSet={f => onUpdate({ ...zone, dwg: f })}
+              onRemove={() => onUpdate({ ...zone, dwg: null })}
+            />
+            <SingleFileSlot
+              label="Documento complementario"
+              accept=".txt,.doc,.docx,.pdf"
+              extLabel="TXT"
+              file={zone.textFile}
+              onSet={f => onUpdate({ ...zone, textFile: f })}
+              onRemove={() => onUpdate({ ...zone, textFile: null })}
+            />
+          </div>
         </div>
 
         {/* Subcapítulo checklist */}
@@ -301,6 +412,116 @@ function InfoStep({ project, onChange }: { project: ExecutionProject; onChange: 
   )
 }
 
+// ─── IndeterminateCheckbox ────────────────────────────────────────────────────
+
+function IndeterminateCheckbox({ checked, indeterminate, onChange }: {
+  checked: boolean; indeterminate: boolean; onChange: () => void
+}) {
+  const ref = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = indeterminate
+  }, [indeterminate])
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      checked={checked}
+      onChange={onChange}
+      style={{ width: 14, height: 14, accentColor: '#1A1A1A', cursor: 'pointer', flexShrink: 0 }}
+    />
+  )
+}
+
+// ─── TemplateStep ─────────────────────────────────────────────────────────────
+
+function TemplateStep({ activeSubIds, onChange }: {
+  activeSubIds: string[]
+  onChange: (ids: string[]) => void
+}) {
+  const toggleSub = (id: string) => {
+    onChange(
+      activeSubIds.includes(id)
+        ? activeSubIds.filter(x => x !== id)
+        : [...activeSubIds, id]
+    )
+  }
+
+  const toggleChapter = (chapter: Capitulo) => {
+    const subIds = chapter.subcapitulos.map(s => s.id)
+    const allActive = subIds.every(id => activeSubIds.includes(id))
+    if (allActive) {
+      onChange(activeSubIds.filter(id => !subIds.includes(id)))
+    } else {
+      const toAdd = subIds.filter(id => !activeSubIds.includes(id))
+      onChange([...activeSubIds, ...toAdd])
+    }
+  }
+
+  return (
+    <div>
+      <h2 style={stepH2}>Configurar template</h2>
+      <p style={{ fontSize: 13, color: '#888', fontWeight: 300, marginBottom: 24, lineHeight: 1.6 }}>
+        Activa los capítulos y subcapítulos que aplican a este proyecto. Los que desactives no aparecerán en los pasos siguientes.
+      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {TEMPLATE_DEFAULT.map(chapter => {
+          const subIds = chapter.subcapitulos.map(s => s.id)
+          const activeCount = subIds.filter(id => activeSubIds.includes(id)).length
+          const allActive = activeCount === subIds.length
+          const someActive = activeCount > 0 && !allActive
+
+          return (
+            <div key={chapter.id} style={{ border: '1px solid #E8E6E0', borderRadius: 6, overflow: 'hidden' }}>
+              {/* Chapter header */}
+              <div style={{
+                padding: '10px 16px', background: allActive ? '#FAFAF8' : someActive ? '#FAFAF8' : '#fff',
+                display: 'flex', alignItems: 'center', gap: 10,
+                borderBottom: activeCount > 0 ? '1px solid #E8E6E0' : 'none',
+              }}>
+                <IndeterminateCheckbox
+                  checked={allActive}
+                  indeterminate={someActive}
+                  onChange={() => toggleChapter(chapter)}
+                />
+                <span style={{ fontSize: 13, fontWeight: 400, color: activeCount > 0 ? '#1A1A1A' : '#BBB' }}>
+                  {chapter.numero}. {chapter.nombre}
+                </span>
+                <span style={{ fontSize: 10, color: '#AAA', marginLeft: 'auto' }}>
+                  {activeCount}/{subIds.length}
+                </span>
+              </div>
+
+              {/* Subcapítulos */}
+              {activeCount > 0 && (
+                <div style={{ padding: '8px 16px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {chapter.subcapitulos.map(sub => {
+                    const active = activeSubIds.includes(sub.id)
+                    return (
+                      <label key={sub.id} style={{
+                        display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+                        padding: '5px 8px', borderRadius: 3,
+                        background: active ? '#F8F7F4' : 'transparent',
+                      }}>
+                        <input
+                          type="checkbox"
+                          checked={active}
+                          onChange={() => toggleSub(sub.id)}
+                          style={{ width: 13, height: 13, accentColor: '#1A1A1A', cursor: 'pointer' }}
+                        />
+                        <span style={{ fontSize: 12, color: active ? '#444' : '#BBB' }}>{sub.nombre}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function GeneralStep({ project, onChange }: { project: ExecutionProject; onChange: (p: Partial<ExecutionProject>) => void }) {
   return (
     <div>
@@ -319,18 +540,20 @@ function GeneralStep({ project, onChange }: { project: ExecutionProject; onChang
   )
 }
 
-function ChapterStep({ chapter, zones, partners, onZonesChange }: {
+function ChapterStep({ chapter, zones, partners, activeSubIds, onZonesChange }: {
   chapter: Capitulo; zones: UploadZone[]; partners: Partner[]
+  activeSubIds: string[]
   onZonesChange: (z: UploadZone[]) => void
 }) {
   const updateZone = (idx: number, updated: UploadZone) => {
     const next = [...zones]
     next[idx] = updated
-    onZonesChange(normalizeZones(chapter, next))
+    onZonesChange(normalizeZones(chapter, next, activeSubIds))
   }
 
+  const activeSubs = chapter.subcapitulos.filter(s => activeSubIds.includes(s.id))
   const coveredCount = new Set(zones.flatMap(z => z.coveredSubIds)).size
-  const total = chapter.subcapitulos.length
+  const total = activeSubs.length
 
   return (
     <div>
@@ -341,7 +564,7 @@ function ChapterStep({ chapter, zones, partners, onZonesChange }: {
         </span>
       </div>
       <p style={{ fontSize: 13, color: '#888', fontWeight: 300, marginBottom: 20, lineHeight: 1.6 }}>
-        Crea una o varias zonas de documentación. Cada zona tiene su propio PDF, sus subcapítulos y sus Execution Partners invitados.
+        Crea una o varias zonas de documentación. Cada zona tiene su propio PDF/DWG, sus subcapítulos y sus Execution Partners invitados.
         Cuando una zona no cubre todos los subcapítulos disponibles, aparece automáticamente una zona complementaria.
       </p>
       {zones.map((zone, i) => (
@@ -352,6 +575,7 @@ function ChapterStep({ chapter, zones, partners, onZonesChange }: {
           chapter={chapter}
           zones={zones}
           partners={partners}
+          activeSubIds={activeSubIds}
           onUpdate={updated => updateZone(i, updated)}
         />
       ))}
@@ -359,35 +583,27 @@ function ChapterStep({ chapter, zones, partners, onZonesChange }: {
   )
 }
 
-const stepH2: React.CSSProperties = { fontSize: 22, fontWeight: 200, color: '#1A1A1A', marginBottom: 20, letterSpacing: '-0.01em' }
-
 // ─── Wizard sidebar + shell ───────────────────────────────────────────────────
 
 interface WizardStep { key: string; label: string; short: string }
 
-const STEPS: WizardStep[] = [
-  { key: 'info', label: 'Información del proyecto', short: 'Proyecto' },
-  { key: 'general', label: 'Documentación general', short: 'Doc. general' },
-  ...TEMPLATE_DEFAULT.map(c => ({ key: c.id, label: `${c.numero}. ${c.nombre}`, short: `${c.numero}. ${c.nombre.split(' ').slice(0, 2).join(' ')}` })),
-]
-
-function stepStatus(idx: number, project: ExecutionProject): 'done' | 'active' | 'pending' {
-  // called during render, so active is handled by the parent
-  const step = STEPS[idx]
+function stepStatus(idx: number, steps: WizardStep[], project: ExecutionProject): 'done' | 'active' | 'pending' {
+  const step = steps[idx]
   if (step.key === 'info') return project.nombre ? 'done' : 'pending'
+  if (step.key === 'template') return 'done' // always considered configured
   if (step.key === 'general') return project.generalFiles.length > 0 ? 'done' : 'pending'
   const cap = TEMPLATE_DEFAULT.find(c => c.id === step.key)
-  if (cap) return isChapterDone(cap, project.chapterZones[cap.id] ?? []) ? 'done' : 'pending'
+  if (cap) return isChapterDone(cap, project.chapterZones[cap.id] ?? [], project.activeSubIds) ? 'done' : 'pending'
   return 'pending'
 }
 
-function WizardSidebar({ current, project, onSelect }: {
-  current: number; project: ExecutionProject; onSelect: (i: number) => void
+function WizardSidebar({ current, steps, project, onSelect }: {
+  current: number; steps: WizardStep[]; project: ExecutionProject; onSelect: (i: number) => void
 }) {
   return (
     <div style={{ width: 220, flexShrink: 0, borderRight: '1px solid #E8E6E0', background: '#fff', overflowY: 'auto' }}>
-      {STEPS.map((step, i) => {
-        const status = i === current ? 'active' : stepStatus(i, project)
+      {steps.map((step, i) => {
+        const status = i === current ? 'active' : stepStatus(i, steps, project)
         const isActive = i === current
         return (
           <button key={step.key} onClick={() => onSelect(i)} style={{
@@ -419,14 +635,27 @@ function Wizard({ project, partners, onUpdate, onBack }: {
   project: ExecutionProject; partners: Partner[]
   onUpdate: (p: Partial<ExecutionProject>) => void; onBack: () => void
 }) {
+  const steps = getSteps(project.activeSubIds)
   const [step, setStep] = useState(0)
+
+  // If activeSubIds changes and the current step's chapter is no longer active, reset to 0
+  useEffect(() => {
+    if (step >= steps.length) setStep(0)
+  }, [steps.length, step])
 
   const updateChapter = (chapId: string, zones: UploadZone[]) =>
     onUpdate({ chapterZones: { ...project.chapterZones, [chapId]: zones } })
 
   const renderContent = () => {
-    const s = STEPS[step]
+    const s = steps[step]
+    if (!s) return null
     if (s.key === 'info') return <InfoStep project={project} onChange={onUpdate} />
+    if (s.key === 'template') return (
+      <TemplateStep
+        activeSubIds={project.activeSubIds}
+        onChange={ids => onUpdate({ activeSubIds: ids })}
+      />
+    )
     if (s.key === 'general') return <GeneralStep project={project} onChange={onUpdate} />
     const cap = TEMPLATE_DEFAULT.find(c => c.id === s.key)
     if (cap) return (
@@ -434,6 +663,7 @@ function Wizard({ project, partners, onUpdate, onBack }: {
         chapter={cap}
         zones={project.chapterZones[cap.id] ?? [emptyZone()]}
         partners={partners}
+        activeSubIds={project.activeSubIds}
         onZonesChange={z => updateChapter(cap.id, z)}
       />
     )
@@ -453,7 +683,7 @@ function Wizard({ project, partners, onUpdate, onBack }: {
 
       {/* Body */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }}>
-        <WizardSidebar current={step} project={project} onSelect={setStep} />
+        <WizardSidebar current={step} steps={steps} project={project} onSelect={setStep} />
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ flex: 1, overflowY: 'auto', padding: '36px 40px' }}>
@@ -471,11 +701,11 @@ function Wizard({ project, partners, onUpdate, onBack }: {
             >
               ← Anterior
             </button>
-            <span style={{ fontSize: 11, color: '#CCC' }}>{step + 1} / {STEPS.length}</span>
+            <span style={{ fontSize: 11, color: '#CCC' }}>{step + 1} / {steps.length}</span>
             <button
-              onClick={() => setStep(s => Math.min(STEPS.length - 1, s + 1))}
-              disabled={step === STEPS.length - 1}
-              style={{ fontSize: 12, padding: '9px 20px', border: 'none', background: step === STEPS.length - 1 ? '#E8E6E0' : '#1A1A1A', color: step === STEPS.length - 1 ? '#AAA' : '#fff', cursor: step === STEPS.length - 1 ? 'default' : 'pointer', borderRadius: 4 }}
+              onClick={() => setStep(s => Math.min(steps.length - 1, s + 1))}
+              disabled={step === steps.length - 1}
+              style={{ fontSize: 12, padding: '9px 20px', border: 'none', background: step === steps.length - 1 ? '#E8E6E0' : '#1A1A1A', color: step === steps.length - 1 ? '#AAA' : '#fff', cursor: step === steps.length - 1 ? 'default' : 'pointer', borderRadius: 4 }}
             >
               Siguiente →
             </button>
@@ -504,7 +734,14 @@ function CreateModal({ existingProjects, onClose, onCreate }: {
 
   const handleCreate = () => {
     if (!form.nombre.trim()) return
-    onCreate({ id: crypto.randomUUID(), ...form, linkedProjectId: linked || undefined, generalFiles: [], chapterZones: initChapterZones() })
+    onCreate({
+      id: crypto.randomUUID(),
+      ...form,
+      linkedProjectId: linked || undefined,
+      activeSubIds: initActiveSubIds(),
+      generalFiles: [],
+      chapterZones: initChapterZones(),
+    })
   }
 
   const f = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
@@ -647,7 +884,8 @@ export default function ExecutionProjectsPage({ existingProjects = [], execution
               </thead>
               <tbody>
                 {projects.map(p => {
-                  const done = TEMPLATE_DEFAULT.filter(c => isChapterDone(c, p.chapterZones[c.id] ?? [])).length
+                  const activeChaps = getActiveChapters(p.activeSubIds)
+                  const done = activeChaps.filter(c => isChapterDone(c, p.chapterZones[c.id] ?? [], p.activeSubIds)).length
                   return (
                     <tr key={p.id} onClick={() => { setActive(p); setView('wizard') }}
                       style={{ borderBottom: '1px solid #F0EEE8', cursor: 'pointer' }}
@@ -657,8 +895,8 @@ export default function ExecutionProjectsPage({ existingProjects = [], execution
                       <td style={{ padding: '14px 16px', color: '#555' }}>{p.cliente || '—'}</td>
                       <td style={{ padding: '14px 16px', color: '#555' }}>{p.ciudad || '—'}</td>
                       <td style={{ padding: '14px 16px' }}>
-                        <span style={{ fontSize: 11, background: done === TEMPLATE_DEFAULT.length ? '#E8F5E9' : '#F0EEE8', color: done === TEMPLATE_DEFAULT.length ? '#1D9E75' : '#888', padding: '2px 8px', borderRadius: 10, fontWeight: 500 }}>
-                          {done}/{TEMPLATE_DEFAULT.length}
+                        <span style={{ fontSize: 11, background: done === activeChaps.length ? '#E8F5E9' : '#F0EEE8', color: done === activeChaps.length ? '#1D9E75' : '#888', padding: '2px 8px', borderRadius: 10, fontWeight: 500 }}>
+                          {done}/{activeChaps.length}
                         </span>
                       </td>
                       <td style={{ padding: '14px 16px', textAlign: 'right', fontSize: 12, color: '#AAA' }}>Configurar →</td>
