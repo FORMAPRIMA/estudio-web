@@ -922,13 +922,16 @@ export default function ExecutionProjectsPage({ existingProjects = [], execution
   }, [])
 
   const handleCreate = async (p: ExecutionProject) => {
-    // Save to DB immediately on creation
-    await upsertExecutionProject({
+    const result = await upsertExecutionProject({
       id: p.id, nombre: p.nombre, cliente: p.cliente, direccion: p.direccion,
       ciudad: p.ciudad, descripcion: p.descripcion, linked_project_id: p.linkedProjectId,
       active_sub_ids: p.activeSubIds, general_files: p.generalFiles,
       chapter_zones: p.chapterZones, status: 'borrador',
     })
+    if ('error' in result && result.error) {
+      alert(`Error al guardar: ${result.error}`)
+      return
+    }
     setProjects(prev => [p, ...prev])
     setActive(p); setView('wizard'); setCreateOpen(false)
   }

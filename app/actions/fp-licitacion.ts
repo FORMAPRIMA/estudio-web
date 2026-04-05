@@ -31,9 +31,9 @@ export async function upsertExecutionProject(project: {
 }) {
   const auth = await requireFP()
   if ('error' in auth) return { error: auth.error }
-  const { supabase } = auth
+  const admin = createAdminClient()
 
-  const { data, error } = await supabase
+  const { data, error } = await admin
     .from('fp_execution_projects')
     .upsert({
       id: project.id,
@@ -52,16 +52,15 @@ export async function upsertExecutionProject(project: {
     .single()
 
   if (error) return { error: error.message }
-  revalidatePath('/team/fp-execution/project')
   return { data }
 }
 
 export async function loadExecutionProjects() {
   const auth = await requireFP()
   if ('error' in auth) return { error: auth.error, data: [] }
-  const { supabase } = auth
+  const admin = createAdminClient()
 
-  const { data, error } = await supabase
+  const { data, error } = await admin
     .from('fp_execution_projects')
     .select('*')
     .order('created_at', { ascending: false })
@@ -73,11 +72,10 @@ export async function loadExecutionProjects() {
 export async function deleteExecutionProject(id: string) {
   const auth = await requireFP()
   if ('error' in auth) return { error: auth.error }
-  const { supabase } = auth
+  const admin = createAdminClient()
 
-  const { error } = await supabase.from('fp_execution_projects').delete().eq('id', id)
+  const { error } = await admin.from('fp_execution_projects').delete().eq('id', id)
   if (error) return { error: error.message }
-  revalidatePath('/team/fp-execution/project')
   return { success: true }
 }
 
