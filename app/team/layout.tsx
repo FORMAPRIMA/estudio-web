@@ -39,6 +39,7 @@ const ALL_NAV: (NavItem & { roles: FpRole[] })[] = [
   { href: '/team/fp-execution/template', label: 'Template', roles: ['fp_partner', 'fp_manager'], isSubItem: true },
   { href: '/team/fp-execution/project', label: 'Project', roles: ['fp_partner', 'fp_manager'], isSubItem: true },
   { href: '/team/fp-execution/archive', label: 'Archive', roles: ['fp_partner', 'fp_manager'], isSubItem: true },
+  { href: '/team/fp-execution/execution-partners', label: 'Execution Partners', roles: ['fp_partner', 'fp_manager'], isSubItem: true },
   // ──────────────────────────────────────────────────────────────────────────
   // ── Captación (group) ─────────────────────────────────────────────────────
   { href: '/team/captacion', label: 'Captación', roles: ['fp_partner', 'fp_manager'] },
