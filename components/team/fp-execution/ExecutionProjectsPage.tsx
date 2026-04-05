@@ -10,7 +10,7 @@ import LaunchStep from '@/components/fp-licitacion/LaunchStep'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface FileItem { id: string; name: string; size: number; path?: string }
+interface FileItem { id: string; name: string; size: number; path?: string; slot?: string }
 
 interface UploadZone {
   id: string
@@ -549,20 +549,134 @@ function TemplateStep({ activeSubIds, onChange }: {
   )
 }
 
+const GENERAL_SLOTS = [
+  { slot: 'planimetria', label: 'Planimetría general',      extLabel: 'PDF',  accept: '.pdf',           multiple: false },
+  { slot: 'dwg',         label: 'DWG general',              extLabel: 'DWG',  accept: '.dwg',           multiple: false },
+  { slot: 'fotos',       label: 'Fotografías de propiedad', extLabel: 'IMG',  accept: '.jpg,.jpeg,.png', multiple: true  },
+  { slot: 'video',       label: 'Vídeo de propiedad',       extLabel: 'MP4',  accept: '.mp4,.mov',      multiple: false },
+] as const
+
+function GeneralSlot({ slot, label, extLabel, accept, multiple, files, projectId, onChange }: {
+  slot: string; label: string; extLabel: string; accept: string; multiple: boolean
+  files: FileItem[]; projectId: string
+  onChange: (files: FileItem[]) => void
+}) {
+  const ref = useRef<HTMLInputElement>(null)
+  const [drag, setDrag] = useState(false)
+  const [uploading, setUploading] = useState(false)
+
+  const process = async (raw: FileList | null) => {
+    if (!raw || raw.length === 0) return
+    setUploading(true)
+    const supabase = createClient()
+    const newFiles: FileItem[] = []
+    for (const f of Array.from(raw)) {
+      const id = crypto.randomUUID()
+      const path = `${projectId}/general/${id}_${f.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+      try {
+        await supabase.storage.from('fp-licitacion').upload(path, f)
+        newFiles.push({ id, name: f.name, size: f.size, path, slot })
+      } catch {
+        newFiles.push({ id, name: f.name, size: f.size, slot })
+      }
+    }
+    onChange(multiple ? [...files, ...newFiles] : [newFiles[0]])
+    setUploading(false)
+  }
+
+  return (
+    <div style={{ border: '1px solid #E8E6E0', borderRadius: 6, overflow: 'hidden' }}>
+      {/* Header */}
+      <div style={{ background: '#FAFAF8', padding: '10px 16px', borderBottom: files.length > 0 ? '1px solid #E8E6E0' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 9, background: '#1A1A1A', color: '#fff', padding: '2px 6px', borderRadius: 2, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{extLabel}</span>
+          <span style={{ fontSize: 13, fontWeight: 400, color: '#1A1A1A' }}>{label}</span>
+        </div>
+        {files.length === 0 && (
+          <button
+            onClick={() => ref.current?.click()}
+            disabled={uploading}
+            style={{ fontSize: 11, padding: '5px 12px', border: '1px solid #E8E6E0', background: '#fff', color: '#555', cursor: 'pointer', borderRadius: 3 }}
+          >
+            {uploading ? 'Subiendo…' : '+ Añadir'}
+          </button>
+        )}
+      </div>
+
+      {/* Files list */}
+      {files.length > 0 && (
+        <div style={{ padding: '8px 16px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {files.map(f => (
+            <div key={f.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 8px', background: '#F8F7F4', borderRadius: 3 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 9, background: '#E8E6E0', color: '#666', padding: '1px 5px', borderRadius: 2, textTransform: 'uppercase' }}>{f.name.split('.').pop()}</span>
+                <span style={{ fontSize: 12, color: '#333' }}>{f.name}</span>
+                <span style={{ fontSize: 11, color: '#AAA' }}>{fmtSize(f.size)}</span>
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                {multiple && (
+                  <button onClick={() => ref.current?.click()} disabled={uploading} style={{ fontSize: 11, color: '#888', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>
+                    {uploading ? 'Subiendo…' : '+ otro'}
+                  </button>
+                )}
+                <button onClick={() => onChange(files.filter(x => x.id !== f.id))} style={{ background: 'none', border: 'none', color: '#CCC', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
+              </div>
+            </div>
+          ))}
+          {multiple && files.length > 0 && (
+            <button onClick={() => ref.current?.click()} disabled={uploading} style={{ fontSize: 11, color: '#888', background: 'none', border: '1px dashed #D4D0C8', padding: '4px 10px', borderRadius: 3, cursor: 'pointer', marginTop: 2 }}>
+              {uploading ? 'Subiendo…' : '+ Añadir más'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Drop zone (shown when empty) */}
+      {files.length === 0 && (
+        <div
+          onClick={() => ref.current?.click()}
+          onDragOver={e => { e.preventDefault(); setDrag(true) }}
+          onDragLeave={() => setDrag(false)}
+          onDrop={e => { e.preventDefault(); setDrag(false); process(e.dataTransfer.files) }}
+          style={{ padding: '14px 16px', textAlign: 'center', cursor: 'pointer', background: drag ? '#F8F7F4' : '#fff' }}
+        >
+          <p style={{ fontSize: 12, color: '#CCC', margin: 0 }}>Arrastra aquí o usa el botón de arriba</p>
+        </div>
+      )}
+
+      <input ref={ref} type="file" accept={accept} multiple={multiple} style={{ display: 'none' }} onChange={e => process(e.target.files)} />
+    </div>
+  )
+}
+
 function GeneralStep({ project, onChange }: { project: ExecutionProject; onChange: (p: Partial<ExecutionProject>) => void }) {
+  const bySlot = (slot: string) => project.generalFiles.filter(f => f.slot === slot)
+  const updateSlot = (slot: string, updated: FileItem[]) => {
+    const rest = project.generalFiles.filter(f => f.slot !== slot)
+    onChange({ generalFiles: [...rest, ...updated] })
+  }
+
   return (
     <div>
       <h2 style={stepH2}>Documentación general</h2>
-      <p style={{ fontSize: 13, color: '#888', fontWeight: 300, marginBottom: 20, lineHeight: 1.6 }}>
-        Planos generales, secciones, alzados, renders, imágenes y vídeos de la propiedad.
-        Esta documentación se incluirá en todos los paquetes que se envíen a los Execution Partners.
+      <p style={{ fontSize: 13, color: '#888', fontWeight: 300, marginBottom: 24, lineHeight: 1.6 }}>
+        Esta documentación se incluirá en todos los paquetes de licitación para dar contexto general del proyecto a cada Execution Partner.
       </p>
-      <FileDropZone
-        files={project.generalFiles}
-        accept=".pdf,.dwg,.jpg,.jpeg,.png,.mp4"
-        onAdd={f => onChange({ generalFiles: [...project.generalFiles, ...f] })}
-        onRemove={id => onChange({ generalFiles: project.generalFiles.filter(f => f.id !== id) })}
-      />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {GENERAL_SLOTS.map(s => (
+          <GeneralSlot
+            key={s.slot}
+            slot={s.slot}
+            label={s.label}
+            extLabel={s.extLabel}
+            accept={s.accept}
+            multiple={s.multiple}
+            files={bySlot(s.slot)}
+            projectId={project.id}
+            onChange={updated => updateSlot(s.slot, updated)}
+          />
+        ))}
+      </div>
     </div>
   )
 }
