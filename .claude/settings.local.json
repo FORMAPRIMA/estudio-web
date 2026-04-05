@@ -13,7 +13,8 @@
       "Bash(find:*)",
       "Bash(sed -n '28,42p' /Users/joseloragonzalez/estudio-web/supabase-schema.sql)",
       "Bash(sed -n '398,410p' /Users/joseloragonzalez/estudio-web/supabase-schema.sql)",
-      "Bash(head -20 /Users/joseloragonzalez/estudio-web/app/team/finanzas/facturacion/control/[id]/page.tsx)"
+      "Bash(head -20 /Users/joseloragonzalez/estudio-web/app/team/finanzas/facturacion/control/[id]/page.tsx)",
+      "Bash(grep -A 5 \"clientes\\\\?\\\\.nombre\\\\|clientes\\\\?\\\\[\" app/team/finanzas/operativas/proyectos/page.tsx app/team/clientes/plataforma/interna/[id]/page.tsx app/portal/[id]/page.tsx)"
     ]
   }
 }

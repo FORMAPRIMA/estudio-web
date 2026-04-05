@@ -670,3 +670,75 @@ ALTER TABLE public.execution_partners ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "FP staff can manage execution_partners" ON public.execution_partners
   FOR ALL USING (public.is_fp_manager_or_above());
+
+-- ── FP Licitación ─────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS public.fp_execution_projects (
+  id                uuid        DEFAULT uuid_generate_v4() PRIMARY KEY,
+  nombre            text        NOT NULL,
+  cliente           text,
+  direccion         text,
+  ciudad            text,
+  descripcion       text,
+  linked_project_id uuid        REFERENCES public.proyectos(id) ON DELETE SET NULL,
+  active_sub_ids    text[]      DEFAULT '{}',
+  general_files     jsonb       DEFAULT '[]',
+  chapter_zones     jsonb       DEFAULT '{}',
+  status            text        DEFAULT 'borrador' CHECK (status IN ('borrador','en_licitacion','adjudicado','archivado')),
+  created_at        timestamptz DEFAULT now()
+);
+ALTER TABLE public.fp_execution_projects ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "FP manage fp_execution_projects" ON public.fp_execution_projects
+  FOR ALL USING (public.is_fp_manager_or_above());
+
+CREATE TABLE IF NOT EXISTS public.fp_procesos_licitacion (
+  id                       uuid        DEFAULT uuid_generate_v4() PRIMARY KEY,
+  execution_project_id     uuid        REFERENCES public.fp_execution_projects(id) ON DELETE CASCADE,
+  descripcion_proyecto     text,
+  fecha_limite             timestamptz,
+  status                   text        DEFAULT 'activo' CHECK (status IN ('activo','cerrado')),
+  launched_at              timestamptz DEFAULT now(),
+  created_at               timestamptz DEFAULT now()
+);
+ALTER TABLE public.fp_procesos_licitacion ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "FP manage fp_procesos_licitacion" ON public.fp_procesos_licitacion
+  FOR ALL USING (public.is_fp_manager_or_above());
+
+CREATE TABLE IF NOT EXISTS public.fp_paquetes_licitacion (
+  id           uuid        DEFAULT uuid_generate_v4() PRIMARY KEY,
+  proceso_id   uuid        REFERENCES public.fp_procesos_licitacion(id) ON DELETE CASCADE,
+  partner_id   uuid        REFERENCES public.execution_partners(id) ON DELETE CASCADE,
+  token        uuid        DEFAULT uuid_generate_v4() UNIQUE NOT NULL,
+  scope        jsonb       NOT NULL DEFAULT '{}',
+  status       text        DEFAULT 'enviado' CHECK (status IN ('enviado','visto','oferta_recibida')),
+  sent_at      timestamptz DEFAULT now(),
+  viewed_at    timestamptz,
+  submitted_at timestamptz,
+  created_at   timestamptz DEFAULT now()
+);
+ALTER TABLE public.fp_paquetes_licitacion ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "FP manage fp_paquetes_licitacion" ON public.fp_paquetes_licitacion
+  FOR ALL USING (public.is_fp_manager_or_above());
+CREATE POLICY "Portal read by token" ON public.fp_paquetes_licitacion
+  FOR SELECT USING (true);
+CREATE POLICY "Portal mark viewed" ON public.fp_paquetes_licitacion
+  FOR UPDATE USING (true) WITH CHECK (true);
+
+CREATE TABLE IF NOT EXISTS public.fp_ofertas (
+  id           uuid        DEFAULT uuid_generate_v4() PRIMARY KEY,
+  paquete_id   uuid        REFERENCES public.fp_paquetes_licitacion(id) ON DELETE CASCADE UNIQUE,
+  lineas       jsonb       NOT NULL DEFAULT '[]',
+  total_amount numeric     DEFAULT 0,
+  notas        text,
+  submitted_at timestamptz DEFAULT now()
+);
+ALTER TABLE public.fp_ofertas ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "FP manage fp_ofertas" ON public.fp_ofertas
+  FOR ALL USING (public.is_fp_manager_or_above());
+CREATE POLICY "Portal submit oferta" ON public.fp_ofertas
+  FOR INSERT WITH CHECK (true);
+CREATE POLICY "Portal read oferta" ON public.fp_ofertas
+  FOR SELECT USING (true);
+
+-- Storage bucket (run separately in Supabase dashboard if needed)
+-- INSERT INTO storage.buckets (id, name, public) VALUES ('fp-licitacion', 'fp-licitacion', false) ON CONFLICT DO NOTHING;

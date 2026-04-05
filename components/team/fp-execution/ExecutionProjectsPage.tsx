@@ -1,12 +1,16 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { TEMPLATE_DEFAULT } from '@/app/team/fp-execution/template/templateData'
 import type { Capitulo } from '@/app/team/fp-execution/template/types'
+import { createClient } from '@/lib/supabase/client'
+import { upsertExecutionProject, loadExecutionProjects } from '@/app/actions/fp-licitacion'
+import ReviewStep, { computePackages } from '@/components/fp-licitacion/ReviewStep'
+import LaunchStep from '@/components/fp-licitacion/LaunchStep'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface FileItem { id: string; name: string; size: number }
+interface FileItem { id: string; name: string; size: number; path?: string }
 
 interface UploadZone {
   id: string
@@ -28,6 +32,7 @@ interface ExecutionProject {
   activeSubIds: string[]
   generalFiles: FileItem[]
   chapterZones: Record<string, UploadZone[]>
+  status?: string
 }
 
 export interface ExistingProject { id: string; nombre: string; cliente?: string; direccion?: string }
@@ -88,6 +93,8 @@ function getSteps(activeSubIds: string[]): WizardStep[] {
       label: `${c.numero}. ${c.nombre}`,
       short: `${c.numero}. ${c.nombre.split(' ').slice(0, 2).join(' ')}`,
     })),
+    { key: 'revisar',  label: 'Revisar paquetes',         short: 'Revisar'       },
+    { key: 'lanzar',   label: 'Lanzar licitación',        short: 'Lanzar'        },
   ]
 }
 
@@ -171,20 +178,34 @@ function FileDropZone({ files, onAdd, onRemove, accept = '.pdf,.dwg,.jpg,.jpeg,.
 
 // ─── SingleFileSlot (one file per slot, specific format) ─────────────────────
 
-function SingleFileSlot({ label, accept, extLabel, file, onSet, onRemove }: {
+function SingleFileSlot({ label, accept, extLabel, file, storagePath, onSet, onRemove }: {
   label: string
   accept: string
   extLabel: string
   file: FileItem | null
+  storagePath: string
   onSet: (f: FileItem) => void
   onRemove: () => void
 }) {
   const ref = useRef<HTMLInputElement>(null)
   const [drag, setDrag] = useState(false)
+  const [uploading, setUploading] = useState(false)
 
-  const process = (raw: FileList | null) => {
+  const process = async (raw: FileList | null) => {
     if (!raw || raw.length === 0) return
-    onSet({ id: crypto.randomUUID(), name: raw[0].name, size: raw[0].size })
+    const f = raw[0]
+    const id = crypto.randomUUID()
+    const path = `${storagePath}/${id}_${f.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+    setUploading(true)
+    try {
+      const supabase = createClient()
+      await supabase.storage.from('fp-licitacion').upload(path, f)
+      onSet({ id, name: f.name, size: f.size, path })
+    } catch {
+      onSet({ id, name: f.name, size: f.size }) // fallback without path
+    } finally {
+      setUploading(false)
+    }
   }
 
   if (file) {
@@ -215,14 +236,14 @@ function SingleFileSlot({ label, accept, extLabel, file, onSet, onRemove }: {
         style={{
           border: `1.5px dashed ${drag ? '#1A1A1A' : '#D4D0C8'}`, borderRadius: 4,
           padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10,
-          cursor: 'pointer', background: drag ? '#F8F7F4' : '#fff', transition: 'all 0.15s',
+          cursor: uploading ? 'default' : 'pointer', background: drag ? '#F8F7F4' : '#fff', transition: 'all 0.15s',
         }}
       >
         <span style={{ fontSize: 9, background: '#E8E6E0', color: '#666', padding: '2px 6px', borderRadius: 2, textTransform: 'uppercase', letterSpacing: '0.05em', flexShrink: 0 }}>
           {extLabel}
         </span>
         <span style={{ fontSize: 12, color: '#AAA' }}>
-          {label} — <span style={{ color: '#1A1A1A', textDecoration: 'underline' }}>seleccionar</span>
+          {uploading ? 'Subiendo…' : <>{label} — <span style={{ color: '#1A1A1A', textDecoration: 'underline' }}>seleccionar</span></>}
         </span>
       </div>
       <input ref={ref} type="file" accept={accept} style={{ display: 'none' }} onChange={e => process(e.target.files)} />
@@ -266,9 +287,10 @@ function PartnerSelector({ partners, selected, onChange }: {
 
 // ─── ZoneCard ─────────────────────────────────────────────────────────────────
 
-function ZoneCard({ zone, zoneIndex, chapter, zones, partners, activeSubIds, onUpdate }: {
+function ZoneCard({ zone, zoneIndex, chapter, zones, partners, activeSubIds, projectId, onUpdate }: {
   zone: UploadZone; zoneIndex: number; chapter: Capitulo
   zones: UploadZone[]; partners: Partner[]; activeSubIds: string[]
+  projectId: string
   onUpdate: (z: UploadZone) => void
 }) {
   const availableSubs = getAvailableSubs(chapter, zones, zoneIndex, activeSubIds)
@@ -319,6 +341,7 @@ function ZoneCard({ zone, zoneIndex, chapter, zones, partners, activeSubIds, onU
               accept=".pdf"
               extLabel="PDF"
               file={zone.pdf}
+              storagePath={`${projectId}/${chapter.id}/${zone.id}`}
               onSet={f => onUpdate({ ...zone, pdf: f })}
               onRemove={() => onUpdate({ ...zone, pdf: null })}
             />
@@ -327,6 +350,7 @@ function ZoneCard({ zone, zoneIndex, chapter, zones, partners, activeSubIds, onU
               accept=".dwg"
               extLabel="DWG"
               file={zone.dwg}
+              storagePath={`${projectId}/${chapter.id}/${zone.id}`}
               onSet={f => onUpdate({ ...zone, dwg: f })}
               onRemove={() => onUpdate({ ...zone, dwg: null })}
             />
@@ -335,6 +359,7 @@ function ZoneCard({ zone, zoneIndex, chapter, zones, partners, activeSubIds, onU
               accept=".txt,.doc,.docx,.pdf"
               extLabel="TXT"
               file={zone.textFile}
+              storagePath={`${projectId}/${chapter.id}/${zone.id}`}
               onSet={f => onUpdate({ ...zone, textFile: f })}
               onRemove={() => onUpdate({ ...zone, textFile: null })}
             />
@@ -542,9 +567,9 @@ function GeneralStep({ project, onChange }: { project: ExecutionProject; onChang
   )
 }
 
-function ChapterStep({ chapter, zones, partners, activeSubIds, onZonesChange }: {
+function ChapterStep({ chapter, zones, partners, activeSubIds, projectId, onZonesChange }: {
   chapter: Capitulo; zones: UploadZone[]; partners: Partner[]
-  activeSubIds: string[]
+  activeSubIds: string[]; projectId: string
   onZonesChange: (z: UploadZone[]) => void
 }) {
   const updateZone = (idx: number, updated: UploadZone) => {
@@ -578,6 +603,7 @@ function ChapterStep({ chapter, zones, partners, activeSubIds, onZonesChange }: 
           zones={zones}
           partners={partners}
           activeSubIds={activeSubIds}
+          projectId={projectId}
           onUpdate={updated => updateZone(i, updated)}
         />
       ))}
@@ -639,26 +665,60 @@ function Wizard({ project, partners, onUpdate, onBack }: {
 }) {
   const steps = getSteps(project.activeSubIds)
   const [step, setStep] = useState(0)
+  const [saving, setSaving] = useState(false)
 
   // If activeSubIds changes and the current step's chapter is no longer active, reset to 0
   useEffect(() => {
     if (step >= steps.length) setStep(0)
   }, [steps.length, step])
 
+  // Persist to DB on every meaningful update (debounced)
+  const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const saveProject = useCallback((p: ExecutionProject) => {
+    if (saveTimeout.current) clearTimeout(saveTimeout.current)
+    saveTimeout.current = setTimeout(async () => {
+      setSaving(true)
+      await upsertExecutionProject({
+        id: p.id, nombre: p.nombre, cliente: p.cliente, direccion: p.direccion,
+        ciudad: p.ciudad, descripcion: p.descripcion, linked_project_id: p.linkedProjectId,
+        active_sub_ids: p.activeSubIds, general_files: p.generalFiles,
+        chapter_zones: p.chapterZones, status: p.status ?? 'borrador',
+      })
+      setSaving(false)
+    }, 1200)
+  }, [])
+
+  const handleUpdate = (partial: Partial<ExecutionProject>) => {
+    const updated = { ...project, ...partial }
+    onUpdate(partial)
+    saveProject(updated)
+  }
+
   const updateChapter = (chapId: string, zones: UploadZone[]) =>
-    onUpdate({ chapterZones: { ...project.chapterZones, [chapId]: zones } })
+    handleUpdate({ chapterZones: { ...project.chapterZones, [chapId]: zones } })
+
+  const packages = computePackages(project as any, partners as any)
 
   const renderContent = () => {
     const s = steps[step]
     if (!s) return null
-    if (s.key === 'info') return <InfoStep project={project} onChange={onUpdate} />
+    if (s.key === 'info') return <InfoStep project={project} onChange={handleUpdate} />
     if (s.key === 'template') return (
       <TemplateStep
         activeSubIds={project.activeSubIds}
-        onChange={ids => onUpdate({ activeSubIds: ids })}
+        onChange={ids => handleUpdate({ activeSubIds: ids })}
       />
     )
-    if (s.key === 'general') return <GeneralStep project={project} onChange={onUpdate} />
+    if (s.key === 'general') return <GeneralStep project={project} onChange={handleUpdate} />
+    if (s.key === 'revisar') return <ReviewStep project={project as any} partners={partners as any} />
+    if (s.key === 'lanzar') return (
+      <LaunchStep
+        project={project as any}
+        packages={packages}
+        partners={partners as any}
+        onLaunched={() => handleUpdate({ status: 'en_licitacion' })}
+      />
+    )
     const cap = TEMPLATE_DEFAULT.find(c => c.id === s.key)
     if (cap) return (
       <ChapterStep
@@ -666,6 +726,7 @@ function Wizard({ project, partners, onUpdate, onBack }: {
         zones={project.chapterZones[cap.id] ?? [emptyZone()]}
         partners={partners}
         activeSubIds={project.activeSubIds}
+        projectId={project.id}
         onZonesChange={z => updateChapter(cap.id, z)}
       />
     )
@@ -681,6 +742,7 @@ function Wizard({ project, partners, onUpdate, onBack }: {
         </button>
         <span style={{ color: '#D4D0C8', fontSize: 14 }}>|</span>
         <span style={{ fontSize: 14, fontWeight: 300, color: '#1A1A1A' }}>{project.nombre || 'Sin nombre'}</span>
+        {saving && <span style={{ fontSize: 11, color: '#CCC', marginLeft: 'auto' }}>Guardando…</span>}
       </div>
 
       {/* Body */}
@@ -836,12 +898,38 @@ export default function ExecutionProjectsPage({ existingProjects = [], execution
   executionPartners?: Partner[]
 }) {
   const [projects, setProjects] = useState<ExecutionProject[]>([])
+  const [loading, setLoading] = useState(true)
   const [view, setView] = useState<'list' | 'wizard'>('list')
   const [active, setActive] = useState<ExecutionProject | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
 
-  const handleCreate = (p: ExecutionProject) => {
-    setProjects(prev => [...prev, p])
+  // Load from DB on mount
+  useEffect(() => {
+    loadExecutionProjects().then(({ data }) => {
+      if (data?.length) {
+        setProjects(data.map((r: any) => ({
+          id: r.id, nombre: r.nombre, cliente: r.cliente ?? '', direccion: r.direccion ?? '',
+          ciudad: r.ciudad ?? '', descripcion: r.descripcion ?? '',
+          linkedProjectId: r.linked_project_id ?? undefined,
+          activeSubIds: r.active_sub_ids ?? initActiveSubIds(),
+          generalFiles: r.general_files ?? [],
+          chapterZones: r.chapter_zones ?? initChapterZones(),
+          status: r.status ?? 'borrador',
+        })))
+      }
+      setLoading(false)
+    })
+  }, [])
+
+  const handleCreate = async (p: ExecutionProject) => {
+    // Save to DB immediately on creation
+    await upsertExecutionProject({
+      id: p.id, nombre: p.nombre, cliente: p.cliente, direccion: p.direccion,
+      ciudad: p.ciudad, descripcion: p.descripcion, linked_project_id: p.linkedProjectId,
+      active_sub_ids: p.activeSubIds, general_files: p.generalFiles,
+      chapter_zones: p.chapterZones, status: 'borrador',
+    })
+    setProjects(prev => [p, ...prev])
     setActive(p); setView('wizard'); setCreateOpen(false)
   }
 
@@ -869,7 +957,11 @@ export default function ExecutionProjectsPage({ existingProjects = [], execution
       </div>
 
       <div style={{ padding: '28px 40px' }}>
-        {projects.length === 0 ? (
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '80px 20px', color: '#CCC' }}>
+            <p style={{ fontSize: 13, fontWeight: 300 }}>Cargando…</p>
+          </div>
+        ) : projects.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '80px 20px', color: '#AAA' }}>
             <p style={{ fontSize: 14, fontWeight: 300, marginBottom: 6 }}>Sin proyectos de ejecución todavía</p>
             <p style={{ fontSize: 12, fontWeight: 300 }}>Crea el primero con el botón de arriba</p>
