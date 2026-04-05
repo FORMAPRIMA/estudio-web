@@ -32,6 +32,14 @@ const ALL_NAV: (NavItem & { roles: FpRole[] })[] = [
     roles: ['fp_team', 'fp_manager', 'fp_partner'],
     pinBottom: true,
   },
+  // ── FP Execution ─────────────────────────────────────────────────────────
+  { href: '/team/fp-execution', label: 'FP Execution', roles: ['fp_partner', 'fp_manager'] },
+  { href: '/team/fp-execution/input', label: 'Input', roles: ['fp_partner', 'fp_manager'], isSubItem: true },
+  { href: '/team/fp-execution/depot', label: 'Depot', roles: ['fp_partner', 'fp_manager'], isSubItem: true },
+  { href: '/team/fp-execution/template', label: 'Template', roles: ['fp_partner', 'fp_manager'], isSubItem: true },
+  { href: '/team/fp-execution/project', label: 'Project', roles: ['fp_partner', 'fp_manager'], isSubItem: true },
+  { href: '/team/fp-execution/archive', label: 'Archive', roles: ['fp_partner', 'fp_manager'], isSubItem: true },
+  // ──────────────────────────────────────────────────────────────────────────
   // ── Captación (group) ─────────────────────────────────────────────────────
   { href: '/team/captacion', label: 'Captación', roles: ['fp_partner', 'fp_manager'] },
   { href: '/team/captacion/leads', label: 'Leads', roles: ['fp_partner', 'fp_manager'], isSubItem: true },
