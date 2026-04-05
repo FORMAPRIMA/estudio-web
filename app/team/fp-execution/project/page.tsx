@@ -33,7 +33,7 @@ export default async function Page() {
   try {
     const { data } = await supabase
       .from('execution_partners')
-      .select('id, nombre')
+      .select('id, nombre, especialidades')
       .order('nombre')
     if (data) executionPartners = data
   } catch {}

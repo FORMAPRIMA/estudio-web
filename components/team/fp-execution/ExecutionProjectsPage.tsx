@@ -31,7 +31,7 @@ interface ExecutionProject {
 }
 
 export interface ExistingProject { id: string; nombre: string; cliente?: string; direccion?: string }
-export interface Partner { id: string; nombre: string }
+export interface Partner { id: string; nombre: string; especialidades: string[] }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -239,7 +239,7 @@ function PartnerSelector({ partners, selected, onChange }: {
 }) {
   if (partners.length === 0) return (
     <p style={{ fontSize: 12, color: '#BBB', fontStyle: 'italic', margin: 0 }}>
-      Sin Execution Partners registrados
+      Sin Execution Partners con especialidad en este capítulo
     </p>
   )
   const toggle = (id: string) =>
@@ -272,6 +272,8 @@ function ZoneCard({ zone, zoneIndex, chapter, zones, partners, activeSubIds, onU
   onUpdate: (z: UploadZone) => void
 }) {
   const availableSubs = getAvailableSubs(chapter, zones, zoneIndex, activeSubIds)
+  const chapterSubIds = new Set(chapter.subcapitulos.map(s => s.id))
+  const relevantPartners = partners.filter(p => p.especialidades.some(e => chapterSubIds.has(e)))
   const allChecked = availableSubs.length > 0 && availableSubs.every(s => zone.coveredSubIds.includes(s.id))
 
   const toggleSub = (id: string) => {
@@ -372,7 +374,7 @@ function ZoneCard({ zone, zoneIndex, chapter, zones, partners, activeSubIds, onU
         <div>
           <span style={labelSt}>Execution Partners invitados a licitar</span>
           <PartnerSelector
-            partners={partners}
+            partners={relevantPartners}
             selected={zone.partnerIds}
             onChange={ids => onUpdate({ ...zone, partnerIds: ids })}
           />
