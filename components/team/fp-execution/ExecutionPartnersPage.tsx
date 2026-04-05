@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { TEMPLATE_DEFAULT } from '@/app/team/fp-execution/template/templateData'
+import { createClient } from '@/lib/supabase/client'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -373,10 +374,20 @@ function PartnerModal({
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function ExecutionPartnersPage() {
+  const supabase = createClient()
   const [partners, setPartners] = useState<ExecutionPartner[]>([])
+  const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
   const [editingPartner, setEditingPartner] = useState<ExecutionPartner | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+
+  useEffect(() => {
+    supabase.from('execution_partners').select('*').order('nombre')
+      .then(({ data }) => {
+        if (data) setPartners(data as ExecutionPartner[])
+        setLoading(false)
+      })
+  }, [])
 
   const openNew = () => {
     setEditingPartner(null)
@@ -388,21 +399,28 @@ export default function ExecutionPartnersPage() {
     setModalOpen(true)
   }
 
-  const handleSave = (form: Omit<ExecutionPartner, 'id' | 'created_at'>) => {
+  const handleSave = async (form: Omit<ExecutionPartner, 'id' | 'created_at'>) => {
     if (editingPartner) {
-      setPartners(prev => prev.map(p => p.id === editingPartner.id ? { ...p, ...form } : p))
+      const { data } = await supabase
+        .from('execution_partners')
+        .update(form)
+        .eq('id', editingPartner.id)
+        .select()
+        .single()
+      if (data) setPartners(prev => prev.map(p => p.id === editingPartner.id ? data as ExecutionPartner : p))
     } else {
-      const newPartner: ExecutionPartner = {
-        ...form,
-        id: crypto.randomUUID(),
-        created_at: new Date().toISOString(),
-      }
-      setPartners(prev => [...prev, newPartner])
+      const { data } = await supabase
+        .from('execution_partners')
+        .insert(form)
+        .select()
+        .single()
+      if (data) setPartners(prev => [...prev, data as ExecutionPartner].sort((a, b) => a.nombre.localeCompare(b.nombre)))
     }
     setModalOpen(false)
   }
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
+    await supabase.from('execution_partners').delete().eq('id', id)
     setPartners(prev => prev.filter(p => p.id !== id))
     setConfirmDelete(null)
   }
@@ -432,7 +450,11 @@ export default function ExecutionPartnersPage() {
 
       {/* Body */}
       <div style={{ padding: '28px 40px' }}>
-        {partners.length === 0 ? (
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '80px 20px', color: '#CCC' }}>
+            <p style={{ fontSize: 13, fontWeight: 300 }}>Cargando…</p>
+          </div>
+        ) : partners.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '80px 20px', color: '#AAA' }}>
             <p style={{ fontSize: 14, fontWeight: 300, marginBottom: 8 }}>Sin execution partners todavía</p>
             <p style={{ fontSize: 12, fontWeight: 300 }}>Crea el primero con el botón de arriba</p>

@@ -644,3 +644,29 @@ UPDATE public.proyecto_fases SET origen = 'previo_a_plataforma' WHERE origen = '
 UPDATE public.tasks        SET origen = 'previo_a_plataforma' WHERE origen = 'post_plataforma';
 UPDATE public.time_entries SET origen = 'previo_a_plataforma' WHERE origen = 'post_plataforma';
 
+
+-- ── FP Execution Partners ────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.execution_partners (
+  id                   uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
+  nombre               text NOT NULL,
+  razon_social         text,
+  nif_cif              text,
+  contacto_nombre      text,
+  email_contacto       text,
+  email_notificaciones text,
+  telefono             text,
+  direccion            text,
+  ciudad               text,
+  codigo_postal        text,
+  pais                 text DEFAULT 'España',
+  iban                 text,
+  email_facturacion    text,
+  notas                text,
+  especialidades       text[] DEFAULT '{}',
+  created_at           timestamptz DEFAULT now()
+);
+
+ALTER TABLE public.execution_partners ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "FP staff can manage execution_partners" ON public.execution_partners
+  FOR ALL USING (public.is_fp_manager_or_above());
