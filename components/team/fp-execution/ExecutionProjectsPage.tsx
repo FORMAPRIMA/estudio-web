@@ -27,7 +27,7 @@ interface ExecutionProject {
   chapterZones: Record<string, UploadZone[]>
 }
 
-export interface ExistingProject { id: string; nombre: string; cliente?: string; direccion?: string; ciudad?: string }
+export interface ExistingProject { id: string; nombre: string; cliente?: string; direccion?: string }
 export interface Partner { id: string; nombre: string }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -499,7 +499,7 @@ function CreateModal({ existingProjects, onClose, onCreate }: {
 
   const prefill = (p: ExistingProject) => {
     setLinked(p.id)
-    setForm(f => ({ ...f, nombre: p.nombre, cliente: p.cliente ?? '', direccion: p.direccion ?? '', ciudad: p.ciudad ?? '' }))
+    setForm(f => ({ ...f, nombre: p.nombre, cliente: p.cliente ?? '', direccion: p.direccion ?? '' }))
   }
 
   const handleCreate = () => {

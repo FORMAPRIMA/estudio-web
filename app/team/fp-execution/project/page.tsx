@@ -11,9 +11,17 @@ export default async function Page() {
   try {
     const { data } = await supabase
       .from('proyectos')
-      .select('id, nombre, cliente, direccion, ciudad')
+      .select('id, nombre, direccion, clientes!cliente_id(nombre)')
       .order('created_at', { ascending: false })
-    if (data) existingProjects = data
+
+    if (data) {
+      existingProjects = data.map((p: any) => ({
+        id: p.id,
+        nombre: p.nombre,
+        cliente: p.clientes?.nombre ?? '',
+        direccion: p.direccion ?? '',
+      }))
+    }
   } catch {}
 
   try {
