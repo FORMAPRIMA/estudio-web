@@ -193,7 +193,7 @@ function ZoneCard({ zone, zoneIndex, chapter, zones, partners, onUpdate }: {
   const toggleAll = () => {
     const next = allChecked
       ? zone.coveredSubIds.filter(id => !availableSubs.find(s => s.id === id))
-      : Array.from(new Set([...zone.coveredSubIds, ...availableSubs.map(s => s.id)]))]
+      : Array.from(new Set([...zone.coveredSubIds, ...availableSubs.map(s => s.id)]))
     onUpdate({ ...zone, coveredSubIds: next })
   }
 
