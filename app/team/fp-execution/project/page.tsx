@@ -11,16 +11,22 @@ export default async function Page() {
   try {
     const { data } = await supabase
       .from('proyectos')
-      .select('id, nombre, direccion, clientes!cliente_id(nombre)')
+      .select('id, nombre, direccion, clientes!cliente_id(nombre), proyecto_clientes(rol, clientes(nombre))')
       .order('created_at', { ascending: false })
 
     if (data) {
-      existingProjects = data.map((p: any) => ({
-        id: p.id,
-        nombre: p.nombre,
-        cliente: p.clientes?.nombre ?? '',
-        direccion: p.direccion ?? '',
-      }))
+      existingProjects = data.map((p: any) => {
+        const clienteDirecto = p.clientes?.nombre ?? ''
+        const junction: any[] = Array.isArray(p.proyecto_clientes) ? p.proyecto_clientes : []
+        const titular = junction.find((j: any) => j.rol === 'titular') ?? junction[0]
+        const clienteJunction = titular?.clientes?.nombre ?? ''
+        return {
+          id: p.id,
+          nombre: p.nombre,
+          cliente: clienteDirecto || clienteJunction,
+          direccion: p.direccion ?? '',
+        }
+      })
     }
   } catch {}
 
