@@ -1,9 +1,33 @@
-export default function FpExecutionProjectPage() {
+import { createClient } from '@/lib/supabase/server'
+import ExecutionProjectsPage from '@/components/team/fp-execution/ExecutionProjectsPage'
+import type { ExistingProject, Partner } from '@/components/team/fp-execution/ExecutionProjectsPage'
+
+export default async function Page() {
+  const supabase = await createClient()
+
+  let existingProjects: ExistingProject[] = []
+  let executionPartners: Partner[] = []
+
+  try {
+    const { data } = await supabase
+      .from('proyectos')
+      .select('id, nombre, cliente, direccion, ciudad')
+      .order('created_at', { ascending: false })
+    if (data) existingProjects = data
+  } catch {}
+
+  try {
+    const { data } = await supabase
+      .from('execution_partners')
+      .select('id, nombre')
+      .order('nombre')
+    if (data) executionPartners = data
+  } catch {}
+
   return (
-    <div className="p-8 lg:p-12">
-      <p className="text-xs tracking-widest uppercase font-light text-meta mb-2">FP Execution</p>
-      <h1 className="text-ink font-light text-2xl mb-10">Project</h1>
-      <p className="text-meta font-light text-sm">Próximamente.</p>
-    </div>
+    <ExecutionProjectsPage
+      existingProjects={existingProjects}
+      executionPartners={executionPartners}
+    />
   )
 }
