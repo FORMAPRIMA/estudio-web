@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { addLead, updateLead, deleteLead } from '@/app/actions/leads'
 import { createContrato } from '@/app/actions/contratos'
+import { createBienvenidaToken } from '@/app/actions/bienvenida'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -296,6 +297,48 @@ export default function LeadsPage({ leads: initial }: { leads: Lead[] }) {
   const [adding, setAdding] = useState(false)
   const [, startTransition] = useTransition()
 
+  // ── Bienvenida token modal state ──
+  const [showBienvenidaModal, setShowBienvenidaModal] = useState(false)
+  const [bienvenidaNombre, setBienvenidaNombre] = useState('')
+  const [bienvenidaNota, setBienvenidaNota] = useState('')
+  const [bienvenidaGenerating, setBienvenidaGenerating] = useState(false)
+  const [bienvenidaError, setBienvenidaError] = useState<string | null>(null)
+  const [bienvenidaUrl, setBienvenidaUrl] = useState<string | null>(null)
+  const [bienvenidaCopied, setBienvenidaCopied] = useState(false)
+
+  const handleOpenBienvenidaModal = () => {
+    setBienvenidaNombre('')
+    setBienvenidaNota('')
+    setBienvenidaError(null)
+    setBienvenidaUrl(null)
+    setBienvenidaCopied(false)
+    setShowBienvenidaModal(true)
+  }
+
+  const handleGenerateBienvenida = async () => {
+    if (!bienvenidaNombre.trim()) {
+      setBienvenidaError('El nombre del cliente es obligatorio.')
+      return
+    }
+    setBienvenidaGenerating(true)
+    setBienvenidaError(null)
+    const res = await createBienvenidaToken(bienvenidaNombre, bienvenidaNota)
+    setBienvenidaGenerating(false)
+    if ('error' in res) {
+      setBienvenidaError(res.error)
+      return
+    }
+    setBienvenidaUrl(window.location.origin + '/bienvenida/' + res.token)
+  }
+
+  const handleCopyBienvenidaUrl = () => {
+    if (!bienvenidaUrl) return
+    navigator.clipboard.writeText(bienvenidaUrl).then(() => {
+      setBienvenidaCopied(true)
+      setTimeout(() => setBienvenidaCopied(false), 2000)
+    })
+  }
+
   const handleAdd = async () => {
     setAdding(true)
     setAddError(null)
@@ -363,15 +406,25 @@ export default function LeadsPage({ leads: initial }: { leads: Lead[] }) {
           <h1 style={{ fontSize: 28, fontWeight: 200, color: '#1A1A1A', margin: 0, letterSpacing: '-0.01em' }}>
             Leads
           </h1>
-          <button
-            onClick={handleAdd}
-            disabled={adding}
-            style={{ height: 36, padding: '0 20px', background: adding ? '#888' : '#1A1A1A', color: '#fff', border: 'none', borderRadius: 4, cursor: adding ? 'not-allowed' : 'pointer', fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', opacity: adding ? 0.7 : 1 }}
-            onMouseEnter={e => { if (!adding) (e.currentTarget as HTMLElement).style.background = '#D85A30' }}
-            onMouseLeave={e => { if (!adding) (e.currentTarget as HTMLElement).style.background = '#1A1A1A' }}
-          >
-            {adding ? 'Creando…' : '+ Nuevo lead'}
-          </button>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <button
+              onClick={handleOpenBienvenidaModal}
+              style={{ height: 36, padding: '0 16px', background: '#fff', color: '#1A1A1A', border: '1px solid #E8E6E0', borderRadius: 4, cursor: 'pointer', fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#F8F7F4' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '#fff' }}
+            >
+              Enviar formulario de nuevo cliente
+            </button>
+            <button
+              onClick={handleAdd}
+              disabled={adding}
+              style={{ height: 36, padding: '0 20px', background: adding ? '#888' : '#1A1A1A', color: '#fff', border: 'none', borderRadius: 4, cursor: adding ? 'not-allowed' : 'pointer', fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', opacity: adding ? 0.7 : 1 }}
+              onMouseEnter={e => { if (!adding) (e.currentTarget as HTMLElement).style.background = '#D85A30' }}
+              onMouseLeave={e => { if (!adding) (e.currentTarget as HTMLElement).style.background = '#1A1A1A' }}
+            >
+              {adding ? 'Creando…' : '+ Nuevo lead'}
+            </button>
+          </div>
         </div>
 
         {addError && (
@@ -469,6 +522,110 @@ export default function LeadsPage({ leads: initial }: { leads: Lead[] }) {
           {filtered.length} de {leads.length} leads
         </p>
       </div>
+
+      {/* ── Bienvenida token modal ── */}
+      {showBienvenidaModal && (
+        <div
+          onClick={() => setShowBienvenidaModal(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ background: '#fff', borderRadius: 8, width: 'min(480px, 96vw)', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
+          >
+            {/* Modal header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #E8E6E0', flexShrink: 0 }}>
+              <div>
+                <h2 style={{ fontSize: 15, fontWeight: 600, color: '#1A1A1A', margin: 0 }}>
+                  Enviar formulario de nuevo cliente
+                </h2>
+                <p style={{ fontSize: 12, color: '#888', margin: '4px 0 0' }}>
+                  Genera un enlace personalizado para que el cliente se registre él mismo.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowBienvenidaModal(false)}
+                style={{ background: 'none', border: '1px solid #E8E6E0', cursor: 'pointer', color: '#888', fontSize: 16, width: 32, height: 32, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit', flexShrink: 0, marginLeft: 12 }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal body */}
+            <div style={{ padding: '20px 20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {!bienvenidaUrl ? (
+                <>
+                  <div>
+                    <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#BBB', margin: '0 0 6px' }}>
+                      Nombre del cliente *
+                    </p>
+                    <input
+                      type="text"
+                      value={bienvenidaNombre}
+                      onChange={e => setBienvenidaNombre(e.target.value)}
+                      placeholder="Ej: María"
+                      style={{ background: '#FFF8F0', border: '1px solid #E8913A', borderRadius: 4, padding: '8px 12px', fontSize: 13, color: '#1A1A1A', fontFamily: 'inherit', outline: 'none', width: '100%', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#BBB', margin: '0 0 6px' }}>
+                      Nota interna (opcional)
+                    </p>
+                    <input
+                      type="text"
+                      value={bienvenidaNota}
+                      onChange={e => setBienvenidaNota(e.target.value)}
+                      placeholder="Ej: Referido por Carlos, interés en reforma integral"
+                      style={{ background: '#FFF8F0', border: '1px solid #E8913A', borderRadius: 4, padding: '8px 12px', fontSize: 13, color: '#1A1A1A', fontFamily: 'inherit', outline: 'none', width: '100%', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  {bienvenidaError && (
+                    <div style={{ padding: '8px 12px', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 4, fontSize: 12, color: '#DC2626' }}>
+                      {bienvenidaError}
+                    </div>
+                  )}
+                  <button
+                    onClick={handleGenerateBienvenida}
+                    disabled={bienvenidaGenerating}
+                    style={{ height: 36, background: bienvenidaGenerating ? '#888' : '#1A1A1A', color: '#fff', border: 'none', borderRadius: 4, cursor: bienvenidaGenerating ? 'not-allowed' : 'pointer', fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', opacity: bienvenidaGenerating ? 0.7 : 1, fontFamily: 'inherit' }}
+                    onMouseEnter={e => { if (!bienvenidaGenerating) (e.currentTarget as HTMLElement).style.background = '#D85A30' }}
+                    onMouseLeave={e => { if (!bienvenidaGenerating) (e.currentTarget as HTMLElement).style.background = '#1A1A1A' }}
+                  >
+                    {bienvenidaGenerating ? 'Generando…' : 'Generar enlace'}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p style={{ fontSize: 12, color: '#555', margin: 0 }}>
+                    Enlace generado. Compártelo por WhatsApp o email.
+                  </p>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      readOnly
+                      value={bienvenidaUrl}
+                      style={{ flex: 1, background: '#F8F7F4', border: '1px solid #E8E6E0', borderRadius: 4, padding: '8px 12px', fontSize: 12, color: '#1A1A1A', fontFamily: 'inherit', outline: 'none', cursor: 'text', userSelect: 'all' }}
+                      onClick={e => (e.currentTarget as HTMLInputElement).select()}
+                    />
+                    <button
+                      onClick={handleCopyBienvenidaUrl}
+                      style={{ height: 36, padding: '0 14px', background: bienvenidaCopied ? '#1D9E75' : '#1A1A1A', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', whiteSpace: 'nowrap', fontFamily: 'inherit', transition: 'background 0.2s', flexShrink: 0 }}
+                    >
+                      {bienvenidaCopied ? '✓ Copiado' : 'Copiar'}
+                    </button>
+                  </div>
+                  <button
+                    onClick={handleOpenBienvenidaModal}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#888', fontSize: 12, textAlign: 'left', padding: 0, fontFamily: 'inherit', textDecoration: 'underline' }}
+                  >
+                    Generar otro enlace
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Lead edit modal overlay ── */}
       {editingLead && (
