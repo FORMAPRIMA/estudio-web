@@ -809,9 +809,10 @@ export function ContratoPDF({ data }: { data: ContratoPDFData }) {
             )
           })()}
 
+          {/* Payment table — wrap=false keeps the whole block on one page */}
+          <View wrap={false}>
           <Text style={{ ...s.bodyText, marginTop: 8 }}>{T.hitosPreamble}</Text>
 
-          {/* Payment table */}
           <View style={s.pagoTable}>
             {data.honorarios.map((h, i) => {
               // Translate seccion (service label) and descripcion (milestone label) when lang=en
@@ -846,6 +847,7 @@ export function ContratoPDF({ data }: { data: ContratoPDFData }) {
               <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: C.brand }}>{fmtEur(totalHonorarios)} + {lang === 'en' ? 'VAT' : 'IVA'}</Text>
             </View>
           </View>
+          </View>{/* end no-wrap payment block */}
 
           <Text style={{ fontSize: 7.5, color: C.mid, marginTop: 8, lineHeight: 1.55 }}>
             {T.travelNote}
