@@ -370,6 +370,48 @@ export default function ContratoDetalle({
   const [firmandoError,   setFirmandoError]   = useState<string | null>(null)
   const [successMsg,      setSuccessMsg]      = useState<string | null>(null)
 
+  // ── Compartir modal ───────────────────────────────────────────────────────
+  const [showCompartir,    setShowCompartir]    = useState(false)
+  const [compartirEmails,  setCompartirEmails]  = useState<string[]>([])
+  const [compartirNewEmail,setCompartirNewEmail]= useState('')
+  const [compartirPdfLang, setCompartirPdfLang] = useState<'es' | 'en' | 'both'>('es')
+  const [compartirEmailLang,setCompartirEmailLang]=useState<'es' | 'en'>('es')
+  const [compartirLoading, setCompartirLoading] = useState(false)
+  const [compartirError,   setCompartirError]   = useState<string | null>(null)
+
+  function openCompartir() {
+    const emails: string[] = []
+    if (clienteEmail) emails.push(clienteEmail)
+    setCompartirEmails(emails)
+    setCompartirNewEmail('')
+    setCompartirPdfLang('es')
+    setCompartirEmailLang('es')
+    setCompartirError(null)
+    setShowCompartir(true)
+  }
+
+  async function handleCompartir() {
+    if (!compartirEmails.length) { setCompartirError('Añade al menos un destinatario.'); return }
+    setCompartirLoading(true)
+    setCompartirError(null)
+    try {
+      const res = await fetch(`/api/contratos/${initial.id}/compartir`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ emails: compartirEmails, pdfLang: compartirPdfLang, emailLang: compartirEmailLang }),
+      })
+      const data = await res.json() as { ok?: boolean; error?: string }
+      if (!res.ok || data.error) { setCompartirError(data.error ?? 'Error al enviar.'); return }
+      setShowCompartir(false)
+      setStatus('enviado')
+      setSuccessMsg(`Contrato enviado a ${compartirEmails.join(', ')}`)
+    } catch {
+      setCompartirError('Error de conexión.')
+    } finally {
+      setCompartirLoading(false)
+    }
+  }
+
   // ── Auto-save on debounce ─────────────────────────────────────────────────
   const scheduleAutoSave = (patch: Parameters<typeof updateContrato>[1]) => {
     if (saveTimer.current) clearTimeout(saveTimer.current)
@@ -529,6 +571,7 @@ export default function ContratoDetalle({
   const meta = STATUS_META[status] ?? STATUS_META.borrador
 
   return (
+    <>
     <div style={{ fontFamily: "'Inter', system-ui, sans-serif", minHeight: '100vh', background: '#F8F7F4' }}>
 
       {/* Header */}
@@ -588,6 +631,22 @@ export default function ContratoDetalle({
             >
               PDF (EN)
             </button>
+
+            {status !== 'firmado' && status !== 'cancelado' && (
+              <button
+                onClick={openCompartir}
+                style={{
+                  height: 36, padding: '0 18px',
+                  background: '#378ADD', color: '#fff',
+                  border: 'none', borderRadius: 4,
+                  cursor: 'pointer', fontSize: 11, fontWeight: 600, letterSpacing: '0.03em',
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#2A6DB5' }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '#378ADD' }}
+              >
+                ↑ Compartir con cliente
+              </button>
+            )}
 
             {status !== 'firmado' && status !== 'cancelado' && (
               <button
@@ -953,5 +1012,130 @@ export default function ContratoDetalle({
 
       </div>
     </div>
+
+    {/* ── COMPARTIR MODAL ─────────────────────────────────────────────────── */}
+    {showCompartir && (
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        background: 'rgba(0,0,0,0.45)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 24,
+      }} onClick={() => setShowCompartir(false)}>
+        <div style={{
+          background: '#fff', borderRadius: 10, width: '100%', maxWidth: 520,
+          boxShadow: '0 8px 40px rgba(0,0,0,0.18)',
+          overflow: 'hidden',
+        }} onClick={e => e.stopPropagation()}>
+
+          {/* Header */}
+          <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #F0EEE8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <p style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>Compartir contrato con cliente</p>
+              <p style={{ fontSize: 11, color: '#AAA', margin: '2px 0 0' }}>{initial.numero}{proyectoNombre ? ` · ${proyectoNombre}` : ''}</p>
+            </div>
+            <button onClick={() => setShowCompartir(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#AAA', lineHeight: 1 }}>×</button>
+          </div>
+
+          {/* Body */}
+          <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+            {/* Destinatarios */}
+            <div>
+              <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', marginBottom: 8 }}>Destinatarios</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {compartirEmails.map((em, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: '#F8F7F4', borderRadius: 5, border: '1px solid #E8E6E0' }}>
+                    <span style={{ flex: 1, fontSize: 12 }}>{em}</span>
+                    <button onClick={() => setCompartirEmails(prev => prev.filter((_, j) => j !== i))}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#CCC', fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
+                  </div>
+                ))}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    type="email"
+                    value={compartirNewEmail}
+                    onChange={e => setCompartirNewEmail(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && compartirNewEmail.trim()) {
+                        setCompartirEmails(prev => [...prev, compartirNewEmail.trim()])
+                        setCompartirNewEmail('')
+                      }
+                    }}
+                    placeholder="Añadir email…"
+                    style={{ flex: 1, padding: '7px 10px', fontSize: 12, border: '1px solid #E8E6E0', borderRadius: 5, fontFamily: 'inherit', outline: 'none' }}
+                  />
+                  <button
+                    onClick={() => { if (compartirNewEmail.trim()) { setCompartirEmails(prev => [...prev, compartirNewEmail.trim()]); setCompartirNewEmail('') } }}
+                    style={{ padding: '7px 14px', background: '#F0EEE8', border: '1px solid #E8E6E0', borderRadius: 5, fontSize: 12, cursor: 'pointer', color: '#555' }}
+                  >+ Añadir</button>
+                </div>
+              </div>
+            </div>
+
+            {/* PDF language */}
+            <div>
+              <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', marginBottom: 8 }}>PDF del contrato</p>
+              <div style={{ display: 'flex', gap: 16 }}>
+                {(['es', 'en', 'both'] as const).map(opt => (
+                  <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12 }}>
+                    <input type="radio" name="pdfLang" value={opt} checked={compartirPdfLang === opt} onChange={() => setCompartirPdfLang(opt)} style={{ accentColor: '#378ADD' }} />
+                    {opt === 'es' ? 'Español' : opt === 'en' ? 'English' : 'Ambos (ES + EN)'}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Email language */}
+            <div>
+              <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', marginBottom: 8 }}>Idioma del correo</p>
+              <div style={{ display: 'flex', gap: 16 }}>
+                {(['es', 'en'] as const).map(opt => (
+                  <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12 }}>
+                    <input type="radio" name="emailLang" value={opt} checked={compartirEmailLang === opt} onChange={() => setCompartirEmailLang(opt)} style={{ accentColor: '#378ADD' }} />
+                    {opt === 'es' ? 'Español' : 'English'}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Preview subject */}
+            <div style={{ background: '#F8F7F4', border: '1px solid #E8E6E0', borderRadius: 6, padding: '10px 14px' }}>
+              <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', marginBottom: 4 }}>Asunto del correo</p>
+              <p style={{ fontSize: 12, color: '#444', margin: 0 }}>
+                {compartirEmailLang === 'en'
+                  ? `Contract ${initial.numero}${proyectoNombre ? ` · ${proyectoNombre}` : ''}`
+                  : `Contrato ${initial.numero}${proyectoNombre ? ` · ${proyectoNombre}` : ''}`}
+              </p>
+            </div>
+
+            {compartirError && (
+              <p style={{ fontSize: 12, color: '#DC2626', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 5, padding: '8px 12px', margin: 0 }}>
+                {compartirError}
+              </p>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div style={{ padding: '14px 24px', borderTop: '1px solid #F0EEE8', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+            <button onClick={() => setShowCompartir(false)}
+              style={{ padding: '9px 18px', background: 'none', border: '1px solid #E8E6E0', borderRadius: 5, fontSize: 12, cursor: 'pointer', color: '#666' }}>
+              Cancelar
+            </button>
+            <button
+              onClick={handleCompartir}
+              disabled={compartirLoading || !compartirEmails.length}
+              style={{
+                padding: '9px 22px', background: compartirLoading ? '#AAA' : '#378ADD',
+                color: '#fff', border: 'none', borderRadius: 5,
+                fontSize: 12, fontWeight: 600, cursor: compartirLoading ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {compartirLoading ? 'Enviando…' : `↑ Enviar a ${compartirEmails.length} destinatario${compartirEmails.length !== 1 ? 's' : ''}`}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   )
 }
