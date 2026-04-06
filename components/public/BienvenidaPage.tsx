@@ -33,6 +33,8 @@ export default function BienvenidaPage({ nombreCliente, token, heroImage, proyec
   const [formError, setFormError]   = useState<string | null>(null)
   const [copied, setCopied]         = useState(false)
   const [teamPhotoIdx, setTeamPhotoIdx] = useState(0)
+  const [heroIdx, setHeroIdx]           = useState(0)
+  const [heroPrev, setHeroPrev]         = useState<number | null>(null)
 
   // Form state
   const [nombre,    setNombre]    = useState('')
@@ -47,6 +49,25 @@ export default function BienvenidaPage({ nombreCliente, token, heroImage, proyec
   useEffect(() => {
     const id = setInterval(() => setTeamPhotoIdx(i => (i + 1) % 2), 4000)
     return () => clearInterval(id)
+  }, [])
+
+  // Hero slideshow — starts after 5 s, then every 5 s
+  useEffect(() => {
+    if (proyectoImages.length < 2) return
+    const start = setTimeout(() => {
+      setHeroPrev(0)
+      setHeroIdx(1)
+      const id = setInterval(() => {
+        setHeroIdx(prev => {
+          const next = (prev + 1) % proyectoImages.length
+          setHeroPrev(prev)
+          return next
+        })
+      }, 5000)
+      return () => clearInterval(id)
+    }, 5000)
+    return () => clearTimeout(start)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Intersection observer for fade-in sections
@@ -187,6 +208,20 @@ export default function BienvenidaPage({ nombreCliente, token, heroImage, proyec
           50%       { transform: translateY(6px); opacity: 1; }
         }
         .fp-bounce { animation: bounce 2s ease-in-out infinite; }
+
+        /* Ken Burns zoom for hero images */
+        @keyframes kenBurns {
+          from { transform: scale(1);    }
+          to   { transform: scale(1.07); }
+        }
+        .fp-hero-active { animation: kenBurns 6s ease-out forwards; }
+
+        /* Hero project name label */
+        @keyframes fadeSlideUp {
+          from { opacity: 0; transform: translateY(8px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .fp-hero-label { animation: fadeSlideUp 0.6s ease forwards; }
       `}</style>
 
       {/* ── 1. HERO ───────────────────────────────────────────────────────────── */}
@@ -200,31 +235,57 @@ export default function BienvenidaPage({ nombreCliente, token, heroImage, proyec
         overflow: 'hidden',
         padding: '0 24px',
       }}>
-        {/* Background image */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={heroImage}
-          alt=""
-          style={{
-            position: 'absolute', inset: 0,
-            width: '100%', height: '100%',
-            objectFit: 'cover', objectPosition: 'center',
-          }}
-        />
+        {/* Background slideshow */}
+        {proyectoImages.map((p, i) => (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            key={p.url}
+            src={p.url}
+            alt=""
+            className={heroIdx === i ? 'fp-hero-active' : undefined}
+            style={{
+              position: 'absolute', inset: 0,
+              width: '100%', height: '100%',
+              objectFit: 'cover', objectPosition: 'center',
+              opacity: heroIdx === i ? 1 : 0,
+              transition: heroIdx === i ? 'opacity 1.4s ease' : 'opacity 1.4s ease 0s',
+              willChange: 'opacity, transform',
+            }}
+          />
+        ))}
+
         {/* Overlay gradient */}
         <div style={{
-          position: 'absolute', inset: 0,
-          background: 'linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.35) 50%, rgba(0,0,0,0.70) 100%)',
+          position: 'absolute', inset: 0, zIndex: 1,
+          background: 'linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.30) 50%, rgba(0,0,0,0.72) 100%)',
         }} />
 
+        {/* Project name label — bottom left */}
+        {proyectoImages[heroIdx] && heroIdx > 0 && (
+          <div
+            key={heroIdx}
+            className="fp-hero-label"
+            style={{
+              position: 'absolute', bottom: 60, left: 28, zIndex: 2,
+            }}
+          >
+            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', marginBottom: 3 }}>
+              {proyectoImages[heroIdx].tipologia ?? 'Project'}
+            </p>
+            <p style={{ fontSize: 14, fontWeight: 400, color: 'rgba(255,255,255,0.85)', letterSpacing: '0.01em' }}>
+              {proyectoImages[heroIdx].nombre}
+            </p>
+          </div>
+        )}
+
         {/* Logo — top */}
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '28px 28px', display: 'flex', justifyContent: 'center', zIndex: 2 }}>
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '28px 28px', display: 'flex', justifyContent: 'center', zIndex: 3 }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/FORMA_PRIMA_BLANCO.png" alt="Forma Prima" style={{ height: 44, opacity: 0.95 }} />
         </div>
 
         {/* Center content */}
-        <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', maxWidth: 560, padding: '80px 0 120px' }}>
+        <div style={{ position: 'relative', zIndex: 3, textAlign: 'center', maxWidth: 560, padding: '80px 0 120px' }}>
           <p style={{
             fontSize: 11, fontWeight: 600, letterSpacing: '0.2em',
             textTransform: 'uppercase', color: 'rgba(255,255,255,0.55)',
@@ -274,7 +335,7 @@ export default function BienvenidaPage({ nombreCliente, token, heroImage, proyec
         {/* Scroll indicator */}
         <div className="fp-bounce" style={{
           position: 'absolute', bottom: 28, left: '50%', transform: 'translateX(-50%)',
-          zIndex: 2, color: 'rgba(255,255,255,0.4)', fontSize: 20, lineHeight: 1,
+          zIndex: 3, color: 'rgba(255,255,255,0.4)', fontSize: 20, lineHeight: 1,
         }}>
           ↓
         </div>
@@ -451,89 +512,61 @@ export default function BienvenidaPage({ nombreCliente, token, heroImage, proyec
       )}
 
       {/* ── 5. SOCIOS ─────────────────────────────────────────────────────────── */}
-      <style>{`
-        .fp-team-banner {
-          position: relative;
-          width: 100%;
-          overflow: hidden;
-          background: #1A1A1A;
-          border-radius: 8px;
-          /* portrait images: give enough height so the bottom (people) shows */
-          height: 110vw;
-          max-height: 520px;
-        }
-        .fp-team-intro-block {
-          position: absolute;
-          /* mobile: text at top so people at bottom stay visible */
-          top: 0; left: 0; right: 0;
-          background: linear-gradient(to bottom, rgba(15,15,15,0.82) 0%, rgba(15,15,15,0.55) 70%, transparent 100%);
-          padding: 28px 24px 48px;
-          display: flex;
-          flex-direction: column;
-          justify-content: flex-start;
-        }
-        @media (min-width: 641px) {
-          .fp-team-banner {
-            height: 500px;
-            max-height: 500px;
-          }
-          .fp-team-intro-block {
-            /* desktop: text panel on the right */
-            top: 0; bottom: 0;
-            left: auto; right: 0;
-            width: 46%;
-            justify-content: center;
-            padding: clamp(28px, 5vw, 52px);
-            border-radius: 0 8px 8px 0;
-            background: rgba(15, 15, 15, 0.70);
-            backdrop-filter: blur(4px);
-            -webkit-backdrop-filter: blur(4px);
-          }
-        }
-      `}</style>
       <section style={{ background: '#F8F6F1', padding: 'clamp(60px, 8vw, 96px) 0' }}>
-        <div id="equipo" data-fade style={{ ...fadeStyle('equipo'), maxWidth: 860, margin: '0 auto' }}>
+        <div id="equipo" data-fade style={{ ...fadeStyle('equipo'), maxWidth: 860, margin: '0 auto', padding: '0 24px' }}>
 
-          {/* Photo banner + intro row */}
-          <div className="fp-team-banner" style={{ marginBottom: 48 }}>
-            {/* Crossfade slideshow — fills entire banner */}
-            {[
-              { src: '/P1074528 copy.jpg',                         alt: 'Gabriela Hidalgo y José Lora — Forma Prima', filter: 'grayscale(100%)' },
-              { src: '/9263BB2D-DDDF-47AD-9EEF-0985C56BC645.JPG', alt: 'Equipo Forma Prima en obra',                filter: 'none' },
-            ].map((photo, i) => (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                key={photo.src}
-                src={photo.src}
-                alt={photo.alt}
-                style={{
-                  position: 'absolute', inset: 0,
-                  width: '100%', height: '100%',
-                  objectFit: 'cover', objectPosition: 'center 65%',
-                  display: 'block',
-                  filter: photo.filter,
-                  opacity: teamPhotoIdx === i ? 1 : 0,
-                  transition: 'opacity 1.2s ease',
-                }}
-              />
-            ))}
+          {/* Team banner — image stacked above text, no overlap */}
+          <div style={{ borderRadius: 10, overflow: 'hidden', marginBottom: 48 }}>
 
-            {/* Intro text — transparent overlay */}
-            <div className="fp-team-intro-block">
+            {/* Crossfade slideshow — portrait images */}
+            <div style={{
+              position: 'relative',
+              width: '100%',
+              height: 'clamp(280px, 75vw, 440px)',
+              background: '#1A1A1A',
+              overflow: 'hidden',
+            }}>
+              {[
+                { src: '/P1074528 copy.jpg',                         alt: 'Gabriela Hidalgo y José Lora — Forma Prima', filter: 'grayscale(100%)' },
+                { src: '/9263BB2D-DDDF-47AD-9EEF-0985C56BC645.JPG', alt: 'Equipo Forma Prima en obra',                filter: 'none' },
+              ].map((photo, i) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={photo.src}
+                  src={photo.src}
+                  alt={photo.alt}
+                  style={{
+                    position: 'absolute', inset: 0,
+                    width: '100%', height: '100%',
+                    objectFit: 'cover', objectPosition: 'center 70%',
+                    display: 'block',
+                    filter: photo.filter,
+                    opacity: teamPhotoIdx === i ? 1 : 0,
+                    transition: 'opacity 1.2s ease',
+                  }}
+                />
+              ))}
+            </div>
+
+            {/* Text block — below image, fully opaque */}
+            <div style={{
+              background: '#1A1A1A',
+              padding: 'clamp(24px, 4vw, 40px) clamp(24px, 5vw, 48px)',
+            }}>
               <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#D85A30', marginBottom: 14, display: 'block' }}>
                 The team
               </span>
-              <h2 style={{ fontSize: 'clamp(20px, 3.5vw, 26px)', fontWeight: 200, color: '#fff', lineHeight: 1.35, marginBottom: 16 }}>
+              <h2 style={{ fontSize: 'clamp(20px, 3.5vw, 26px)', fontWeight: 200, color: '#fff', lineHeight: 1.35, marginBottom: 14 }}>
                 Who you will be working with
               </h2>
-              <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.65)', lineHeight: 1.75 }}>
+              <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.55)', lineHeight: 1.75, maxWidth: 560 }}>
                 Forma Prima is a deliberately small studio. Every project is handled personally by us — no hand-offs, no intermediaries.
               </p>
             </div>
           </div>
 
           {/* Individual cards */}
-          <div className="fp-socios-grid" style={{ padding: '0 24px' }}>
+          <div className="fp-socios-grid">
             {studio.socios.map(s => (
               <div key={s.nombre} style={{
                 background: '#fff',
