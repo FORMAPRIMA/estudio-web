@@ -756,7 +756,7 @@ export default function ContratoDetalle({
             </div>
             <Field label="Código de proyecto" value={proyectoCodigo} onChange={set(setProyectoCodigo, 'proyecto_codigo')} disabled={isReadonly} mono />
             <div style={{ gridColumn: '1 / 3' }}>
-              <Field label="Dirección / Emplazamiento" value={proyectoDireccion} onChange={set(setProyectoDireccion, 'proyecto_direccion')} disabled={isReadonly} />
+              <Field label="Dirección / Emplazamiento" value={proyectoDireccion} onChange={set(setProyectoDireccion, 'proyecto_direccion')} />
             </div>
             <div>
               <span style={LBL}>Tipo de proyecto</span>
