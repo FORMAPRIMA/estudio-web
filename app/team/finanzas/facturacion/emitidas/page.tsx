@@ -51,9 +51,9 @@ export default async function Page({
     const { data: f } = await admin
       .from('facturas')
       .select(`
-        id, concepto, monto, proyecto_id,
+        id, concepto, monto, proyecto_id, clientes_ids,
         proyectos(
-          id, nombre, codigo,
+          id, nombre, codigo, direccion,
           clientes!cliente_id(
             id, nombre, apellidos, empresa,
             nif_cif, direccion_facturacion, ciudad, codigo_postal, email, email_cc
@@ -64,16 +64,29 @@ export default async function Page({
       .single()
 
     if (f) {
+      type ClienteRow = {
+        id: string; nombre: string; apellidos: string | null; empresa: string | null
+        nif_cif: string | null; direccion_facturacion: string | null
+        ciudad: string | null; codigo_postal: string | null; email: string | null; email_cc: string | null
+      }
       const proyecto = f.proyectos as unknown as {
         id: string; nombre: string; codigo: string | null; direccion: string | null
-        clientes: {
-          id: string; nombre: string; apellidos: string | null; empresa: string | null
-          nif_cif: string | null; direccion_facturacion: string | null
-          ciudad: string | null; codigo_postal: string | null; email: string | null; email_cc: string | null
-        } | null
+        clientes: ClienteRow | null
       } | null
 
-      const cliente = proyecto?.clientes ?? null
+      // Prefer the client explicitly selected for this factura (clientes_ids[0])
+      // over the project's default primary client
+      const clientesIds = (f as Record<string, unknown>).clientes_ids as string[] | null
+      let cliente: ClienteRow | null = proyecto?.clientes ?? null
+
+      if (clientesIds && clientesIds.length > 0) {
+        const { data: selectedCliente } = await admin
+          .from('clientes')
+          .select('id, nombre, apellidos, empresa, nif_cif, direccion_facturacion, ciudad, codigo_postal, email, email_cc')
+          .eq('id', clientesIds[0])
+          .single()
+        if (selectedCliente) cliente = selectedCliente as ClienteRow
+      }
       const clienteNombreCompleto = cliente
         ? [cliente.nombre, cliente.apellidos].filter(Boolean).join(' ')
         : ''
