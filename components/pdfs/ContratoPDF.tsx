@@ -814,8 +814,16 @@ export function ContratoPDF({ data }: { data: ContratoPDFData }) {
           <View style={s.pagoTable}>
             {data.honorarios.map((h, i) => {
               // Translate seccion (service label) and descripcion (milestone label) when lang=en
-              const seccionStr    = lang === 'en'
-                ? (SERVICIOS_CONFIG_EN[h.seccion as ServicioId]?.label ?? PAGO_LABEL_EN[h.seccion] ?? h.seccion)
+              const seccionStr = lang === 'en'
+                ? (() => {
+                    // Match by label to get the service id, then look up EN translation
+                    const srv = data.servicios_contrato.find(s => s.label === h.seccion)
+                    if (srv) {
+                      const dbEN = data.plantilla_en?.[srv.id]
+                      return dbEN?.label_en || SERVICIOS_CONFIG_EN[srv.id as ServicioId]?.label || h.seccion
+                    }
+                    return PAGO_LABEL_EN[h.seccion] ?? h.seccion
+                  })()
                 : h.seccion
               const descripcionStr = lang === 'en'
                 ? (PAGO_LABEL_EN[h.descripcion] ?? h.descripcion)
