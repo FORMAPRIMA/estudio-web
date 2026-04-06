@@ -578,9 +578,14 @@ function EquipoTab({ allMembers: initialMembers }: { allMembers: TeamMember[] })
   const [, startTransition]           = useTransition()
 
   // ── Edit form state ──
-  const [editForm, setEditForm] = useState<Partial<TeamMember> & { newEmail?: string; newPassword?: string }>({})
+  const [editForm, setEditForm] = useState<Partial<TeamMember> & { newEmail?: string }>({})
   const [editMsg,  setEditMsg]  = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
   const [saving,   setSaving]   = useState(false)
+
+  // ── Password change state ──
+  const [pwForm,   setPwForm]   = useState<{ pass: string; confirm: string }>({ pass: '', confirm: '' })
+  const [pwMsg,    setPwMsg]    = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
+  const [pwSaving, setPwSaving] = useState(false)
 
   // ── Avatar upload ──
   const avatarInputRef = useRef<HTMLInputElement>(null)
@@ -621,9 +626,10 @@ function EquipoTab({ allMembers: initialMembers }: { allMembers: TeamMember[] })
       salario_mensual:    m.salario_mensual ?? undefined,
       seniority:          m.seniority ?? '',
       newEmail:           m.email,
-      newPassword:        '',
     })
     setEditMsg(null)
+    setPwForm({ pass: '', confirm: '' })
+    setPwMsg(null)
   }
 
   const handleSave = async (m: TeamMember) => {
@@ -656,12 +662,6 @@ function EquipoTab({ allMembers: initialMembers }: { allMembers: TeamMember[] })
       if ('error' in res2) { setEditMsg({ type: 'err', text: res2.error }); setSaving(false); return }
     }
 
-    // Update password if provided
-    if (editForm.newPassword && editForm.newPassword.length >= 6) {
-      const res3 = await resetTeamMemberPassword(m.id, editForm.newPassword)
-      if ('error' in res3) { setEditMsg({ type: 'err', text: res3.error }); setSaving(false); return }
-    }
-
     const updated: TeamMember = {
       ...m,
       nombre:             (editForm.nombre ?? m.nombre).trim(),
@@ -679,6 +679,18 @@ function EquipoTab({ allMembers: initialMembers }: { allMembers: TeamMember[] })
     setMembers(prev => prev.map(x => x.id === m.id ? updated : x))
     setEditMsg({ type: 'ok', text: 'Guardado correctamente.' })
     setSaving(false)
+  }
+
+  const handlePasswordChange = async (m: TeamMember) => {
+    if (!pwForm.pass) { setPwMsg({ type: 'err', text: 'Introduce una contraseña.' }); return }
+    if (pwForm.pass.length < 6) { setPwMsg({ type: 'err', text: 'Mínimo 6 caracteres.' }); return }
+    if (pwForm.pass !== pwForm.confirm) { setPwMsg({ type: 'err', text: 'Las contraseñas no coinciden.' }); return }
+    setPwSaving(true); setPwMsg(null)
+    const res = await resetTeamMemberPassword(m.id, pwForm.pass)
+    if ('error' in res) { setPwMsg({ type: 'err', text: res.error }); setPwSaving(false); return }
+    setPwForm({ pass: '', confirm: '' })
+    setPwMsg({ type: 'ok', text: 'Contraseña actualizada correctamente.' })
+    setPwSaving(false)
   }
 
   const handleBlock = async (m: TeamMember) => {
@@ -921,7 +933,6 @@ function EquipoTab({ allMembers: initialMembers }: { allMembers: TeamMember[] })
                             { key: 'fecha_nacimiento',   label: 'Fecha nacimiento', type: 'date' },
                             { key: 'fecha_contratacion', label: 'Fecha contratación', type: 'date' },
                             { key: 'newEmail',           label: 'Email' },
-                            { key: 'newPassword',        label: 'Nueva contraseña', type: 'password', ph: 'Mín. 6 caracteres' },
                             { key: 'salario_mensual',    label: 'Salario mensual (costo empresa)', type: 'number', ph: '0' },
                           ].map(f => (
                             <div key={f.key}>
@@ -980,7 +991,7 @@ function EquipoTab({ allMembers: initialMembers }: { allMembers: TeamMember[] })
                         </div>
                         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                           <button onClick={() => handleSave(m)} disabled={saving} style={{ ...btnPrimary, opacity: saving ? 0.5 : 1 }}>
-                            {saving ? 'Guardando…' : 'Guardar'}
+                            {saving ? 'Guardando…' : 'Guardar perfil'}
                           </button>
                           <button onClick={() => handleBlock(m)}
                             style={{ ...btnGhost, color: m.blocked ? '#1D9E75' : '#C04828', borderColor: m.blocked ? '#1D9E7540' : '#F0D0C8' }}>
@@ -992,6 +1003,51 @@ function EquipoTab({ allMembers: initialMembers }: { allMembers: TeamMember[] })
                               {editMsg.text}
                             </p>
                           )}
+                        </div>
+
+                        {/* ── Password section ── */}
+                        <div style={{ marginTop: 20, paddingTop: 20, borderTop: '1px solid #ECEAE6' }}>
+                          <p style={{ fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#BBB', fontWeight: 300, marginBottom: 14 }}>
+                            Cambiar contraseña
+                          </p>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 12 }} className="ap-expand-grid">
+                            <div>
+                              <label style={labelSt}>Nueva contraseña</label>
+                              <input
+                                type="password"
+                                value={pwForm.pass}
+                                onChange={e => setPwForm(v => ({ ...v, pass: e.target.value }))}
+                                placeholder="Mín. 6 caracteres"
+                                style={inputSt}
+                                autoComplete="new-password"
+                              />
+                            </div>
+                            <div>
+                              <label style={labelSt}>Confirmar contraseña</label>
+                              <input
+                                type="password"
+                                value={pwForm.confirm}
+                                onChange={e => setPwForm(v => ({ ...v, confirm: e.target.value }))}
+                                placeholder="Repite la contraseña"
+                                style={inputSt}
+                                autoComplete="new-password"
+                              />
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                            <button
+                              onClick={() => handlePasswordChange(m)}
+                              disabled={pwSaving}
+                              style={{ ...btnPrimary, opacity: pwSaving ? 0.5 : 1 }}
+                            >
+                              {pwSaving ? 'Guardando…' : 'Cambiar contraseña'}
+                            </button>
+                            {pwMsg && (
+                              <p style={{ fontSize: 11, fontWeight: 300, color: pwMsg.type === 'ok' ? '#1D9E75' : '#C04828' }}>
+                                {pwMsg.text}
+                              </p>
+                            )}
+                          </div>
                         </div>
                       </td>
                     </tr>
