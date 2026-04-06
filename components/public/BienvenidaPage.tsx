@@ -453,41 +453,36 @@ export default function BienvenidaPage({ nombreCliente, token, heroImage, proyec
       {/* ── 5. SOCIOS ─────────────────────────────────────────────────────────── */}
       <style>{`
         .fp-team-banner {
+          position: relative;
+          width: 100%;
+          overflow: hidden;
+          background: #1A1A1A;
+          min-height: 320px;
+          border-radius: 8px;
+        }
+        .fp-team-intro-block {
+          position: absolute;
+          bottom: 0; left: 0; right: 0;
+          background: rgba(20, 20, 20, 0.72);
+          backdrop-filter: blur(6px);
+          -webkit-backdrop-filter: blur(6px);
+          padding: 28px 24px 32px;
           display: flex;
           flex-direction: column;
+          justify-content: flex-end;
         }
         @media (min-width: 641px) {
           .fp-team-banner {
-            display: grid;
-            grid-template-columns: minmax(0,1fr) minmax(0,1fr);
+            min-height: 420px;
           }
-        }
-        .fp-team-slide {
-          position: relative;
-          width: 100%;
-          aspect-ratio: 4/3;
-          overflow: hidden;
-          background: #1A1A1A;
-        }
-        @media (min-width: 641px) {
-          .fp-team-slide {
-            aspect-ratio: unset;
-            height: 100%;
-            min-height: 360px;
-            border-radius: 8px 0 0 8px;
-          }
-        }
-        .fp-team-intro-block {
-          background: #1A1A1A;
-          padding: 28px 24px;
-          display: flex;
-          flex-direction: column;
-          justify-content: center;
-        }
-        @media (min-width: 641px) {
           .fp-team-intro-block {
+            top: 0; bottom: 0;
+            left: auto; right: 0;
+            width: 46%;
+            justify-content: center;
             padding: clamp(28px, 5vw, 52px);
             border-radius: 0 8px 8px 0;
+            background: rgba(20, 20, 20, 0.68);
           }
         }
       `}</style>
@@ -496,39 +491,37 @@ export default function BienvenidaPage({ nombreCliente, token, heroImage, proyec
 
           {/* Photo banner + intro row */}
           <div className="fp-team-banner" style={{ marginBottom: 48 }}>
-            {/* Crossfade slideshow */}
-            <div className="fp-team-slide">
-              {[
-                { src: '/P1074528 copy.jpg',                                  alt: 'Gabriela Hidalgo y José Lora — Forma Prima', filter: 'grayscale(100%)' },
-                { src: '/9263BB2D-DDDF-47AD-9EEF-0985C56BC645.JPG',           alt: 'Equipo Forma Prima en obra',                filter: 'none' },
-              ].map((photo, i) => (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  key={photo.src}
-                  src={photo.src}
-                  alt={photo.alt}
-                  style={{
-                    position: 'absolute', inset: 0,
-                    width: '100%', height: '100%',
-                    objectFit: 'cover', objectPosition: 'center top',
-                    display: 'block',
-                    filter: photo.filter,
-                    opacity: teamPhotoIdx === i ? 1 : 0,
-                    transition: 'opacity 1.2s ease',
-                  }}
-                />
-              ))}
-            </div>
+            {/* Crossfade slideshow — fills entire banner */}
+            {[
+              { src: '/P1074528 copy.jpg',                         alt: 'Gabriela Hidalgo y José Lora — Forma Prima', filter: 'grayscale(100%)' },
+              { src: '/9263BB2D-DDDF-47AD-9EEF-0985C56BC645.JPG', alt: 'Equipo Forma Prima en obra',                filter: 'none' },
+            ].map((photo, i) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={photo.src}
+                src={photo.src}
+                alt={photo.alt}
+                style={{
+                  position: 'absolute', inset: 0,
+                  width: '100%', height: '100%',
+                  objectFit: 'cover', objectPosition: 'center top',
+                  display: 'block',
+                  filter: photo.filter,
+                  opacity: teamPhotoIdx === i ? 1 : 0,
+                  transition: 'opacity 1.2s ease',
+                }}
+              />
+            ))}
 
-            {/* Intro text */}
+            {/* Intro text — transparent overlay */}
             <div className="fp-team-intro-block">
-              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#D85A30', marginBottom: 16, display: 'block' }}>
+              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#D85A30', marginBottom: 14, display: 'block' }}>
                 The team
               </span>
-              <h2 style={{ fontSize: 'clamp(20px, 3.5vw, 28px)', fontWeight: 200, color: '#fff', lineHeight: 1.35, marginBottom: 20 }}>
+              <h2 style={{ fontSize: 'clamp(20px, 3.5vw, 26px)', fontWeight: 200, color: '#fff', lineHeight: 1.35, marginBottom: 16 }}>
                 Who you will be working with
               </h2>
-              <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.55)', lineHeight: 1.75 }}>
+              <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.65)', lineHeight: 1.75 }}>
                 Forma Prima is a deliberately small studio. Every project is handled personally by us — no hand-offs, no intermediaries.
               </p>
             </div>
