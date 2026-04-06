@@ -238,6 +238,7 @@ export interface ServicioPlantillaData {
   entregables:     { grupo: string; items: string[] }[]
   semanas_default: string
   pago:            { label: string; pct: number }[]
+  notas?:          string
 }
 
 /**

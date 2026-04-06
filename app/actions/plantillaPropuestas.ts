@@ -27,7 +27,7 @@ export async function getPlantillaServicios(): Promise<ServicioEntry[]> {
   const admin = createAdminClient()
   const { data, error: selectErr } = await admin
     .from('propuestas_servicios_plantilla')
-    .select('id, label, texto, entregables, semanas_default, pago, label_en, texto_en, entregables_en, semanas_default_en, pago_en')
+    .select('id, label, texto, entregables, semanas_default, pago, notas, label_en, texto_en, entregables_en, semanas_default_en, pago_en')
 
   const rows = data ?? []
 
@@ -48,6 +48,7 @@ export async function getPlantillaServicios(): Promise<ServicioEntry[]> {
       tipo:      cfg.tipo,
       pem_split: cfg.pem_split,
       ...merged,
+      notas:              db?.notas               ?? '',
       label_en:           db?.label_en           ?? null,
       texto_en:           db?.texto_en            ?? null,
       entregables_en:     db?.entregables_en      ?? null,
@@ -69,6 +70,7 @@ export async function getPlantillaServicios(): Promise<ServicioEntry[]> {
       entregables:         row.entregables ?? [],
       semanas_default:     row.semanas_default ?? '',
       pago:                row.pago ?? [],
+      notas:               row.notas ?? '',
       label_en:            row.label_en           ?? null,
       texto_en:            row.texto_en            ?? null,
       entregables_en:      row.entregables_en      ?? null,
@@ -94,7 +96,7 @@ export async function savePlantillaServicio(
     // Try UPDATE first; if no row exists yet, INSERT with required columns
     const { data: updated, error: updateErr } = await admin
       .from('propuestas_servicios_plantilla')
-      .update({ label: data.label, texto: data.texto, entregables: data.entregables, semanas_default: data.semanas_default, pago: data.pago })
+      .update({ label: data.label, texto: data.texto, entregables: data.entregables, semanas_default: data.semanas_default, pago: data.pago, notas: data.notas ?? null })
       .eq('id', id)
       .select('id')
     if (updateErr) return { error: updateErr.message }

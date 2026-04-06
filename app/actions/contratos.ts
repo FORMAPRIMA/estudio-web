@@ -266,6 +266,7 @@ export async function createContratoFromPropuesta(
         importe:     breakdown[sid]      ?? 0,
         semanas:     propuesta.semanas?.[sid] ?? entry?.semanas_default ?? '',
         pago:        entry?.pago         ?? [],
+        notas:       entry?.notas        ?? '',
       }
     })
 

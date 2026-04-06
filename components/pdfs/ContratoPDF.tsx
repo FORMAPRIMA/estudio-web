@@ -240,6 +240,7 @@ export interface ServicioContrato {
   importe:     number
   semanas:     string
   pago:        { label: string; pct: number }[]
+  notas?:      string
 }
 
 export interface ContratoHonorario {
@@ -710,11 +711,20 @@ export function ContratoPDF({ data }: { data: ContratoPDFData }) {
             const srvTexto     = dbEN?.texto_en   || cfgEN?.texto         || srv.texto
             const srvEntregs   = (dbEN?.entregables_en && dbEN.entregables_en.length > 0) ? dbEN.entregables_en : (cfgEN?.entregables ?? srv.entregables)
             const srvSemanas   = dbEN?.semanas_default_en || cfgEN?.semanas_default || srv.semanas
+            const srvNotas = srv.notas
             return (
               <View key={srv.id} wrap={false}>
-                <Text style={{ ...s.subClauseTitle, marginTop: i === 0 ? 6 : 14 }}>
-                  {srvLabel}
-                </Text>
+                {/* Title + duration inline */}
+                <View style={{ flexDirection: 'row', alignItems: 'baseline', marginTop: i === 0 ? 6 : 14, marginBottom: 2 }}>
+                  <Text style={{ ...s.subClauseTitle, marginTop: 0, flex: 1 }}>
+                    {srvLabel}
+                  </Text>
+                  {!!srvSemanas && (
+                    <Text style={{ fontSize: 7.5, color: C.mid, marginLeft: 8, fontStyle: 'italic' }}>
+                      {T.plazoLabel}{srvSemanas}
+                    </Text>
+                  )}
+                </View>
                 {!!srvTexto && (
                   <Text style={s.bodyText}>{srvTexto}</Text>
                 )}
@@ -728,10 +738,9 @@ export function ContratoPDF({ data }: { data: ContratoPDFData }) {
                     ))}
                   </View>
                 ))}
-                {!!srvSemanas && (
-                  <Text style={{ ...s.indented, marginTop: 4, color: C.mid }}>
-                    <Text style={{ fontFamily: 'Helvetica-Bold', color: C.ink }}>{T.plazoLabel}</Text>
-                    {srvSemanas}
+                {!!srvNotas && (
+                  <Text style={{ ...s.bodyText, marginTop: 5, fontStyle: 'italic', color: C.mid }}>
+                    {srvNotas}
                   </Text>
                 )}
               </View>

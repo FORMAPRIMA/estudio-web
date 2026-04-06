@@ -61,7 +61,8 @@ function ServicioEditor({
   const [grupos,  setGrupos]  = useState(
     entry.entregables.map(g => ({ grupo: g.grupo, items: [...g.items] }))
   )
-  const [pago, setPago] = useState(entry.pago.map(p => ({ ...p })))
+  const [pago,  setPago]  = useState(entry.pago.map(p => ({ ...p })))
+  const [notas, setNotas] = useState(entry.notas ?? '')
 
   // EN state
   const [labelEN,   setLabelEN]   = useState(entry.label_en ?? '')
@@ -158,12 +159,12 @@ function ServicioEditor({
     setSaveOk(false); setError(null)
     startSave(async () => {
       const result = await savePlantillaServicio(entry.id, {
-        label, texto, entregables: grupos, semanas_default: semanas, pago,
+        label, texto, entregables: grupos, semanas_default: semanas, pago, notas,
       })
       if ('error' in result) { setError(result.error) }
       else {
         setSaveOk(true)
-        onSaved(entry.id, { label, texto, entregables: grupos, semanas_default: semanas, pago })
+        onSaved(entry.id, { label, texto, entregables: grupos, semanas_default: semanas, pago, notas })
         setTimeout(() => setSaveOk(false), 2500)
         // Auto-translate only if user has not manually edited EN
         if (!enModified) {
@@ -339,6 +340,20 @@ function ServicioEditor({
               </div>
             )}
           </div>
+        </div>
+
+        {/* Notas de contrato */}
+        <div>
+          <FieldLabel>Notas del contrato</FieldLabel>
+          <div style={{ fontSize: 11, color: '#BBB', marginBottom: 6, lineHeight: 1.5 }}>
+            Texto que aparece en el contrato tras los entregables de este servicio.
+          </div>
+          <textarea
+            style={{ ...inp(), minHeight: 80, resize: 'vertical' as const, lineHeight: 1.6 }}
+            value={notas}
+            onChange={e => setNotas(e.target.value)}
+            placeholder="Ej. Los planos se entregarán en formato DWG y PDF…"
+          />
         </div>
 
         {/* Actions ES */}
