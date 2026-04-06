@@ -98,6 +98,7 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
   const [estadoObras, setEstadoObras] = useState('')
   const [instrucciones, setInstrucciones] = useState('')
   const [floorfyUrl, setFloorfyUrl] = useState('')
+  const [aiLoading, setAiLoading] = useState(false)
   const [compartirCliente, setCompartirCliente] = useState(true)
   const [compartirConstructor, setCompartirConstructor] = useState(true)
 
@@ -335,6 +336,8 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
+    <>
+    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     <div
       style={{
         position: 'fixed', inset: 0,
@@ -525,7 +528,12 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
 
               {/* Estado de obras */}
               <div>
-                <label style={S.label}>Estado de obras</label>
+                <label style={S.label}>
+                  Estado de obras{' '}
+                  <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: '#BBB' }}>
+                    (Describe qué capítulos se están ejecutando)
+                  </span>
+                </label>
                 <textarea
                   rows={4}
                   value={estadoObras}
@@ -537,7 +545,44 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
 
               {/* Instrucciones */}
               <div>
-                <label style={S.label}>Instrucciones</label>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <label style={{ ...S.label, marginBottom: 0 }}>Instrucciones</label>
+                  <button
+                    type="button"
+                    disabled={aiLoading || !instrucciones.trim()}
+                    onClick={async () => {
+                      setAiLoading(true)
+                      try {
+                        const res = await fetch('/api/profesionalizar-instrucciones', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ notas: instrucciones }),
+                        })
+                        const data = await res.json() as { texto?: string; error?: string }
+                        if (data.texto) setInstrucciones(data.texto)
+                      } finally {
+                        setAiLoading(false)
+                      }
+                    }}
+                    style={{
+                      fontSize: 10, fontWeight: 600, padding: '4px 10px',
+                      background: aiLoading ? '#F0EDE8' : '#1A1A1A',
+                      color: aiLoading ? '#AAA' : '#fff',
+                      border: 'none', borderRadius: 4, cursor: aiLoading ? 'not-allowed' : 'pointer',
+                      letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 5,
+                      transition: 'background 0.15s',
+                    }}
+                  >
+                    {aiLoading ? (
+                      <>
+                        <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', border: '2px solid #CCC', borderTopColor: '#888', animation: 'spin 0.7s linear infinite' }} />
+                        Procesando…
+                      </>
+                    ) : (
+                      <>✦ Profesionalizar con IA</>
+                    )}
+                  </button>
+                </div>
                 <textarea
                   rows={5}
                   value={instrucciones}
@@ -878,6 +923,7 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
         )}
       </div>
     </div>
+    </>
   )
 }
 
