@@ -500,7 +500,7 @@ export function ContratoPDF({ data }: { data: ContratoPDFData }) {
     locationPrep: `located at ${propiedadAddr}`,
     clientSuffix: '(hereinafter, the «CLIENT»).',
     partyTwoLabel: 'And, on the other part',
-    studioParty: `the company ${STUDIO.razon_social} (trading as ${STUDIO.nombre_comercial}), Tax ID ${STUDIO.nif}, domiciled at ${STUDIO.domicilio}, represented by Ms. ${STUDIO.rep_nombre}, of legal age, with ID ${STUDIO.rep_dni}, ${STUDIO.rep_titulo} (hereinafter, the «STUDIO»).`,
+    studioParty: `the company ${STUDIO.razon_social} (trading as ${STUDIO.nombre_comercial}), Tax ID ${STUDIO.nif}, domiciled at ${STUDIO.domicilio}, represented by Ms. ${STUDIO.rep_nombre}, of legal age, with ID ${STUDIO.rep_dni}, registered architect COAM 25284 (hereinafter, the «STUDIO»).`,
     bothParties: 'Both parties having the legal capacity required to grant and execute this agreement (hereinafter, the «Agreement»).',
     manifiestan: 'Recitals',
     m1: `That the Studio offers its professional services of ${serviceNames} (hereinafter, the «Services»), whose deliverables are defined in clause one of this Agreement.`,
@@ -759,10 +759,10 @@ export function ContratoPDF({ data }: { data: ContratoPDFData }) {
                 {hasInteriorismo && (
                   <>
                     <Text style={{ ...s.subClauseTitle, marginTop: 10 }}>
-                      {T.interiorismoTitle(interiorismoNames.join(' y '))}
+                      {T.interiorismoTitle(interiorismoNames.join(lang === 'en' ? ' and ' : ' y '))}
                     </Text>
                     <Text style={s.bodyText}>
-                      {T.interiorismoCriteria(interiorismoNames.join(' y '))}
+                      {T.interiorismoCriteria(interiorismoNames.join(lang === 'en' ? ' and ' : ' y '))}
                     </Text>
                   </>
                 )}
@@ -804,13 +804,13 @@ export function ContratoPDF({ data }: { data: ContratoPDFData }) {
                     )}
                     <Text style={s.pagoLabel}>{descripcionStr}</Text>
                   </View>
-                  <Text style={s.pagoImporte}>{fmtEur(h.importe)} + IVA</Text>
+                  <Text style={s.pagoImporte}>{fmtEur(h.importe)} + {lang === 'en' ? 'VAT' : 'IVA'}</Text>
                 </View>
               )
             })}
             <View wrap={false} style={s.totalRow}>
               <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: C.hInk }}>{T.totalHonorarios}</Text>
-              <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: C.brand }}>{fmtEur(totalHonorarios)} + IVA</Text>
+              <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: C.brand }}>{fmtEur(totalHonorarios)} + {lang === 'en' ? 'VAT' : 'IVA'}</Text>
             </View>
           </View>
 
