@@ -541,19 +541,25 @@ export default function BienvenidaPage({ nombreCliente, token, heroImage, proyec
           <h2 style={{ fontSize: 'clamp(20px, 4.5vw, 28px)', fontWeight: 200, color: '#fff', marginBottom: 32, lineHeight: 1.3 }}>
             What it feels like to work with Forma Prima.
           </h2>
-          {/* YouTube embed — replace VIDEO_ID with real ID when available */}
+          {/* YouTube Shorts embed — vertical 9/16 */}
           <div style={{
-            position: 'relative', paddingBottom: '56.25%', height: 0,
-            borderRadius: 8, overflow: 'hidden', background: '#2A2A2A',
+            position: 'relative',
+            width: '100%',
+            maxWidth: 360,
+            margin: '0 auto',
+            paddingBottom: 'min(640px, 177.78%)',
+            height: 0,
+            borderRadius: 12,
+            overflow: 'hidden',
+            background: '#2A2A2A',
           }}>
-            <div style={{
-              position: 'absolute', inset: 0,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              flexDirection: 'column', gap: 12,
-            }}>
-              <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: 13 }}>Video coming soon</p>
-              <p style={{ color: 'rgba(255,255,255,0.12)', fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase' }}>YouTube embed</p>
-            </div>
+            <iframe
+              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none' }}
+              src="https://www.youtube.com/embed/H2oe26E1zI8?rel=0&modestbranding=1&playsinline=1"
+              title="Forma Prima — así es trabajar con nosotros"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
           </div>
         </div>
       </section>
