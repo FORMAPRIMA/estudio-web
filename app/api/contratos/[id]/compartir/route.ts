@@ -97,9 +97,9 @@ export async function POST(
       })
     }
 
-    // Client name
-    const clientName = contrato.cliente_empresa
-      || [contrato.cliente_nombre, contrato.cliente_apellidos].filter(Boolean).join(' ')
+    // Always use personal name, not company
+    const clientName = [contrato.cliente_nombre, contrato.cliente_apellidos].filter(Boolean).join(' ')
+      || contrato.cliente_empresa
       || 'Cliente'
 
     const projectLabel = contrato.proyecto_nombre
