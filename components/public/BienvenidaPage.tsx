@@ -444,16 +444,67 @@ export default function BienvenidaPage({ nombreCliente, token, heroImage, proyec
       )}
 
       {/* ── 5. SOCIOS ─────────────────────────────────────────────────────────── */}
-      <section style={{ background: '#F8F6F1', padding: 'clamp(60px, 8vw, 96px) 24px' }}>
+      <section style={{ background: '#F8F6F1', padding: 'clamp(60px, 8vw, 96px) 0' }}>
+        {/* Team photo — full bleed on mobile, contained on desktop */}
         <div id="equipo" data-fade style={{ ...fadeStyle('equipo'), maxWidth: 860, margin: '0 auto' }}>
-          <span className="fp-section-label">The team</span>
-          <h2 style={{ fontSize: 'clamp(22px, 5vw, 30px)', fontWeight: 300, marginBottom: 8 }}>
-            Who you will be working with
-          </h2>
-          <p style={{ fontSize: 14, color: '#888', marginBottom: 0, lineHeight: 1.6 }}>
-            Forma Prima is a deliberately small studio. Every project is handled personally by us — no hand-offs.
-          </p>
-          <div className="fp-socios-grid">
+          {/* Photo + intro row */}
+          <div className="fp-team-grid" style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)',
+            gap: 0,
+            marginBottom: 48,
+          }}>
+            <style>{`
+              @media (max-width: 640px) {
+                .fp-team-grid { grid-template-columns: 1fr !important; }
+                .fp-team-photo { max-height: 72vw !important; border-radius: 0 !important; }
+                .fp-team-intro { padding: 28px 24px !important; }
+              }
+            `}</style>
+            {/* Photo */}
+            <div className="fp-team-photo" style={{
+              overflow: 'hidden',
+              maxHeight: 440,
+              background: '#1A1A1A',
+              borderRadius: '8px 0 0 8px',
+            }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/P1074528 copy.jpg"
+                alt="Gabriela Hidalgo y José Lora — Forma Prima"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  objectPosition: 'center top',
+                  display: 'block',
+                  filter: 'grayscale(100%)',
+                }}
+              />
+            </div>
+            {/* Intro text */}
+            <div className="fp-team-intro" style={{
+              background: '#1A1A1A',
+              padding: 'clamp(28px, 5vw, 52px)',
+              borderRadius: '0 8px 8px 0',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+            }}>
+              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#D85A30', marginBottom: 16, display: 'block' }}>
+                The team
+              </span>
+              <h2 style={{ fontSize: 'clamp(20px, 3.5vw, 28px)', fontWeight: 200, color: '#fff', lineHeight: 1.35, marginBottom: 20 }}>
+                Who you will be working with
+              </h2>
+              <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.55)', lineHeight: 1.75 }}>
+                Forma Prima is a deliberately small studio. Every project is handled personally by us — no hand-offs, no intermediaries.
+              </p>
+            </div>
+          </div>
+
+          {/* Individual cards */}
+          <div className="fp-socios-grid" style={{ padding: '0 24px' }}>
             {studio.socios.map(s => (
               <div key={s.nombre} style={{
                 background: '#fff',
