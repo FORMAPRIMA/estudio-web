@@ -77,16 +77,35 @@ export default async function DashboardPage() {
       autor_nombre:    a.autor?.nombre ?? null,
     }))
 
-  // ── Facturas cobrables (solo partners) ───────────────────────────────────
+  // ── Facturas cobrables + pendientes de pago (solo partners) ─────────────
   let facturasCobrables: FacturaCobrable[] = []
+  let facturasPendientes: import('@/components/team/dashboard/AvisosStrip').FacturaPendiente[] = []
+
   if (profile.rol === 'fp_partner') {
     const admin = createAdminClient()
-    const { data: cobrables } = await admin
-      .from('facturas')
-      .select('id, concepto, monto, proyecto_id, proyectos(id, nombre, codigo)')
-      .eq('status', 'cobrable')
-      .is('factura_emitida_id', null)
-      .order('created_at')
+
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - 14)
+    const cutoffIso = cutoff.toISOString().split('T')[0]
+
+    const [{ data: cobrables }, { data: pendientes }] = await Promise.all([
+      admin
+        .from('facturas')
+        .select('id, concepto, monto, proyecto_id, proyectos(id, nombre, codigo)')
+        .eq('status', 'cobrable')
+        .is('factura_emitida_id', null)
+        .order('created_at'),
+      admin
+        .from('facturas_emitidas')
+        .select(`
+          id, numero_completo, fecha_emision, cliente_nombre, cliente_contacto,
+          cliente_id, proyecto_nombre, total,
+          clientes(id, email, email_cc)
+        `)
+        .eq('estado', 'enviada')
+        .lte('fecha_emision', cutoffIso)
+        .order('fecha_emision', { ascending: true }),
+    ])
 
     facturasCobrables = (cobrables ?? []).map((f: any) => ({
       id:              f.id,
@@ -96,6 +115,24 @@ export default async function DashboardPage() {
       proyecto_nombre: f.proyectos?.nombre ?? '—',
       proyecto_codigo: f.proyectos?.codigo ?? null,
     }))
+
+    const hoy = new Date()
+    facturasPendientes = (pendientes ?? []).map((f: any) => {
+      const emision = new Date(f.fecha_emision)
+      const dias = Math.floor((hoy.getTime() - emision.getTime()) / (1000 * 60 * 60 * 24))
+      return {
+        id:              f.id,
+        numero_completo: f.numero_completo,
+        cliente_nombre:  f.cliente_nombre ?? '—',
+        cliente_contacto: f.cliente_contacto ?? null,
+        cliente_email:   (f.clientes as any)?.email   ?? null,
+        cliente_email_cc: (f.clientes as any)?.email_cc ?? null,
+        proyecto_nombre: f.proyecto_nombre ?? null,
+        total:           f.total,
+        fecha_emision:   f.fecha_emision,
+        dias_pendiente:  dias,
+      }
+    })
   }
 
   // Banner images — latest projects with imagen_url
@@ -248,7 +285,7 @@ export default async function DashboardPage() {
       <FacturasCobrables facturas={facturasCobrables} />
 
       {/* ── Avisos ────────────────────────────────────────────────────────── */}
-      <AvisosStrip avisos={avisos} />
+      <AvisosStrip avisos={avisos} facturasPendientes={facturasPendientes} />
 
       {/* ── Gadgets — stacked full-width sections ─────────────────────────── */}
       <div className="flex flex-col divide-y divide-ink/[0.06]">

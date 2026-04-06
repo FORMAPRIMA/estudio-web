@@ -18,17 +18,31 @@ export interface Aviso {
   autor_nombre:    string | null
 }
 
+export interface FacturaPendiente {
+  id:               string
+  numero_completo:  string
+  cliente_nombre:   string
+  cliente_contacto: string | null
+  cliente_email:    string | null
+  cliente_email_cc: string | null
+  proyecto_nombre:  string | null
+  total:            number
+  fecha_emision:    string
+  dias_pendiente:   number
+}
+
 interface Props {
-  avisos: Aviso[]
+  avisos:             Aviso[]
+  facturasPendientes?: FacturaPendiente[]
 }
 
 // ── Nivel config ──────────────────────────────────────────────────────────────
 
 const NIVEL: Record<NivelAviso, {
   label:     string
-  color:     string          // accent / text
-  bgRgba:    string          // card tint
-  barColor:  string          // left bar
+  color:     string
+  bgRgba:    string
+  barColor:  string
   badgeBg:   string
   showBadge: boolean
 }> = {
@@ -78,6 +92,10 @@ function fmtDate(iso: string) {
   return `${parseInt(d)} ${meses[parseInt(m) - 1]}`
 }
 
+function fmtEuros(n: number) {
+  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(n)
+}
+
 function todayIso() {
   return new Date().toISOString().split('T')[0]
 }
@@ -109,7 +127,6 @@ function AvisoCard({ aviso, onArchivar }: { aviso: Aviso; onArchivar: () => void
           {initials(aviso.autor_nombre)}
         </div>
       ) : (
-        /* System icon */
         <div
           className="shrink-0 w-[26px] h-[26px] rounded-full flex items-center justify-center text-[12px]"
           style={{ background: cfg.bgRgba, border: `1px solid ${cfg.barColor}33` }}
@@ -125,7 +142,6 @@ function AvisoCard({ aviso, onArchivar }: { aviso: Aviso; onArchivar: () => void
           className={`block w-full text-left ${aviso.contenido ? 'cursor-pointer' : 'cursor-default'}`}
         >
           <div className="flex items-center gap-2">
-            {/* Pulsing dot for urgente */}
             {aviso.nivel === 'urgente' && (
               <span
                 className="shrink-0 w-[7px] h-[7px] rounded-full animate-pulse"
@@ -157,7 +173,6 @@ function AvisoCard({ aviso, onArchivar }: { aviso: Aviso; onArchivar: () => void
 
       {/* Right metadata */}
       <div className="shrink-0 flex items-center gap-3">
-        {/* Nivel badge */}
         {cfg.showBadge && (
           <span
             className="text-[8px] tracking-widest uppercase font-medium px-2 py-[3px]"
@@ -167,14 +182,12 @@ function AvisoCard({ aviso, onArchivar }: { aviso: Aviso; onArchivar: () => void
           </span>
         )}
 
-        {/* Author first name */}
         {aviso.autor_nombre && (
           <span className="hidden md:block text-[10px] font-light text-ink/30">
             {aviso.autor_nombre.split(' ')[0]}
           </span>
         )}
 
-        {/* Caducidad */}
         {aviso.fecha_caducidad && (
           <span className="hidden sm:block text-[9px] text-ink/28">
             hasta {fmtDate(aviso.fecha_caducidad)}
@@ -191,6 +204,219 @@ function AvisoCard({ aviso, onArchivar }: { aviso: Aviso; onArchivar: () => void
         ×
       </button>
     </div>
+  )
+}
+
+// ── Follow-up reminder modal ──────────────────────────────────────────────────
+
+function RecordatorioModal({
+  factura,
+  onClose,
+  onSent,
+}: {
+  factura:  FacturaPendiente
+  onClose:  () => void
+  onSent:   () => void
+}) {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const handleSend = async () => {
+    if (loading) return
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/facturas-emitidas/${factura.id}/recordatorio`, {
+        method: 'POST',
+      })
+      const json = await res.json()
+      if (!res.ok) { setError(json.error ?? 'Error al enviar.'); setLoading(false); return }
+      onSent()
+    } catch {
+      setError('Error de red.')
+      setLoading(false)
+    }
+  }
+
+  const recipientName = factura.cliente_contacto || factura.cliente_nombre
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(6px)' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div
+        className="bg-white w-full max-w-md mx-4 shadow-2xl"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-ink/[0.08]">
+          <p className="text-[10px] tracking-widest uppercase font-medium text-ink/50">
+            Recordatorio de pago
+          </p>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-ink/30 hover:text-ink/60 transition-colors text-xl leading-none"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+
+          {/* Invoice summary */}
+          <div className="bg-ink/[0.02] border border-ink/[0.07] px-4 py-3 space-y-1.5">
+            <div className="flex items-baseline justify-between">
+              <span className="text-[11px] font-medium text-ink/70">{factura.numero_completo}</span>
+              <span className="text-[13px] font-light text-ink">{fmtEuros(factura.total)}</span>
+            </div>
+            {factura.proyecto_nombre && (
+              <p className="text-[11px] text-ink/45 font-light">{factura.proyecto_nombre}</p>
+            )}
+            <p className="text-[10px] text-amber-700 font-medium">
+              Pendiente desde {fmtDate(factura.fecha_emision)} · {factura.dias_pendiente} días
+            </p>
+          </div>
+
+          {/* Recipient */}
+          <div>
+            <p className="text-[9px] tracking-widest uppercase text-ink/40 mb-1.5">Destinatario</p>
+            <p className="text-[13px] text-ink font-light">{recipientName}</p>
+            {factura.cliente_email ? (
+              <p className="text-[11px] text-ink/45 mt-0.5">{factura.cliente_email}</p>
+            ) : (
+              <p className="text-[11px] text-red-500 mt-0.5">Sin email registrado</p>
+            )}
+            {factura.cliente_email_cc && (
+              <p className="text-[10px] text-ink/35 mt-0.5">CC: {factura.cliente_email_cc}</p>
+            )}
+          </div>
+
+          {/* Email preview hint */}
+          <p className="text-[11px] text-ink/40 font-light leading-relaxed">
+            Se enviará un correo cordial recordando el pago de la factura
+            {factura.proyecto_nombre ? ` del proyecto ${factura.proyecto_nombre}` : ''}.
+          </p>
+
+          {error && <p className="text-[11px] text-red-500">{error}</p>}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-ink/[0.08]">
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-[9px] tracking-widest uppercase font-medium text-ink/40 hover:text-ink/70 transition-colors px-3 py-2"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={handleSend}
+            disabled={loading || !factura.cliente_email}
+            className="text-[9px] tracking-widest uppercase font-medium text-white bg-ink px-5 py-2.5 hover:bg-ink/80 transition-colors disabled:opacity-30"
+          >
+            {loading ? 'Enviando…' : 'Enviar recordatorio'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Factura pendiente card ────────────────────────────────────────────────────
+
+function FacturaPendienteCard({
+  factura,
+  onDismiss,
+}: {
+  factura:   FacturaPendiente
+  onDismiss: () => void
+}) {
+  const [showModal,  setShowModal]  = useState(false)
+  const [sent,       setSent]       = useState(false)
+
+  const isUrgent = factura.dias_pendiente >= 30
+  const barColor  = isUrgent ? '#DC2626' : '#D97706'
+  const bgRgba    = isUrgent ? 'rgba(220,38,38,0.04)' : 'rgba(217,119,6,0.04)'
+  const badgeColor = isUrgent ? '#B91C1C' : '#B45309'
+  const badgeBg    = isUrgent ? 'rgba(220,38,38,0.08)' : 'rgba(217,119,6,0.08)'
+
+  return (
+    <>
+      <div
+        className="relative flex items-center gap-4 px-8 lg:px-14 py-4 border-b border-ink/[0.05] group transition-colors"
+        style={{ background: bgRgba }}
+      >
+        {/* Left accent bar */}
+        <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ background: barColor }} />
+
+        {/* Icon */}
+        <div
+          className="shrink-0 w-[26px] h-[26px] rounded-full flex items-center justify-center text-[11px]"
+          style={{ background: bgRgba, border: `1px solid ${barColor}44` }}
+        >
+          <span style={{ color: barColor }}>€</span>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <p className="text-[13px] font-light text-ink/80 leading-snug truncate">
+            {factura.numero_completo}
+            {' · '}
+            <span className="font-normal">{fmtEuros(factura.total)}</span>
+            {' — '}
+            {factura.cliente_contacto || factura.cliente_nombre}
+          </p>
+          {factura.proyecto_nombre && (
+            <p className="text-[10px] text-ink/40 font-light mt-0.5 truncate">{factura.proyecto_nombre}</p>
+          )}
+        </div>
+
+        {/* Right: days badge + send button */}
+        <div className="shrink-0 flex items-center gap-3">
+          <span
+            className="text-[8px] tracking-widest uppercase font-medium px-2 py-[3px]"
+            style={{ color: badgeColor, background: badgeBg }}
+          >
+            {factura.dias_pendiente}d pendiente
+          </span>
+
+          {sent ? (
+            <span className="text-[9px] tracking-widest uppercase font-medium text-green-600">
+              ✓ Enviado
+            </span>
+          ) : (
+            <button
+              onClick={() => setShowModal(true)}
+              className="text-[9px] tracking-widest uppercase font-medium px-3 py-1.5 border transition-colors"
+              style={{ borderColor: barColor + '55', color: barColor }}
+            >
+              Recordatorio
+            </button>
+          )}
+        </div>
+
+        {/* Dismiss button */}
+        <button
+          onClick={onDismiss}
+          title="Ignorar esta sesión"
+          className="shrink-0 w-7 h-7 flex items-center justify-center rounded text-ink/20 hover:text-ink/55 hover:bg-ink/5 transition-colors text-base leading-none opacity-0 group-hover:opacity-100"
+        >
+          ×
+        </button>
+      </div>
+
+      {showModal && (
+        <RecordatorioModal
+          factura={factura}
+          onClose={() => setShowModal(false)}
+          onSent={() => { setShowModal(false); setSent(true) }}
+        />
+      )}
+    </>
   )
 }
 
@@ -373,22 +599,39 @@ function AddAvisoModal({ onClose }: { onClose: () => void }) {
 
 // ── AvisosStrip ───────────────────────────────────────────────────────────────
 
-export default function AvisosStrip({ avisos }: Props) {
-  const [hidden,   setHidden]   = useState<Set<string>>(new Set())
-  const [showForm, setShowForm] = useState(false)
+export default function AvisosStrip({ avisos, facturasPendientes = [] }: Props) {
+  const [hidden,           setHidden]           = useState<Set<string>>(new Set())
+  const [hiddenFacturas,   setHiddenFacturas]   = useState<Set<string>>(new Set())
+  const [showForm,         setShowForm]         = useState(false)
 
-  const visible = avisos.filter(a => !hidden.has(a.id))
+  const visible         = avisos.filter(a => !hidden.has(a.id))
+  const visibleFacturas = facturasPendientes.filter(f => !hiddenFacturas.has(f.id))
 
   const handleArchivar = (id: string) => {
     setHidden(prev => new Set([...Array.from(prev), id]))
-    archivarAviso(id) // fire-and-forget
+    archivarAviso(id)
   }
+
+  const handleDismissFactura = (id: string) => {
+    setHiddenFacturas(prev => new Set([...Array.from(prev), id]))
+  }
+
+  const hasContent = visible.length > 0 || visibleFacturas.length > 0
 
   return (
     <>
       <div className="border-b border-ink/[0.06]">
 
-        {/* Aviso cards — one per row, section grows naturally */}
+        {/* Factura pendiente cards — shown before regular avisos */}
+        {visibleFacturas.map(f => (
+          <FacturaPendienteCard
+            key={f.id}
+            factura={f}
+            onDismiss={() => handleDismissFactura(f.id)}
+          />
+        ))}
+
+        {/* Regular aviso cards */}
         {visible.map(a => (
           <AvisoCard
             key={a.id}
@@ -397,13 +640,13 @@ export default function AvisosStrip({ avisos }: Props) {
           />
         ))}
 
-        {/* Control bar — always visible, thinner when no avisos */}
+        {/* Control bar */}
         <div className="flex items-center gap-3 px-8 lg:px-14 py-[10px]">
           <span className="text-[9px] tracking-widest uppercase font-medium text-ink/28 select-none">
             Avisos
           </span>
 
-          {visible.length === 0 && (
+          {!hasContent && (
             <>
               <span className="w-px h-3 bg-ink/10 shrink-0" />
               <span className="text-[10px] text-ink/20 italic font-light">
