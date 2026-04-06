@@ -256,6 +256,7 @@ export interface ServicioEntry extends ServicioPlantillaData {
   entregables_en?:     { grupo: string; items: string[] }[] | null
   semanas_default_en?: string | null
   pago_en?:            { label: string; pct: number }[] | null
+  notas_en?:           string | null
 }
 
 /**

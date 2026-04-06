@@ -27,7 +27,7 @@ export async function getPlantillaServicios(): Promise<ServicioEntry[]> {
   const admin = createAdminClient()
   const { data, error: selectErr } = await admin
     .from('propuestas_servicios_plantilla')
-    .select('id, label, texto, entregables, semanas_default, pago, notas, label_en, texto_en, entregables_en, semanas_default_en, pago_en')
+    .select('id, label, texto, entregables, semanas_default, pago, notas, label_en, texto_en, entregables_en, semanas_default_en, pago_en, notas_en')
 
   const rows = data ?? []
 
@@ -54,6 +54,7 @@ export async function getPlantillaServicios(): Promise<ServicioEntry[]> {
       entregables_en:     db?.entregables_en      ?? null,
       semanas_default_en: db?.semanas_default_en  ?? null,
       pago_en:            db?.pago_en             ?? null,
+      notas_en:           db?.notas_en            ?? null,
     }
   })
 
@@ -72,6 +73,7 @@ export async function getPlantillaServicios(): Promise<ServicioEntry[]> {
       pago:                row.pago ?? [],
       notas:               row.notas ?? '',
       label_en:            row.label_en           ?? null,
+      notas_en:            row.notas_en           ?? null,
       texto_en:            row.texto_en            ?? null,
       entregables_en:      row.entregables_en      ?? null,
       semanas_default_en:  row.semanas_default_en  ?? null,
@@ -174,6 +176,7 @@ export async function saveServicioEN(
     entregables_en:     { grupo: string; items: string[] }[] | null
     semanas_default_en: string | null
     pago_en:            { label: string; pct: number }[] | null
+    notas_en:           string | null
   }
 ): Promise<{ success: true } | { error: string }> {
   try {
@@ -188,6 +191,7 @@ export async function saveServicioEN(
         entregables_en:     data.entregables_en,
         semanas_default_en: data.semanas_default_en,
         pago_en:            data.pago_en,
+        notas_en:           data.notas_en,
       })
       .eq('id', id)
       .select('id')
@@ -211,6 +215,7 @@ export async function saveServicioEN(
           entregables_en:      data.entregables_en,
           semanas_default_en:  data.semanas_default_en,
           pago_en:             data.pago_en,
+          notas_en:            data.notas_en,
         })
       if (insertErr) return { error: insertErr.message }
     }

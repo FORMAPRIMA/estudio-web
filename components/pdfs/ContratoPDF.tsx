@@ -277,6 +277,7 @@ export interface ContratoPDFData {
     entregables_en?:     { grupo: string; items: string[] }[] | null
     semanas_default_en?: string | null
     pago_en?:            { label: string; pct: number }[] | null
+    notas_en?:           string | null
   }>
 }
 
@@ -711,7 +712,7 @@ export function ContratoPDF({ data }: { data: ContratoPDFData }) {
             const srvTexto     = dbEN?.texto_en   || cfgEN?.texto         || srv.texto
             const srvEntregs   = (dbEN?.entregables_en && dbEN.entregables_en.length > 0) ? dbEN.entregables_en : (cfgEN?.entregables ?? srv.entregables)
             const srvSemanas   = dbEN?.semanas_default_en || cfgEN?.semanas_default || srv.semanas
-            const srvNotas = srv.notas
+            const srvNotas = (lang === 'en' && dbEN?.notas_en) ? dbEN.notas_en : srv.notas
             return (
               <View key={srv.id} wrap={false}>
                 {/* Title + duration inline */}

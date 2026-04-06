@@ -75,6 +75,8 @@ function ServicioEditor({
     entry.pago_en ? entry.pago_en.map(p => ({ ...p })) : []
   )
 
+  const [notasEN, setNotasEN] = useState(entry.notas_en ?? '')
+
   const [enModified,    setEnModified]    = useState(false)
   const [isTranslating, setIsTranslating] = useState(false)
   const [enStatus,      setEnStatus]      = useState<'idle' | 'translating' | 'translated' | 'saved' | 'error'>('idle')
@@ -122,7 +124,7 @@ function ServicioEditor({
   const pagoSumEN = sumPct(pagoEN)
 
   // ── Auto-translate ────────────────────────────────────────────────────────
-  async function doTranslate(esLabel: string, esTexto: string, esGrupos: { grupo: string; items: string[] }[], esSemanas: string, esPago: { label: string; pct: number }[]) {
+  async function doTranslate(esLabel: string, esTexto: string, esGrupos: { grupo: string; items: string[] }[], esSemanas: string, esPago: { label: string; pct: number }[], esNotas?: string) {
     setIsTranslating(true)
     setEnStatus('translating')
     setEnError(null)
@@ -130,7 +132,7 @@ function ServicioEditor({
       const res = await fetch('/api/translate-servicio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label: esLabel, texto: esTexto, entregables: esGrupos, semanas_default: esSemanas, pago: esPago }),
+        body: JSON.stringify({ label: esLabel, texto: esTexto, entregables: esGrupos, semanas_default: esSemanas, pago: esPago, notas: esNotas ?? '' }),
       })
       if (!res.ok) { const d = await res.json(); throw new Error(d.error ?? 'Translation failed') }
       const translated = await res.json() as {
@@ -138,12 +140,14 @@ function ServicioEditor({
         entregables: { grupo: string; items: string[] }[]
         semanas_default: string
         pago: { label: string; pct: number }[]
+        notas?: string
       }
       setLabelEN(translated.label ?? '')
       setTextoEN(translated.texto ?? '')
       setGruposEN(translated.entregables ?? [])
       setSemanasEN(translated.semanas_default ?? '')
       setPagoEN(translated.pago ?? [])
+      setNotasEN(translated.notas ?? '')
       setEnModified(false)
       setEnStatus('translated')
     } catch (e) {
@@ -168,7 +172,7 @@ function ServicioEditor({
         setTimeout(() => setSaveOk(false), 2500)
         // Auto-translate only if user has not manually edited EN
         if (!enModified) {
-          doTranslate(label, texto, grupos, semanas, pago).then(async () => {
+          doTranslate(label, texto, grupos, semanas, pago, notas).then(async () => {
             // After translate completes, auto-save EN too
             // We read current EN state via closure — but doTranslate updates state async,
             // so we handle auto-save inside doTranslate result by reading updated values
@@ -190,6 +194,7 @@ function ServicioEditor({
         entregables_en:     gruposEN.length > 0 ? gruposEN : null,
         semanas_default_en: semanasEN || null,
         pago_en:            pagoEN.length > 0 ? pagoEN : null,
+        notas_en:           notasEN || null,
       })
       if ('error' in result) { setEnError(result.error); setEnStatus('error') }
       else { setSaveENOk(true); setEnStatus('saved'); setTimeout(() => setSaveENOk(false), 2500) }
@@ -385,7 +390,7 @@ function ServicioEditor({
             </span>
           </div>
           <button
-            onClick={() => doTranslate(label, texto, grupos, semanas, pago)}
+            onClick={() => doTranslate(label, texto, grupos, semanas, pago, notas)}
             disabled={isTranslating}
             style={{
               fontSize: 11, padding: '5px 14px',
@@ -499,6 +504,20 @@ function ServicioEditor({
               </div>
             )}
           </div>
+        </div>
+
+        {/* Notas EN */}
+        <div>
+          <FieldLabel>Contract notes</FieldLabel>
+          <div style={{ fontSize: 11, color: '#BBB', marginBottom: 6, lineHeight: 1.5 }}>
+            Text shown in the contract after this service's deliverables.
+          </div>
+          <textarea
+            style={{ ...inpEN(), minHeight: 80, resize: 'vertical' as const, lineHeight: 1.6 }}
+            value={notasEN}
+            onChange={e => { setNotasEN(e.target.value); setEnModified(true) }}
+            placeholder="e.g. Drawings will be delivered in DWG and PDF format…"
+          />
         </div>
 
         {/* Actions EN */}

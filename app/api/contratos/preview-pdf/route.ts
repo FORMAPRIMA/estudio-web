@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
   // Fetch EN translations from plantilla
   const { data: plantillaRows } = await admin
     .from('propuestas_servicios_plantilla')
-    .select('id, label_en, texto_en, entregables_en, semanas_default_en, pago_en')
+    .select('id, label_en, texto_en, entregables_en, semanas_default_en, pago_en, notas_en')
 
   const plantilla_en: NonNullable<ContratoPDFData['plantilla_en']> = {}
   for (const row of (plantillaRows ?? [])) {
@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
       entregables_en:     row.entregables_en,
       semanas_default_en: row.semanas_default_en,
       pago_en:            row.pago_en,
+      notas_en:           row.notas_en,
     }
   }
 

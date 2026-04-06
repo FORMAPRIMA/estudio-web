@@ -15,9 +15,10 @@ export async function POST(req: NextRequest) {
     entregables:     { grupo: string; items: string[] }[]
     semanas_default: string
     pago:            { label: string; pct: number }[]
+    notas?:          string
   }
 
-  const systemPrompt = `You are a professional translator for an architecture and interior design studio. Translate the following service content from Spanish to English. Return ONLY valid JSON with the same structure as the input (label, texto, entregables array, semanas_default, pago array). Keep all percentages (pct values) unchanged. Translate only text strings.`
+  const systemPrompt = `You are a professional translator for an architecture and interior design studio. Translate the following service content from Spanish to English. Return ONLY valid JSON with the same structure as the input (label, texto, entregables array, semanas_default, pago array, notas). Keep all percentages (pct values) unchanged. Translate only text strings.`
 
   const message = await client.messages.create({
     model: 'claude-haiku-4-5-20251001',
