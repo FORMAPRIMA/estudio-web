@@ -457,32 +457,37 @@ export default function BienvenidaPage({ nombreCliente, token, heroImage, proyec
           width: 100%;
           overflow: hidden;
           background: #1A1A1A;
-          min-height: 320px;
           border-radius: 8px;
+          /* portrait images: give enough height so the bottom (people) shows */
+          height: 110vw;
+          max-height: 520px;
         }
         .fp-team-intro-block {
           position: absolute;
-          bottom: 0; left: 0; right: 0;
-          background: rgba(20, 20, 20, 0.72);
-          backdrop-filter: blur(6px);
-          -webkit-backdrop-filter: blur(6px);
-          padding: 28px 24px 32px;
+          /* mobile: text at top so people at bottom stay visible */
+          top: 0; left: 0; right: 0;
+          background: linear-gradient(to bottom, rgba(15,15,15,0.82) 0%, rgba(15,15,15,0.55) 70%, transparent 100%);
+          padding: 28px 24px 48px;
           display: flex;
           flex-direction: column;
-          justify-content: flex-end;
+          justify-content: flex-start;
         }
         @media (min-width: 641px) {
           .fp-team-banner {
-            min-height: 420px;
+            height: 500px;
+            max-height: 500px;
           }
           .fp-team-intro-block {
+            /* desktop: text panel on the right */
             top: 0; bottom: 0;
             left: auto; right: 0;
             width: 46%;
             justify-content: center;
             padding: clamp(28px, 5vw, 52px);
             border-radius: 0 8px 8px 0;
-            background: rgba(20, 20, 20, 0.68);
+            background: rgba(15, 15, 15, 0.70);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
           }
         }
       `}</style>
@@ -504,7 +509,7 @@ export default function BienvenidaPage({ nombreCliente, token, heroImage, proyec
                 style={{
                   position: 'absolute', inset: 0,
                   width: '100%', height: '100%',
-                  objectFit: 'cover', objectPosition: 'center top',
+                  objectFit: 'cover', objectPosition: 'center 65%',
                   display: 'block',
                   filter: photo.filter,
                   opacity: teamPhotoIdx === i ? 1 : 0,
