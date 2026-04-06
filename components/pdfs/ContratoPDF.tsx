@@ -6,7 +6,8 @@ import path from 'path'
 import { fmtEur, PRECIO_HORA, SERVICIO_IDS, SERVICIOS_CONFIG_EN, PAGO_LABEL_EN } from '@/lib/propuestas/config'
 import type { ServicioId } from '@/lib/propuestas/config'
 
-const LOGO_BLANCO = path.join(process.cwd(), 'public', 'FORMA_PRIMA_BLANCO.png')
+const LOGO_BLANCO   = path.join(process.cwd(), 'public', 'FORMA_PRIMA_BLANCO.png')
+const FIRMA_GABRIELA = path.join(process.cwd(), 'public', 'FIRMA GABRIELA.png')
 
 // ── Fixed studio data ─────────────────────────────────────────────────────────
 const STUDIO = {
@@ -942,6 +943,12 @@ export function ContratoPDF({ data }: { data: ContratoPDFData }) {
               )}
             </View>
             <View style={s.firmaCol}>
+              <View style={{ width: '80%', height: 36, justifyContent: 'flex-end' }}>
+                <Image
+                  src={FIRMA_GABRIELA}
+                  style={{ height: 32, objectFit: 'contain', objectPositionX: 'center', objectPositionY: 'bottom' }}
+                />
+              </View>
               <View style={s.firmaLinea} />
               <Text style={s.firmaLabel}>{T.firmaEstudio}</Text>
               <Text style={s.firmaNombre}>{STUDIO.rep_nombre}</Text>
