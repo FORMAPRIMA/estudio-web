@@ -4,8 +4,9 @@ import { useState, useTransition, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { updateContrato, firmarContrato } from '@/app/actions/contratos'
 import type { Honorario } from '@/app/actions/contratos'
-import { SERVICIO_IDS } from '@/lib/propuestas/config'
+import { SERVICIO_IDS, SERVICIOS_CONFIG } from '@/lib/propuestas/config'
 import type { ServicioId } from '@/lib/propuestas/config'
+import type { ServicioContrato } from '@/components/pdfs/ContratoPDF'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -351,6 +352,10 @@ export default function ContratoDetalle({
   const [cuerpoTexto, setCuerpoTexto] = useState<string>(
     (initial.contenido?.cuerpo_texto as string | undefined) ?? DEFAULT_CUERPO_TEXTO
   )
+  const [serviciosEdit, setServiciosEdit] = useState<ServicioContrato[]>(
+    (initial.contenido?.servicios ?? []) as ServicioContrato[]
+  )
+  const serviciosBase = useRef<ServicioContrato[]>((initial.contenido?.servicios ?? []) as ServicioContrato[])
 
   // ── Contenido JSONB — tracked via ref so partial saves don't clobber each other
   const contenidoRef = useRef<Record<string, unknown>>(initial.contenido ?? {})
@@ -468,6 +473,22 @@ export default function ContratoDetalle({
       fecha_pago_acordada: h.fecha_pago_acordada ?? (dateByLabel[h.seccion] ?? null),
     }))
     handleHonorariosChange(updated)
+  }
+
+  function toggleContratoDeliverable(srvId: string, grupoNombre: string, item: string) {
+    setServiciosEdit(prev => {
+      const updated = prev.map(srv => {
+        if (srv.id !== srvId) return srv
+        const updatedEntregs = srv.entregables.map(g => {
+          if (g.grupo !== grupoNombre) return g
+          const has = g.items.includes(item)
+          return { ...g, items: has ? g.items.filter(i => i !== item) : [...g.items, item] }
+        }).filter(g => g.items.length > 0)
+        return { ...srv, entregables: updatedEntregs }
+      })
+      saveContenido({ servicios: updated })
+      return updated
+    })
   }
 
   const handleStatusChange = (newStatus: string) => {
@@ -768,6 +789,64 @@ export default function ContratoDetalle({
             </div>
           </div>
         </section>
+
+        {/* ── Alcance de servicios contratados ───────────── */}
+        {serviciosEdit.length > 0 && (
+          <section style={{ background: '#fff', border: '1px solid #E8E6E0', borderRadius: 8, padding: '24px 28px' }}>
+            <p style={SECTION_TITLE}>Alcance de servicios contratados</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              {serviciosEdit.map(srv => {
+                const baseEntregs = serviciosBase.current.find(s => s.id === srv.id)?.entregables ?? []
+                return (
+                  <div key={srv.id} style={{ paddingBottom: 20, borderBottom: '1px solid #F0EEE8' }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#1A1A1A', marginBottom: 10 }}>
+                      {srv.label}
+                    </div>
+                    {baseEntregs.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {baseEntregs.map(grupo => {
+                          const currentSrv = serviciosEdit.find(s => s.id === srv.id)
+                          const currentGrupo = currentSrv?.entregables.find(g => g.grupo === grupo.grupo)
+                          return (
+                            <div key={grupo.grupo}>
+                              <div style={{ fontSize: 10, fontWeight: 600, color: '#AAA', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 5 }}>
+                                {grupo.grupo}
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                {grupo.items.map(item => {
+                                  const selected = currentGrupo?.items.includes(item) ?? true
+                                  return (
+                                    <label key={item} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: isReadonly ? 'default' : 'pointer', fontSize: 12 }}>
+                                      <div
+                                        onClick={isReadonly ? undefined : () => toggleContratoDeliverable(srv.id, grupo.grupo, item)}
+                                        style={{
+                                          width: 14, height: 14, borderRadius: 2, flexShrink: 0, marginTop: 1,
+                                          border: '1.5px solid', borderColor: selected ? '#1A1A1A' : '#CCC',
+                                          background: selected ? '#1A1A1A' : '#fff',
+                                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                          cursor: isReadonly ? 'default' : 'pointer',
+                                        }}
+                                      >
+                                        {selected && <span style={{ color: '#fff', fontSize: 9, lineHeight: 1 }}>✓</span>}
+                                      </div>
+                                      <span style={{ color: selected ? '#1A1A1A' : '#CCC', lineHeight: 1.4, textDecoration: selected ? 'none' : 'line-through' }}>
+                                        {item}
+                                      </span>
+                                    </label>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </section>
+        )}
 
         {/* ── Honorarios ─────────────────────────────────── */}
         <section>

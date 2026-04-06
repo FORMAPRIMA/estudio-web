@@ -242,6 +242,7 @@ export interface PropuestaPDFData {
   honorarios_override:  Record<string, number>
   serviciosPlantilla:   ServicioEntry[]
   lang?:                'es' | 'en'
+  entregables_override?: Record<string, { grupo: string; items: string[] }[]>
   lead: {
     nombre:    string
     apellidos: string
@@ -387,6 +388,8 @@ export function PropuestaPDF({ data }: { data: PropuestaPDFData }) {
   // Use provided date or today's date as emission date
   const fechaEmision = data.fecha_propuesta ?? new Date().toISOString().slice(0, 10)
 
+  const hasPemServices = baseServicios.some(sid => SERVICIOS_CONFIG[sid].tipo === 'pem')
+
   const Footer = () => (
     <View style={s.footer} fixed>
       <Text style={s.footerText}>GEINEX GROUP, S.L. · NIF B44873552 · contacto@formaprima.es</Text>
@@ -465,20 +468,24 @@ export function PropuestaPDF({ data }: { data: PropuestaPDFData }) {
                 {data.m2.toLocaleString('es-ES')} m²
               </Text>
             </View>
-            <View style={s.summaryItem}>
-              <Text style={s.metaLabel}>{T.targetPriceM2}</Text>
-              <Text style={{ fontSize: 14, fontFamily: 'Helvetica-Bold', color: C.ink, marginTop: 2 }}>
-                {fmtEur(data.costo_m2)}
-                <Text style={{ fontSize: 8, fontFamily: 'Helvetica', color: C.mid }}> + IVA</Text>
-              </Text>
-            </View>
-            <View style={s.summaryItem}>
-              <Text style={s.metaLabel}>{T.targetCost}</Text>
-              <Text style={{ fontSize: 14, fontFamily: 'Helvetica-Bold', color: C.ink, marginTop: 2 }}>
-                {fmtEur(pem)}
-                <Text style={{ fontSize: 8, fontFamily: 'Helvetica', color: C.mid }}> + IVA</Text>
-              </Text>
-            </View>
+            {hasPemServices && (
+              <View style={s.summaryItem}>
+                <Text style={s.metaLabel}>{T.targetPriceM2}</Text>
+                <Text style={{ fontSize: 14, fontFamily: 'Helvetica-Bold', color: C.ink, marginTop: 2 }}>
+                  {fmtEur(data.costo_m2)}
+                  <Text style={{ fontSize: 8, fontFamily: 'Helvetica', color: C.mid }}> + IVA</Text>
+                </Text>
+              </View>
+            )}
+            {hasPemServices && (
+              <View style={s.summaryItem}>
+                <Text style={s.metaLabel}>{T.targetCost}</Text>
+                <Text style={{ fontSize: 14, fontFamily: 'Helvetica-Bold', color: C.ink, marginTop: 2 }}>
+                  {fmtEur(pem)}
+                  <Text style={{ fontSize: 8, fontFamily: 'Helvetica', color: C.mid }}> + IVA</Text>
+                </Text>
+              </View>
+            )}
             <View style={s.summaryItem}>
               <Text style={s.metaLabel}>{T.totalFees}</Text>
               <Text style={{ fontSize: 14, fontFamily: 'Helvetica-Bold', color: C.brand, marginTop: 2 }}>
@@ -572,8 +579,31 @@ export function PropuestaPDF({ data }: { data: PropuestaPDFData }) {
             // ES: prefer DB override, fall back to config
             const label_       = cfgEN?.label       ?? entry?.label       ?? cfgBase?.label       ?? sid
             const texto_       = cfgEN?.texto        ?? entry?.texto       ?? cfgBase?.texto       ?? ''
-            const entregables_ = cfgEN?.entregables  ?? entry?.entregables ?? (cfgBase?.entregables as unknown as { grupo: string; items: string[] }[] ?? [])
             const pago_        = cfgEN?.pago         ?? entry?.pago        ?? (cfgBase?.pago as unknown as { label: string; pct: number }[] ?? [])
+
+            // Compute entregables with override support
+            let entregables_: { grupo: string; items: string[] }[]
+            const rawOverride = data.entregables_override?.[sid]
+            if (rawOverride) {
+              if (lang === 'en' && cfgEN?.entregables) {
+                // Map Spanish selected items to EN equivalents by position index
+                const fullES = (entry?.entregables ?? (cfgBase?.entregables as unknown as { grupo: string; items: string[] }[]) ?? [])
+                entregables_ = rawOverride.map(oGroup => {
+                  const esGroupIdx = fullES.findIndex(g => g.grupo === oGroup.grupo)
+                  const enGroup = cfgEN!.entregables[esGroupIdx]
+                  if (!enGroup || esGroupIdx === -1) return null
+                  const items = oGroup.items
+                    .map(esItem => fullES[esGroupIdx].items.indexOf(esItem))
+                    .filter(idx => idx >= 0 && idx < enGroup.items.length)
+                    .map(idx => enGroup.items[idx])
+                  return items.length > 0 ? { grupo: enGroup.grupo, items } : null
+                }).filter(Boolean) as { grupo: string; items: string[] }[]
+              } else {
+                entregables_ = rawOverride
+              }
+            } else {
+              entregables_ = cfgEN?.entregables ?? entry?.entregables ?? (cfgBase?.entregables as unknown as { grupo: string; items: string[] }[] ?? [])
+            }
             const precio       = breakdown[sid] ?? 0
             const semanas      = data.semanas[sid] ?? cfgEN?.semanas_default ?? entry?.semanas_default ?? cfgBase?.semanas_default ?? ''
 
@@ -669,7 +699,7 @@ export function PropuestaPDF({ data }: { data: PropuestaPDFData }) {
             </View>
             <Text style={{ fontSize: 7, color: C.meta, marginTop: 8, lineHeight: 1.5 }}>
               {T.vatNote}
-              {data.m2 > 0 ? T.vatPemSuffix(fmtEur(pem), data.m2, fmtEur(data.costo_m2)) : ''}
+              {hasPemServices && data.m2 > 0 ? T.vatPemSuffix(fmtEur(pem), data.m2, fmtEur(data.costo_m2)) : ''}
             </Text>
           </View>
 

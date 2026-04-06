@@ -41,6 +41,7 @@ type Propuesta = {
   cliente_id:           string | null
   fecha_envio:          string | null
   honorarios_override:  Record<string, number> | null
+  entregables_override: Record<string, { grupo: string; items: string[] }[]> | null
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -132,6 +133,9 @@ export default function PropuestaDetalle({
     Object.fromEntries(
       Object.entries(initial.honorarios_override ?? {}).map(([k, v]) => [k, String(v)])
     )
+  )
+  const [entregablesOverride, setEntregablesOverride] = useState<Record<string, { grupo: string; items: string[] }[]>>(
+    (initial as any).entregables_override ?? {}
   )
 
   const currentContacto = contactos.find(c => c.id === contactoId) ?? null
@@ -294,6 +298,7 @@ export default function PropuestaDetalle({
         notas:               notas || null,
         status,
         honorarios_override: overrideNums,
+        entregables_override: entregablesOverride,
       })
       router.refresh()
     })
@@ -367,6 +372,7 @@ export default function PropuestaDetalle({
       pct_partner:         parseFloat(pctPartner) || 30,
       semanas: semanasForPdf,
       honorarios_override: overrideNums,
+      entregables_override: entregablesOverride,
       serviciosPlantilla,
       ratios,
       lead: currentContacto ? {
@@ -384,6 +390,28 @@ export default function PropuestaDetalle({
     setServicios(prev =>
       prev.includes(sid) ? prev.filter(s => s !== sid) : [...prev, sid]
     )
+  }
+
+  function getBaseEntregables(sid: string): { grupo: string; items: string[] }[] {
+    const entry = serviciosPlantilla.find(e => e.id === sid)
+    return entry?.entregables ?? (SERVICIOS_CONFIG[sid as ServicioId]?.entregables as unknown as { grupo: string; items: string[] }[]) ?? []
+  }
+
+  function getEffectiveEntregables(sid: string): { grupo: string; items: string[] }[] {
+    return entregablesOverride[sid] ?? getBaseEntregables(sid)
+  }
+
+  function toggleDeliverable(sid: string, grupoNombre: string, item: string) {
+    const base = getBaseEntregables(sid)
+    const current = getEffectiveEntregables(sid)
+    const updated = base.map(bg => {
+      const cur = current.find(g => g.grupo === bg.grupo)
+      const selectedItems = cur ? cur.items : bg.items
+      if (bg.grupo !== grupoNombre) return { grupo: bg.grupo, items: selectedItems }
+      const has = selectedItems.includes(item)
+      return { grupo: bg.grupo, items: has ? selectedItems.filter(i => i !== item) : [...selectedItems, item] }
+    }).filter(g => g.items.length > 0)
+    setEntregablesOverride(prev => ({ ...prev, [sid]: updated }))
   }
 
   const filteredContactos = contactos.filter(c => {
@@ -1042,6 +1070,55 @@ export default function PropuestaDetalle({
                         </div>
                       </div>
                     )}
+
+                    {/* Entregables */}
+                    {checked && entry.entregables && entry.entregables.length > 0 && (() => {
+                      const base = getBaseEntregables(entry.id)
+                      const effective = getEffectiveEntregables(entry.id)
+                      return (
+                        <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #F0EEE8' }}
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <div style={{ fontSize: 10, fontWeight: 600, color: '#888', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>
+                            Entregables
+                          </div>
+                          {base.map(grupo => {
+                            const effectiveGrupo = effective.find(g => g.grupo === grupo.grupo)
+                            return (
+                              <div key={grupo.grupo} style={{ marginBottom: 10 }}>
+                                <div style={{ fontSize: 10, fontWeight: 600, color: '#AAA', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 5 }}>
+                                  {grupo.grupo}
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                  {grupo.items.map(item => {
+                                    const selected = effectiveGrupo?.items.includes(item) ?? true
+                                    return (
+                                      <label key={item} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer', fontSize: 12 }}>
+                                        <div
+                                          onClick={() => toggleDeliverable(entry.id, grupo.grupo, item)}
+                                          style={{
+                                            width: 14, height: 14, borderRadius: 2, flexShrink: 0, marginTop: 1,
+                                            border: '1.5px solid', borderColor: selected ? '#1A1A1A' : '#CCC',
+                                            background: selected ? '#1A1A1A' : '#fff',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            cursor: 'pointer',
+                                          }}
+                                        >
+                                          {selected && <span style={{ color: '#fff', fontSize: 9, lineHeight: 1 }}>✓</span>}
+                                        </div>
+                                        <span style={{ color: selected ? '#1A1A1A' : '#CCC', lineHeight: 1.4, textDecoration: selected ? 'none' : 'line-through' }}>
+                                          {item}
+                                        </span>
+                                      </label>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )
+                    })()}
                   </div>
                 )
               })}

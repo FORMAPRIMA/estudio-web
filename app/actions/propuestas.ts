@@ -104,6 +104,7 @@ export async function updatePropuesta(
     status:               string
     fecha_envio:          string | null
     honorarios_override:  Record<string, number>
+    entregables_override: Record<string, { grupo: string; items: string[] }[]>
   }>
 ): Promise<{ success: true } | { error: string }> {
   try {
