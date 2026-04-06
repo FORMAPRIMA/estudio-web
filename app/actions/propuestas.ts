@@ -40,7 +40,7 @@ export async function createPropuesta(
           contactoData = {
             lead_id:   contactoId,
             titulo:    lead.nombre ? `Proyecto ${[lead.nombre, lead.apellidos].filter(Boolean).join(' ')}` : null,
-            direccion: lead.direccion ?? null,
+            // direccion is the PROJECT address — not auto-filled from contact's personal address
           }
         }
       } else {
@@ -53,7 +53,7 @@ export async function createPropuesta(
           contactoData = {
             cliente_id: contactoId,
             titulo:     cliente.nombre ? `Proyecto ${[cliente.nombre, cliente.apellidos].filter(Boolean).join(' ')}` : null,
-            direccion:  cliente.direccion ?? null,
+            // direccion is the PROJECT address — not auto-filled from contact's personal address
           }
         }
       }

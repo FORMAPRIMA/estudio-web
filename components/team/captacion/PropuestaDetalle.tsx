@@ -381,7 +381,7 @@ export default function PropuestaDetalle({
         empresa:   currentContacto.empresa,
         email:     currentContacto.email,
         telefono:  currentContacto.telefono,
-        direccion: currentContacto.direccion,
+        direccion: null, // PROJECT address — not copied from contact's personal address
       } : null,
     }
   }
