@@ -192,16 +192,18 @@ export async function saveServicioEN(
     if (updateErr) return { error: updateErr.message }
 
     if (!updated || updated.length === 0) {
-      // Row doesn't exist yet — insert a minimal stub with just id + en fields
+      // Row doesn't exist yet — insert using config defaults for Spanish fields
+      // so we don't overwrite them with empty strings
+      const cfgBase = SERVICIOS_CONFIG[id as ServicioId]
       const { error: insertErr } = await admin
         .from('propuestas_servicios_plantilla')
         .insert({
           id,
-          label:               '',
-          texto:               '',
-          entregables:         [],
-          semanas_default:     '',
-          pago:                [],
+          label:               cfgBase?.label           ?? '',
+          texto:               cfgBase?.texto           ?? '',
+          entregables:         cfgBase?.entregables     ?? [],
+          semanas_default:     cfgBase?.semanas_default ?? '',
+          pago:                cfgBase?.pago            ?? [],
           label_en:            data.label_en,
           texto_en:            data.texto_en,
           entregables_en:      data.entregables_en,
