@@ -32,6 +32,7 @@ export default function BienvenidaPage({ nombreCliente, token, heroImage, proyec
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError]   = useState<string | null>(null)
   const [copied, setCopied]         = useState(false)
+  const [teamPhotoIdx, setTeamPhotoIdx] = useState(0)
 
   // Form state
   const [nombre,    setNombre]    = useState('')
@@ -41,6 +42,12 @@ export default function BienvenidaPage({ nombreCliente, token, heroImage, proyec
   const [empresa,   setEmpresa]   = useState('')
   const [idea,      setIdea]      = useState('')
   const [origen,    setOrigen]    = useState('')
+
+  // Team photo slideshow
+  useEffect(() => {
+    const id = setInterval(() => setTeamPhotoIdx(i => (i + 1) % 2), 4000)
+    return () => clearInterval(id)
+  }, [])
 
   // Intersection observer for fade-in sections
   const [visible, setVisible] = useState<Record<string, boolean>>({})
@@ -444,53 +451,77 @@ export default function BienvenidaPage({ nombreCliente, token, heroImage, proyec
       )}
 
       {/* ── 5. SOCIOS ─────────────────────────────────────────────────────────── */}
+      <style>{`
+        .fp-team-banner {
+          display: flex;
+          flex-direction: column;
+        }
+        @media (min-width: 641px) {
+          .fp-team-banner {
+            display: grid;
+            grid-template-columns: minmax(0,1fr) minmax(0,1fr);
+          }
+        }
+        .fp-team-slide {
+          position: relative;
+          width: 100%;
+          aspect-ratio: 4/3;
+          overflow: hidden;
+          background: #1A1A1A;
+        }
+        @media (min-width: 641px) {
+          .fp-team-slide {
+            aspect-ratio: unset;
+            height: 100%;
+            min-height: 360px;
+            border-radius: 8px 0 0 8px;
+          }
+        }
+        .fp-team-intro-block {
+          background: #1A1A1A;
+          padding: 28px 24px;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+        }
+        @media (min-width: 641px) {
+          .fp-team-intro-block {
+            padding: clamp(28px, 5vw, 52px);
+            border-radius: 0 8px 8px 0;
+          }
+        }
+      `}</style>
       <section style={{ background: '#F8F6F1', padding: 'clamp(60px, 8vw, 96px) 0' }}>
-        {/* Team photo — full bleed on mobile, contained on desktop */}
         <div id="equipo" data-fade style={{ ...fadeStyle('equipo'), maxWidth: 860, margin: '0 auto' }}>
-          {/* Photo + intro row */}
-          <div className="fp-team-grid" style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)',
-            gap: 0,
-            marginBottom: 48,
-          }}>
-            <style>{`
-              @media (max-width: 640px) {
-                .fp-team-grid { grid-template-columns: 1fr !important; }
-                .fp-team-photo { max-height: 72vw !important; border-radius: 0 !important; }
-                .fp-team-intro { padding: 28px 24px !important; }
-              }
-            `}</style>
-            {/* Photo */}
-            <div className="fp-team-photo" style={{
-              overflow: 'hidden',
-              maxHeight: 440,
-              background: '#1A1A1A',
-              borderRadius: '8px 0 0 8px',
-            }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/P1074528 copy.jpg"
-                alt="Gabriela Hidalgo y José Lora — Forma Prima"
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'cover',
-                  objectPosition: 'center top',
-                  display: 'block',
-                  filter: 'grayscale(100%)',
-                }}
-              />
+
+          {/* Photo banner + intro row */}
+          <div className="fp-team-banner" style={{ marginBottom: 48 }}>
+            {/* Crossfade slideshow */}
+            <div className="fp-team-slide">
+              {[
+                { src: '/P1074528 copy.jpg',                                  alt: 'Gabriela Hidalgo y José Lora — Forma Prima', filter: 'grayscale(100%)' },
+                { src: '/9263BB2D-DDDF-47AD-9EEF-0985C56BC645.JPG',           alt: 'Equipo Forma Prima en obra',                filter: 'none' },
+              ].map((photo, i) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={photo.src}
+                  src={photo.src}
+                  alt={photo.alt}
+                  style={{
+                    position: 'absolute', inset: 0,
+                    width: '100%', height: '100%',
+                    objectFit: 'cover', objectPosition: 'center top',
+                    display: 'block',
+                    filter: photo.filter,
+                    opacity: teamPhotoIdx === i ? 1 : 0,
+                    transition: 'opacity 1.2s ease',
+                  }}
+                />
+              ))}
             </div>
+
             {/* Intro text */}
-            <div className="fp-team-intro" style={{
-              background: '#1A1A1A',
-              padding: 'clamp(28px, 5vw, 52px)',
-              borderRadius: '0 8px 8px 0',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center',
-            }}>
+            <div className="fp-team-intro-block">
               <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#D85A30', marginBottom: 16, display: 'block' }}>
                 The team
               </span>
