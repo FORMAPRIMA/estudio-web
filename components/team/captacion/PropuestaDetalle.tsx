@@ -300,8 +300,8 @@ export default function PropuestaDetalle({
   }
 
   // ── Preview PDF ───────────────────────────────────────────────────────────
-  async function handlePreviewPDF() {
-    const pdfData: PropuestaPDFData = buildPDFData()
+  async function handlePreviewPDF(lang: 'es' | 'en' = 'es') {
+    const pdfData: PropuestaPDFData = { ...buildPDFData(), lang }
     const res = await fetch('/api/propuestas/preview-pdf', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -434,13 +434,22 @@ export default function PropuestaDetalle({
           {sendOk && <span style={{ fontSize: 12, color: '#4CAF50' }}>Enviada correctamente</span>}
           {sendError && <span style={{ fontSize: 12, color: '#E57373' }}>{sendError}</span>}
           <button
-            onClick={handlePreviewPDF}
+            onClick={() => handlePreviewPDF('es')}
             style={{
               padding: '8px 16px', background: '#fff', color: '#1A1A1A',
               border: '1px solid #E8E6E0', borderRadius: 4, fontSize: 13, cursor: 'pointer',
             }}
           >
-            Vista previa PDF
+            PDF (ES)
+          </button>
+          <button
+            onClick={() => handlePreviewPDF('en')}
+            style={{
+              padding: '8px 16px', background: '#fff', color: '#1A1A1A',
+              border: '1px solid #E8E6E0', borderRadius: 4, fontSize: 13, cursor: 'pointer',
+            }}
+          >
+            PDF (EN)
           </button>
           <button
             onClick={handleSend}

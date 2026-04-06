@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Sin sesión' }, { status: 401 })
 
-  const { contratoId } = await req.json()
+  const { contratoId, lang } = await req.json()
 
   const admin = createAdminClient()
   const { data: contrato, error } = await admin
@@ -41,6 +41,7 @@ export async function POST(req: NextRequest) {
     servicios_contrato: serviciosContrato,
     honorarios,
     notas:              contrato.notas ?? null,
+    lang:               (lang === 'en' ? 'en' : 'es') as 'es' | 'en',
   }
 
   const buffer = await renderToBuffer(createElement(ContratoPDF, { data }) as any)

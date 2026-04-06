@@ -5,7 +5,7 @@ import {
   Document, Page, View, Text, Image, StyleSheet,
 } from '@react-pdf/renderer'
 import path from 'path'
-import { SERVICIOS_CONFIG, SERVICIO_IDS, fmtEur, calcPropuesta } from '@/lib/propuestas/config'
+import { SERVICIOS_CONFIG, SERVICIOS_CONFIG_EN, SERVICIO_IDS, fmtEur, calcPropuesta } from '@/lib/propuestas/config'
 import type { ServicioId, ServicioEntry } from '@/lib/propuestas/config'
 
 const LOGO_BLANCO = path.join(process.cwd(), 'public', 'FORMA_PRIMA_BLANCO.png')
@@ -241,6 +241,7 @@ export interface PropuestaPDFData {
   ratios:               { label: string; servicio: ServicioId | null; ratio: number }[]
   honorarios_override:  Record<string, number>
   serviciosPlantilla:   ServicioEntry[]
+  lang?:                'es' | 'en'
   lead: {
     nombre:    string
     apellidos: string
@@ -252,9 +253,94 @@ export interface PropuestaPDFData {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function formatDate(iso: string | null) {
+function formatDate(iso: string | null, lang: 'es' | 'en' = 'es') {
   if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })
+  return new Date(iso).toLocaleDateString(lang === 'en' ? 'en-GB' : 'es-ES', { day: '2-digit', month: 'long', year: 'numeric' })
+}
+
+// ── Translations ──────────────────────────────────────────────────────────────
+const ES = {
+  docTitle:       'Propuesta de Honorarios',
+  studioSub:      'Taller de arquitectura y diseño',
+  client:         'Cliente',
+  number:         'Número',
+  dateIssued:     'Fecha de emisión',
+  project:        'Proyecto',
+  noClient:       'Sin cliente',
+  greeting:       (name: string) => `Estimado/a ${name},`,
+  greetingAnon:   'Estimado/a cliente,',
+  intro1:         (titulo: string | null) =>
+    `Nos complace presentarle la siguiente propuesta de honorarios${titulo ? ` para el proyecto "${titulo}"` : ''}. En Forma Prima entendemos cada espacio como una oportunidad única de transformar la vida de las personas, y es un placer poder acompañarle en este proceso.`,
+  intro2:         'A continuación encontrará el detalle de los servicios que conforman nuestra propuesta, junto con los entregables, plazos y condiciones de pago de cada fase. Quedamos a su entera disposición para resolver cualquier duda o adaptar la propuesta a sus necesidades.',
+  intro3:         'Atentamente,\nEl equipo de Forma Prima',
+  area:           'Superficie',
+  targetPriceM2:  'Precio objetivo €/m²',
+  targetCost:     'Objetivo de costo de obra',
+  totalFees:      'Honorarios totales',
+  metTitle:       'Metodología de cálculo de honorarios',
+  metPemBoth:     (pct: number, pemStr: string, m2Str: string, costoStr: string) =>
+    `Las fases de proyecto y dirección de obra se calculan aplicando un porcentaje del ${pct}% sobre el Presupuesto de Ejecución Material (PEM) objetivo, determinado en ${pemStr} (${m2Str} m² × ${costoStr}/m²). Este criterio vincula la retribución del Estudio al valor real de la obra, garantizando transparencia y proporcionalidad.`,
+  metPemOnly:     (pct: number, pemStr: string, m2Str: string, costoStr: string) =>
+    `Los honorarios profesionales del presente encargo se calculan aplicando un porcentaje del ${pct}% sobre el Presupuesto de Ejecución Material (PEM) objetivo, determinado en ${pemStr} (${m2Str} m² × ${costoStr}/m²). Este criterio vincula directamente la retribución del Estudio al alcance y valor real de la obra, garantizando transparencia y proporcionalidad.`,
+  distribBoth:    'Distribución de las fases de arquitectura:',
+  distribOnly:    'El total de honorarios se distribuye entre las fases contratadas de la siguiente forma:',
+  doRevision:     'Revisión de PEM a la liquidación de obra: Con carácter previo al último pago de la Dirección Estética de Obra, las partes realizarán una revisión del coste real de ejecución material. En caso de que el PEM definitivo supere el objetivo de cálculo, el importe del último pago de dirección de obra se ajustará proporcionalmente al alza. No procederá reducción de honorarios por variación a la baja del PEM.',
+  pctPemLabel:    '% de los honorarios PEM',
+  ratioHasBoth:   (names: string) =>
+    `Los honorarios de interiorismo (${names}) quedan expresamente excluidos del sistema de cálculo basado en PEM. Se determinan mediante una estimación de horas de dedicación del equipo en función del tamaño y complejidad del proyecto, aplicando la tarifa horaria del Estudio según el perfil del equipo asignado.`,
+  ratioOnly:      'Los honorarios del presente encargo corresponden a servicios de interiorismo y se calculan de forma independiente al Presupuesto de Ejecución Material. Se determinan mediante una estimación de horas de dedicación del equipo en función del tamaño y complejidad del proyecto, aplicando la tarifa horaria del Estudio según el perfil del equipo asignado.',
+  scopeTitle:     'Alcance de servicios',
+  timeline:       'Plazo',
+  paymentMilest:  'Hitos de pago',
+  financialSum:   'Resumen económico',
+  totalLabel:     'Total honorarios',
+  totalVat:       'Total IVA incluido',
+  vatNote:        'Todos los importes indicados no incluyen IVA (21%). Se facturarán según los hitos de pago descritos en cada servicio.',
+  vatPemSuffix:   (pemStr: string, m2: number, costoStr: string) =>
+    ` Objetivo de costo de obra base de cálculo: ${pemStr} (${m2} m² × ${costoStr}/m²).`,
+  notes:          'Notas',
+}
+
+const EN: typeof ES = {
+  docTitle:       'Professional Fees Proposal',
+  studioSub:      'Architecture and design studio',
+  client:         'Client',
+  number:         'Number',
+  dateIssued:     'Date of issue',
+  project:        'Project',
+  noClient:       'No client',
+  greeting:       (name: string) => `Dear ${name},`,
+  greetingAnon:   'Dear Client,',
+  intro1:         (titulo: string | null) =>
+    `We are pleased to present you with the following professional fees proposal${titulo ? ` for the project "${titulo}"` : ''}. At Forma Prima we understand each space as a unique opportunity to transform people's lives, and it is a pleasure to accompany you in this process.`,
+  intro2:         'Below you will find the detail of the services included in our proposal, along with the deliverables, timelines and payment conditions for each phase. We remain at your entire disposal to answer any questions or to adapt the proposal to your needs.',
+  intro3:         'Yours sincerely,\nThe Forma Prima team',
+  area:           'Area',
+  targetPriceM2:  'Target price €/m²',
+  targetCost:     'Target construction cost',
+  totalFees:      'Total professional fees',
+  metTitle:       'Fee calculation methodology',
+  metPemBoth:     (pct: number, pemStr: string, m2Str: string, costoStr: string) =>
+    `The project and site supervision phases are calculated by applying a percentage of ${pct}% on the target Material Execution Budget (MEB), set at ${pemStr} (${m2Str} m² × ${costoStr}/m²). This criterion directly links the Studio's remuneration to the actual scope and value of the works, ensuring transparency and proportionality.`,
+  metPemOnly:     (pct: number, pemStr: string, m2Str: string, costoStr: string) =>
+    `The professional fees for this commission are calculated by applying a percentage of ${pct}% on the target Material Execution Budget (MEB), set at ${pemStr} (${m2Str} m² × ${costoStr}/m²). This criterion directly links the Studio's remuneration to the actual scope and value of the works, ensuring transparency and proportionality.`,
+  distribBoth:    'Distribution of architecture phases:',
+  distribOnly:    'The total fees are distributed among the contracted phases as follows:',
+  doRevision:     'MEB revision at project completion: Prior to the last payment of the Aesthetic Construction Management phase, the parties shall jointly review the actual material execution cost. Should the final MEB exceed the initial calculation target, the last construction management instalment shall be adjusted proportionally upward. No reduction in fees shall apply for a downward variation of the MEB.',
+  pctPemLabel:    '% of MEB fees',
+  ratioHasBoth:   (names: string) =>
+    `Interior design fees (${names}) are expressly excluded from the MEB-based calculation system. They are determined independently, based on an estimate of the studio team's hours of dedication according to the size, complexity and scope of the commission, to which the applicable professional hourly rate is applied according to the profile of the professionals assigned.`,
+  ratioOnly:      "The fees for this commission correspond to interior design services and are calculated independently of the Material Execution Budget. They are determined based on an estimate of the studio team's hours of dedication according to the size, complexity and scope of the commission, to which the applicable professional hourly rate is applied according to the profile of the professionals assigned.",
+  scopeTitle:     'Scope of services',
+  timeline:       'Timeline',
+  paymentMilest:  'Payment milestones',
+  financialSum:   'Financial summary',
+  totalLabel:     'Total professional fees',
+  totalVat:       'Total VAT included',
+  vatNote:        'All amounts shown are exclusive of VAT (21%). They will be invoiced according to the payment milestones described for each service.',
+  vatPemSuffix:   (pemStr: string, m2: number, costoStr: string) =>
+    ` Calculation base construction cost: ${pemStr} (${m2} m² × ${costoStr}/m²).`,
+  notes:          'Notes',
 }
 
 // ── Document ──────────────────────────────────────────────────────────────────
@@ -267,6 +353,9 @@ function sortServicios(ids: string[]): string[] {
 }
 
 export function PropuestaPDF({ data }: { data: PropuestaPDFData }) {
+  const lang = data.lang ?? 'es'
+  const T    = lang === 'en' ? EN : ES
+
   const sortedServicios = sortServicios(data.servicios)
   const baseServicios = sortedServicios.filter(sid => sid in SERVICIOS_CONFIG) as ServicioId[]
   const { pem, honorariosPemBase, breakdown: autoBreakdown } = calcPropuesta({
@@ -289,7 +378,7 @@ export function PropuestaPDF({ data }: { data: PropuestaPDFData }) {
 
   const clientName = data.lead
     ? [data.lead.nombre, data.lead.apellidos].filter(Boolean).join(' ') + (data.lead.empresa ? ` · ${data.lead.empresa}` : '')
-    : 'Sin cliente'
+    : T.noClient
 
   const clientAddress = data.direccion
     ?? data.lead?.direccion
@@ -308,15 +397,15 @@ export function PropuestaPDF({ data }: { data: PropuestaPDFData }) {
   return (
     <Document title={`Propuesta ${data.numero} · Forma Prima`} author="Forma Prima">
 
-      {/* ── PAGE 1: Portada + carta de presentación (sin margen superior para que el header llegue al borde) ── */}
+      {/* ── PAGE 1: Portada + carta de presentación ── */}
       <Page size="A4" style={{ ...s.page, paddingTop: 0 }}>
         {/* Header */}
         <View style={s.headerBlock}>
           <View style={s.headerInner}>
             <Image src={LOGO_BLANCO} style={s.logo} />
             <View style={{ alignItems: 'flex-end' }}>
-              <Text style={s.headerTitle}>Propuesta de Honorarios</Text>
-              <Text style={s.headerSub}>Taller de arquitectura y diseño</Text>
+              <Text style={s.headerTitle}>{T.docTitle}</Text>
+              <Text style={s.headerSub}>{T.studioSub}</Text>
               {data.titulo && (
                 <Text style={{ color: C.white, fontSize: 13, fontFamily: 'Helvetica-Bold', marginTop: 10, textAlign: 'right', opacity: 0.95 }}>
                   {data.titulo}
@@ -330,19 +419,19 @@ export function PropuestaPDF({ data }: { data: PropuestaPDFData }) {
         {/* Meta bar */}
         <View style={s.metaBar}>
           <View>
-            <Text style={s.metaLabel}>Cliente</Text>
+            <Text style={s.metaLabel}>{T.client}</Text>
             <Text style={s.metaValue}>{clientName}</Text>
             {data.lead?.email && <Text style={{ ...s.metaValueLight, marginTop: 2 }}>{data.lead.email}</Text>}
             <Text style={{ ...s.metaValueLight, marginTop: 2 }}>{clientAddress}</Text>
           </View>
           <View style={{ alignItems: 'flex-end' }}>
-            <Text style={s.metaLabel}>Número</Text>
+            <Text style={s.metaLabel}>{T.number}</Text>
             <Text style={s.metaValue}>{data.numero}</Text>
-            <Text style={{ ...s.metaLabel, marginTop: 10 }}>Fecha de emisión</Text>
-            <Text style={s.metaValueLight}>{formatDate(fechaEmision)}</Text>
+            <Text style={{ ...s.metaLabel, marginTop: 10 }}>{T.dateIssued}</Text>
+            <Text style={s.metaValueLight}>{formatDate(fechaEmision, lang)}</Text>
             {data.titulo && (
               <>
-                <Text style={{ ...s.metaLabel, marginTop: 10 }}>Proyecto</Text>
+                <Text style={{ ...s.metaLabel, marginTop: 10 }}>{T.project}</Text>
                 <Text style={s.metaValueLight}>{data.titulo}</Text>
               </>
             )}
@@ -353,17 +442,17 @@ export function PropuestaPDF({ data }: { data: PropuestaPDFData }) {
         <View style={s.introBlock}>
           <Text style={s.introText}>
             {data.lead
-              ? `Estimado/a ${[data.lead.nombre, data.lead.apellidos].filter(Boolean).join(' ')},`
-              : 'Estimado/a cliente,'}
+              ? T.greeting([data.lead.nombre, data.lead.apellidos].filter(Boolean).join(' '))
+              : T.greetingAnon}
           </Text>
           <Text style={{ ...s.introText, marginTop: 8 }}>
-            {`Nos complace presentarle la siguiente propuesta de honorarios${data.titulo ? ` para el proyecto "${data.titulo}"` : ''}. En Forma Prima entendemos cada espacio como una oportunidad única de transformar la vida de las personas, y es un placer poder acompañarle en este proceso.`}
+            {T.intro1(data.titulo)}
           </Text>
           <Text style={{ ...s.introText, marginTop: 8 }}>
-            A continuación encontrará el detalle de los servicios que conforman nuestra propuesta, junto con los entregables, plazos y condiciones de pago de cada fase. Quedamos a su entera disposición para resolver cualquier duda o adaptar la propuesta a sus necesidades.
+            {T.intro2}
           </Text>
           <Text style={{ ...s.introText, marginTop: 8 }}>
-            Atentamente,{'\n'}El equipo de Forma Prima
+            {T.intro3}
           </Text>
         </View>
 
@@ -371,27 +460,27 @@ export function PropuestaPDF({ data }: { data: PropuestaPDFData }) {
         <View style={s.body}>
           <View style={s.summaryBox}>
             <View style={s.summaryItemFirst}>
-              <Text style={s.metaLabel}>Superficie</Text>
+              <Text style={s.metaLabel}>{T.area}</Text>
               <Text style={{ fontSize: 14, fontFamily: 'Helvetica-Bold', color: C.ink, marginTop: 2 }}>
                 {data.m2.toLocaleString('es-ES')} m²
               </Text>
             </View>
             <View style={s.summaryItem}>
-              <Text style={s.metaLabel}>Precio objetivo €/m²</Text>
+              <Text style={s.metaLabel}>{T.targetPriceM2}</Text>
               <Text style={{ fontSize: 14, fontFamily: 'Helvetica-Bold', color: C.ink, marginTop: 2 }}>
                 {fmtEur(data.costo_m2)}
                 <Text style={{ fontSize: 8, fontFamily: 'Helvetica', color: C.mid }}> + IVA</Text>
               </Text>
             </View>
             <View style={s.summaryItem}>
-              <Text style={s.metaLabel}>Objetivo de costo de obra</Text>
+              <Text style={s.metaLabel}>{T.targetCost}</Text>
               <Text style={{ fontSize: 14, fontFamily: 'Helvetica-Bold', color: C.ink, marginTop: 2 }}>
                 {fmtEur(pem)}
                 <Text style={{ fontSize: 8, fontFamily: 'Helvetica', color: C.mid }}> + IVA</Text>
               </Text>
             </View>
             <View style={s.summaryItem}>
-              <Text style={s.metaLabel}>Honorarios totales</Text>
+              <Text style={s.metaLabel}>{T.totalFees}</Text>
               <Text style={{ fontSize: 14, fontFamily: 'Helvetica-Bold', color: C.brand, marginTop: 2 }}>
                 {fmtEur(total)}
                 <Text style={{ fontSize: 8, fontFamily: 'Helvetica', color: C.mid }}> + IVA</Text>
@@ -411,18 +500,18 @@ export function PropuestaPDF({ data }: { data: PropuestaPDFData }) {
 
             return (
               <View style={s.metodologiaBlock}>
-                <Text style={s.metodologiaTitle}>Metodología de cálculo de honorarios</Text>
+                <Text style={s.metodologiaTitle}>{T.metTitle}</Text>
 
                 {/* PEM-based services */}
                 {pemServices.length > 0 && (
                   <>
                     <Text style={s.metodologiaText}>
                       {hasBoth
-                        ? `Las fases de proyecto y dirección de obra se calculan aplicando un porcentaje del ${pctBase}% sobre el Presupuesto de Ejecución Material (PEM) objetivo, determinado en ${fmtEur(pem)} (${data.m2.toLocaleString('es-ES')} m² × ${fmtEur(data.costo_m2)}/m²). Este criterio vincula la retribución del Estudio al valor real de la obra, garantizando transparencia y proporcionalidad.`
-                        : `Los honorarios profesionales del presente encargo se calculan aplicando un porcentaje del ${pctBase}% sobre el Presupuesto de Ejecución Material (PEM) objetivo, determinado en ${fmtEur(pem)} (${data.m2.toLocaleString('es-ES')} m² × ${fmtEur(data.costo_m2)}/m²). Este criterio vincula directamente la retribución del Estudio al alcance y valor real de la obra, garantizando transparencia y proporcionalidad.`}
+                        ? T.metPemBoth(pctBase, fmtEur(pem), data.m2.toLocaleString('es-ES'), fmtEur(data.costo_m2))
+                        : T.metPemOnly(pctBase, fmtEur(pem), data.m2.toLocaleString('es-ES'), fmtEur(data.costo_m2))}
                     </Text>
                     <Text style={{ ...s.metodologiaText, marginTop: 4 }}>
-                      {hasBoth ? 'Distribución de las fases de arquitectura:' : 'El total de honorarios se distribuye entre las fases contratadas de la siguiente forma:'}
+                      {hasBoth ? T.distribBoth : T.distribOnly}
                     </Text>
                     {pemServices.map(sid => {
                       const cfg     = SERVICIOS_CONFIG[sid]
@@ -430,13 +519,13 @@ export function PropuestaPDF({ data }: { data: PropuestaPDFData }) {
                       const pctFase = Math.round(cfg.pem_split * 100)
                       return (
                         <Text key={sid} style={s.metodologiaBullet}>
-                          {`· ${cfg.label}  —  ${pctFase}% de los honorarios PEM  (${fmtEur(importe)} + IVA)`}
+                          {`· ${(lang === 'en' ? SERVICIOS_CONFIG_EN[sid]?.label : null) ?? cfg.label}  —  ${pctFase}${T.pctPemLabel}  (${fmtEur(importe)} + IVA)`}
                         </Text>
                       )
                     })}
                     {includesDO && (
                       <Text style={s.metodologiaAlert}>
-                        {'Revisión de PEM a la liquidación de obra: Con carácter previo al último pago de la Dirección Estética de Obra, las partes realizarán una revisión del coste real de ejecución material. En caso de que el PEM definitivo supere el objetivo de cálculo, el importe del último pago de dirección de obra se ajustará proporcionalmente al alza. No procederá reducción de honorarios por variación a la baja del PEM.'}
+                        {T.doRevision}
                       </Text>
                     )}
                   </>
@@ -447,14 +536,15 @@ export function PropuestaPDF({ data }: { data: PropuestaPDFData }) {
                   <>
                     <Text style={{ ...s.metodologiaText, marginTop: pemServices.length > 0 ? 8 : 0 }}>
                       {hasBoth
-                        ? `Los honorarios de interiorismo (${ratioServices.map(sid => SERVICIOS_CONFIG[sid].label).join(' y ')}) quedan expresamente excluidos del sistema de cálculo basado en PEM. Se determinan mediante una estimación de horas de dedicación del equipo en función del tamaño y complejidad del proyecto, aplicando la tarifa horaria del Estudio según el perfil del equipo asignado.`
-                        : `Los honorarios del presente encargo corresponden a servicios de interiorismo y se calculan de forma independiente al Presupuesto de Ejecución Material. Se determinan mediante una estimación de horas de dedicación del equipo en función del tamaño y complejidad del proyecto, aplicando la tarifa horaria del Estudio según el perfil del equipo asignado.`}
+                        ? T.ratioHasBoth(ratioServices.map(sid => (lang === 'en' ? SERVICIOS_CONFIG_EN[sid]?.label : null) ?? SERVICIOS_CONFIG[sid].label).join(', '))
+                        : T.ratioOnly}
                     </Text>
                     {ratioServices.map(sid => {
                       const importe = breakdown[sid] ?? 0
+                      const lbl = (lang === 'en' ? SERVICIOS_CONFIG_EN[sid]?.label : null) ?? SERVICIOS_CONFIG[sid].label
                       return (
                         <Text key={sid} style={s.metodologiaBullet}>
-                          {`· ${SERVICIOS_CONFIG[sid].label}  —  ${fmtEur(importe)} + IVA`}
+                          {`· ${lbl}  —  ${fmtEur(importe)} + IVA`}
                         </Text>
                       )
                     })}
@@ -468,21 +558,24 @@ export function PropuestaPDF({ data }: { data: PropuestaPDFData }) {
         <Footer />
       </Page>
 
-      {/* ── PAGE 2+: Detalle de servicios (con margen superior en páginas de continuación) ── */}
+      {/* ── PAGE 2+: Detalle de servicios ── */}
       <Page size="A4" style={s.page}>
         <View style={s.body}>
           {/* Servicios */}
-          <Text style={s.sectionTitle}>Alcance de servicios</Text>
+          <Text style={s.sectionTitle}>{T.scopeTitle}</Text>
 
           {sortedServicios.map(sid => {
             const entry        = data.serviciosPlantilla.find(s => s.id === sid)
             const cfgBase      = SERVICIOS_CONFIG[sid as ServicioId]
-            const label_       = entry?.label ?? cfgBase?.label ?? sid
-            const texto_       = entry?.texto ?? cfgBase?.texto ?? ''
-            const entregables_ = entry?.entregables ?? (cfgBase?.entregables as unknown as { grupo: string; items: string[] }[] ?? [])
-            const pago_        = entry?.pago ?? (cfgBase?.pago as unknown as { label: string; pct: number }[] ?? [])
+            const cfgEN        = lang === 'en' ? SERVICIOS_CONFIG_EN[sid as ServicioId] : null
+            // EN: always use built-in EN config (DB plantilla is in Spanish)
+            // ES: prefer DB override, fall back to config
+            const label_       = cfgEN?.label       ?? entry?.label       ?? cfgBase?.label       ?? sid
+            const texto_       = cfgEN?.texto        ?? entry?.texto       ?? cfgBase?.texto       ?? ''
+            const entregables_ = cfgEN?.entregables  ?? entry?.entregables ?? (cfgBase?.entregables as unknown as { grupo: string; items: string[] }[] ?? [])
+            const pago_        = cfgEN?.pago         ?? entry?.pago        ?? (cfgBase?.pago as unknown as { label: string; pct: number }[] ?? [])
             const precio       = breakdown[sid] ?? 0
-            const semanas      = data.semanas[sid] ?? entry?.semanas_default ?? cfgBase?.semanas_default ?? ''
+            const semanas      = data.semanas[sid] ?? cfgEN?.semanas_default ?? entry?.semanas_default ?? cfgBase?.semanas_default ?? ''
 
             const col1 = entregables_.filter((_, i) => i % 2 === 0)
             const col2 = entregables_.filter((_, i) => i % 2 === 1)
@@ -525,12 +618,12 @@ export function PropuestaPDF({ data }: { data: PropuestaPDFData }) {
                 )}
 
                 <View style={s.detailRow}>
-                  <Text style={s.detailLabel}>Plazo</Text>
+                  <Text style={s.detailLabel}>{T.timeline}</Text>
                   <Text style={s.detailValue}>{semanas}</Text>
                 </View>
 
                 <View style={{ marginTop: 8 }}>
-                  <Text style={{ ...s.metaLabel, marginBottom: 4 }}>Hitos de pago</Text>
+                  <Text style={{ ...s.metaLabel, marginBottom: 4 }}>{T.paymentMilest}</Text>
                   {pago_.map(p => (
                     <View key={p.label} style={s.pagoRow}>
                       <Text style={s.pagoLabel}>{p.label}</Text>
@@ -548,10 +641,10 @@ export function PropuestaPDF({ data }: { data: PropuestaPDFData }) {
 
           {/* Totals */}
           <View style={s.totalsBlock} wrap={false}>
-            <Text style={s.sectionTitle}>Resumen económico</Text>
+            <Text style={s.sectionTitle}>{T.financialSum}</Text>
             {sortedServicios.map(sid => {
               const e   = data.serviciosPlantilla.find(s => s.id === sid)
-              const lbl = e?.label ?? SERVICIOS_CONFIG[sid as ServicioId]?.label ?? sid
+              const lbl = (lang === 'en' ? SERVICIOS_CONFIG_EN[sid as ServicioId]?.label : null) ?? e?.label ?? SERVICIOS_CONFIG[sid as ServicioId]?.label ?? sid
               const base = breakdown[sid] ?? 0
               return (
                 <View key={sid} style={s.totalRow}>
@@ -564,26 +657,26 @@ export function PropuestaPDF({ data }: { data: PropuestaPDFData }) {
               )
             })}
             <View style={s.totalRowFinal}>
-              <Text style={s.totalFinalLabel}>Total honorarios</Text>
+              <Text style={s.totalFinalLabel}>{T.totalLabel}</Text>
               <Text style={s.totalFinalValue}>
                 {fmtEur(total)}
                 <Text style={{ fontSize: 8, fontFamily: 'Helvetica', color: C.hMid }}> + IVA</Text>
               </Text>
             </View>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, paddingHorizontal: 12, backgroundColor: C.brand, marginTop: 2 }}>
-              <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: C.white }}>Total IVA incluido</Text>
+              <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: C.white }}>{T.totalVat}</Text>
               <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: C.white }}>{fmtEur(total * 1.21)}</Text>
             </View>
             <Text style={{ fontSize: 7, color: C.meta, marginTop: 8, lineHeight: 1.5 }}>
-              Todos los importes indicados no incluyen IVA (21%). Se facturarán según los hitos de pago descritos en cada servicio.
-              {data.m2 > 0 && ` Objetivo de costo de obra base de cálculo: ${fmtEur(pem)} (${data.m2} m² × ${fmtEur(data.costo_m2)}/m²).`}
+              {T.vatNote}
+              {data.m2 > 0 ? T.vatPemSuffix(fmtEur(pem), data.m2, fmtEur(data.costo_m2)) : ''}
             </Text>
           </View>
 
           {/* Notas */}
           {data.notas && (
             <View style={s.notasBlock} wrap={false}>
-              <Text style={s.notasTitle}>Notas</Text>
+              <Text style={s.notasTitle}>{T.notes}</Text>
               <Text style={s.notasText}>{data.notas}</Text>
             </View>
           )}

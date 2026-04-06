@@ -478,11 +478,11 @@ export default function ContratoDetalle({
     })
   }
 
-  const handlePreviewPDF = async () => {
+  const handlePreviewPDF = async (lang: 'es' | 'en' = 'es') => {
     const res = await fetch('/api/contratos/preview-pdf', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contratoId: initial.id }),
+      body: JSON.stringify({ contratoId: initial.id, lang }),
     })
     if (!res.ok) return
     const blob = await res.blob()
@@ -552,12 +552,20 @@ export default function ContratoDetalle({
             )}
 
             <button
-              onClick={handlePreviewPDF}
+              onClick={() => handlePreviewPDF('es')}
               style={{ height: 36, padding: '0 16px', background: '#fff', color: '#1A1A1A', border: '1px solid #E8E6E0', borderRadius: 4, cursor: 'pointer', fontSize: 11, fontWeight: 500 }}
               onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = '#1A1A1A' }}
               onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = '#E8E6E0' }}
             >
-              Vista previa PDF
+              PDF (ES)
+            </button>
+            <button
+              onClick={() => handlePreviewPDF('en')}
+              style={{ height: 36, padding: '0 16px', background: '#fff', color: '#1A1A1A', border: '1px solid #E8E6E0', borderRadius: 4, cursor: 'pointer', fontSize: 11, fontWeight: 500 }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = '#1A1A1A' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = '#E8E6E0' }}
+            >
+              PDF (EN)
             </button>
 
             {status !== 'firmado' && status !== 'cancelado' && (

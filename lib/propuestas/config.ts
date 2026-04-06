@@ -82,6 +82,102 @@ export const SERVICIOS_CONFIG = {
 export type ServicioId = keyof typeof SERVICIOS_CONFIG
 export const SERVICIO_IDS = Object.keys(SERVICIOS_CONFIG) as ServicioId[]
 
+// ── English service content ───────────────────────────────────────────────────
+// Used when generating PDFs with lang='en'. Overrides label/texto/entregables/pago/semanas.
+// The payment milestone translation map covers the stored honorarios strings in contratos.
+
+type ServicioContent = {
+  label:           string
+  texto:           string
+  entregables:     { grupo: string; items: string[] }[]
+  semanas_default: string
+  pago:            { label: string; pct: number }[]
+}
+
+export const SERVICIOS_CONFIG_EN: Record<ServicioId, ServicioContent> = {
+  anteproyecto: {
+    label:           'Preliminary Design',
+    semanas_default: '3–4 weeks',
+    texto: 'The Preliminary Design service covers the development of design and space layout proposals, including the graphic documentation and three-dimensional conceptualisation required for their understanding and approval by the client.',
+    entregables: [
+      { grupo: 'Proposal drawings',     items: ['Existing conditions drawings', 'Proposed layout drawing', 'Dimensions and areas drawing'] },
+      { grupo: '3D Design',             items: ['3D modelling of main spaces', 'Renders'] },
+      { grupo: 'Written documentation', items: ['Preliminary materials specification'] },
+    ],
+    pago: [
+      { label: 'On signature of the agreement',              pct: 50 },
+      { label: 'On delivery of the preliminary design',      pct: 50 },
+    ],
+  },
+  proyecto_ejecucion: {
+    label:           'Execution Project',
+    semanas_default: '6–8 weeks',
+    texto: 'The Execution Project covers the full technical development required for tendering and carrying out the works, with detailed construction documentation enabling the correct performance of the works and the selection of the contractor through a competitive tender process.',
+    entregables: [
+      { grupo: 'Execution project',        items: ['Detailed construction drawings', 'Technical and construction details', 'Technical specifications', 'Graphic documentation for execution', 'Tender documentation'] },
+      { grupo: 'Executive 3D design',      items: ['3D model update', 'Renders'] },
+      { grupo: 'Economic documentation',   items: ['Tender process management', 'Budget comparison', 'Advisory on construction budget review'] },
+    ],
+    pago: [
+      { label: 'On signature of the agreement for this phase', pct: 40 },
+      { label: 'On delivery of the execution project',         pct: 60 },
+    ],
+  },
+  direccion_obra: {
+    label:           'Aesthetic Construction Management',
+    semanas_default: 'Duration of works',
+    texto: 'Aesthetic Construction Management covers the monitoring and control of the construction process from a design standpoint, ensuring that the execution adheres to the aesthetic and technical criteria defined in the project, with ongoing coordination with the contractor and the client.',
+    entregables: [
+      { grupo: 'Site monitoring',   items: ['Site visit reports', 'Photographic / video log', 'Programme monitoring', 'Finish and sample validation', 'Contractor coordination', 'Ongoing client advisory'] },
+      { grupo: 'Handover control',  items: ['Snagging list (Checklist)', 'Practical completion report', 'Final execution validation', 'Attendance at handover'] },
+    ],
+    pago: [
+      { label: 'Monthly during construction', pct: 100 },
+    ],
+  },
+  interiorismo: {
+    label:           'Interior Design Project',
+    semanas_default: '4–6 weeks',
+    texto: 'The Interior Design Project covers the comprehensive design of furniture and decoration for the spaces, from conceptualisation through to the selection and budgeting of all elements, including the development of the visual concept and the documentation required for decision-making.',
+    entregables: [
+      { grupo: 'Interior design project', items: ['Design concept (Moodboards and Collages per space)', 'Furniture and decoration selection proposal', 'Budget for selected items', 'Showroom visits'] },
+      { grupo: '3D Design',               items: ['3D model with furniture', 'Photorealistic renders'] },
+    ],
+    pago: [
+      { label: 'On signature of the agreement for this phase',    pct: 50 },
+      { label: 'On delivery of the interior design project',      pct: 50 },
+    ],
+  },
+  gestion_interiorismo: {
+    label:           'Interior Design Management',
+    semanas_default: 'According to works programme',
+    texto: 'The Interior Design Management service covers the comprehensive coordination of the purchase, tracking, reception and installation of all selected furniture and decoration elements, ensuring that the final presentation of the space meets the criteria defined in the project.',
+    entregables: [
+      { grupo: 'Purchase management', items: ['Order coordination', 'Delivery tracking', 'Delivery reception'] },
+      { grupo: 'Installation',        items: ['Installation coordination', 'Installation supervision', 'Final furniture validation', 'Final cleaning coordination'] },
+    ],
+    pago: [
+      { label: 'On commencement of purchase management', pct: 30 },
+      { label: 'On completion of installation',          pct: 70 },
+    ],
+  },
+}
+
+/**
+ * Maps Spanish payment-milestone labels (as stored in contratos.honorarios)
+ * to their English equivalents.
+ */
+export const PAGO_LABEL_EN: Record<string, string> = {
+  'A la firma del contrato':                       'On signature of the agreement',
+  'A la entrega del anteproyecto':                 'On delivery of the preliminary design',
+  'A la firma del contrato de esta fase':          'On signature of the agreement for this phase',
+  'A la entrega del proyecto ejecutivo':           'On delivery of the execution project',
+  'Mensualmente durante la ejecución de la obra': 'Monthly during construction',
+  'A la entrega del proyecto de interiorismo':     'On delivery of the interior design project',
+  'Al inicio de las gestiones de compra':         'On commencement of purchase management',
+  'A la finalización del montaje':                'On completion of installation',
+}
+
 /** Commercial hourly rates by seniority */
 export const PRECIO_HORA: Record<string, number> = {
   junior: 60,
