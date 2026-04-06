@@ -1,788 +1,523 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { submitBienvenidaForm } from '@/app/actions/bienvenida'
-
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-interface Socio {
-  nombre: string
-  titulo: string
-  bio: string
-}
-
-interface Studio {
-  nombre: string
-  tagline: string
-  descripcion: string
-  fundacion: string
-  proyectos: string
-  ciudades: string
-  socios: Socio[]
-}
 
 interface Props {
   nombreCliente: string
   token: string
-  studio: Studio
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function initials(nombre: string) {
-  return nombre
-    .split(' ')
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join('')
-    .toUpperCase()
-}
-
-function inp(): React.CSSProperties {
-  return {
-    padding: '10px 14px',
-    border: '1px solid #E5E2DA',
-    borderRadius: 4,
-    fontSize: 14,
-    width: '100%',
-    boxSizing: 'border-box',
-    fontFamily: 'inherit',
-    background: '#fff',
-    color: '#1A1A1A',
-    outline: 'none',
+  heroImage: string
+  proyectoImages: { nombre: string; url: string; tipologia: string | null }[]
+  studio: {
+    tagline: string
+    descripcion_es: string
+    proyectos: string
+    paises: string
+    fundacion: string
+    socios: { nombre: string; titulo: string; bio: string }[]
   }
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
+function initials(n: string) {
+  return n.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
+}
 
-export default function BienvenidaPage({ nombreCliente, token, studio }: Props) {
-  const [isMobile, setIsMobile] = useState(false)
+// ── Scroll-to-section ─────────────────────────────────────────────────────────
+function scrollTo(id: string) {
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
+}
+
+export default function BienvenidaPage({ nombreCliente, token, heroImage, proyectoImages, studio }: Props) {
+  const [submitted, setSubmitted]   = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [formError, setFormError]   = useState<string | null>(null)
+  const [copied, setCopied]         = useState(false)
 
   // Form state
-  const [nombre, setNombre] = useState('')
+  const [nombre,    setNombre]    = useState('')
   const [apellidos, setApellidos] = useState('')
-  const [email, setEmail] = useState('')
-  const [telefono, setTelefono] = useState('')
-  const [empresa, setEmpresa] = useState('')
-  const [interes, setInteres] = useState('')
-  const [origen, setOrigen] = useState('')
-  const [notas, setNotas] = useState('')
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [submitted, setSubmitted] = useState(false)
-  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [email,     setEmail]     = useState('')
+  const [telefono,  setTelefono]  = useState('')
+  const [empresa,   setEmpresa]   = useState('')
+  const [idea,      setIdea]      = useState('')
+  const [origen,    setOrigen]    = useState('')
+
+  // Intersection observer for fade-in sections
+  const [visible, setVisible] = useState<Record<string, boolean>>({})
+  const observer = useRef<IntersectionObserver | null>(null)
 
   useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 700)
-    check()
-    window.addEventListener('resize', check)
-    return () => window.removeEventListener('resize', check)
+    observer.current = new IntersectionObserver(
+      (entries) => {
+        entries.forEach(e => {
+          if (e.isIntersecting) setVisible(prev => ({ ...prev, [e.target.id]: true }))
+        })
+      },
+      { threshold: 0.12 }
+    )
+    const sections = document.querySelectorAll('[data-fade]')
+    sections.forEach(s => observer.current?.observe(s))
+    return () => observer.current?.disconnect()
   }, [])
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setIsSubmitting(true)
-    setSubmitError(null)
-    const res = await submitBienvenidaForm(token, {
-      nombre,
-      apellidos,
-      email,
-      telefono,
-      empresa: empresa || undefined,
-      interes: interes || undefined,
-      notas: notas || undefined,
+    if (!nombre.trim() || !email.trim()) return
+    setSubmitting(true)
+    setFormError(null)
+    const result = await submitBienvenidaForm(token, {
+      nombre: nombre.trim(),
+      apellidos: apellidos.trim(),
+      email: email.trim(),
+      telefono: telefono.trim(),
+      empresa: empresa.trim() || undefined,
+      interes: `${idea.trim()}${origen ? ` | Origen: ${origen}` : ''}`.trim() || undefined,
+      notas: undefined,
     })
-    setIsSubmitting(false)
-    if ('error' in res) {
-      setSubmitError(res.error)
-    } else {
-      setSubmitted(true)
-    }
+    setSubmitting(false)
+    if ('error' in result) setFormError(result.error)
+    else setSubmitted(true)
   }
 
-  const containerStyle: React.CSSProperties = {
-    fontFamily: "'Inter', system-ui, sans-serif",
-    background: '#F8F6F1',
-    color: '#1A1A1A',
-    margin: 0,
-    padding: 0,
-  }
-
-  const sectionWrap = (maxW = 1100): React.CSSProperties => ({
-    maxWidth: maxW,
-    margin: '0 auto',
+  const fadeStyle = (id: string): React.CSSProperties => ({
+    opacity: visible[id] ? 1 : 0,
+    transform: visible[id] ? 'translateY(0)' : 'translateY(28px)',
+    transition: 'opacity 0.7s ease, transform 0.7s ease',
   })
 
   return (
     <>
-      {/* Inject keyframe animation */}
       <style>{`
-        @keyframes bv-bounce {
-          0%, 100% { opacity: 0.35; transform: translateY(0); }
-          50% { opacity: 0.6; transform: translateY(6px); }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html { scroll-behavior: smooth; }
+        body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: #F8F6F1; color: #1A1A1A; }
+
+        .fp-section-label {
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.15em;
+          text-transform: uppercase;
+          color: #D85A30;
+          margin-bottom: 14px;
+          display: block;
         }
-        @keyframes bv-gallery-hide-scrollbar {
-          from {} to {}
+
+        .fp-btn-primary {
+          background: #D85A30;
+          color: #fff;
+          border: none;
+          border-radius: 4px;
+          padding: 16px 32px;
+          font-size: 15px;
+          font-weight: 500;
+          cursor: pointer;
+          width: 100%;
+          letter-spacing: 0.01em;
+          transition: background 0.2s;
+          font-family: inherit;
         }
-        .bv-gallery::-webkit-scrollbar { display: none; }
+        .fp-btn-primary:hover { background: #C24E26; }
+        .fp-btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        .fp-input {
+          padding: 12px 14px;
+          border: 1px solid #E5E2DA;
+          border-radius: 4px;
+          font-size: 14px;
+          width: 100%;
+          background: #fff;
+          color: #1A1A1A;
+          font-family: inherit;
+          outline: none;
+          transition: border-color 0.15s;
+        }
+        .fp-input:focus { border-color: #D85A30; }
+
+        .fp-field-label {
+          display: block;
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          color: #888;
+          margin-bottom: 6px;
+        }
+
+        .fp-grid-2 {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 16px;
+        }
+        @media (max-width: 600px) {
+          .fp-grid-2 { grid-template-columns: 1fr; }
+        }
+
+        .fp-stats-row {
+          display: flex;
+          gap: 40px;
+          flex-wrap: wrap;
+          margin-top: 40px;
+        }
+        @media (max-width: 500px) {
+          .fp-stats-row { gap: 28px; }
+        }
+
+        .fp-socios-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 24px;
+          margin-top: 32px;
+        }
+        @media (max-width: 680px) {
+          .fp-socios-grid { grid-template-columns: 1fr; }
+        }
+
+        .fp-carousel::-webkit-scrollbar { display: none; }
+
+        /* Hero scroll bounce */
+        @keyframes bounce {
+          0%, 100% { transform: translateY(0); opacity: 0.5; }
+          50%       { transform: translateY(6px); opacity: 1; }
+        }
+        .fp-bounce { animation: bounce 2s ease-in-out infinite; }
       `}</style>
 
-      <div style={containerStyle}>
-
-        {/* ── Section 1: Hero ── */}
-        <section
+      {/* ── 1. HERO ───────────────────────────────────────────────────────────── */}
+      <section style={{
+        position: 'relative',
+        minHeight: '100svh',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+        padding: '0 24px',
+      }}>
+        {/* Background image */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={heroImage}
+          alt=""
           style={{
-            background: '#1A1A1A',
-            minHeight: '100vh',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '60px 24px 80px',
-            position: 'relative',
-            textAlign: 'center',
+            position: 'absolute', inset: 0,
+            width: '100%', height: '100%',
+            objectFit: 'cover', objectPosition: 'center',
           }}
-        >
-          {/* Logo */}
-          <p
-            style={{
-              fontSize: 28,
-              fontWeight: 200,
-              letterSpacing: '0.25em',
-              color: '#fff',
-              margin: '0 0 0',
-            }}
-          >
-            FORMA PRIMA
+        />
+        {/* Overlay gradient */}
+        <div style={{
+          position: 'absolute', inset: 0,
+          background: 'linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.35) 50%, rgba(0,0,0,0.70) 100%)',
+        }} />
+
+        {/* Logo — top */}
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '28px 28px', display: 'flex', justifyContent: 'center', zIndex: 2 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/FORMA_PRIMA_BLANCO.png" alt="Forma Prima" style={{ height: 22, opacity: 0.95 }} />
+        </div>
+
+        {/* Center content */}
+        <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', maxWidth: 560, padding: '80px 0 120px' }}>
+          <p style={{
+            fontSize: 11, fontWeight: 600, letterSpacing: '0.2em',
+            textTransform: 'uppercase', color: 'rgba(255,255,255,0.55)',
+            marginBottom: 20,
+          }}>
+            Architecture · Interior Design
           </p>
-
-          {/* Thin rule */}
-          <div
-            style={{
-              width: 60,
-              height: 1,
-              background: 'rgba(255,255,255,0.2)',
-              margin: '24px auto',
-            }}
-          />
-
-          {/* Greeting */}
-          <h1
-            style={{
-              fontSize: isMobile ? 28 : 42,
-              fontWeight: 200,
-              color: '#fff',
-              letterSpacing: '-0.02em',
-              margin: '0 0 20px',
-              lineHeight: 1.2,
-            }}
-          >
-            Hola, {nombreCliente}.
+          <h1 style={{
+            fontSize: 'clamp(32px, 8vw, 52px)',
+            fontWeight: 200,
+            color: '#fff',
+            letterSpacing: '-0.02em',
+            lineHeight: 1.15,
+            marginBottom: 20,
+          }}>
+            Hello, {nombreCliente}.
           </h1>
-
-          {/* Subtitle */}
-          <p
-            style={{
-              color: 'rgba(255,255,255,0.65)',
-              fontSize: 16,
-              maxWidth: 480,
-              margin: '0 auto',
-              lineHeight: 1.7,
-              textAlign: 'center',
-            }}
-          >
-            Nos alegra que estés aquí. Queremos presentarte quiénes somos y cómo trabajamos antes de dar cualquier paso.
+          <p style={{
+            fontSize: 'clamp(14px, 3.5vw, 17px)',
+            color: 'rgba(255,255,255,0.72)',
+            lineHeight: 1.75,
+            marginBottom: 36,
+            fontWeight: 300,
+          }}>
+            We are glad you are here. We would love to introduce ourselves
+            and show you how we work before taking any step together.
           </p>
-
-          {/* Scroll indicator */}
-          <div
+          <button
+            onClick={() => scrollTo('form')}
             style={{
-              position: 'absolute',
-              bottom: 32,
-              left: '50%',
-              transform: 'translateX(-50%)',
-              fontSize: 22,
-              color: 'rgba(255,255,255,0.4)',
-              animation: 'bv-bounce 2s ease-in-out infinite',
-              userSelect: 'none',
+              background: '#D85A30',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 4,
+              padding: '14px 32px',
+              fontSize: 14,
+              fontWeight: 500,
+              cursor: 'pointer',
+              letterSpacing: '0.02em',
+              fontFamily: 'inherit',
             }}
           >
-            ▾
-          </div>
-        </section>
+            Tell us about your project →
+          </button>
+        </div>
 
-        {/* ── Section 2: Studio intro ── */}
-        <section style={{ padding: '80px 24px', background: '#F8F6F1' }}>
-          <div style={sectionWrap()}>
-            {/* Label */}
-            <p
-              style={{
-                fontSize: 10,
-                letterSpacing: '0.15em',
-                textTransform: 'uppercase',
-                color: '#D85A30',
-                marginBottom: 16,
-                fontWeight: 500,
-              }}
-            >
-              ESTUDIO
-            </p>
+        {/* Scroll indicator */}
+        <div className="fp-bounce" style={{
+          position: 'absolute', bottom: 28, left: '50%', transform: 'translateX(-50%)',
+          zIndex: 2, color: 'rgba(255,255,255,0.4)', fontSize: 20, lineHeight: 1,
+        }}>
+          ↓
+        </div>
+      </section>
 
-            {/* Title */}
-            <h2
-              style={{
-                fontSize: isMobile ? 24 : 32,
-                fontWeight: 300,
-                color: '#1A1A1A',
-                maxWidth: 560,
-                margin: '0 0 24px',
-                lineHeight: 1.3,
-              }}
-            >
-              Diseñamos espacios que transforman vidas.
-            </h2>
-
-            {/* Description */}
-            <p
-              style={{
-                fontSize: 15,
-                color: '#555',
-                lineHeight: 1.8,
-                maxWidth: 640,
-                margin: '0 0 48px',
-              }}
-            >
-              {studio.descripcion}
-            </p>
-
-            {/* Stats */}
-            <div
-              style={{
-                display: 'flex',
-                gap: isMobile ? 24 : 48,
-                flexWrap: 'wrap',
-              }}
-            >
-              {[
-                { value: studio.proyectos, label: 'Proyectos' },
-                { value: studio.fundacion, label: 'Año fundación' },
-                { value: studio.ciudades, label: 'Presencia' },
-              ].map((stat) => (
-                <div key={stat.label}>
-                  <p
-                    style={{
-                      fontSize: 28,
-                      fontWeight: 200,
-                      color: '#D85A30',
-                      margin: '0 0 4px',
-                      lineHeight: 1,
-                    }}
-                  >
-                    {stat.value}
-                  </p>
-                  <p
-                    style={{
-                      fontSize: 11,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.1em',
-                      color: '#888',
-                      margin: 0,
-                    }}
-                  >
-                    {stat.label}
-                  </p>
-                </div>
-              ))}
+      {/* ── 2. FORM ───────────────────────────────────────────────────────────── */}
+      <section id="form" data-fade style={{ background: '#fff', padding: 'clamp(60px, 8vw, 96px) 24px' }}>
+        <div id="form-inner" data-fade style={{ ...fadeStyle('form-inner'), maxWidth: 600, margin: '0 auto' }}>
+          <span className="fp-section-label">First step</span>
+          {submitted ? (
+            <div style={{ textAlign: 'center', padding: '48px 0' }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/FORMA_PRIMA_NEGRO.png" alt="Forma Prima" style={{ height: 20, marginBottom: 32, opacity: 0.7 }} />
+              <h2 style={{ fontSize: 26, fontWeight: 300, marginBottom: 16 }}>
+                Thank you, {nombre || nombreCliente}!
+              </h2>
+              <p style={{ fontSize: 15, color: '#666', lineHeight: 1.7, maxWidth: 400, margin: '0 auto' }}>
+                We have received your information and will be in touch within 24 hours.
+              </p>
             </div>
-          </div>
-        </section>
+          ) : (
+            <>
+              <h2 style={{ fontSize: 'clamp(24px, 5vw, 32px)', fontWeight: 300, marginBottom: 10, lineHeight: 1.2 }}>
+                Tell us about yourself and your idea
+              </h2>
+              <p style={{ fontSize: 14, color: '#888', marginBottom: 36, lineHeight: 1.65 }}>
+                No commitment needed. We simply want to understand you better before our first conversation.
+              </p>
+              <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                <div className="fp-grid-2">
+                  <div>
+                    <label className="fp-field-label">First name *</label>
+                    <input className="fp-input" value={nombre} onChange={e => setNombre(e.target.value)} required placeholder="Your first name" />
+                  </div>
+                  <div>
+                    <label className="fp-field-label">Last name</label>
+                    <input className="fp-input" value={apellidos} onChange={e => setApellidos(e.target.value)} placeholder="Your last name" />
+                  </div>
+                </div>
+                <div className="fp-grid-2">
+                  <div>
+                    <label className="fp-field-label">Email *</label>
+                    <input className="fp-input" type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="you@email.com" />
+                  </div>
+                  <div>
+                    <label className="fp-field-label">Phone</label>
+                    <input className="fp-input" type="tel" value={telefono} onChange={e => setTelefono(e.target.value)} placeholder="+32 000 000 000" />
+                  </div>
+                </div>
+                <div>
+                  <label className="fp-field-label">Company (optional)</label>
+                  <input className="fp-input" value={empresa} onChange={e => setEmpresa(e.target.value)} placeholder="Your company or community name" />
+                </div>
+                <div>
+                  <label className="fp-field-label">What do you have in mind?</label>
+                  <textarea
+                    className="fp-input"
+                    value={idea}
+                    onChange={e => setIdea(e.target.value)}
+                    rows={4}
+                    placeholder="Tell us briefly about your project or idea…"
+                    style={{ resize: 'vertical' }}
+                  />
+                </div>
+                <div>
+                  <label className="fp-field-label">How did you find us?</label>
+                  <select className="fp-input" value={origen} onChange={e => setOrigen(e.target.value)} style={{ cursor: 'pointer' }}>
+                    <option value="">— Select an option —</option>
+                    <option value="Referido">Referral / recommendation</option>
+                    <option value="Instagram">Instagram</option>
+                    <option value="Web">Website</option>
+                    <option value="Google">Google</option>
+                    <option value="LinkedIn">LinkedIn</option>
+                    <option value="Evento">Event</option>
+                    <option value="Otro">Other</option>
+                  </select>
+                </div>
+                {formError && (
+                  <p style={{ fontSize: 13, color: '#E53E3E', padding: '8px 12px', background: '#FFF5F5', borderRadius: 4 }}>
+                    {formError}
+                  </p>
+                )}
+                <button type="submit" className="fp-btn-primary" disabled={submitting}>
+                  {submitting ? 'Sending…' : "Let's get started →"}
+                </button>
+                <p style={{ fontSize: 11, color: '#BBB', textAlign: 'center', lineHeight: 1.6 }}>
+                  Your information is confidential and will only be used to get in touch with you.
+                </p>
+              </form>
+            </>
+          )}
+        </div>
+      </section>
 
-        {/* ── Section 3: Gallery ── */}
-        <section style={{ background: '#1A1A1A', padding: 0 }}>
-          <p
-            style={{
-              fontSize: 10,
-              textTransform: 'uppercase',
-              letterSpacing: '0.15em',
-              color: 'rgba(255,255,255,0.4)',
-              padding: '40px 40px 16px',
-              margin: 0,
-            }}
-          >
-            PROYECTOS RECIENTES
-          </p>
+      {/* ── 3. ESTUDIO ────────────────────────────────────────────────────────── */}
+      <section style={{ background: '#F8F6F1', padding: 'clamp(60px, 8vw, 96px) 24px' }}>
+        <div id="estudio" data-fade style={{ ...fadeStyle('estudio'), maxWidth: 720, margin: '0 auto' }}>
+          <span className="fp-section-label">The studio</span>
+          <h2 style={{ fontSize: 'clamp(22px, 5vw, 32px)', fontWeight: 300, lineHeight: 1.3, marginBottom: 28, maxWidth: 560 }}>
+            True harmony is not found in uniformity,<br />but in the strategic amalgamation of contrasts.
+          </h2>
+          {studio.descripcion_es.split('\n\n').map((p, i) => (
+            <p key={i} style={{ fontSize: 15, color: '#444', lineHeight: 1.8, marginBottom: 16 }}>
+              {p}
+            </p>
+          ))}
+          <div className="fp-stats-row">
+            {[
+              { value: studio.proyectos, label: 'Projects' },
+              { value: studio.fundacion, label: 'Founded' },
+              { value: studio.paises,    label: 'Projects in' },
+            ].map(s => (
+              <div key={s.label}>
+                <p style={{ fontSize: 28, fontWeight: 200, color: '#D85A30', lineHeight: 1 }}>{s.value}</p>
+                <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', marginTop: 6 }}>{s.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── 4. CAROUSEL ───────────────────────────────────────────────────────── */}
+      {proyectoImages.length > 0 && (
+        <section style={{ background: '#1A1A1A', padding: 'clamp(48px, 6vw, 72px) 0' }}>
+          <div style={{ padding: '0 24px 20px' }}>
+            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.35)' }}>
+              Proyectos recientes
+            </span>
+          </div>
           <div
-            className="bv-gallery"
+            className="fp-carousel"
             style={{
               display: 'flex',
+              gap: 3,
               overflowX: 'auto',
-              gap: 2,
               scrollbarWidth: 'none',
+              paddingLeft: 24,
+              paddingRight: 24,
             }}
           >
-            {(['#2A2A2A', '#3A3530', '#4A3F38', '#2E2825', '#352F2A', '#3F3830'] as const).map(
-              (bg, i) => (
-                <div
-                  key={i}
-                  style={{
-                    background: bg,
-                    aspectRatio: '4/3',
-                    minWidth: 320,
-                    flexShrink: 0,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: 11,
-                      color: 'rgba(255,255,255,0.4)',
-                      opacity: 0.4,
-                    }}
-                  >
-                    Próximamente: galería de proyectos
-                  </span>
-                </div>
-              )
-            )}
-          </div>
-        </section>
-
-        {/* ── Section 4: Socios ── */}
-        <section style={{ padding: '80px 24px', background: '#F8F6F1' }}>
-          <div style={sectionWrap()}>
-            <p
-              style={{
-                fontSize: 10,
-                letterSpacing: '0.15em',
-                textTransform: 'uppercase',
-                color: '#D85A30',
-                marginBottom: 16,
-                fontWeight: 500,
-              }}
-            >
-              EL EQUIPO
-            </p>
-            <h2
-              style={{
-                fontSize: isMobile ? 22 : 28,
-                fontWeight: 300,
-                color: '#1A1A1A',
-                margin: '0 0 40px',
-              }}
-            >
-              Con quienes vas a trabajar
-            </h2>
-
-            <div
-              style={{
-                display: 'flex',
-                gap: 20,
-                flexWrap: 'wrap',
-              }}
-            >
-              {studio.socios.map((socio) => (
-                <div
-                  key={socio.nombre}
-                  style={{
-                    background: '#fff',
-                    border: '1px solid #E5E2DA',
-                    borderRadius: 8,
-                    padding: 28,
-                    flex: '1 1 260px',
-                    minWidth: isMobile ? '100%' : 260,
-                  }}
-                >
-                  {/* Avatar */}
-                  <div
-                    style={{
-                      width: 48,
-                      height: 48,
-                      borderRadius: '50%',
-                      background: '#F0EDE8',
-                      color: '#888',
-                      fontSize: 18,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      marginBottom: 16,
-                      fontWeight: 300,
-                    }}
-                  >
-                    {initials(socio.nombre)}
-                  </div>
-                  <p style={{ fontSize: 16, fontWeight: 600, margin: '0 0 4px', color: '#1A1A1A' }}>
-                    {socio.nombre}
-                  </p>
-                  <p style={{ fontSize: 12, color: '#D85A30', margin: '0 0 12px' }}>{socio.titulo}</p>
-                  <p style={{ fontSize: 13, color: '#555', lineHeight: 1.7, margin: 0 }}>{socio.bio}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* ── Section 5: Video placeholder ── */}
-        <section style={{ padding: '80px 24px', background: '#1A1A1A' }}>
-          <div style={sectionWrap()}>
-            <p
-              style={{
-                fontSize: 10,
-                letterSpacing: '0.15em',
-                textTransform: 'uppercase',
-                color: 'rgba(255,255,255,0.4)',
-                marginBottom: 16,
-                fontWeight: 500,
-              }}
-            >
-              NUESTRO TRABAJO
-            </p>
-            <h2
-              style={{
-                fontSize: isMobile ? 22 : 28,
-                fontWeight: 200,
-                color: '#fff',
-                margin: '0 0 0',
-              }}
-            >
-              Así es trabajar con Forma Prima.
-            </h2>
-            <div
-              style={{
-                background: '#2A2A2A',
-                borderRadius: 8,
-                aspectRatio: '16/9',
-                maxWidth: 800,
-                margin: '32px auto 0',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>
-                Vídeo próximamente
-              </span>
-            </div>
-          </div>
-        </section>
-
-        {/* ── Section 6: Form ── */}
-        <section style={{ padding: '80px 24px', background: '#F8F6F1' }}>
-          <div style={{ ...sectionWrap(640) }}>
-            <p
-              style={{
-                fontSize: 10,
-                letterSpacing: '0.15em',
-                textTransform: 'uppercase',
-                color: '#D85A30',
-                marginBottom: 16,
-                fontWeight: 500,
-              }}
-            >
-              PRIMER PASO
-            </p>
-            <h2
-              style={{
-                fontSize: isMobile ? 22 : 28,
-                fontWeight: 300,
-                color: '#1A1A1A',
-                margin: '0 0 12px',
-              }}
-            >
-              Cuéntanos sobre ti y tu idea
-            </h2>
-            <p style={{ fontSize: 14, color: '#888', marginBottom: 40 }}>
-              Sin compromiso. Solo queremos entenderte mejor antes de nuestra primera conversación.
-            </p>
-
-            {submitted ? (
-              <div style={{ textAlign: 'center', padding: '48px 0' }}>
-                <h3
-                  style={{
-                    fontSize: isMobile ? 22 : 28,
-                    fontWeight: 300,
-                    color: '#1A1A1A',
-                    margin: '0 0 16px',
-                  }}
-                >
-                  ¡Gracias, {nombre}!
-                </h3>
-                <p style={{ fontSize: 15, color: '#555', lineHeight: 1.7, maxWidth: 400, margin: '0 auto 32px' }}>
-                  Hemos recibido tu información. Nos pondremos en contacto contigo en menos de 24 horas.
-                </p>
-                <p
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 200,
-                    letterSpacing: '0.2em',
-                    color: '#888',
-                  }}
-                >
-                  FORMA PRIMA
-                </p>
-              </div>
-            ) : (
-              <form onSubmit={handleSubmit}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-
-                  {/* Row: Nombre + Apellidos */}
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
-                      gap: 16,
-                    }}
-                  >
-                    <div>
-                      <label
-                        style={{
-                          display: 'block',
-                          fontSize: 11,
-                          fontWeight: 600,
-                          letterSpacing: '0.05em',
-                          textTransform: 'uppercase',
-                          color: '#888',
-                          marginBottom: 6,
-                        }}
-                      >
-                        Nombre *
-                      </label>
-                      <input
-                        required
-                        type="text"
-                        value={nombre}
-                        onChange={(e) => setNombre(e.target.value)}
-                        style={inp()}
-                      />
-                    </div>
-                    <div>
-                      <label
-                        style={{
-                          display: 'block',
-                          fontSize: 11,
-                          fontWeight: 600,
-                          letterSpacing: '0.05em',
-                          textTransform: 'uppercase',
-                          color: '#888',
-                          marginBottom: 6,
-                        }}
-                      >
-                        Apellidos
-                      </label>
-                      <input
-                        type="text"
-                        value={apellidos}
-                        onChange={(e) => setApellidos(e.target.value)}
-                        style={inp()}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Row: Email + Teléfono */}
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
-                      gap: 16,
-                    }}
-                  >
-                    <div>
-                      <label
-                        style={{
-                          display: 'block',
-                          fontSize: 11,
-                          fontWeight: 600,
-                          letterSpacing: '0.05em',
-                          textTransform: 'uppercase',
-                          color: '#888',
-                          marginBottom: 6,
-                        }}
-                      >
-                        Email *
-                      </label>
-                      <input
-                        required
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        style={inp()}
-                      />
-                    </div>
-                    <div>
-                      <label
-                        style={{
-                          display: 'block',
-                          fontSize: 11,
-                          fontWeight: 600,
-                          letterSpacing: '0.05em',
-                          textTransform: 'uppercase',
-                          color: '#888',
-                          marginBottom: 6,
-                        }}
-                      >
-                        Teléfono
-                      </label>
-                      <input
-                        type="tel"
-                        value={telefono}
-                        onChange={(e) => setTelefono(e.target.value)}
-                        style={inp()}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Empresa */}
-                  <div>
-                    <label
-                      style={{
-                        display: 'block',
-                        fontSize: 11,
-                        fontWeight: 600,
-                        letterSpacing: '0.05em',
-                        textTransform: 'uppercase',
-                        color: '#888',
-                        marginBottom: 6,
-                      }}
-                    >
-                      Empresa
-                    </label>
-                    <input
-                      type="text"
-                      value={empresa}
-                      onChange={(e) => setEmpresa(e.target.value)}
-                      style={inp()}
-                    />
-                  </div>
-
-                  {/* Interes */}
-                  <div>
-                    <label
-                      style={{
-                        display: 'block',
-                        fontSize: 11,
-                        fontWeight: 600,
-                        letterSpacing: '0.05em',
-                        textTransform: 'uppercase',
-                        color: '#888',
-                        marginBottom: 6,
-                      }}
-                    >
-                      ¿Qué tienes en mente?
-                    </label>
-                    <textarea
-                      rows={4}
-                      value={interes}
-                      onChange={(e) => setInteres(e.target.value)}
-                      placeholder="Cuéntanos brevemente tu proyecto o idea…"
-                      style={{ ...inp(), resize: 'vertical', lineHeight: 1.6 }}
-                    />
-                  </div>
-
-                  {/* Origen */}
-                  <div>
-                    <label
-                      style={{
-                        display: 'block',
-                        fontSize: 11,
-                        fontWeight: 600,
-                        letterSpacing: '0.05em',
-                        textTransform: 'uppercase',
-                        color: '#888',
-                        marginBottom: 6,
-                      }}
-                    >
-                      ¿Cómo nos has conocido?
-                    </label>
-                    <select
-                      value={origen}
-                      onChange={(e) => setOrigen(e.target.value)}
-                      style={inp()}
-                    >
-                      <option value="">Selecciona una opción…</option>
-                      <option value="Referido">Referido</option>
-                      <option value="Instagram">Instagram</option>
-                      <option value="Web">Web</option>
-                      <option value="Google">Google</option>
-                      <option value="Evento">Evento</option>
-                      <option value="Otro">Otro</option>
-                    </select>
-                  </div>
-
-                  {/* Error */}
-                  {submitError && (
-                    <div
-                      style={{
-                        padding: '10px 16px',
-                        background: '#FEF2F2',
-                        border: '1px solid #FCA5A5',
-                        borderRadius: 4,
-                        fontSize: 13,
-                        color: '#DC2626',
-                      }}
-                    >
-                      {submitError}
-                    </div>
+            {proyectoImages.map((p, i) => (
+              <div
+                key={i}
+                style={{
+                  position: 'relative',
+                  flexShrink: 0,
+                  width: 'clamp(260px, 45vw, 380px)',
+                  aspectRatio: '3/4',
+                  borderRadius: 4,
+                  overflow: 'hidden',
+                  background: '#2A2A2A',
+                }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={p.url}
+                  alt={p.nombre}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                />
+                <div style={{
+                  position: 'absolute', bottom: 0, left: 0, right: 0,
+                  background: 'linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 100%)',
+                  padding: '24px 16px 16px',
+                }}>
+                  <p style={{ fontSize: 12, fontWeight: 500, color: '#fff', letterSpacing: '0.02em' }}>{p.nombre}</p>
+                  {p.tipologia && (
+                    <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{p.tipologia}</p>
                   )}
-
-                  {/* Submit */}
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    style={{
-                      width: '100%',
-                      background: isSubmitting ? '#C0876A' : '#D85A30',
-                      color: '#fff',
-                      padding: '14px',
-                      fontSize: 15,
-                      fontWeight: 500,
-                      border: 'none',
-                      borderRadius: 4,
-                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                      fontFamily: 'inherit',
-                      transition: 'background 0.15s',
-                    }}
-                  >
-                    {isSubmitting ? 'Enviando…' : 'Quiero empezar →'}
-                  </button>
                 </div>
-              </form>
-            )}
+              </div>
+            ))}
           </div>
         </section>
+      )}
 
-        {/* ── Section 7: Footer ── */}
-        <footer
-          style={{
-            background: '#1A1A1A',
-            padding: '32px 24px',
-            textAlign: 'center',
-          }}
-        >
-          <p
-            style={{
-              fontSize: 14,
-              fontWeight: 200,
-              letterSpacing: '0.2em',
-              color: '#fff',
-              margin: '0 0 8px',
-            }}
-          >
-            FORMA PRIMA
+      {/* ── 5. SOCIOS ─────────────────────────────────────────────────────────── */}
+      <section style={{ background: '#F8F6F1', padding: 'clamp(60px, 8vw, 96px) 24px' }}>
+        <div id="equipo" data-fade style={{ ...fadeStyle('equipo'), maxWidth: 860, margin: '0 auto' }}>
+          <span className="fp-section-label">The team</span>
+          <h2 style={{ fontSize: 'clamp(22px, 5vw, 30px)', fontWeight: 300, marginBottom: 8 }}>
+            Who you will be working with
+          </h2>
+          <p style={{ fontSize: 14, color: '#888', marginBottom: 0, lineHeight: 1.6 }}>
+            Forma Prima is a deliberately small studio. Every project is handled personally by us — no hand-offs.
           </p>
-          <p
-            style={{
-              fontSize: 12,
-              color: 'rgba(255,255,255,0.4)',
-              margin: '0 0 4px',
-            }}
-          >
-            contacto@formaprima.es
-          </p>
-          <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', margin: 0 }}>
-            © 2025 Geinex Group S.L.
-          </p>
-        </footer>
-      </div>
+          <div className="fp-socios-grid">
+            {studio.socios.map(s => (
+              <div key={s.nombre} style={{
+                background: '#fff',
+                border: '1px solid #E5E2DA',
+                borderRadius: 8,
+                padding: 'clamp(20px, 4vw, 32px)',
+              }}>
+                <div style={{
+                  width: 52, height: 52, borderRadius: '50%',
+                  background: '#F0EDE8', color: '#888',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 16, fontWeight: 600, marginBottom: 16,
+                  letterSpacing: '0.02em',
+                }}>
+                  {initials(s.nombre)}
+                </div>
+                <p style={{ fontSize: 15, fontWeight: 600, marginBottom: 2 }}>{s.nombre}</p>
+                <p style={{ fontSize: 11, color: '#D85A30', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 16 }}>{s.titulo}</p>
+                {s.bio.split('\n\n').map((p, i) => (
+                  <p key={i} style={{ fontSize: 13, color: '#555', lineHeight: 1.75, marginBottom: 10 }}>{p}</p>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── 6. VIDEO ──────────────────────────────────────────────────────────── */}
+      <section style={{ background: '#1A1A1A', padding: 'clamp(60px, 8vw, 96px) 24px' }}>
+        <div id="video" data-fade style={{ ...fadeStyle('video'), maxWidth: 800, margin: '0 auto', textAlign: 'center' }}>
+          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.35)', display: 'block', marginBottom: 14 }}>
+            Our work
+          </span>
+          <h2 style={{ fontSize: 'clamp(20px, 4.5vw, 28px)', fontWeight: 200, color: '#fff', marginBottom: 32, lineHeight: 1.3 }}>
+            What it feels like to work with Forma Prima.
+          </h2>
+          {/* YouTube embed — replace VIDEO_ID with real ID when available */}
+          <div style={{
+            position: 'relative', paddingBottom: '56.25%', height: 0,
+            borderRadius: 8, overflow: 'hidden', background: '#2A2A2A',
+          }}>
+            <div style={{
+              position: 'absolute', inset: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexDirection: 'column', gap: 12,
+            }}>
+              <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: 13 }}>Video coming soon</p>
+              <p style={{ color: 'rgba(255,255,255,0.12)', fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase' }}>YouTube embed</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── 7. FOOTER ─────────────────────────────────────────────────────────── */}
+      <footer style={{ background: '#111', padding: '40px 24px', textAlign: 'center' }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/FORMA_PRIMA_BLANCO.png" alt="Forma Prima" style={{ height: 18, marginBottom: 16, opacity: 0.6 }} />
+        <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', marginBottom: 6 }}>
+          contacto@formaprima.es
+        </p>
+        <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.18)' }}>
+          © 2025 Geinex Group S.L. · Madrid · Spain
+        </p>
+      </footer>
     </>
   )
 }
