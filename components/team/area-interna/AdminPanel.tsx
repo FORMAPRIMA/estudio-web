@@ -583,9 +583,11 @@ function EquipoTab({ allMembers: initialMembers }: { allMembers: TeamMember[] })
   const [saving,   setSaving]   = useState(false)
 
   // ── Password change state ──
-  const [pwForm,   setPwForm]   = useState<{ pass: string; confirm: string }>({ pass: '', confirm: '' })
-  const [pwMsg,    setPwMsg]    = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
-  const [pwSaving, setPwSaving] = useState(false)
+  const [pwForm,      setPwForm]      = useState<{ pass: string; confirm: string }>({ pass: '', confirm: '' })
+  const [pwMsg,       setPwMsg]       = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
+  const [pwSaving,    setPwSaving]    = useState(false)
+  const [showPass,    setShowPass]    = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
 
   // ── Avatar upload ──
   const avatarInputRef = useRef<HTMLInputElement>(null)
@@ -630,6 +632,8 @@ function EquipoTab({ allMembers: initialMembers }: { allMembers: TeamMember[] })
     setEditMsg(null)
     setPwForm({ pass: '', confirm: '' })
     setPwMsg(null)
+    setShowPass(false)
+    setShowConfirm(false)
   }
 
   const handleSave = async (m: TeamMember) => {
@@ -1013,25 +1017,51 @@ function EquipoTab({ allMembers: initialMembers }: { allMembers: TeamMember[] })
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 12 }} className="ap-expand-grid">
                             <div>
                               <label style={labelSt}>Nueva contraseña</label>
-                              <input
-                                type="password"
-                                value={pwForm.pass}
-                                onChange={e => setPwForm(v => ({ ...v, pass: e.target.value }))}
-                                placeholder="Mín. 6 caracteres"
-                                style={inputSt}
-                                autoComplete="new-password"
-                              />
+                              <div style={{ position: 'relative' }}>
+                                <input
+                                  type={showPass ? 'text' : 'password'}
+                                  value={pwForm.pass}
+                                  onChange={e => setPwForm(v => ({ ...v, pass: e.target.value }))}
+                                  placeholder="Mín. 6 caracteres"
+                                  style={{ ...inputSt, paddingRight: 34 }}
+                                  autoComplete="new-password"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setShowPass(v => !v)}
+                                  style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: '#AAA', lineHeight: 1 }}
+                                  title={showPass ? 'Ocultar' : 'Mostrar'}
+                                >
+                                  {showPass
+                                    ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                                    : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                  }
+                                </button>
+                              </div>
                             </div>
                             <div>
                               <label style={labelSt}>Confirmar contraseña</label>
-                              <input
-                                type="password"
-                                value={pwForm.confirm}
-                                onChange={e => setPwForm(v => ({ ...v, confirm: e.target.value }))}
-                                placeholder="Repite la contraseña"
-                                style={inputSt}
-                                autoComplete="new-password"
-                              />
+                              <div style={{ position: 'relative' }}>
+                                <input
+                                  type={showConfirm ? 'text' : 'password'}
+                                  value={pwForm.confirm}
+                                  onChange={e => setPwForm(v => ({ ...v, confirm: e.target.value }))}
+                                  placeholder="Repite la contraseña"
+                                  style={{ ...inputSt, paddingRight: 34 }}
+                                  autoComplete="new-password"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setShowConfirm(v => !v)}
+                                  style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: '#AAA', lineHeight: 1 }}
+                                  title={showConfirm ? 'Ocultar' : 'Mostrar'}
+                                >
+                                  {showConfirm
+                                    ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                                    : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                  }
+                                </button>
+                              </div>
                             </div>
                           </div>
                           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
