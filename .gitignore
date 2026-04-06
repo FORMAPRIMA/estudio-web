@@ -10,6 +10,9 @@ node_modules/
 # Production build
 /build
 
+# Claude Code local settings (may contain sensitive data)
+.claude/settings.local.json
+
 # Env files
 .env
 .env.local
