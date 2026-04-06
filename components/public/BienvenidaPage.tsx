@@ -213,7 +213,7 @@ export default function BienvenidaPage({ nombreCliente, token, heroImage, proyec
         {/* Logo — top */}
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '28px 28px', display: 'flex', justifyContent: 'center', zIndex: 2 }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/FORMA_PRIMA_BLANCO.png" alt="Forma Prima" style={{ height: 22, opacity: 0.95 }} />
+          <img src="/FORMA_PRIMA_BLANCO.png" alt="Forma Prima" style={{ height: 44, opacity: 0.95 }} />
         </div>
 
         {/* Center content */}
