@@ -1,15 +1,7 @@
 import { Resend } from 'resend'
-import fs from 'fs'
-import path from 'path'
 
-const LOGO_BASE64 = (() => {
-  try {
-    const buf = fs.readFileSync(path.join(process.cwd(), 'public', 'FORMA_PRIMA_BLANCO.png'))
-    return `data:image/png;base64,${buf.toString('base64')}`
-  } catch {
-    return null
-  }
-})()
+// Public URL — no auth middleware on static assets (matcher only covers /team/* and /area-privada/*)
+const LOGO_URL = 'https://internal.formaprima.es/FORMA_PRIMA_BLANCO.png'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -95,10 +87,7 @@ export function wrapEmail(bodyHtml: string): string {
           <!-- Header -->
           <tr>
             <td style="background:#1A1A1A;padding:28px 40px 0;">
-              ${LOGO_BASE64
-                ? `<img src="${LOGO_BASE64}" alt="Forma Prima" width="140" style="display:block;margin:0 0 10px;border:0;outline:none;" />`
-                : `<p style="margin:0 0 10px;font-size:16px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#F0EDE8;">Forma Prima</p>`
-              }
+              <img src="${LOGO_URL}" alt="Forma Prima" width="140" style="display:block;margin:0 0 10px;border:0;outline:none;" />
               <p style="margin:0 0 0;font-size:11px;color:#888580;font-style:italic;">
                 Taller de arquitectura y diseño
               </p>
