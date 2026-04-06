@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import AreaInternaPage from '@/components/team/area-interna/AreaInternaPage'
 
+export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Área Interna FP' }
 
 export default async function Page() {
@@ -61,8 +62,8 @@ export default async function Page() {
       : Promise.resolve({ data: [] }),
 
     isPartner
-      ? supabase.from('nominas')
-          .select('id, user_id, periodo, pdf_path, pdf_url, created_at, profiles(nombre, apellido, rol)')
+      ? admin.from('nominas')
+          .select('id, user_id, periodo, pdf_path, pdf_url, created_at')
           .order('periodo', { ascending: false })
       : Promise.resolve({ data: [] }),
 

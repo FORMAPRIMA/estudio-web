@@ -14,7 +14,11 @@
       "Bash(sed -n '28,42p' /Users/joseloragonzalez/estudio-web/supabase-schema.sql)",
       "Bash(sed -n '398,410p' /Users/joseloragonzalez/estudio-web/supabase-schema.sql)",
       "Bash(head -20 /Users/joseloragonzalez/estudio-web/app/team/finanzas/facturacion/control/[id]/page.tsx)",
-      "Bash(grep -A 5 \"clientes\\\\?\\\\.nombre\\\\|clientes\\\\?\\\\[\" app/team/finanzas/operativas/proyectos/page.tsx app/team/clientes/plataforma/interna/[id]/page.tsx app/portal/[id]/page.tsx)"
+      "Bash(grep -A 5 \"clientes\\\\?\\\\.nombre\\\\|clientes\\\\?\\\\[\" app/team/finanzas/operativas/proyectos/page.tsx app/team/clientes/plataforma/interna/[id]/page.tsx app/portal/[id]/page.tsx)",
+      "Bash(grep -r \"salarios_historia\\\\|CREATE TABLE\" /Users/joseloragonzalez/estudio-web/supabase*)",
+      "Bash(grep -r \"salarios_historia\\\\|fondo_fp\\\\|nominas\" /Users/joseloragonzalez/estudio-web/supabase*)",
+      "Bash(curl -s -X POST https://xzzxxpwshgnqpnpahgoh.supabase.co/rest/v1/rpc/exec_sql -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh6enh4cHdzaGducXBucGFoZ29oIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NDY0MzgxMiwiZXhwIjoyMDkwMjE5ODEyfQ.h3alR0_qtq6pf3BIH0q8uKAFeIyve4SQJs6k70boIUw' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh6enh4cHdzaGducXBucGFoZ29oIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NDY0MzgxMiwiZXhwIjoyMDkwMjE5ODEyfQ.h3alR0_qtq6pf3BIH0q8uKAFeIyve4SQJs6k70boIUw')",
+      "Bash(npx supabase:*)"
     ]
   }
 }
