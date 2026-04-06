@@ -943,13 +943,21 @@ export function ContratoPDF({ data }: { data: ContratoPDFData }) {
               )}
             </View>
             <View style={s.firmaCol}>
-              <View style={{ width: '80%', height: 36, justifyContent: 'flex-end' }}>
+              {/* Same container as client firmaLinea — keeps lines aligned */}
+              <View style={{ position: 'relative', width: '80%', height: 36, borderBottomWidth: 1, borderBottomColor: C.ink, marginBottom: 6 }}>
+                {/* Signature overlaps upward from the line, doesn't push layout */}
                 <Image
                   src={FIRMA_GABRIELA}
-                  style={{ height: 32, objectFit: 'contain', objectPositionX: 'center', objectPositionY: 'bottom' }}
+                  style={{
+                    position: 'absolute',
+                    bottom: 0,
+                    left: 0,
+                    width: '100%',
+                    height: 100,
+                    objectFit: 'contain',
+                  }}
                 />
               </View>
-              <View style={s.firmaLinea} />
               <Text style={s.firmaLabel}>{T.firmaEstudio}</Text>
               <Text style={s.firmaNombre}>{STUDIO.rep_nombre}</Text>
               <Text style={{ ...s.firmaLabel, marginTop: 2 }}>{STUDIO.nombre_comercial}</Text>
