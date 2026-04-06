@@ -80,13 +80,12 @@ const ALL_NAV: (NavItem & { roles: FpRole[] })[] = [
   // ── Finanzas macro ───────────────────────────────────────────────────────
   { href: '', label: 'Finanzas generales', roles: ['fp_partner'], isSection: true },
   { href: '/team/finanzas/macro/costes', label: 'Costes fijos/variables', roles: ['fp_partner'], isSubItem: true },
-  // ── Facturación: sección interna para fp_partner · grupo standalone para fp_manager ──
+  // ── Facturación: sección interna para fp_partner únicamente ─────────────
   { href: '', label: 'Facturación', roles: ['fp_partner'], isSection: true },
-  { href: '/team/finanzas/facturacion/control', label: 'Facturación', roles: ['fp_manager'] },
-  { href: '/team/finanzas/facturacion/dashboard', label: 'Dashboard general', roles: ['fp_partner', 'fp_manager'], isSubItem: true },
-  { href: '/team/finanzas/facturacion/control', label: 'Facturación por proyecto', roles: ['fp_partner', 'fp_manager'], isSubItem: true },
-  { href: '/team/finanzas/facturacion/emitidas', label: 'Facturas emitidas', roles: ['fp_partner', 'fp_manager'], isSubItem: true },
-  { href: '/team/finanzas/facturacion/empresa', label: 'Información empresa', roles: ['fp_partner', 'fp_manager'], isSubItem: true },
+  { href: '/team/finanzas/facturacion/dashboard', label: 'Dashboard general', roles: ['fp_partner'], isSubItem: true },
+  { href: '/team/finanzas/facturacion/control', label: 'Facturación por proyecto', roles: ['fp_partner'], isSubItem: true },
+  { href: '/team/finanzas/facturacion/emitidas', label: 'Facturas emitidas', roles: ['fp_partner'], isSubItem: true },
+  { href: '/team/finanzas/facturacion/empresa', label: 'Información empresa', roles: ['fp_partner'], isSubItem: true },
   // ── Clientes ─────────────────────────────────────────────────────────────
   // Parent for fp_partner / fp_manager — lands on base-datos
   {

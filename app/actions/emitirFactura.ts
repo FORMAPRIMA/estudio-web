@@ -51,7 +51,7 @@ export async function emitirYEnviarFactura(
     // Partner emails from DB (avoid hardcoded list)
     const adminForCC = createAdminClient()
     const { data: partnerProfiles } = await adminForCC
-      .from('profiles').select('email').in('rol', ['fp_partner', 'fp_manager'])
+      .from('profiles').select('email').eq('rol', 'fp_partner')
     const PARTNERS_CC = (partnerProfiles ?? []).map((p: { email: string }) => p.email).filter(Boolean)
 
     // 3 — Totales
