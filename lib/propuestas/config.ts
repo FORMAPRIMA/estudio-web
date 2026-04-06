@@ -249,6 +249,12 @@ export interface ServicioEntry extends ServicioPlantillaData {
   isCustom:  boolean
   tipo:      'pem' | 'ratio' | 'manual'
   pem_split: number
+  // DB-stored EN translations (may be null if not yet translated)
+  label_en?:           string | null
+  texto_en?:           string | null
+  entregables_en?:     { grupo: string; items: string[] }[] | null
+  semanas_default_en?: string | null
+  pago_en?:            { label: string; pct: number }[] | null
 }
 
 /**

@@ -269,6 +269,14 @@ export interface ContratoPDFData {
   honorarios:         ContratoHonorario[]
   notas:              string | null
   lang?:              'es' | 'en'
+  // DB-stored EN translations keyed by service id
+  plantilla_en?: Record<string, {
+    label_en?:           string | null
+    texto_en?:           string | null
+    entregables_en?:     { grupo: string; items: string[] }[] | null
+    semanas_default_en?: string | null
+    pago_en?:            { label: string; pct: number }[] | null
+  }>
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -369,7 +377,10 @@ export function ContratoPDF({ data }: { data: ContratoPDFData }) {
   const propiedadAddr = data.proyecto_direccion ?? '—'
   const proyectoDesc  = data.proyecto_tipo ?? (lang === 'en' ? 'refurbishment' : 'reforma')
   const serviceNames  = data.servicios_contrato
-    .map(s => (lang === 'en' ? SERVICIOS_CONFIG_EN[s.id as ServicioId]?.label : null) ?? s.label)
+    .map(s => {
+      const dbEN_ = lang === 'en' ? data.plantilla_en?.[s.id] : null
+      return dbEN_?.label_en || (lang === 'en' ? SERVICIOS_CONFIG_EN[s.id as ServicioId]?.label : null) || s.label
+    })
     .join(', ')
 
   const Footer = () => (
@@ -693,11 +704,12 @@ export function ContratoPDF({ data }: { data: ContratoPDFData }) {
           <Text style={s.bodyText}>{T.clause1Intro}</Text>
 
           {sortedServicios.map((srv, i) => {
+            const dbEN         = lang === 'en' ? data.plantilla_en?.[srv.id] : null
             const cfgEN        = lang === 'en' ? SERVICIOS_CONFIG_EN[srv.id as ServicioId] : null
-            const srvLabel     = cfgEN?.label       ?? srv.label
-            const srvTexto     = cfgEN?.texto        ?? srv.texto
-            const srvEntregs   = cfgEN?.entregables  ?? srv.entregables
-            const srvSemanas   = cfgEN?.semanas_default ?? srv.semanas
+            const srvLabel     = dbEN?.label_en   || cfgEN?.label        || srv.label
+            const srvTexto     = dbEN?.texto_en   || cfgEN?.texto         || srv.texto
+            const srvEntregs   = (dbEN?.entregables_en && dbEN.entregables_en.length > 0) ? dbEN.entregables_en : (cfgEN?.entregables ?? srv.entregables)
+            const srvSemanas   = dbEN?.semanas_default_en || cfgEN?.semanas_default || srv.semanas
             return (
               <View key={srv.id} wrap={false}>
                 <Text style={{ ...s.subClauseTitle, marginTop: i === 0 ? 6 : 14 }}>
@@ -746,7 +758,10 @@ export function ContratoPDF({ data }: { data: ContratoPDFData }) {
             const hasInteriorismo = data.servicios_contrato.some(s => ['interiorismo', 'gestion_interiorismo'].includes(s.id))
             const interiorismoNames = data.servicios_contrato
               .filter(s => ['interiorismo', 'gestion_interiorismo'].includes(s.id))
-              .map(s => (lang === 'en' ? SERVICIOS_CONFIG_EN[s.id as ServicioId]?.label : null) ?? s.label)
+              .map(s => {
+                const dbEN_ = lang === 'en' ? data.plantilla_en?.[s.id] : null
+                return dbEN_?.label_en || (lang === 'en' ? SERVICIOS_CONFIG_EN[s.id as ServicioId]?.label : null) || s.label
+              })
             if (!hasPem && !hasInteriorismo) return null
             return (
               <>

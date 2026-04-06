@@ -27,7 +27,7 @@ export async function getPlantillaServicios(): Promise<ServicioEntry[]> {
   const admin = createAdminClient()
   const { data, error: selectErr } = await admin
     .from('propuestas_servicios_plantilla')
-    .select('id, label, texto, entregables, semanas_default, pago')
+    .select('id, label, texto, entregables, semanas_default, pago, label_en, texto_en, entregables_en, semanas_default_en, pago_en')
 
   const rows = data ?? []
 
@@ -48,6 +48,11 @@ export async function getPlantillaServicios(): Promise<ServicioEntry[]> {
       tipo:      cfg.tipo,
       pem_split: cfg.pem_split,
       ...merged,
+      label_en:           db?.label_en           ?? null,
+      texto_en:           db?.texto_en            ?? null,
+      entregables_en:     db?.entregables_en      ?? null,
+      semanas_default_en: db?.semanas_default_en  ?? null,
+      pago_en:            db?.pago_en             ?? null,
     }
   })
 
@@ -55,15 +60,20 @@ export async function getPlantillaServicios(): Promise<ServicioEntry[]> {
   const customRows = rows.filter(r => !baseIds.has(r.id))
   for (const row of customRows) {
     entries.push({
-      id:              row.id,
-      isCustom:        true,
-      tipo:            'manual',
-      pem_split:       0,
-      label:           row.label,
-      texto:           row.texto ?? '',
-      entregables:     row.entregables ?? [],
-      semanas_default: row.semanas_default ?? '',
-      pago:            row.pago ?? [],
+      id:                  row.id,
+      isCustom:            true,
+      tipo:                'manual',
+      pem_split:           0,
+      label:               row.label,
+      texto:               row.texto ?? '',
+      entregables:         row.entregables ?? [],
+      semanas_default:     row.semanas_default ?? '',
+      pago:                row.pago ?? [],
+      label_en:            row.label_en           ?? null,
+      texto_en:            row.texto_en            ?? null,
+      entregables_en:      row.entregables_en      ?? null,
+      semanas_default_en:  row.semanas_default_en  ?? null,
+      pago_en:             row.pago_en             ?? null,
     })
   }
 
@@ -146,6 +156,64 @@ export async function createServicio(
     if (error) return { error: error.message }
     revalidatePath(PATH)
     return { id }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
+/**
+ * Upsert only the EN translation columns for a service.
+ */
+export async function saveServicioEN(
+  id: string,
+  data: {
+    label_en:           string | null
+    texto_en:           string | null
+    entregables_en:     { grupo: string; items: string[] }[] | null
+    semanas_default_en: string | null
+    pago_en:            { label: string; pct: number }[] | null
+  }
+): Promise<{ success: true } | { error: string }> {
+  try {
+    await requirePartner()
+    const admin = createAdminClient()
+
+    const { data: updated, error: updateErr } = await admin
+      .from('propuestas_servicios_plantilla')
+      .update({
+        label_en:           data.label_en,
+        texto_en:           data.texto_en,
+        entregables_en:     data.entregables_en,
+        semanas_default_en: data.semanas_default_en,
+        pago_en:            data.pago_en,
+      })
+      .eq('id', id)
+      .select('id')
+    if (updateErr) return { error: updateErr.message }
+
+    if (!updated || updated.length === 0) {
+      // Row doesn't exist yet — insert a minimal stub with just id + en fields
+      const { error: insertErr } = await admin
+        .from('propuestas_servicios_plantilla')
+        .insert({
+          id,
+          label:               '',
+          texto:               '',
+          entregables:         [],
+          semanas_default:     '',
+          pago:                [],
+          label_en:            data.label_en,
+          texto_en:            data.texto_en,
+          entregables_en:      data.entregables_en,
+          semanas_default_en:  data.semanas_default_en,
+          pago_en:             data.pago_en,
+        })
+      if (insertErr) return { error: insertErr.message }
+    }
+
+    revalidatePath(PATH)
+    revalidatePath('/team/captacion/propuestas', 'layout')
+    return { success: true }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
   }

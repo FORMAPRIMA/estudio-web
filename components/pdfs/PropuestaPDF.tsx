@@ -522,11 +522,13 @@ export function PropuestaPDF({ data }: { data: PropuestaPDFData }) {
                     </Text>
                     {pemServices.map(sid => {
                       const cfg     = SERVICIOS_CONFIG[sid]
+                      const entryP  = data.serviciosPlantilla.find(s => s.id === sid)
                       const importe = breakdown[sid] ?? 0
                       const pctFase = Math.round(cfg.pem_split * 100)
+                      const lbl     = (lang === 'en' ? entryP?.label_en : null) || (lang === 'en' ? SERVICIOS_CONFIG_EN[sid]?.label : null) || cfg.label
                       return (
                         <Text key={sid} style={s.metodologiaBullet}>
-                          {`· ${(lang === 'en' ? SERVICIOS_CONFIG_EN[sid]?.label : null) ?? cfg.label}  —  ${pctFase}${T.pctPemLabel}  (${fmtEur(importe)} + IVA)`}
+                          {`· ${lbl}  —  ${pctFase}${T.pctPemLabel}  (${fmtEur(importe)} + IVA)`}
                         </Text>
                       )
                     })}
@@ -543,12 +545,13 @@ export function PropuestaPDF({ data }: { data: PropuestaPDFData }) {
                   <>
                     <Text style={{ ...s.metodologiaText, marginTop: pemServices.length > 0 ? 8 : 0 }}>
                       {hasBoth
-                        ? T.ratioHasBoth(ratioServices.map(sid => (lang === 'en' ? SERVICIOS_CONFIG_EN[sid]?.label : null) ?? SERVICIOS_CONFIG[sid].label).join(', '))
+                        ? T.ratioHasBoth(ratioServices.map(sid => { const eR = data.serviciosPlantilla.find(s => s.id === sid); return (lang === 'en' ? eR?.label_en : null) || (lang === 'en' ? SERVICIOS_CONFIG_EN[sid]?.label : null) || SERVICIOS_CONFIG[sid].label }).join(', '))
                         : T.ratioOnly}
                     </Text>
                     {ratioServices.map(sid => {
+                      const entryR  = data.serviciosPlantilla.find(s => s.id === sid)
                       const importe = breakdown[sid] ?? 0
-                      const lbl = (lang === 'en' ? SERVICIOS_CONFIG_EN[sid]?.label : null) ?? SERVICIOS_CONFIG[sid].label
+                      const lbl     = (lang === 'en' ? entryR?.label_en : null) || (lang === 'en' ? SERVICIOS_CONFIG_EN[sid]?.label : null) || SERVICIOS_CONFIG[sid].label
                       return (
                         <Text key={sid} style={s.metodologiaBullet}>
                           {`· ${lbl}  —  ${fmtEur(importe)} + IVA`}
@@ -575,16 +578,34 @@ export function PropuestaPDF({ data }: { data: PropuestaPDFData }) {
             const entry        = data.serviciosPlantilla.find(s => s.id === sid)
             const cfgBase      = SERVICIOS_CONFIG[sid as ServicioId]
             const cfgEN        = lang === 'en' ? SERVICIOS_CONFIG_EN[sid as ServicioId] : null
-            // EN: always use built-in EN config (DB plantilla is in Spanish)
-            // ES: prefer DB override, fall back to config
-            const label_       = cfgEN?.label       ?? entry?.label       ?? cfgBase?.label       ?? sid
-            const texto_       = cfgEN?.texto        ?? entry?.texto       ?? cfgBase?.texto       ?? ''
-            const pago_        = cfgEN?.pago         ?? entry?.pago        ?? (cfgBase?.pago as unknown as { label: string; pct: number }[] ?? [])
+            // Prefer DB EN translations over hardcoded EN config
+            const label_       = (lang === 'en' ? entry?.label_en : null) || cfgEN?.label || entry?.label || cfgBase?.label || sid
+            const texto_       = (lang === 'en' ? entry?.texto_en : null) || cfgEN?.texto  || entry?.texto || cfgBase?.texto  || ''
+            const pago_        = (lang === 'en' ? entry?.pago_en  : null) || cfgEN?.pago   || entry?.pago  || (cfgBase?.pago as unknown as { label: string; pct: number }[] ?? [])
+            const semanas      = data.semanas[sid] ?? (lang === 'en' ? entry?.semanas_default_en : null) ?? cfgEN?.semanas_default ?? entry?.semanas_default ?? cfgBase?.semanas_default ?? ''
 
             // Compute entregables with override support
             let entregables_: { grupo: string; items: string[] }[]
             const rawOverride = data.entregables_override?.[sid]
-            if (rawOverride) {
+            if (lang === 'en' && entry?.entregables_en && entry.entregables_en.length > 0) {
+              // DB EN entregables exist — apply any override by matching against ES source
+              if (rawOverride) {
+                const fullES = (entry?.entregables ?? (cfgBase?.entregables as unknown as { grupo: string; items: string[] }[]) ?? [])
+                const fullEN = entry.entregables_en
+                entregables_ = rawOverride.map(oGroup => {
+                  const esGroupIdx = fullES.findIndex(g => g.grupo === oGroup.grupo)
+                  const enGroup = fullEN[esGroupIdx]
+                  if (!enGroup || esGroupIdx === -1) return null
+                  const items = oGroup.items
+                    .map(esItem => fullES[esGroupIdx].items.indexOf(esItem))
+                    .filter(idx => idx >= 0 && idx < enGroup.items.length)
+                    .map(idx => enGroup.items[idx])
+                  return items.length > 0 ? { grupo: enGroup.grupo, items } : null
+                }).filter(Boolean) as { grupo: string; items: string[] }[]
+              } else {
+                entregables_ = entry.entregables_en
+              }
+            } else if (rawOverride) {
               if (lang === 'en' && cfgEN?.entregables) {
                 // Map Spanish selected items to EN equivalents by position index
                 const fullES = (entry?.entregables ?? (cfgBase?.entregables as unknown as { grupo: string; items: string[] }[]) ?? [])
@@ -605,7 +626,6 @@ export function PropuestaPDF({ data }: { data: PropuestaPDFData }) {
               entregables_ = cfgEN?.entregables ?? entry?.entregables ?? (cfgBase?.entregables as unknown as { grupo: string; items: string[] }[] ?? [])
             }
             const precio       = breakdown[sid] ?? 0
-            const semanas      = data.semanas[sid] ?? cfgEN?.semanas_default ?? entry?.semanas_default ?? cfgBase?.semanas_default ?? ''
 
             const col1 = entregables_.filter((_, i) => i % 2 === 0)
             const col2 = entregables_.filter((_, i) => i % 2 === 1)
@@ -674,7 +694,7 @@ export function PropuestaPDF({ data }: { data: PropuestaPDFData }) {
             <Text style={s.sectionTitle}>{T.financialSum}</Text>
             {sortedServicios.map(sid => {
               const e   = data.serviciosPlantilla.find(s => s.id === sid)
-              const lbl = (lang === 'en' ? SERVICIOS_CONFIG_EN[sid as ServicioId]?.label : null) ?? e?.label ?? SERVICIOS_CONFIG[sid as ServicioId]?.label ?? sid
+              const lbl = (lang === 'en' ? e?.label_en : null) || (lang === 'en' ? SERVICIOS_CONFIG_EN[sid as ServicioId]?.label : null) || e?.label || SERVICIOS_CONFIG[sid as ServicioId]?.label || sid
               const base = breakdown[sid] ?? 0
               return (
                 <View key={sid} style={s.totalRow}>
