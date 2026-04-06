@@ -327,18 +327,29 @@ function FondoTab({ periodos, participaciones, allMembers, proyectos }: {
   proyectos:         FondoProyecto[]
 }) {
   return (
-    <FondoTimeline
-      proyectos={proyectos}
-      participaciones={participaciones}
-      isPartner={true}
-      allMembers={allMembers.map(m => ({
-        id:        m.id,
-        nombre:    m.nombre,
-        apellido:  m.apellido,
-        avatar_url: m.avatar_url,
-        rol:       m.rol,
-      }))}
-    />
+    <div style={{ position: 'relative', overflow: 'hidden', borderRadius: 6 }}>
+      <FondoTimeline
+        proyectos={proyectos}
+        participaciones={participaciones}
+        isPartner={true}
+        allMembers={allMembers.map(m => ({
+          id:        m.id,
+          nombre:    m.nombre,
+          apellido:  m.apellido,
+          avatar_url: m.avatar_url,
+          rol:       m.rol,
+        }))}
+      />
+      {/* Work in Progress overlay */}
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 20,
+        background: 'repeating-linear-gradient(135deg, rgba(248,247,244,0.55) 0px, rgba(248,247,244,0.55) 18px, rgba(232,230,224,0.35) 18px, rgba(232,230,224,0.35) 36px)',
+      }} />
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', zIndex: 21 }}>
+        <div style={{ transform: 'rotate(-18deg)', background: '#1A1A1A', color: '#fff', padding: '10px 64px', fontSize: 10, fontWeight: 700, letterSpacing: '0.28em', textTransform: 'uppercase', whiteSpace: 'nowrap', boxShadow: '0 2px 24px rgba(0,0,0,0.18)' }}>
+          Work in Progress
+        </div>
+      </div>
+    </div>
   )
 }
 
