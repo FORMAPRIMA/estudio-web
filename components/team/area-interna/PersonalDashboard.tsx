@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useRef } from 'react'
 import FondoChart, { type FondoPeriodo } from './FondoChart'
 import FondoTimeline from './FondoTimeline'
 import type { Proyecto as FondoProyecto, Participacion as FondoParticipacion } from './FondoTimeline'
 import { getNominaSignedUrl } from '@/app/actions/area-interna'
+import { uploadAvatar, updateProfile, updatePassword } from '@/app/actions/profile'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -452,6 +453,254 @@ function FondoSection({
   )
 }
 
+// ── Mi Cuenta section ─────────────────────────────────────────────────────────
+
+const ROLE_LABELS_PD: Record<string, string> = {
+  fp_team: 'FP Team', fp_manager: 'FP Manager', fp_partner: 'FP Partner',
+}
+const ROLE_COLORS_PD: Record<string, string> = {
+  fp_team: '#1D9E75', fp_manager: '#378ADD', fp_partner: '#D85A30',
+}
+
+function EyeIcon({ open }: { open: boolean }) {
+  if (open) return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/>
+      <path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/>
+      <line x1="1" y1="1" x2="23" y2="23"/>
+    </svg>
+  )
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+      <circle cx="12" cy="12" r="3"/>
+    </svg>
+  )
+}
+
+function MiCuentaSection({ user, onAvatarChange }: { user: CurrentUser; onAvatarChange?: (url: string) => void }) {
+  const roleColor = ROLE_COLORS_PD[user.rol] ?? '#888'
+  const initials  = [user.nombre, user.apellido].filter(Boolean).map(s => s![0].toUpperCase()).join('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Avatar
+  const [savedAvatar,  setSavedAvatar]  = useState<string | null>(user.avatar_url)
+  const [pendingFile,  setPendingFile]  = useState<File | null>(null)
+  const [previewUrl,   setPreviewUrl]   = useState<string | null>(null)
+  const [avatarSaving, setAvatarSaving] = useState(false)
+  const [avatarMsg,    setAvatarMsg]    = useState<{ ok: boolean; text: string } | null>(null)
+  const displayAvatar = previewUrl ?? savedAvatar
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setPendingFile(file); setPreviewUrl(URL.createObjectURL(file)); setAvatarMsg(null)
+  }
+  const handleSaveAvatar = async () => {
+    if (!pendingFile) return
+    setAvatarSaving(true); setAvatarMsg(null)
+    const bytes = new Uint8Array(await pendingFile.arrayBuffer())
+    const result = await uploadAvatar(bytes, pendingFile.name, pendingFile.type)
+    if ('error' in result) {
+      setAvatarMsg({ ok: false, text: result.error })
+    } else {
+      setSavedAvatar(result.url); setPendingFile(null); setPreviewUrl(null)
+      setAvatarMsg({ ok: true, text: 'Foto guardada correctamente.' })
+      onAvatarChange?.(result.url)
+    }
+    setAvatarSaving(false)
+  }
+
+  // Nombre
+  const [nombre,      setNombre]      = useState(user.nombre + (user.apellido ? ` ${user.apellido}` : ''))
+  const [nombreSaving, setNombreSaving] = useState(false)
+  const [nombreMsg,    setNombreMsg]    = useState<{ ok: boolean; text: string } | null>(null)
+  const handleNombre = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!nombre.trim()) return
+    setNombreSaving(true); setNombreMsg(null)
+    const result = await updateProfile(nombre.trim())
+    setNombreMsg('error' in result ? { ok: false, text: result.error } : { ok: true, text: 'Nombre actualizado.' })
+    setNombreSaving(false)
+  }
+
+  // Password
+  const [pw,       setPw]       = useState({ new: '', confirm: '' })
+  const [showNew,  setShowNew]  = useState(false)
+  const [showConf, setShowConf] = useState(false)
+  const [pwSaving, setPwSaving] = useState(false)
+  const [pwMsg,    setPwMsg]    = useState<{ ok: boolean; text: string } | null>(null)
+  const handlePassword = async (e: React.FormEvent) => {
+    e.preventDefault(); setPwMsg(null)
+    if (pw.new.length < 6) { setPwMsg({ ok: false, text: 'Mínimo 6 caracteres.' }); return }
+    if (pw.new !== pw.confirm) { setPwMsg({ ok: false, text: 'Las contraseñas no coinciden.' }); return }
+    setPwSaving(true)
+    const result = await updatePassword(pw.new)
+    setPwMsg('error' in result ? { ok: false, text: result.error } : { ok: true, text: 'Contraseña actualizada.' })
+    if (!('error' in result)) setPw({ new: '', confirm: '' })
+    setPwSaving(false)
+  }
+
+  const inputSt: React.CSSProperties = {
+    width: '100%', border: '1px solid #E8E6E0', padding: '8px 12px',
+    fontSize: 13, fontWeight: 300, color: '#1A1A1A', background: '#fff',
+    outline: 'none', boxSizing: 'border-box',
+  }
+  const labelSt: React.CSSProperties = {
+    display: 'block', fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase',
+    color: '#BBB', fontWeight: 300, marginBottom: 6,
+  }
+  const sectionTitle: React.CSSProperties = {
+    fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase',
+    color: '#BBB', fontWeight: 300, marginBottom: 16,
+  }
+  const btnPrimary: React.CSSProperties = {
+    background: '#1A1A1A', color: '#fff', border: 'none',
+    padding: '8px 18px', fontSize: 9, letterSpacing: '0.14em',
+    textTransform: 'uppercase', fontWeight: 300, cursor: 'pointer',
+  }
+
+  return (
+    <div style={{ background: '#fff', border: '1px solid #ECEAE6', padding: '24px 28px' }}>
+      <p style={{ fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: '#BBB', fontWeight: 300, marginBottom: 24 }}>
+        Mi cuenta
+      </p>
+
+      {/* ── Avatar ── */}
+      <p style={sectionTitle}>Foto de perfil</p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 18, marginBottom: 16 }}>
+        <div
+          onClick={() => fileInputRef.current?.click()}
+          style={{
+            width: 64, height: 64, borderRadius: '50%', flexShrink: 0,
+            background: roleColor, overflow: 'hidden', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          {displayAvatar
+            ? <img src={displayAvatar} alt={user.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            : <span style={{ color: '#fff', fontSize: 20, fontWeight: 300 }}>{initials}</span>
+          }
+        </div>
+        <div>
+          <p style={{ fontSize: 13, color: '#1A1A1A', fontWeight: 300, marginBottom: 2 }}>
+            {user.nombre}{user.apellido ? ` ${user.apellido}` : ''}
+          </p>
+          <p style={{ fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase', color: roleColor, fontWeight: 400, marginBottom: 8 }}>
+            {ROLE_LABELS_PD[user.rol] ?? user.rol}
+          </p>
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            style={{ fontSize: 10, color: '#AAA', fontWeight: 300, background: 'none', border: 'none', cursor: 'pointer', padding: 0, letterSpacing: '0.1em', textTransform: 'uppercase' }}
+          >
+            {displayAvatar ? 'Cambiar foto' : 'Subir foto'}
+          </button>
+        </div>
+      </div>
+      {pendingFile && (
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 8 }}>
+          <button onClick={handleSaveAvatar} disabled={avatarSaving} style={{ ...btnPrimary, opacity: avatarSaving ? 0.5 : 1 }}>
+            {avatarSaving ? 'Guardando…' : 'Guardar foto'}
+          </button>
+          <button onClick={() => { setPendingFile(null); setPreviewUrl(null) }}
+            style={{ fontSize: 10, color: '#AAA', background: 'none', border: 'none', cursor: 'pointer', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+            Cancelar
+          </button>
+        </div>
+      )}
+      {avatarMsg && (
+        <p style={{ fontSize: 11, fontWeight: 300, color: avatarMsg.ok ? '#1D9E75' : '#C04828', marginBottom: 8 }}>
+          {avatarMsg.text}
+        </p>
+      )}
+      <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
+
+      <div style={{ borderTop: '1px solid #ECEAE6', margin: '20px 0' }} />
+
+      {/* ── Datos ── */}
+      <p style={sectionTitle}>Datos</p>
+      <form onSubmit={handleNombre} style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 480 }}>
+        <div>
+          <label style={labelSt}>Nombre completo</label>
+          <input
+            value={nombre}
+            onChange={e => { setNombre(e.target.value); setNombreMsg(null) }}
+            placeholder="Tu nombre"
+            style={inputSt}
+          />
+        </div>
+        <div>
+          <label style={labelSt}>Correo electrónico</label>
+          <input
+            value={user.email}
+            disabled
+            style={{ ...inputSt, background: '#FAFAF8', color: '#AAA', cursor: 'not-allowed' }}
+          />
+          <p style={{ fontSize: 9, color: '#CCC', fontWeight: 300, marginTop: 4 }}>El correo no se puede modificar desde aquí.</p>
+        </div>
+        {nombreMsg && (
+          <p style={{ fontSize: 11, fontWeight: 300, color: nombreMsg.ok ? '#1D9E75' : '#C04828' }}>{nombreMsg.text}</p>
+        )}
+        <div>
+          <button type="submit" disabled={nombreSaving || !nombre.trim()} style={{ ...btnPrimary, opacity: (nombreSaving || !nombre.trim()) ? 0.5 : 1 }}>
+            {nombreSaving ? 'Guardando…' : 'Guardar nombre'}
+          </button>
+        </div>
+      </form>
+
+      <div style={{ borderTop: '1px solid #ECEAE6', margin: '20px 0' }} />
+
+      {/* ── Contraseña ── */}
+      <p style={sectionTitle}>Contraseña</p>
+      <form onSubmit={handlePassword} style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 480 }}>
+        <div>
+          <label style={labelSt}>Nueva contraseña</label>
+          <div style={{ position: 'relative' }}>
+            <input
+              type={showNew ? 'text' : 'password'}
+              value={pw.new}
+              onChange={e => { setPw(p => ({ ...p, new: e.target.value })); setPwMsg(null) }}
+              placeholder="Mínimo 6 caracteres"
+              style={{ ...inputSt, paddingRight: 38 }}
+              autoComplete="new-password"
+            />
+            <button type="button" onClick={() => setShowNew(v => !v)}
+              style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#AAA', padding: 0, lineHeight: 1 }}>
+              <EyeIcon open={showNew} />
+            </button>
+          </div>
+        </div>
+        <div>
+          <label style={labelSt}>Confirmar contraseña</label>
+          <div style={{ position: 'relative' }}>
+            <input
+              type={showConf ? 'text' : 'password'}
+              value={pw.confirm}
+              onChange={e => { setPw(p => ({ ...p, confirm: e.target.value })); setPwMsg(null) }}
+              placeholder="Repite la contraseña"
+              style={{ ...inputSt, paddingRight: 38 }}
+              autoComplete="new-password"
+            />
+            <button type="button" onClick={() => setShowConf(v => !v)}
+              style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#AAA', padding: 0, lineHeight: 1 }}>
+              <EyeIcon open={showConf} />
+            </button>
+          </div>
+        </div>
+        {pwMsg && (
+          <p style={{ fontSize: 11, fontWeight: 300, color: pwMsg.ok ? '#1D9E75' : '#C04828' }}>{pwMsg.text}</p>
+        )}
+        <div>
+          <button type="submit" disabled={pwSaving || !pw.new || !pw.confirm} style={{ ...btnPrimary, opacity: (pwSaving || !pw.new || !pw.confirm) ? 0.5 : 1 }}>
+            {pwSaving ? 'Guardando…' : 'Cambiar contraseña'}
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 interface Props {
@@ -483,6 +732,7 @@ export default function PersonalDashboard({
         allParticipaciones={allParticipaciones}
         isPartner={isPartner}
       />
+      <MiCuentaSection user={currentUser} />
     </div>
   )
 }

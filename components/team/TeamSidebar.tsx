@@ -227,7 +227,7 @@ export default function TeamSidebar({ nombre, rol, navItems }: TeamSidebarProps)
         </Link>
 
         <Link
-          href="/team/perfil"
+          href="/team/area-interna"
           className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 hover:ring-white/50 transition-all shrink-0"
           style={{ background: roleColor }}
         >
@@ -258,7 +258,7 @@ export default function TeamSidebar({ nombre, rol, navItems }: TeamSidebarProps)
           </Link>
           <div className="flex items-center gap-2">
             <Link
-              href="/team/perfil"
+              href="/team/area-interna"
               title="Mi perfil"
               className="relative shrink-0 w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 hover:ring-white/50 transition-all"
               style={{ background: roleColor }}
@@ -463,7 +463,7 @@ export default function TeamSidebar({ nombre, rol, navItems }: TeamSidebarProps)
 
         {/* User + logout */}
         <div className="px-4 py-5 border-t border-white/10">
-          <Link href="/team/perfil" className="flex items-center gap-3 mb-4 group">
+          <Link href="/team/area-interna" className="flex items-center gap-3 mb-4 group">
             <div
               className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center text-white text-[11px] font-medium shrink-0 ring-1 ring-white/10 group-hover:ring-white/30 transition-all"
               style={{ background: roleColor }}
