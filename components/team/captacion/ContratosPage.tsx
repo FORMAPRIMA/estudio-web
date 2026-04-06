@@ -20,11 +20,12 @@ interface ContratoRow {
   created_at: string
 }
 
-interface Lead {
+interface ContactoItem {
   id: string
   nombre: string
   apellidos: string | null
   empresa: string | null
+  source: 'lead' | 'cliente'
 }
 
 interface PropuestaRow {
@@ -60,18 +61,20 @@ function totalHonorarios(honorarios: { importe: number }[]) {
 
 export default function ContratosPage({
   contratos: initial,
-  leads,
+  contactos,
   propuestas,
 }: {
   contratos:  ContratoRow[]
-  leads:      Lead[]
+  contactos:  ContactoItem[]
   propuestas: PropuestaRow[]
 }) {
   const router = useRouter()
   const [contratos, setContratos] = useState(initial)
   const [statusFilter, setStatusFilter] = useState('')
   const [query, setQuery] = useState('')
-  const [newLeadId, setNewLeadId] = useState('')
+  const [showContactoModal, setShowContactoModal] = useState(false)
+  const [contactoSearch, setContactoSearch] = useState('')
+  const [selectedContacto, setSelectedContacto] = useState<ContactoItem | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [selectedPropuesta, setSelectedPropuesta] = useState('')
   const [tipoCliente, setTipoCliente] = useState<'fisica' | 'juridica'>('fisica')
@@ -79,10 +82,19 @@ export default function ContratosPage({
 
   const handleCreate = () => {
     startTransition(async () => {
-      const res = await createContrato(newLeadId || null)
+      const res = await createContrato(selectedContacto?.id ?? null, selectedContacto?.source ?? 'lead')
       if ('id' in res) router.push(`/team/captacion/contratos/${res.id}`)
     })
   }
+
+  const filteredContactos = contactos.filter(c => {
+    const q = contactoSearch.toLowerCase()
+    return (
+      c.nombre.toLowerCase().includes(q) ||
+      (c.apellidos ?? '').toLowerCase().includes(q) ||
+      (c.empresa ?? '').toLowerCase().includes(q)
+    )
+  })
 
   const handleCreateFromPropuesta = () => {
     if (!selectedPropuesta) return
@@ -141,18 +153,21 @@ export default function ContratosPage({
             >
               + Desde propuesta
             </button>
-            <select
-              value={newLeadId}
-              onChange={e => setNewLeadId(e.target.value)}
-              style={{ height: 40, padding: '0 10px', fontSize: 12, border: '1px solid #E8E6E0', borderRadius: 4, background: '#fff', fontFamily: 'inherit', color: newLeadId ? '#1A1A1A' : '#AAA', outline: 'none', flex: 1 }}
+            <button
+              onClick={() => { setContactoSearch(''); setShowContactoModal(true) }}
+              style={{ height: 40, padding: '0 14px', fontSize: 12, border: '1px solid #E8E6E0', borderRadius: 4, background: '#fff', fontFamily: 'inherit', color: selectedContacto ? '#1A1A1A' : '#AAA', outline: 'none', flex: 1, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}
             >
-              <option value="">Sin lead asociado</option>
-              {leads.map(l => (
-                <option key={l.id} value={l.id}>
-                  {[l.nombre, l.apellidos].filter(Boolean).join(' ')}{l.empresa ? ` · ${l.empresa}` : ''}
-                </option>
-              ))}
-            </select>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {selectedContacto
+                  ? `${[selectedContacto.nombre, selectedContacto.apellidos].filter(Boolean).join(' ')}${selectedContacto.empresa ? ` · ${selectedContacto.empresa}` : ''}`
+                  : 'Sin cliente asociado'}
+              </span>
+              {selectedContacto && (
+                <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 6px', borderRadius: 3, background: selectedContacto.source === 'cliente' ? '#E8F4EF' : '#EEF4FF', color: selectedContacto.source === 'cliente' ? '#1D9E75' : '#378ADD', flexShrink: 0 }}>
+                  {selectedContacto.source === 'cliente' ? 'Cliente' : 'Lead'}
+                </span>
+              )}
+            </button>
             <button
               onClick={handleCreate}
               style={{ height: 40, padding: '0 20px', background: '#1A1A1A', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', whiteSpace: 'nowrap', fontFamily: 'inherit' }}
@@ -349,6 +364,64 @@ export default function ContratosPage({
               }}
             >
               {creating ? 'Creando…' : 'Crear contrato'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    {/* ── Modal: selector de contacto (lead o cliente) ── */}
+    {showContactoModal && (
+      <div
+        className="captacion-modal-overlay"
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }}
+        onClick={() => setShowContactoModal(false)}
+      >
+        <div
+          className="captacion-modal-box"
+          onClick={e => e.stopPropagation()}
+          style={{ background: '#fff', borderRadius: 8, width: 'min(460px, 92vw)', maxHeight: '80vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
+        >
+          <div style={{ padding: '20px 20px 0' }}>
+            <h3 style={{ fontSize: 15, fontWeight: 400, margin: '0 0 4px', color: '#1A1A1A' }}>Seleccionar cliente</h3>
+            <p style={{ fontSize: 13, color: '#AAA', margin: '0 0 12px' }}>Leads y clientes de la base de datos.</p>
+            <input
+              autoFocus
+              value={contactoSearch}
+              onChange={e => setContactoSearch(e.target.value)}
+              placeholder="Buscar por nombre o empresa…"
+              style={{ width: '100%', padding: '10px 12px', border: '1px solid #E8E6E0', borderRadius: 4, fontSize: 14, outline: 'none', boxSizing: 'border-box' }}
+            />
+          </div>
+          <div style={{ overflowY: 'auto', flex: 1, padding: '6px 0' }}>
+            <button
+              onClick={() => { setSelectedContacto(null); setShowContactoModal(false) }}
+              style={{ width: '100%', padding: '12px 20px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#AAA', fontStyle: 'italic', borderBottom: '1px solid #F0EEE8' }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#FAFAF8')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+            >
+              Sin cliente asociado
+            </button>
+            {filteredContactos.map(c => (
+              <button
+                key={`${c.source}-${c.id}`}
+                onClick={() => { setSelectedContacto(c); setShowContactoModal(false) }}
+                style={{ width: '100%', padding: '11px 20px', textAlign: 'left', background: selectedContacto?.id === c.id ? '#FAFAF8' : 'none', border: 'none', borderBottom: '1px solid #F0EEE8', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}
+                onMouseEnter={e => (e.currentTarget.style.background = '#FAFAF8')}
+                onMouseLeave={e => (e.currentTarget.style.background = selectedContacto?.id === c.id ? '#FAFAF8' : 'none')}
+              >
+                <span>
+                  <span style={{ color: '#1A1A1A' }}>{[c.nombre, c.apellidos].filter(Boolean).join(' ')}</span>
+                  {c.empresa && <span style={{ color: '#AAA', marginLeft: 8 }}>· {c.empresa}</span>}
+                </span>
+                <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 7px', borderRadius: 3, flexShrink: 0, background: c.source === 'cliente' ? '#E8F4EF' : '#EEF4FF', color: c.source === 'cliente' ? '#1D9E75' : '#378ADD' }}>
+                  {c.source === 'cliente' ? 'Cliente' : 'Lead'}
+                </span>
+              </button>
+            ))}
+          </div>
+          <div style={{ padding: '10px 20px', borderTop: '1px solid #E8E6E0' }}>
+            <button onClick={() => setShowContactoModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#AAA' }}>
+              Cancelar
             </button>
           </div>
         </div>

@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { createPropuesta, deletePropuesta } from '@/app/actions/propuestas'
 
-type Lead = { id: string; nombre: string; apellidos: string | null; empresa: string | null }
+type ContactoItem = { id: string; nombre: string; apellidos: string | null; empresa: string | null; source: 'lead' | 'cliente' }
 type Propuesta = {
   id: string
   numero: string
@@ -12,7 +12,9 @@ type Propuesta = {
   titulo: string | null
   fecha_propuesta: string | null
   lead_id: string | null
+  cliente_id: string | null
   leads: { nombre: string; apellidos: string; empresa: string | null } | null
+  clientes: { nombre: string; apellidos: string | null; empresa: string | null } | null
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -31,10 +33,10 @@ const STATUS_COLOR: Record<string, string> = {
 
 export default function PropuestasPage({
   propuestas,
-  leads,
+  contactos,
 }: {
   propuestas: Propuesta[]
-  leads: Lead[]
+  contactos: ContactoItem[]
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -52,10 +54,10 @@ export default function PropuestasPage({
     setShowLeadModal(true)
   }
 
-  async function handleCreate(leadId?: string) {
+  async function handleCreate(contactoId?: string, source?: 'lead' | 'cliente') {
     setShowLeadModal(false)
     startTransition(async () => {
-      const result = await createPropuesta(leadId ?? null)
+      const result = await createPropuesta(contactoId ?? null, source ?? 'lead')
       if ('id' in result) {
         router.push(`/team/captacion/propuestas/${result.id}`)
       }
@@ -68,12 +70,12 @@ export default function PropuestasPage({
     await deletePropuesta(id)
   }
 
-  const filteredLeads = leads.filter(l => {
+  const filteredContactos = contactos.filter(c => {
     const q = search.toLowerCase()
     return (
-      l.nombre.toLowerCase().includes(q) ||
-      (l.apellidos ?? '').toLowerCase().includes(q) ||
-      (l.empresa ?? '').toLowerCase().includes(q)
+      c.nombre.toLowerCase().includes(q) ||
+      (c.apellidos ?? '').toLowerCase().includes(q) ||
+      (c.empresa ?? '').toLowerCase().includes(q)
     )
   })
 
@@ -155,17 +157,20 @@ export default function PropuestasPage({
                     </td>
                     <td style={{ padding: '14px 16px', color: '#1A1A1A', fontWeight: 400 }}>
                       <div>{p.titulo ?? <span style={{ color: '#CCC', fontStyle: 'italic' }}>Sin título</span>}</div>
-                      {p.leads && (
+                      {(p.leads || p.clientes) && (
                         <div className="captacion-col-show-mobile" style={{ fontSize: 11, color: '#888', marginTop: 2 }}>
-                          {[p.leads.nombre, p.leads.apellidos].filter(Boolean).join(' ')}
-                          {p.leads.empresa ? ` · ${p.leads.empresa}` : ''}
+                          {p.leads
+                            ? [p.leads.nombre, p.leads.apellidos].filter(Boolean).join(' ') + (p.leads.empresa ? ` · ${p.leads.empresa}` : '')
+                            : [p.clientes!.nombre, p.clientes!.apellidos].filter(Boolean).join(' ') + (p.clientes!.empresa ? ` · ${p.clientes!.empresa}` : '')}
                         </div>
                       )}
                     </td>
                     <td className="captacion-col-hide" style={{ padding: '14px 16px', color: '#555' }}>
                       {p.leads
                         ? [p.leads.nombre, p.leads.apellidos].filter(Boolean).join(' ') + (p.leads.empresa ? ` · ${p.leads.empresa}` : '')
-                        : <span style={{ color: '#CCC', fontStyle: 'italic' }}>Sin cliente</span>}
+                        : p.clientes
+                          ? [p.clientes.nombre, p.clientes.apellidos].filter(Boolean).join(' ') + (p.clientes.empresa ? ` · ${p.clientes.empresa}` : '')
+                          : <span style={{ color: '#CCC', fontStyle: 'italic' }}>Sin cliente</span>}
                     </td>
                     <td className="captacion-col-hide" style={{ padding: '14px 16px', color: '#888', whiteSpace: 'nowrap' }}>
                       {p.fecha_propuesta
@@ -213,12 +218,12 @@ export default function PropuestasPage({
           >
             <div style={{ padding: '20px 20px 0' }}>
               <h3 style={{ fontSize: 16, fontWeight: 400, margin: '0 0 4px', color: '#1A1A1A' }}>Nueva propuesta</h3>
-              <p style={{ fontSize: 13, color: '#AAA', margin: '0 0 14px' }}>Selecciona un lead o crea la propuesta sin cliente.</p>
+              <p style={{ fontSize: 13, color: '#AAA', margin: '0 0 14px' }}>Selecciona un lead o cliente existente.</p>
               <input
                 autoFocus
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Buscar lead…"
+                placeholder="Buscar por nombre o empresa…"
                 style={{ width: '100%', padding: '10px 12px', border: '1px solid #E8E6E0', borderRadius: 4, fontSize: 16, outline: 'none', boxSizing: 'border-box' }}
               />
             </div>
@@ -231,16 +236,26 @@ export default function PropuestasPage({
               >
                 Sin cliente
               </button>
-              {filteredLeads.map(l => (
+              {filteredContactos.map(c => (
                 <button
-                  key={l.id}
-                  onClick={() => handleCreate(l.id)}
-                  style={{ width: '100%', padding: '14px 20px', textAlign: 'left', background: 'none', border: 'none', borderBottom: '1px solid #F0EEE8', cursor: 'pointer', fontSize: 14 }}
+                  key={`${c.source}-${c.id}`}
+                  onClick={() => handleCreate(c.id, c.source)}
+                  style={{ width: '100%', padding: '12px 20px', textAlign: 'left', background: 'none', border: 'none', borderBottom: '1px solid #F0EEE8', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}
                   onMouseEnter={e => (e.currentTarget.style.background = '#FAFAF8')}
                   onMouseLeave={e => (e.currentTarget.style.background = 'none')}
                 >
-                  <span style={{ color: '#1A1A1A' }}>{[l.nombre, l.apellidos].filter(Boolean).join(' ')}</span>
-                  {l.empresa && <span style={{ color: '#AAA', marginLeft: 8 }}>· {l.empresa}</span>}
+                  <span>
+                    <span style={{ color: '#1A1A1A' }}>{[c.nombre, c.apellidos].filter(Boolean).join(' ')}</span>
+                    {c.empresa && <span style={{ color: '#AAA', marginLeft: 8 }}>· {c.empresa}</span>}
+                  </span>
+                  <span style={{
+                    fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase',
+                    padding: '2px 7px', borderRadius: 3, flexShrink: 0,
+                    background: c.source === 'cliente' ? '#E8F4EF' : '#EEF4FF',
+                    color: c.source === 'cliente' ? '#1D9E75' : '#378ADD',
+                  }}>
+                    {c.source === 'cliente' ? 'Cliente' : 'Lead'}
+                  </span>
                 </button>
               ))}
             </div>

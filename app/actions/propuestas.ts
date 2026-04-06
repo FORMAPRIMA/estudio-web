@@ -18,28 +18,43 @@ async function requirePartner() {
 }
 
 export async function createPropuesta(
-  leadId?: string | null
+  contactoId?: string | null,
+  source: 'lead' | 'cliente' = 'lead'
 ): Promise<{ id: string } | { error: string }> {
   try {
     const user  = await requirePartner()
     const admin = createAdminClient()
 
-    // El número real se asigna al guardar por primera vez, no al crear
     const numero = 'BORRADOR'
 
-    // Pre-fill from lead
-    let leadData: Record<string, string | null> = {}
-    if (leadId) {
-      const { data: lead } = await admin
-        .from('leads')
-        .select('nombre, apellidos, empresa, email, direccion')
-        .eq('id', leadId)
-        .single()
-      if (lead) {
-        leadData = {
-          lead_id:   leadId,
-          titulo:    lead.nombre ? `Proyecto ${[lead.nombre, lead.apellidos].filter(Boolean).join(' ')}` : null,
-          direccion: lead.direccion ?? null,
+    // Pre-fill from lead or cliente
+    let contactoData: Record<string, string | null> = {}
+    if (contactoId) {
+      if (source === 'lead') {
+        const { data: lead } = await admin
+          .from('leads')
+          .select('nombre, apellidos, empresa, email, direccion')
+          .eq('id', contactoId)
+          .single()
+        if (lead) {
+          contactoData = {
+            lead_id:   contactoId,
+            titulo:    lead.nombre ? `Proyecto ${[lead.nombre, lead.apellidos].filter(Boolean).join(' ')}` : null,
+            direccion: lead.direccion ?? null,
+          }
+        }
+      } else {
+        const { data: cliente } = await admin
+          .from('clientes')
+          .select('nombre, apellidos, empresa, email, direccion')
+          .eq('id', contactoId)
+          .single()
+        if (cliente) {
+          contactoData = {
+            cliente_id: contactoId,
+            titulo:     cliente.nombre ? `Proyecto ${[cliente.nombre, cliente.apellidos].filter(Boolean).join(' ')}` : null,
+            direccion:  cliente.direccion ?? null,
+          }
         }
       }
     }
@@ -56,7 +71,7 @@ export async function createPropuesta(
         porcentaje_pem: 10,
         semanas:        {},
         created_by:     user.id,
-        ...leadData,
+        ...contactoData,
       })
       .select('id')
       .single()
@@ -73,6 +88,7 @@ export async function updatePropuesta(
   id: string,
   data: Partial<{
     lead_id:           string | null
+    cliente_id:        string | null
     titulo:            string | null
     direccion:         string | null
     fecha_propuesta:   string

@@ -8,14 +8,15 @@ import type { ServicioId, ServicioEntry } from '@/lib/propuestas/config'
 import type { PropuestaPDFData } from '@/components/pdfs/PropuestaPDF'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type Lead = {
+type ContactoItem = {
   id:        string
   nombre:    string
-  apellidos: string
+  apellidos: string | null
   empresa:   string | null
   email:     string | null
   telefono:  string | null
   direccion: string | null
+  source:    'lead' | 'cliente'
 }
 
 type RatioFase = { id: string; label: string; seccion: string; ratio: number | null }
@@ -37,6 +38,7 @@ type Propuesta = {
   semanas:              Record<string, string>
   notas:                string | null
   lead_id:              string | null
+  cliente_id:           string | null
   fecha_envio:          string | null
   honorarios_override:  Record<string, number> | null
 }
@@ -82,7 +84,7 @@ function Field({ children, style }: { children: React.ReactNode; style?: React.C
 // ── Main component ────────────────────────────────────────────────────────────
 export default function PropuestaDetalle({
   propuesta: initial,
-  leads,
+  contactos,
   ratiosFases,
   serviciosPlantilla,
   pipelineHoras,
@@ -90,7 +92,7 @@ export default function PropuestaDetalle({
   teamCount,
 }: {
   propuesta:          Propuesta
-  leads:              Lead[]
+  contactos:          ContactoItem[]
   ratiosFases:        RatioFase[]
   serviciosPlantilla: ServicioEntry[]
   pipelineHoras:      Record<string, number>
@@ -121,7 +123,10 @@ export default function PropuestaDetalle({
   const [pctPartner, setPctPartner]               = useState(String(initial.pct_partner ?? 30))
   const [semanas, setSemanas]                     = useState<Record<string, string>>(initial.semanas ?? {})
   const [notas, setNotas]                         = useState(initial.notas ?? '')
-  const [leadId, setLeadId]                       = useState(initial.lead_id ?? null)
+  const initContactoId = initial.lead_id ?? initial.cliente_id ?? null
+  const initContactoSource = initial.cliente_id && !initial.lead_id ? 'cliente' : 'lead'
+  const [contactoId,     setContactoId]     = useState<string | null>(initContactoId)
+  const [contactoSource, setContactoSource] = useState<'lead' | 'cliente'>(initContactoSource as 'lead' | 'cliente')
   // Manual honorarios overrides for ratio-based services (keyed by ServicioId)
   const [honorariosOverride, setHonorariosOverride] = useState<Record<string, string>>(
     Object.fromEntries(
@@ -129,7 +134,7 @@ export default function PropuestaDetalle({
     )
   )
 
-  const currentLead = leads.find(l => l.id === leadId) ?? null
+  const currentContacto = contactos.find(c => c.id === contactoId) ?? null
 
   // ── Live calculation ──────────────────────────────────────────────────────
   // Solo fases de Interiorismo para calcPropuesta (ratio-based honorario)
@@ -273,7 +278,8 @@ export default function PropuestaDetalle({
         if (v !== '') overrideNums[k] = parseFloat(v) || 0
       }
       await updatePropuesta(initial.id, {
-        lead_id:             leadId,
+        lead_id:             contactoSource === 'lead'    ? contactoId : null,
+        cliente_id:          contactoSource === 'cliente' ? contactoId : null,
         titulo:              titulo || null,
         direccion:           direccion || null,
         fecha_propuesta:     fecha || undefined,
@@ -309,11 +315,11 @@ export default function PropuestaDetalle({
 
   // ── Send to lead ──────────────────────────────────────────────────────────
   async function handleSend() {
-    if (!currentLead?.email) {
-      setSendError('El lead no tiene email registrado.')
+    if (!currentContacto?.email) {
+      setSendError('El contacto no tiene email registrado.')
       return
     }
-    if (!confirm(`¿Enviar propuesta ${initial.numero} a ${currentLead.email}?`)) return
+    if (!confirm(`¿Enviar propuesta ${initial.numero} a ${currentContacto.email}?`)) return
     setSendError(null)
     setSendOk(false)
     setIsSending(true)
@@ -363,13 +369,13 @@ export default function PropuestaDetalle({
       honorarios_override: overrideNums,
       serviciosPlantilla,
       ratios,
-      lead: currentLead ? {
-        nombre:    currentLead.nombre,
-        apellidos: currentLead.apellidos,
-        empresa:   currentLead.empresa,
-        email:     currentLead.email,
-        telefono:  currentLead.telefono,
-        direccion: currentLead.direccion,
+      lead: currentContacto ? {
+        nombre:    currentContacto.nombre,
+        apellidos: currentContacto.apellidos ?? '',
+        empresa:   currentContacto.empresa,
+        email:     currentContacto.email,
+        telefono:  currentContacto.telefono,
+        direccion: currentContacto.direccion,
       } : null,
     }
   }
@@ -380,12 +386,12 @@ export default function PropuestaDetalle({
     )
   }
 
-  const filteredLeads = leads.filter(l => {
+  const filteredContactos = contactos.filter(c => {
     const q = leadSearch.toLowerCase()
     return (
-      l.nombre.toLowerCase().includes(q) ||
-      l.apellidos.toLowerCase().includes(q) ||
-      (l.empresa ?? '').toLowerCase().includes(q)
+      c.nombre.toLowerCase().includes(q) ||
+      (c.apellidos ?? '').toLowerCase().includes(q) ||
+      (c.empresa ?? '').toLowerCase().includes(q)
     )
   })
 
@@ -438,13 +444,13 @@ export default function PropuestaDetalle({
           </button>
           <button
             onClick={handleSend}
-            disabled={isSending || !currentLead?.email}
-            title={!currentLead?.email ? 'El lead no tiene email' : ''}
+            disabled={isSending || !currentContacto?.email}
+            title={!currentContacto?.email ? 'Sin email registrado' : ''}
             style={{
               padding: '8px 16px', background: '#378ADD', color: '#fff',
               border: 'none', borderRadius: 4, fontSize: 13,
-              cursor: isSending || !currentLead?.email ? 'not-allowed' : 'pointer',
-              opacity: !currentLead?.email ? 0.4 : 1,
+              cursor: isSending || !currentContacto?.email ? 'not-allowed' : 'pointer',
+              opacity: !currentContacto?.email ? 0.4 : 1,
             }}
           >
             {isSending ? 'Enviando…' : 'Enviar al lead'}
@@ -479,15 +485,15 @@ export default function PropuestaDetalle({
                 style={{
                   width: '100%', padding: '8px 10px', border: '1px solid #E8E6E0',
                   borderRadius: 4, fontSize: 13, background: '#fff', cursor: 'pointer',
-                  textAlign: 'left', color: currentLead ? '#1A1A1A' : '#CCC',
+                  textAlign: 'left', color: currentContacto ? '#1A1A1A' : '#CCC',
                 }}
               >
-                {currentLead
-                  ? [currentLead.nombre, currentLead.apellidos].filter(Boolean).join(' ') + (currentLead.empresa ? ` · ${currentLead.empresa}` : '')
-                  : 'Seleccionar lead…'}
+                {currentContacto
+                  ? [currentContacto.nombre, currentContacto.apellidos].filter(Boolean).join(' ') + (currentContacto.empresa ? ` · ${currentContacto.empresa}` : '')
+                  : 'Seleccionar contacto…'}
               </button>
-              {currentLead?.email && (
-                <div style={{ fontSize: 11, color: '#AAA', marginTop: 4 }}>{currentLead.email}</div>
+              {currentContacto?.email && (
+                <div style={{ fontSize: 11, color: '#AAA', marginTop: 4 }}>{currentContacto.email}</div>
               )}
             </Field>
 
@@ -1126,18 +1132,18 @@ export default function PropuestaDetalle({
             )}
           </div>
 
-          {/* Datos del lead */}
-          {currentLead && (
+          {/* Datos del contacto */}
+          {currentContacto && (
             <div style={{ background: '#fff', border: '1px solid #E8E6E0', borderRadius: 8, padding: '16px 20px', marginTop: 16 }}>
               <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', marginBottom: 12 }}>
                 Datos del cliente
               </div>
               {[
-                { label: 'Nombre', value: `${currentLead.nombre} ${currentLead.apellidos}` },
-                { label: 'Empresa', value: currentLead.empresa },
-                { label: 'Email', value: currentLead.email },
-                { label: 'Teléfono', value: currentLead.telefono },
-                { label: 'Dirección', value: currentLead.direccion },
+                { label: 'Nombre', value: `${currentContacto.nombre} ${currentContacto.apellidos}` },
+                { label: 'Empresa', value: currentContacto.empresa },
+                { label: 'Email', value: currentContacto.email },
+                { label: 'Teléfono', value: currentContacto.telefono },
+                { label: 'Dirección', value: currentContacto.direccion },
               ].filter(r => r.value).map(r => (
                 <div key={r.label} style={{ marginBottom: 8 }}>
                   <div style={{ fontSize: 10, color: '#AAA', marginBottom: 2 }}>{r.label}</div>
@@ -1162,7 +1168,7 @@ export default function PropuestaDetalle({
             style={{ background: '#fff', borderRadius: 8, width: 'min(440px, 92vw)', maxHeight: '65vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
           >
             <div style={{ padding: '20px 20px 0' }}>
-              <h3 style={{ fontSize: 15, fontWeight: 400, margin: '0 0 12px', color: '#1A1A1A' }}>Seleccionar lead</h3>
+              <h3 style={{ fontSize: 15, fontWeight: 400, margin: '0 0 12px', color: '#1A1A1A' }}>Seleccionar contacto</h3>
               <input
                 autoFocus
                 value={leadSearch}
@@ -1173,20 +1179,25 @@ export default function PropuestaDetalle({
             </div>
             <div style={{ overflowY: 'auto', flex: 1 }}>
               <button
-                onClick={() => { setLeadId(null); setShowLeadModal(false) }}
+                onClick={() => { setContactoId(null); setShowLeadModal(false) }}
                 style={{ width: '100%', padding: '10px 20px', textAlign: 'left', background: 'none', border: 'none', borderBottom: '1px solid #F0EEE8', cursor: 'pointer', fontSize: 12, color: '#AAA', fontStyle: 'italic' }}
               >
                 Sin cliente
               </button>
-              {filteredLeads.map(l => (
+              {filteredContactos.map(c => (
                 <button
-                  key={l.id}
-                  onClick={() => { setLeadId(l.id); setShowLeadModal(false) }}
-                  style={{ width: '100%', padding: '10px 20px', textAlign: 'left', background: leadId === l.id ? '#F8F7F4' : 'none', border: 'none', borderBottom: '1px solid #F0EEE8', cursor: 'pointer', fontSize: 13 }}
+                  key={`${c.source}-${c.id}`}
+                  onClick={() => { setContactoId(c.id); setContactoSource(c.source); setShowLeadModal(false) }}
+                  style={{ width: '100%', padding: '10px 20px', textAlign: 'left', background: contactoId === c.id ? '#F8F7F4' : 'none', border: 'none', borderBottom: '1px solid #F0EEE8', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}
                 >
-                  <span style={{ color: '#1A1A1A' }}>{l.nombre} {l.apellidos}</span>
-                  {l.empresa && <span style={{ color: '#AAA', marginLeft: 8 }}>· {l.empresa}</span>}
-                  {l.email && <div style={{ fontSize: 11, color: '#CCC', marginTop: 2 }}>{l.email}</div>}
+                  <span>
+                    <span style={{ color: '#1A1A1A' }}>{c.nombre} {c.apellidos}</span>
+                    {c.empresa && <span style={{ color: '#AAA', marginLeft: 8 }}>· {c.empresa}</span>}
+                    {c.email && <div style={{ fontSize: 11, color: '#CCC', marginTop: 2 }}>{c.email}</div>}
+                  </span>
+                  <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 7px', borderRadius: 3, flexShrink: 0, background: c.source === 'cliente' ? '#E8F4EF' : '#EEF4FF', color: c.source === 'cliente' ? '#1D9E75' : '#378ADD' }}>
+                    {c.source === 'cliente' ? 'Cliente' : 'Lead'}
+                  </span>
                 </button>
               ))}
             </div>

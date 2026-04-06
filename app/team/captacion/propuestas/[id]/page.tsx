@@ -19,6 +19,7 @@ export default async function Page({ params }: { params: { id: string } }) {
   const [
     { data: propuesta },
     { data: leads },
+    { data: clientes },
     { data: ratiosFases },
     serviciosPlantilla,
     { data: activeProyectos },
@@ -26,6 +27,7 @@ export default async function Page({ params }: { params: { id: string } }) {
   ] = await Promise.all([
     admin.from('propuestas').select('*').eq('id', params.id).single(),
     admin.from('leads').select('id, nombre, apellidos, empresa, email, telefono, direccion').order('nombre'),
+    admin.from('clientes').select('id, nombre, apellidos, empresa, email, telefono, direccion').order('nombre'),
     admin.from('catalogo_fases').select('id, label, seccion, ratio').order('orden'),
     getPlantillaServicios(),
     admin.from('proyectos').select('id').in('status', ['activo', 'on_hold']),
@@ -124,10 +126,15 @@ export default async function Page({ params }: { params: { id: string } }) {
     a.proyectoNombre.localeCompare(b.proyectoNombre) || a.faseLabel.localeCompare(b.faseLabel)
   )
 
+  const contactos = [
+    ...(leads ?? []).map(l => ({ ...l, source: 'lead' as const })),
+    ...(clientes ?? []).map(c => ({ ...c, source: 'cliente' as const })),
+  ]
+
   return (
     <PropuestaDetalle
       propuesta={propuesta}
-      leads={(leads ?? []) as Parameters<typeof PropuestaDetalle>[0]['leads']}
+      contactos={contactos as Parameters<typeof PropuestaDetalle>[0]['contactos']}
       ratiosFases={(ratiosFases ?? []) as Parameters<typeof PropuestaDetalle>[0]['ratiosFases']}
       serviciosPlantilla={serviciosPlantilla as Parameters<typeof PropuestaDetalle>[0]['serviciosPlantilla']}
       pipelineHoras={pipelineHoras}

@@ -29,7 +29,8 @@ export interface Honorario {
 // ── CRUD ──────────────────────────────────────────────────────────────────────
 
 export async function createContrato(
-  leadId?: string | null
+  contactoId?: string | null,
+  source: 'lead' | 'cliente' = 'lead'
 ): Promise<{ id: string } | { error: string }> {
   try {
     const user = await requirePartner()
@@ -53,27 +54,29 @@ export async function createContrato(
     // Pre-fill studio config
     const { data: cfg } = await admin.from('estudio_config').select('*').eq('id', 1).single()
 
-    // Pre-fill lead data if provided
-    let leadData: Record<string, string | null> = {}
-    if (leadId) {
-      const { data: lead } = await admin
-        .from('leads')
+    // Pre-fill contacto data (lead or cliente)
+    let contactoData: Record<string, string | null> = {}
+    const table = source === 'lead' ? 'leads' : 'clientes'
+    const idField = source === 'lead' ? 'lead_id' : 'cliente_id'
+    if (contactoId) {
+      const { data: contacto } = await admin
+        .from(table)
         .select('nombre, apellidos, empresa, nif_cif, email, telefono, direccion, ciudad, codigo_postal, pais')
-        .eq('id', leadId)
+        .eq('id', contactoId)
         .single()
-      if (lead) {
-        const fullName = [lead.nombre, lead.apellidos].filter(Boolean).join(' ')
-        leadData = {
-          cliente_nombre:    lead.empresa ? fullName : lead.nombre,
-          cliente_apellidos: lead.apellidos ?? null,
-          cliente_empresa:   lead.empresa   ?? null,
-          cliente_nif:       lead.nif_cif   ?? null,
-          cliente_email:     lead.email     ?? null,
-          cliente_telefono:  lead.telefono  ?? null,
-          cliente_direccion: lead.direccion ?? null,
-          cliente_ciudad:    lead.ciudad    ?? null,
-          cliente_cp:        lead.codigo_postal ?? null,
-          cliente_pais:      lead.pais      ?? null,
+      if (contacto) {
+        const fullName = [contacto.nombre, contacto.apellidos].filter(Boolean).join(' ')
+        contactoData = {
+          cliente_nombre:    contacto.empresa ? fullName : contacto.nombre,
+          cliente_apellidos: contacto.apellidos ?? null,
+          cliente_empresa:   contacto.empresa   ?? null,
+          cliente_nif:       contacto.nif_cif   ?? null,
+          cliente_email:     contacto.email     ?? null,
+          cliente_telefono:  contacto.telefono  ?? null,
+          cliente_direccion: contacto.direccion ?? null,
+          cliente_ciudad:    contacto.ciudad    ?? null,
+          cliente_cp:        (contacto as any).codigo_postal ?? null,
+          cliente_pais:      contacto.pais      ?? null,
         }
       }
     }
@@ -82,7 +85,7 @@ export async function createContrato(
       .from('contratos')
       .insert({
         numero,
-        lead_id:          leadId ?? null,
+        [idField]:        contactoId ?? null,
         emisor_nombre:    cfg?.nombre      ?? null,
         emisor_nif:       cfg?.nif         ?? null,
         emisor_direccion: cfg?.direccion   ?? null,
@@ -93,7 +96,7 @@ export async function createContrato(
         honorarios:       [],
         status:           'borrador',
         created_by:       user.id,
-        ...leadData,
+        ...contactoData,
       })
       .select('id')
       .single()
@@ -169,7 +172,7 @@ export async function createContratoFromPropuesta(
       .from('propuestas').select('*').eq('id', propuestaId).single()
     if (pErr || !propuesta) return { error: 'Propuesta no encontrada.' }
 
-    // Fetch lead
+    // Fetch contacto (lead or cliente)
     let leadFields: Record<string, string | null> = {}
     if (propuesta.lead_id) {
       const { data: lead } = await admin
@@ -189,6 +192,26 @@ export async function createContratoFromPropuesta(
           cliente_ciudad:    lead.ciudad         ?? null,
           cliente_cp:        lead.codigo_postal  ?? null,
           cliente_pais:      lead.pais           ?? 'España',
+        }
+      }
+    } else if ((propuesta as any).cliente_id) {
+      const { data: cliente } = await admin
+        .from('clientes')
+        .select('nombre, apellidos, empresa, nif_cif, documento_identidad, email, telefono, direccion, ciudad, codigo_postal, pais')
+        .eq('id', (propuesta as any).cliente_id).single()
+      if (cliente) {
+        leadFields = {
+          cliente_id:        (propuesta as any).cliente_id,
+          cliente_nombre:    cliente.nombre,
+          cliente_apellidos: cliente.apellidos      ?? null,
+          cliente_empresa:   cliente.empresa        ?? null,
+          cliente_nif:       cliente.nif_cif ?? (cliente as any).documento_identidad ?? null,
+          cliente_email:     cliente.email          ?? null,
+          cliente_telefono:  cliente.telefono       ?? null,
+          cliente_direccion: cliente.direccion      ?? null,
+          cliente_ciudad:    cliente.ciudad         ?? null,
+          cliente_cp:        (cliente as any).codigo_postal ?? null,
+          cliente_pais:      cliente.pais           ?? 'España',
         }
       }
     }
