@@ -81,17 +81,17 @@ export default async function BienvenidaTokenPage({
       .filter((p) => !!p.imagen_url)
       .map((p) => ({ nombre: p.nombre, url: p.imagen_url as string, tipologia: p.tipologia }))
 
-  // Always include hero image in carousel
-  if (!proyectoImages.some((p) => p.url === HERO_IMAGE)) {
-    proyectoImages.unshift({ nombre: 'Castelló 42', url: HERO_IMAGE, tipologia: 'Interiorismo' })
-  }
+  // Castelló 42 must always be first
+  const castelloEntry = proyectoImages.find(p => p.url === HERO_IMAGE)
+    ?? { nombre: 'Castelló 42', url: HERO_IMAGE, tipologia: 'Interiorismo' }
+  const orderedImages = [castelloEntry, ...proyectoImages.filter(p => p.url !== HERO_IMAGE)]
 
   return (
     <BienvenidaPage
       nombreCliente={tokenData.nombre_cliente}
       token={params.token}
       heroImage={HERO_IMAGE}
-      proyectoImages={proyectoImages}
+      proyectoImages={orderedImages}
       studio={STUDIO}
     />
   )
