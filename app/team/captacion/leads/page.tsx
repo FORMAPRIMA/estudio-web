@@ -23,7 +23,7 @@ export default async function Page() {
       .order('nombre', { ascending: true }),
     admin
       .from('bienvenida_tokens')
-      .select('id, token, nombre_cliente, nota_interna, used, created_at, primer_acceso, num_accesos')
+      .select('id, token, nombre_cliente, nota_interna, used, created_at, primer_acceso, num_accesos, accesos')
       .order('created_at', { ascending: false })
       .limit(30),
   ])

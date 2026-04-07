@@ -108,20 +108,43 @@ export async function submitBienvenidaForm(
   }
 }
 
-export async function registrarAccesoBienvenida(token: string): Promise<void> {
+function parseDispositivo(ua: string): string {
+  const isMobile  = /Mobile|Android|iPhone/i.test(ua)
+  const isTablet  = /iPad|Tablet/i.test(ua)
+  const device    = isTablet ? 'Tablet' : isMobile ? 'Móvil' : 'Escritorio'
+  const browser   =
+    /Edg\//i.test(ua)     ? 'Edge'    :
+    /OPR\//i.test(ua)     ? 'Opera'   :
+    /Chrome\//i.test(ua)  ? 'Chrome'  :
+    /Firefox\//i.test(ua) ? 'Firefox' :
+    /Safari\//i.test(ua)  ? 'Safari'  : 'Desconocido'
+  return `${device} · ${browser}`
+}
+
+export async function registrarAccesoBienvenida(
+  token: string,
+  ip: string,
+  ua: string,
+): Promise<void> {
   try {
     const admin = createAdminClient()
     const { data: row } = await admin
       .from('bienvenida_tokens')
-      .select('id, primer_acceso, num_accesos')
+      .select('id, primer_acceso, num_accesos, accesos')
       .eq('token', token)
       .single()
     if (!row) return
+
+    const now       = new Date().toISOString()
+    const accesos   = (row.accesos as object[] | null) ?? []
+    const entrada   = { ts: now, ip, dispositivo: parseDispositivo(ua) }
+
     await admin
       .from('bienvenida_tokens')
       .update({
-        primer_acceso: row.primer_acceso ?? new Date().toISOString(),
-        num_accesos: ((row.num_accesos as number) ?? 0) + 1,
+        primer_acceso: row.primer_acceso ?? now,
+        num_accesos:   ((row.num_accesos as number) ?? 0) + 1,
+        accesos:       [...accesos, entrada],
       })
       .eq('id', row.id)
   } catch { /* swallow — non-blocking */ }

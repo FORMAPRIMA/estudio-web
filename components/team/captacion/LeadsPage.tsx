@@ -8,6 +8,12 @@ import { createBienvenidaToken } from '@/app/actions/bienvenida'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+export interface AccesoEntry {
+  ts:          string
+  ip:          string
+  dispositivo: string
+}
+
 export interface BienvenidaToken {
   id:              string
   token:           string
@@ -17,6 +23,7 @@ export interface BienvenidaToken {
   created_at:      string
   primer_acceso:   string | null
   num_accesos:     number
+  accesos:         AccesoEntry[] | null
 }
 
 interface Lead {
@@ -305,8 +312,9 @@ function LeadRow({
 // ── Bienvenida tokens panel ───────────────────────────────────────────────────
 
 function BienvenidaTokensPanel({ tokens: initial }: { tokens: BienvenidaToken[] }) {
-  const [tokens, setTokens] = useState(initial)
-  const [copied, setCopied] = useState<string | null>(null)
+  const [tokens]    = useState(initial)
+  const [copied,    setCopied]    = useState<string | null>(null)
+  const [expanded,  setExpanded]  = useState<string | null>(null)
 
   const handleCopy = (token: BienvenidaToken) => {
     const url = window.location.origin + '/bienvenida/' + token.token
@@ -317,9 +325,9 @@ function BienvenidaTokensPanel({ tokens: initial }: { tokens: BienvenidaToken[] 
   }
 
   const getStatus = (t: BienvenidaToken) => {
-    if (t.used) return { label: 'Rellenado', color: '#1D9E75', bg: '#EEF8F4', dot: '#1D9E75' }
+    if (t.used)         return { label: 'Rellenado',           color: '#1D9E75', bg: '#EEF8F4', dot: '#1D9E75' }
     if (t.primer_acceso) return { label: `Visto ${t.num_accesos}×`, color: '#B45309', bg: '#FDF6EE', dot: '#D97706' }
-    return { label: 'Sin abrir', color: '#999', bg: '#F0EEE8', dot: '#CCC' }
+    return                       { label: 'Sin abrir',           color: '#999',    bg: '#F0EEE8', dot: '#CCC' }
   }
 
   if (tokens.length === 0) return null
@@ -333,52 +341,87 @@ function BienvenidaTokensPanel({ tokens: initial }: { tokens: BienvenidaToken[] 
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#F8F7F4' }}>
-              <th style={{ ...TH }}>Cliente</th>
-              <th style={{ ...TH }}>Nota interna</th>
-              <th style={{ ...TH }}>Enviado</th>
-              <th style={{ ...TH }}>Estado</th>
-              <th style={{ ...TH }}>Primer acceso</th>
-              <th style={{ ...TH, width: 80 }} />
+              <th style={TH}>Cliente</th>
+              <th style={TH}>Nota interna</th>
+              <th style={TH}>Enviado</th>
+              <th style={TH}>Estado</th>
+              <th style={TH}>Primer acceso</th>
+              <th style={{ ...TH, width: 90 }} />
             </tr>
           </thead>
           <tbody>
             {tokens.map(t => {
-              const st = getStatus(t)
+              const st          = getStatus(t)
+              const accesos     = t.accesos ?? []
+              const isExpanded  = expanded === t.id
+              const hasAccesos  = accesos.length > 0
+
               return (
-                <tr key={t.id}>
-                  <td style={{ ...TD, fontWeight: 500 }}>{t.nombre_cliente}</td>
-                  <td style={{ ...TD, color: '#888', fontStyle: t.nota_interna ? 'normal' : 'italic' }}>
-                    {t.nota_interna ?? '—'}
-                  </td>
-                  <td style={{ ...TD, color: '#888' }}>
-                    {fmtDateTime(t.created_at)}
-                  </td>
-                  <td style={{ ...TD }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', background: st.bg, borderRadius: 10 }}>
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: st.dot, display: 'inline-block',
-                        ...(t.primer_acceso && !t.used ? { animation: 'none' } : {}) }} />
-                      <span style={{ fontSize: 10, color: st.color, fontWeight: 600 }}>{st.label}</span>
-                    </span>
-                  </td>
-                  <td style={{ ...TD, color: '#888', fontSize: 11 }}>
-                    {t.primer_acceso ? fmtDateTime(t.primer_acceso) : '—'}
-                    {t.primer_acceso && !t.used && t.num_accesos > 1 && (
-                      <span style={{ marginLeft: 6, color: '#B45309', fontSize: 10 }}>
-                        ({t.num_accesos} visitas)
+                <>
+                  <tr
+                    key={t.id}
+                    style={{ cursor: hasAccesos ? 'pointer' : 'default', background: isExpanded ? '#FDFCFA' : 'transparent' }}
+                    onClick={() => hasAccesos && setExpanded(isExpanded ? null : t.id)}
+                  >
+                    <td style={{ ...TD, fontWeight: 500 }}>
+                      {hasAccesos && (
+                        <span style={{ marginRight: 6, fontSize: 10, color: '#CCC', display: 'inline-block', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}>▶</span>
+                      )}
+                      {t.nombre_cliente}
+                    </td>
+                    <td style={{ ...TD, color: '#888', fontStyle: t.nota_interna ? 'normal' : 'italic' }}>
+                      {t.nota_interna ?? '—'}
+                    </td>
+                    <td style={{ ...TD, color: '#888' }}>{fmtDateTime(t.created_at)}</td>
+                    <td style={TD}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', background: st.bg, borderRadius: 10 }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: st.dot, display: 'inline-block' }} />
+                        <span style={{ fontSize: 10, color: st.color, fontWeight: 600 }}>{st.label}</span>
                       </span>
-                    )}
-                  </td>
-                  <td style={{ ...TD, textAlign: 'right' }}>
-                    {!t.used && (
-                      <button
-                        onClick={() => handleCopy(t)}
-                        style={{ fontSize: 10, padding: '4px 10px', background: copied === t.id ? '#1D9E75' : '#F0EEE8', color: copied === t.id ? '#fff' : '#555', border: 'none', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, transition: 'background 0.2s' }}
-                      >
-                        {copied === t.id ? '✓ Copiado' : 'Copiar link'}
-                      </button>
-                    )}
-                  </td>
-                </tr>
+                    </td>
+                    <td style={{ ...TD, color: '#888', fontSize: 11 }}>
+                      {t.primer_acceso ? fmtDateTime(t.primer_acceso) : '—'}
+                    </td>
+                    <td style={{ ...TD, textAlign: 'right' }} onClick={e => e.stopPropagation()}>
+                      {!t.used && (
+                        <button
+                          onClick={() => handleCopy(t)}
+                          style={{ fontSize: 10, padding: '4px 10px', background: copied === t.id ? '#1D9E75' : '#F0EEE8', color: copied === t.id ? '#fff' : '#555', border: 'none', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, transition: 'background 0.2s' }}
+                        >
+                          {copied === t.id ? '✓ Copiado' : 'Copiar link'}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+
+                  {/* Expanded accesos log */}
+                  {isExpanded && (
+                    <tr key={t.id + '-log'}>
+                      <td colSpan={6} style={{ padding: '0 16px 12px 48px', background: '#FDFCFA', borderBottom: '1px solid #F0EEE8' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                          <thead>
+                            <tr>
+                              <th style={{ ...TH, paddingLeft: 0, paddingTop: 8, fontSize: 8 }}>#</th>
+                              <th style={{ ...TH, paddingLeft: 0, paddingTop: 8, fontSize: 8 }}>Fecha y hora</th>
+                              <th style={{ ...TH, paddingLeft: 0, paddingTop: 8, fontSize: 8 }}>IP</th>
+                              <th style={{ ...TH, paddingLeft: 0, paddingTop: 8, fontSize: 8 }}>Dispositivo</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {accesos.map((a, i) => (
+                              <tr key={i}>
+                                <td style={{ ...TD, paddingLeft: 0, fontSize: 11, color: '#AAA', width: 24 }}>{i + 1}</td>
+                                <td style={{ ...TD, paddingLeft: 0, fontSize: 11, color: '#555' }}>{fmtDateTime(a.ts)}</td>
+                                <td style={{ ...TD, paddingLeft: 0, fontSize: 11, color: '#555', fontFamily: 'monospace' }}>{a.ip}</td>
+                                <td style={{ ...TD, paddingLeft: 0, fontSize: 11, color: '#555' }}>{a.dispositivo}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </td>
+                    </tr>
+                  )}
+                </>
               )
             })}
           </tbody>

@@ -1,3 +1,4 @@
+import { headers } from 'next/headers'
 import { getBienvenidaToken, registrarAccesoBienvenida } from '@/app/actions/bienvenida'
 import { createAdminClient } from '@/lib/supabase/admin'
 import BienvenidaPage from '@/components/public/BienvenidaPage'
@@ -40,7 +41,12 @@ export default async function BienvenidaTokenPage({
   params: { token: string }
 }) {
   // Register this access (non-blocking — fire and forget)
-  void registrarAccesoBienvenida(params.token)
+  const reqHeaders = await headers()
+  const ip = reqHeaders.get('x-forwarded-for')?.split(',')[0].trim()
+    ?? reqHeaders.get('x-real-ip')
+    ?? 'desconocida'
+  const ua = reqHeaders.get('user-agent') ?? ''
+  void registrarAccesoBienvenida(params.token, ip, ua)
 
   const tokenData = await getBienvenidaToken(params.token)
 
