@@ -8,6 +8,17 @@ import { createBienvenidaToken } from '@/app/actions/bienvenida'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+export interface BienvenidaToken {
+  id:              string
+  token:           string
+  nombre_cliente:  string
+  nota_interna:    string | null
+  used:            boolean
+  created_at:      string
+  primer_acceso:   string | null
+  num_accesos:     number
+}
+
 interface Lead {
   id: string
   nombre: string
@@ -74,6 +85,12 @@ const FIELD: React.CSSProperties = {
 function fmtDate(iso: string) {
   const [y, m, d] = iso.split('-')
   return `${d}/${m}/${y}`
+}
+
+function fmtDateTime(iso: string) {
+  const d = new Date(iso)
+  return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: '2-digit' })
+    + ' ' + d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
 }
 
 function presupuestoLabel(n: number | null) {
@@ -285,9 +302,95 @@ function LeadRow({
   )
 }
 
+// ── Bienvenida tokens panel ───────────────────────────────────────────────────
+
+function BienvenidaTokensPanel({ tokens: initial }: { tokens: BienvenidaToken[] }) {
+  const [tokens, setTokens] = useState(initial)
+  const [copied, setCopied] = useState<string | null>(null)
+
+  const handleCopy = (token: BienvenidaToken) => {
+    const url = window.location.origin + '/bienvenida/' + token.token
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(token.id)
+      setTimeout(() => setCopied(null), 2000)
+    })
+  }
+
+  const getStatus = (t: BienvenidaToken) => {
+    if (t.used) return { label: 'Rellenado', color: '#1D9E75', bg: '#EEF8F4', dot: '#1D9E75' }
+    if (t.primer_acceso) return { label: `Visto ${t.num_accesos}×`, color: '#B45309', bg: '#FDF6EE', dot: '#D97706' }
+    return { label: 'Sin abrir', color: '#999', bg: '#F0EEE8', dot: '#CCC' }
+  }
+
+  if (tokens.length === 0) return null
+
+  return (
+    <div style={{ padding: '0 40px 32px' }}>
+      <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', margin: '0 0 10px' }}>
+        Formularios enviados
+      </p>
+      <div style={{ background: '#fff', border: '1px solid #E8E6E0', borderRadius: 8, overflow: 'hidden' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ background: '#F8F7F4' }}>
+              <th style={{ ...TH }}>Cliente</th>
+              <th style={{ ...TH }}>Nota interna</th>
+              <th style={{ ...TH }}>Enviado</th>
+              <th style={{ ...TH }}>Estado</th>
+              <th style={{ ...TH }}>Primer acceso</th>
+              <th style={{ ...TH, width: 80 }} />
+            </tr>
+          </thead>
+          <tbody>
+            {tokens.map(t => {
+              const st = getStatus(t)
+              return (
+                <tr key={t.id}>
+                  <td style={{ ...TD, fontWeight: 500 }}>{t.nombre_cliente}</td>
+                  <td style={{ ...TD, color: '#888', fontStyle: t.nota_interna ? 'normal' : 'italic' }}>
+                    {t.nota_interna ?? '—'}
+                  </td>
+                  <td style={{ ...TD, color: '#888' }}>
+                    {fmtDateTime(t.created_at)}
+                  </td>
+                  <td style={{ ...TD }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', background: st.bg, borderRadius: 10 }}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: st.dot, display: 'inline-block',
+                        ...(t.primer_acceso && !t.used ? { animation: 'none' } : {}) }} />
+                      <span style={{ fontSize: 10, color: st.color, fontWeight: 600 }}>{st.label}</span>
+                    </span>
+                  </td>
+                  <td style={{ ...TD, color: '#888', fontSize: 11 }}>
+                    {t.primer_acceso ? fmtDateTime(t.primer_acceso) : '—'}
+                    {t.primer_acceso && !t.used && t.num_accesos > 1 && (
+                      <span style={{ marginLeft: 6, color: '#B45309', fontSize: 10 }}>
+                        ({t.num_accesos} visitas)
+                      </span>
+                    )}
+                  </td>
+                  <td style={{ ...TD, textAlign: 'right' }}>
+                    {!t.used && (
+                      <button
+                        onClick={() => handleCopy(t)}
+                        style={{ fontSize: 10, padding: '4px 10px', background: copied === t.id ? '#1D9E75' : '#F0EEE8', color: copied === t.id ? '#fff' : '#555', border: 'none', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, transition: 'background 0.2s' }}
+                      >
+                        {copied === t.id ? '✓ Copiado' : 'Copiar link'}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export default function LeadsPage({ leads: initial }: { leads: Lead[] }) {
+export default function LeadsPage({ leads: initial, tokens = [] }: { leads: Lead[]; tokens?: BienvenidaToken[] }) {
   const router = useRouter()
   const [leads, setLeads] = useState(initial)
   const [editingLead, setEditingLead] = useState<Lead | null>(null)
@@ -522,6 +625,9 @@ export default function LeadsPage({ leads: initial }: { leads: Lead[] }) {
           {filtered.length} de {leads.length} leads
         </p>
       </div>
+
+      {/* ── Formularios enviados ── */}
+      <BienvenidaTokensPanel tokens={tokens} />
 
       {/* ── Bienvenida token modal ── */}
       {showBienvenidaModal && (

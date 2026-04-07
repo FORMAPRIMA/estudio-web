@@ -108,6 +108,25 @@ export async function submitBienvenidaForm(
   }
 }
 
+export async function registrarAccesoBienvenida(token: string): Promise<void> {
+  try {
+    const admin = createAdminClient()
+    const { data: row } = await admin
+      .from('bienvenida_tokens')
+      .select('id, primer_acceso, num_accesos')
+      .eq('token', token)
+      .single()
+    if (!row) return
+    await admin
+      .from('bienvenida_tokens')
+      .update({
+        primer_acceso: row.primer_acceso ?? new Date().toISOString(),
+        num_accesos: ((row.num_accesos as number) ?? 0) + 1,
+      })
+      .eq('id', row.id)
+  } catch { /* swallow — non-blocking */ }
+}
+
 export async function getBienvenidaToken(token: string): Promise<{
   nombre_cliente: string
   nota_interna: string | null

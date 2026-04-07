@@ -1,4 +1,4 @@
-import { getBienvenidaToken } from '@/app/actions/bienvenida'
+import { getBienvenidaToken, registrarAccesoBienvenida } from '@/app/actions/bienvenida'
 import { createAdminClient } from '@/lib/supabase/admin'
 import BienvenidaPage from '@/components/public/BienvenidaPage'
 
@@ -39,6 +39,9 @@ export default async function BienvenidaTokenPage({
 }: {
   params: { token: string }
 }) {
+  // Register this access (non-blocking — fire and forget)
+  void registrarAccesoBienvenida(params.token)
+
   const tokenData = await getBienvenidaToken(params.token)
 
   if (!tokenData || tokenData.used) {
