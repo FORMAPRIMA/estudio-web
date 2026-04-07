@@ -150,6 +150,24 @@ export async function registrarAccesoBienvenida(
   } catch { /* swallow — non-blocking */ }
 }
 
+export async function deleteBienvenidaTokens(
+  ids: string[]
+): Promise<{ success: true } | { error: string }> {
+  try {
+    await requirePartner()
+    const admin = createAdminClient()
+    const { error } = await admin
+      .from('bienvenida_tokens')
+      .delete()
+      .in('id', ids)
+    if (error) return { error: error.message }
+    revalidatePath('/team/captacion/leads')
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
 export async function getBienvenidaToken(token: string): Promise<{
   nombre_cliente: string
   nota_interna: string | null

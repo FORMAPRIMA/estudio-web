@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { addLead, updateLead, deleteLead } from '@/app/actions/leads'
 import { createContrato } from '@/app/actions/contratos'
-import { createBienvenidaToken } from '@/app/actions/bienvenida'
+import { createBienvenidaToken, deleteBienvenidaTokens } from '@/app/actions/bienvenida'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -312,9 +312,34 @@ function LeadRow({
 // ── Bienvenida tokens panel ───────────────────────────────────────────────────
 
 function BienvenidaTokensPanel({ tokens: initial }: { tokens: BienvenidaToken[] }) {
-  const [tokens]    = useState(initial)
+  const [tokens,    setTokens]    = useState(initial)
   const [copied,    setCopied]    = useState<string | null>(null)
   const [expanded,  setExpanded]  = useState<string | null>(null)
+  const [selected,  setSelected]  = useState<Set<string>>(new Set())
+  const [deleting,  setDeleting]  = useState(false)
+
+  const toggleSelect = (id: string) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  const toggleAll = () => {
+    setSelected(prev => prev.size === tokens.length ? new Set() : new Set(tokens.map(t => t.id)))
+  }
+
+  const handleDelete = async () => {
+    if (!selected.size || deleting) return
+    setDeleting(true)
+    const ids = Array.from(selected)
+    const res = await deleteBienvenidaTokens(ids)
+    setDeleting(false)
+    if ('error' in res) { alert(res.error); return }
+    setTokens(prev => prev.filter(t => !ids.includes(t.id)))
+    setSelected(new Set())
+  }
 
   const handleCopy = (token: BienvenidaToken) => {
     const url = window.location.origin + '/bienvenida/' + token.token
@@ -334,13 +359,32 @@ function BienvenidaTokensPanel({ tokens: initial }: { tokens: BienvenidaToken[] 
 
   return (
     <div style={{ padding: '0 40px 32px' }}>
-      <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', margin: '0 0 10px' }}>
-        Formularios enviados
-      </p>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', margin: 0 }}>
+          Formularios enviados
+        </p>
+        {selected.size > 0 && (
+          <button
+            onClick={handleDelete}
+            disabled={deleting}
+            style={{ fontSize: 10, padding: '4px 12px', background: deleting ? '#888' : '#E53E3E', color: '#fff', border: 'none', borderRadius: 4, cursor: deleting ? 'not-allowed' : 'pointer', fontFamily: 'inherit', fontWeight: 600 }}
+          >
+            {deleting ? 'Eliminando…' : `Eliminar ${selected.size} seleccionado${selected.size > 1 ? 's' : ''}`}
+          </button>
+        )}
+      </div>
       <div style={{ background: '#fff', border: '1px solid #E8E6E0', borderRadius: 8, overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#F8F7F4' }}>
+              <th style={{ ...TH, width: 32, paddingRight: 0 }}>
+                <input
+                  type="checkbox"
+                  checked={selected.size === tokens.length && tokens.length > 0}
+                  onChange={toggleAll}
+                  style={{ cursor: 'pointer' }}
+                />
+              </th>
               <th style={TH}>Cliente</th>
               <th style={TH}>Nota interna</th>
               <th style={TH}>Enviado</th>
@@ -360,9 +404,12 @@ function BienvenidaTokensPanel({ tokens: initial }: { tokens: BienvenidaToken[] 
                 <>
                   <tr
                     key={t.id}
-                    style={{ cursor: hasAccesos ? 'pointer' : 'default', background: isExpanded ? '#FDFCFA' : 'transparent' }}
+                    style={{ cursor: hasAccesos ? 'pointer' : 'default', background: isExpanded ? '#FDFCFA' : selected.has(t.id) ? '#FFF8F0' : 'transparent' }}
                     onClick={() => hasAccesos && setExpanded(isExpanded ? null : t.id)}
                   >
+                    <td style={{ ...TD, width: 32, paddingRight: 0 }} onClick={e => { e.stopPropagation(); toggleSelect(t.id) }}>
+                      <input type="checkbox" checked={selected.has(t.id)} onChange={() => toggleSelect(t.id)} style={{ cursor: 'pointer' }} />
+                    </td>
                     <td style={{ ...TD, fontWeight: 500 }}>
                       {hasAccesos && (
                         <span style={{ marginRight: 6, fontSize: 10, color: '#CCC', display: 'inline-block', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}>▶</span>
@@ -397,7 +444,7 @@ function BienvenidaTokensPanel({ tokens: initial }: { tokens: BienvenidaToken[] 
                   {/* Expanded accesos log */}
                   {isExpanded && (
                     <tr key={t.id + '-log'}>
-                      <td colSpan={6} style={{ padding: '0 16px 12px 48px', background: '#FDFCFA', borderBottom: '1px solid #F0EEE8' }}>
+                      <td colSpan={7} style={{ padding: '0 16px 12px 48px', background: '#FDFCFA', borderBottom: '1px solid #F0EEE8' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                           <thead>
                             <tr>
