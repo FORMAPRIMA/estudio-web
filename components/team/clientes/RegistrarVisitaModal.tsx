@@ -97,6 +97,7 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
   const [titulo, setTitulo] = useState(`Visita de obra — ${proyecto.nombre}`)
   const [estadoObras, setEstadoObras] = useState('')
   const [instrucciones, setInstrucciones] = useState('')
+  const [instruccionesConstructor, setInstruccionesConstructor] = useState('')
   const [floorfyUrl, setFloorfyUrl] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
   const [compartirCliente, setCompartirCliente] = useState(true)
@@ -125,6 +126,20 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
       if (!('error' in res)) setContacts(res)
     })
   }, [proyecto.id])
+
+  // Auto-add Gabriela Hidalgo as default attendee
+  useEffect(() => {
+    if (!contacts) return
+    const gabriela = contacts.equipo.find(e =>
+      `${e.nombre}${e.apellido ? ' ' + e.apellido : ''}`.toLowerCase().includes('gabriela')
+    )
+    if (!gabriela) return
+    const nombre = `${gabriela.nombre}${gabriela.apellido ? ' ' + gabriela.apellido : ''}`
+    setAsistentesSeleccionados(prev => {
+      if (prev.some(a => a.id === gabriela.id)) return prev
+      return [...prev, { id: gabriela.id, nombre, tipo: 'equipo' as const }]
+    })
+  }, [contacts])
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -279,9 +294,16 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
       return
     }
 
-    // 2 — Send emails to checked recipients
+    // 2 — Send emails to checked recipients (split by group)
     const checkedRecipients = emailRecipients.filter(r => r.preChecked && r.email)
-    const checkedEmails = checkedRecipients.map(r => r.email as string)
+
+    const clienteEmails = checkedRecipients
+      .filter(r => r.grupo === 'cliente_proyecto' || r.grupo === 'asistente')
+      .map(r => r.email as string)
+
+    const constructorEmails = checkedRecipients
+      .filter(r => r.grupo === 'constructor')
+      .map(r => r.email as string)
 
     // Client names for greeting — primary entries only (exclude "(CC)" duplicates)
     const clienteNombres = checkedRecipients
@@ -289,21 +311,24 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
       .map(r => r.nombre.split(' ')[0]) // first name only
       .filter(Boolean)
 
-    if (checkedEmails.length > 0) {
+    if (clienteEmails.length > 0 || constructorEmails.length > 0) {
       const asistenteStr = asistentesSeleccionados.map(a => a.nombre).join(', ')
       await compartirActaPorEmail({
-        emails:          checkedEmails,
+        clienteEmails,
+        constructorEmails,
         clienteNombres,
-        proyecto_id:     proyecto.id,
-        proyecto_nombre: proyecto.nombre,
-        proyecto_codigo: proyecto.codigo,
+        constructorNombre:         proyectoConstructor?.nombre ?? null,
+        proyecto_id:               proyecto.id,
+        proyecto_nombre:           proyecto.nombre,
+        proyecto_codigo:           proyecto.codigo,
         fecha,
         titulo,
-        acta_url:        res.acta_url,
-        asistentes:      asistenteStr || null,
-        estado_obras:    estadoObras,
+        acta_url:                  res.acta_url,
+        asistentes:                asistenteStr || null,
+        estado_obras:              estadoObras,
         instrucciones,
-        floorfy_url:     floorfyUrl.trim() || null,
+        instruccionesConstructor,
+        floorfy_url:               floorfyUrl.trim() || null,
       })
     }
 
@@ -351,7 +376,7 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
       <div style={{
         background: '#fff',
         borderRadius: 12,
-        maxWidth: 640,
+        maxWidth: 900,
         width: '100%',
         maxHeight: '90vh',
         overflow: 'auto',
@@ -543,53 +568,84 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
                 />
               </div>
 
-              {/* Instrucciones */}
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <label style={{ ...S.label, marginBottom: 0 }}>Instrucciones</label>
-                  <button
-                    type="button"
-                    disabled={aiLoading || !instrucciones.trim()}
-                    onClick={async () => {
-                      setAiLoading(true)
-                      try {
-                        const res = await fetch('/api/profesionalizar-instrucciones', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ notas: instrucciones }),
-                        })
-                        const data = await res.json() as { texto?: string; error?: string }
-                        if (data.texto) setInstrucciones(data.texto)
-                      } finally {
-                        setAiLoading(false)
-                      }
-                    }}
-                    style={{
-                      fontSize: 10, fontWeight: 600, padding: '4px 10px',
-                      background: aiLoading ? '#F0EDE8' : '#1A1A1A',
-                      color: aiLoading ? '#AAA' : '#fff',
-                      border: 'none', borderRadius: 4, cursor: aiLoading ? 'not-allowed' : 'pointer',
-                      letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 5,
-                      transition: 'background 0.15s',
-                    }}
-                  >
-                    {aiLoading ? (
-                      <>
-                        <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', border: '2px solid #CCC', borderTopColor: '#888', animation: 'spin 0.7s linear infinite' }} />
-                        Procesando…
-                      </>
-                    ) : (
-                      <>✦ Profesionalizar con IA</>
-                    )}
-                  </button>
+              {/* Instrucciones — two columns */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+
+                {/* Left: instrucciones cliente */}
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <label style={{ ...S.label, marginBottom: 0 }}>Instrucciones acta cliente</label>
+                    <button
+                      type="button"
+                      disabled={aiLoading || !instrucciones.trim()}
+                      onClick={async () => {
+                        setAiLoading(true)
+                        try {
+                          const res = await fetch('/api/profesionalizar-instrucciones', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ notas: instrucciones }),
+                          })
+                          const data = await res.json() as { texto?: string; error?: string }
+                          if (data.texto) setInstrucciones(data.texto)
+                        } finally {
+                          setAiLoading(false)
+                        }
+                      }}
+                      style={{
+                        fontSize: 10, fontWeight: 600, padding: '4px 10px',
+                        background: aiLoading ? '#F0EDE8' : '#1A1A1A',
+                        color: aiLoading ? '#AAA' : '#fff',
+                        border: 'none', borderRadius: 4, cursor: aiLoading ? 'not-allowed' : 'pointer',
+                        letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 5,
+                        transition: 'background 0.15s',
+                      }}
+                    >
+                      {aiLoading ? (
+                        <>
+                          <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', border: '2px solid #CCC', borderTopColor: '#888', animation: 'spin 0.7s linear infinite' }} />
+                          Procesando…
+                        </>
+                      ) : (
+                        <>✦ Profesionalizar con IA</>
+                      )}
+                    </button>
+                  </div>
+                  <textarea
+                    rows={6}
+                    value={instrucciones}
+                    onChange={e => setInstrucciones(e.target.value)}
+                    placeholder="Escribe aquí las instrucciones para el cliente…"
+                    style={S.textarea}
+                  />
                 </div>
-                <textarea
-                  rows={5}
-                  value={instrucciones}
-                  onChange={e => setInstrucciones(e.target.value)}
-                  placeholder="Escribe aquí las instrucciones de la visita…"
-                  style={S.textarea}
-                />
+
+                {/* Right: instrucciones constructor */}
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <label style={{ ...S.label, marginBottom: 0 }}>Instrucciones acta constructor</label>
+                    <button
+                      type="button"
+                      onClick={() => setInstruccionesConstructor(instrucciones)}
+                      style={{
+                        fontSize: 10, fontWeight: 600, padding: '4px 10px',
+                        background: 'none', color: '#888',
+                        border: '1px solid #E8E6E0', borderRadius: 4, cursor: 'pointer',
+                        letterSpacing: '0.04em',
+                      }}
+                    >
+                      ← Copiar desde cliente
+                    </button>
+                  </div>
+                  <textarea
+                    rows={6}
+                    value={instruccionesConstructor}
+                    onChange={e => setInstruccionesConstructor(e.target.value)}
+                    placeholder="Instrucciones específicas para el constructor…"
+                    style={S.textarea}
+                  />
+                </div>
+
               </div>
 
               {/* Floorfy URL */}
@@ -827,8 +883,11 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
                 </p>
               ) : (
                 <>
-                  <p style={{ fontSize: 11, color: '#888', margin: '0 0 8px' }}>
+                  <p style={{ fontSize: 11, color: '#888', margin: '0 0 4px' }}>
                     El acta en PDF se enviará a los correos seleccionados.
+                  </p>
+                  <p style={{ fontSize: 11, color: '#AAA', margin: '0 0 8px', fontStyle: 'italic' }}>
+                    José y Gabriela (partners) siempre en copia automática.
                   </p>
 
                   {/* Clientes del proyecto */}
