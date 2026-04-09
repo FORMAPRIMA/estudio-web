@@ -29,21 +29,18 @@ export async function POST(req: NextRequest) {
   const { imageUrl } = await req.json() as { imageUrl: string }
   if (!imageUrl) return NextResponse.json({ error: 'Sin imagen' }, { status: 400 })
 
-  // Download the image to pass as base64 to Claude
-  const imgRes = await fetch(imageUrl)
-  if (!imgRes.ok) return NextResponse.json({ error: 'No se pudo obtener la imagen' }, { status: 400 })
-  const imgBuffer = await imgRes.arrayBuffer()
-  const base64 = Buffer.from(imgBuffer).toString('base64')
-  const contentType = imgRes.headers.get('content-type') ?? 'image/jpeg'
-  const mediaType = contentType.startsWith('image/') ? contentType : 'image/jpeg'
+  // Download the file to pass as base64 to Claude
+  const fileRes = await fetch(imageUrl)
+  if (!fileRes.ok) return NextResponse.json({ error: 'No se pudo obtener el archivo' }, { status: 400 })
+  const fileBuffer = await fileRes.arrayBuffer()
+  const base64 = Buffer.from(fileBuffer).toString('base64')
+  const contentType = fileRes.headers.get('content-type') ?? 'image/jpeg'
+  const isPdf = contentType.includes('pdf') || imageUrl.toLowerCase().endsWith('.pdf')
 
   const today = new Date().toISOString().split('T')[0]
 
-  const message = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 512,
-    system: `Eres un asistente de gestión de gastos de una empresa de arquitectura llamada Forma Prima.
-Analiza imágenes de tickets y facturas y extrae su información en JSON.
+  const systemPrompt = `Eres un asistente de gestión de gastos de una empresa de arquitectura llamada Forma Prima.
+Analiza imágenes y PDFs de tickets y facturas y extrae su información en JSON.
 Responde ÚNICAMENTE con un objeto JSON válido, sin texto adicional, sin markdown, sin explicaciones.
 Formato exacto:
 {
@@ -56,26 +53,43 @@ Formato exacto:
 }
 Reglas:
 - fecha_ticket: extrae la fecha del ticket. Si no es clara, usa null.
-- monto: el importe TOTAL del ticket en número (sin símbolo). Usa null si no está claro.
+- monto: el importe TOTAL en número (sin símbolo). Usa null si no está claro.
 - moneda: casi siempre EUR. Si ves otro símbolo, ponlo (USD, GBP…).
 - tipo: elige el más apropiado de la lista. "gasto_proyecto" para materiales/servicios de obra.
 - proveedor: nombre del restaurante, empresa, taxi app, etc.
-- descripcion: qué se compró o el concepto principal.`,
+- descripcion: qué se compró o el concepto principal.`
+
+  // Build content block depending on file type
+  const fileContent = isPdf
+    ? {
+        type: 'document' as const,
+        source: {
+          type: 'base64' as const,
+          media_type: 'application/pdf' as const,
+          data: base64,
+        },
+      }
+    : {
+        type: 'image' as const,
+        source: {
+          type: 'base64' as const,
+          media_type: (contentType.startsWith('image/') ? contentType : 'image/jpeg') as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+          data: base64,
+        },
+      }
+
+  const message = await client.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 512,
+    system: systemPrompt,
     messages: [
       {
         role: 'user',
         content: [
-          {
-            type: 'image',
-            source: {
-              type: 'base64',
-              media_type: mediaType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
-              data: base64,
-            },
-          },
+          fileContent as any,
           {
             type: 'text',
-            text: `Analiza este ticket/factura y extrae los datos. Fecha de referencia: ${today}.`,
+            text: `Analiza este ${isPdf ? 'PDF' : 'ticket/factura'} y extrae los datos. Fecha de referencia: ${today}.`,
           },
         ],
       },

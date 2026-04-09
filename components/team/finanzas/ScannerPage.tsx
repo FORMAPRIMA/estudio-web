@@ -59,6 +59,7 @@ export default function ScannerPage({ initialScans, proyectos, initialYear, init
   const [loadingMonth, setLoadingMonth] = useState(false)
 
   const [showCapture, setShowCapture]   = useState(false)
+  const [showBatch, setShowBatch]       = useState(false)
   const [editingScan, setEditingScan]   = useState<ExpenseScan | null>(null)
   const [lightbox, setLightbox]         = useState<string | null>(null)
 
@@ -132,18 +133,30 @@ export default function ScannerPage({ initialScans, proyectos, initialYear, init
           <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', margin: '0 0 4px' }}>Finanzas</p>
           <h1 style={{ fontSize: 20, fontWeight: 300, color: '#1A1A1A', margin: 0, letterSpacing: '-0.01em' }}>Scanner de gastos</h1>
         </div>
-        <button
-          onClick={() => setShowCapture(true)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            padding: '10px 18px', background: '#D85A30', color: '#fff',
-            border: 'none', borderRadius: 8, cursor: 'pointer',
-            fontSize: 12, fontWeight: 700, letterSpacing: '0.04em',
-            flexShrink: 0,
-          }}
-        >
-          <span style={{ fontSize: 16 }}>📷</span> Escanear ticket
-        </button>
+        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+          <button
+            onClick={() => setShowBatch(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '10px 14px', background: '#fff', color: '#1A1A1A',
+              border: '1px solid #E8E6E0', borderRadius: 8, cursor: 'pointer',
+              fontSize: 12, fontWeight: 600,
+            }}
+          >
+            <span style={{ fontSize: 15 }}>📂</span> Subir archivos
+          </button>
+          <button
+            onClick={() => setShowCapture(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '10px 16px', background: '#D85A30', color: '#fff',
+              border: 'none', borderRadius: 8, cursor: 'pointer',
+              fontSize: 12, fontWeight: 700, letterSpacing: '0.04em',
+            }}
+          >
+            <span style={{ fontSize: 15 }}>📷</span> Escanear
+          </button>
+        </div>
       </div>
 
       {/* ── Month navigation ────────────────────────────────────────────────── */}
@@ -249,6 +262,15 @@ export default function ScannerPage({ initialScans, proyectos, initialYear, init
         </div>
       )}
 
+      {/* ── Batch upload modal ──────────────────────────────────────────────── */}
+      {showBatch && (
+        <BatchUploadModal
+          proyectos={proyectos}
+          onClose={() => setShowBatch(false)}
+          onSaved={scans => { scans.forEach(handleSaved); setShowBatch(false) }}
+        />
+      )}
+
       {/* ── Capture modal ────────────────────────────────────────────────────── */}
       {showCapture && (
         <CaptureModal
@@ -280,6 +302,331 @@ export default function ScannerPage({ initialScans, proyectos, initialYear, init
         </div>
       )}
     </div>
+  )
+}
+
+// ── BatchUploadModal ───────────────────────────────────────────────────────────
+
+interface BatchItem {
+  id:          string
+  file:        File
+  preview:     string | null   // object URL for images
+  isPdf:       boolean
+  status:      'idle' | 'uploading' | 'analyzing' | 'done' | 'error'
+  photoUrl:    string | null
+  error:       string | null
+  skip:        boolean
+  // form fields
+  tipo:        ExpenseType
+  monto:       string
+  moneda:      string
+  proveedor:   string
+  descripcion: string
+  fechaTicket: string
+  proyectoId:  string
+  notas:       string
+}
+
+function BatchUploadModal({ proyectos, onClose, onSaved }: {
+  proyectos: Proyecto[]
+  onClose: () => void
+  onSaved: (scans: ExpenseScan[]) => void
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [items, setItems] = useState<BatchItem[]>([])
+  const [stage, setStage] = useState<'select' | 'processing' | 'review'>('select')
+  const [saving, setSaving] = useState(false)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  const makeItem = (file: File): BatchItem => ({
+    id:          `${file.name}-${file.size}-${Date.now()}-${Math.random()}`,
+    file,
+    preview:     file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
+    isPdf:       file.type.includes('pdf') || file.name.toLowerCase().endsWith('.pdf'),
+    status:      'idle',
+    photoUrl:    null,
+    error:       null,
+    skip:        false,
+    tipo:        'otro',
+    monto:       '',
+    moneda:      'EUR',
+    proveedor:   '',
+    descripcion: '',
+    fechaTicket: '',
+    proyectoId:  '',
+    notas:       '',
+  })
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? [])
+    if (!files.length) return
+    setItems(prev => [...prev, ...files.map(makeItem)])
+    e.target.value = ''
+  }
+
+  const removeItem = (id: string) => setItems(prev => prev.filter(i => i.id !== id))
+
+  const updateItem = (id: string, patch: Partial<BatchItem>) =>
+    setItems(prev => prev.map(i => i.id === id ? { ...i, ...patch } : i))
+
+  const processAll = async () => {
+    if (items.length === 0) return
+    setStage('processing')
+
+    for (const item of items) {
+      // 1. Upload
+      updateItem(item.id, { status: 'uploading' })
+      const fd = new FormData()
+      fd.append('photo', item.file)
+      const upRes = await uploadExpensePhoto(fd)
+
+      if ('error' in upRes) {
+        updateItem(item.id, { status: 'error', error: upRes.error })
+        continue
+      }
+
+      updateItem(item.id, { photoUrl: upRes.url, status: 'analyzing' })
+
+      // 2. AI analysis
+      try {
+        const res = await fetch('/api/scan-ticket', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageUrl: upRes.url }),
+        })
+        const json = await res.json() as { data?: any; error?: string }
+        if (json.data) {
+          const d = json.data
+          updateItem(item.id, {
+            status:      'done',
+            tipo:        TIPOS.includes(d.tipo) ? d.tipo : 'otro',
+            monto:       d.monto != null ? String(d.monto) : '',
+            moneda:      d.moneda ?? 'EUR',
+            proveedor:   d.proveedor ?? '',
+            descripcion: d.descripcion ?? '',
+            fechaTicket: d.fecha_ticket ?? '',
+          })
+        } else {
+          updateItem(item.id, { status: 'done' })
+        }
+      } catch {
+        updateItem(item.id, { status: 'done' })
+      }
+    }
+
+    setStage('review')
+  }
+
+  const handleSaveAll = async () => {
+    const toSave = items.filter(i => !i.skip && i.photoUrl && i.status !== 'error')
+    if (toSave.length === 0) { onClose(); return }
+    setSaving(true)
+
+    const saved: ExpenseScan[] = []
+    for (const item of toSave) {
+      const res = await saveExpenseScan({
+        foto_url:     item.photoUrl!,
+        fecha_ticket: item.fechaTicket || null,
+        monto:        item.monto ? parseFloat(item.monto) : null,
+        moneda:       item.moneda,
+        tipo:         item.tipo,
+        proveedor:    item.proveedor || null,
+        descripcion:  item.descripcion || null,
+        proyecto_id:  item.proyectoId || null,
+        notas:        item.notas || null,
+      })
+      if ('id' in res) {
+        saved.push({
+          id:           res.id,
+          user_id:      '',
+          foto_url:     item.photoUrl!,
+          fecha_ticket: item.fechaTicket || null,
+          monto:        item.monto ? parseFloat(item.monto) : null,
+          moneda:       item.moneda,
+          tipo:         item.tipo,
+          proveedor:    item.proveedor || null,
+          descripcion:  item.descripcion || null,
+          proyecto_id:  item.proyectoId || null,
+          notas:        item.notas || null,
+          created_at:   new Date().toISOString(),
+          autor:        null,
+        })
+      }
+    }
+
+    setSaving(false)
+    onSaved(saved)
+  }
+
+  const activeItems  = items.filter(i => !i.skip)
+  const pendingCount = items.filter(i => i.status === 'uploading' || i.status === 'analyzing').length
+  const doneCount    = items.filter(i => i.status === 'done' || i.status === 'error').length
+
+  return (
+    <ModalShell title="Subida manual de archivos" onClose={onClose}>
+
+      {/* Drop / select zone */}
+      {stage === 'select' && (
+        <>
+          <div
+            onClick={() => fileInputRef.current?.click()}
+            style={{
+              border: '2px dashed #E8E6E0', borderRadius: 10, padding: '28px 16px',
+              textAlign: 'center', cursor: 'pointer', marginBottom: 16,
+              background: '#FAFAF8',
+              transition: 'border-color 0.15s',
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = '#D85A30' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = '#E8E6E0' }}
+          >
+            <p style={{ fontSize: 28, margin: '0 0 8px' }}>📂</p>
+            <p style={{ fontSize: 13, fontWeight: 500, color: '#1A1A1A', margin: '0 0 4px' }}>
+              Selecciona fotos o PDFs
+            </p>
+            <p style={{ fontSize: 11, color: '#AAA', margin: 0 }}>
+              JPG, PNG, WEBP, PDF · Múltiples archivos permitidos
+            </p>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,.pdf"
+            multiple
+            style={{ display: 'none' }}
+            onChange={handleFileChange}
+          />
+        </>
+      )}
+
+      {/* File queue */}
+      {items.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16, maxHeight: 260, overflowY: 'auto' }}>
+          {items.map(item => {
+            const cfg  = TIPO_CONFIG[item.tipo]
+            const isExpanded = expandedId === item.id && stage === 'review'
+
+            return (
+              <div key={item.id} style={{
+                border: `1px solid ${item.status === 'error' ? '#FECACA' : item.skip ? '#F3F4F6' : '#E8E6E0'}`,
+                borderRadius: 8, overflow: 'hidden',
+                opacity: item.skip ? 0.45 : 1,
+                transition: 'opacity 0.15s',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px' }}>
+                  {/* Thumb */}
+                  <div style={{ width: 40, height: 40, flexShrink: 0, borderRadius: 5, overflow: 'hidden', background: '#F8F7F4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {item.preview
+                      // eslint-disable-next-line @next/next/no-img-element
+                      ? <img src={item.preview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      : <span style={{ fontSize: 20 }}>📄</span>
+                    }
+                  </div>
+
+                  {/* Name + status */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 11, fontWeight: 500, color: '#1A1A1A', margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {item.file.name}
+                    </p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {item.status === 'idle' && <span style={{ fontSize: 10, color: '#AAA' }}>En cola</span>}
+                      {item.status === 'uploading' && <><Spinner size={10} /><span style={{ fontSize: 10, color: '#888' }}>Subiendo…</span></>}
+                      {item.status === 'analyzing' && <><Spinner size={10} /><span style={{ fontSize: 10, color: '#92400E' }}>Analizando con IA…</span></>}
+                      {item.status === 'done' && <span style={{ fontSize: 10, color: cfg.color, background: cfg.bg, padding: '1px 6px', borderRadius: 4 }}>{cfg.icon} {cfg.label}</span>}
+                      {item.status === 'error' && <span style={{ fontSize: 10, color: '#DC2626' }}>Error: {item.error}</span>}
+                      {item.status === 'done' && item.monto && <span style={{ fontSize: 10, color: '#555', fontWeight: 600 }}>{fmtMoney(parseFloat(item.monto), item.moneda)}</span>}
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                    {stage === 'review' && item.status === 'done' && (
+                      <button
+                        onClick={() => setExpandedId(isExpanded ? null : item.id)}
+                        style={{ fontSize: 10, padding: '3px 8px', background: 'none', border: '1px solid #E8E6E0', borderRadius: 4, cursor: 'pointer', color: '#555' }}
+                      >{isExpanded ? 'Cerrar' : 'Editar'}</button>
+                    )}
+                    {stage === 'review' && item.status !== 'error' && (
+                      <button
+                        onClick={() => updateItem(item.id, { skip: !item.skip })}
+                        style={{ fontSize: 10, padding: '3px 8px', background: 'none', border: `1px solid ${item.skip ? '#D85A30' : '#E8E6E0'}`, borderRadius: 4, cursor: 'pointer', color: item.skip ? '#D85A30' : '#888' }}
+                      >{item.skip ? 'Incluir' : 'Omitir'}</button>
+                    )}
+                    {stage === 'select' && (
+                      <button onClick={() => removeItem(item.id)} style={{ fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', color: '#AAA', padding: '0 2px' }}>×</button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Inline edit form for review stage */}
+                {isExpanded && (
+                  <div style={{ borderTop: '1px solid #F0EEE8', padding: '12px' }}>
+                    <ExpenseForm
+                      tipo={item.tipo}        setTipo={v => updateItem(item.id, { tipo: v })}
+                      monto={item.monto}       setMonto={v => updateItem(item.id, { monto: v })}
+                      moneda={item.moneda}     setMoneda={v => updateItem(item.id, { moneda: v })}
+                      proveedor={item.proveedor} setProveedor={v => updateItem(item.id, { proveedor: v })}
+                      descripcion={item.descripcion} setDescripcion={v => updateItem(item.id, { descripcion: v })}
+                      fechaTicket={item.fechaTicket} setFechaTicket={v => updateItem(item.id, { fechaTicket: v })}
+                      proyectoId={item.proyectoId} setProyectoId={v => updateItem(item.id, { proyectoId: v })}
+                      notas={item.notas}       setNotas={v => updateItem(item.id, { notas: v })}
+                      proyectos={proyectos}
+                    />
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Add more button in select stage */}
+      {stage === 'select' && items.length > 0 && (
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          style={{ ...btnGhost, marginBottom: 16, fontSize: 11 }}
+        >+ Añadir más archivos</button>
+      )}
+
+      {/* Progress bar in processing stage */}
+      {stage === 'processing' && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ height: 4, background: '#F0EEE8', borderRadius: 2, overflow: 'hidden' }}>
+            <div style={{ height: '100%', background: '#D85A30', borderRadius: 2, width: `${items.length > 0 ? (doneCount / items.length) * 100 : 0}%`, transition: 'width 0.3s' }} />
+          </div>
+          <p style={{ fontSize: 11, color: '#888', margin: '6px 0 0', textAlign: 'center' }}>
+            {pendingCount > 0 ? `Procesando ${doneCount + 1} de ${items.length}…` : 'Análisis completado'}
+          </p>
+        </div>
+      )}
+
+      {/* Footer buttons */}
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button onClick={onClose} style={{ ...btnGhost, flex: 1 }}>Cancelar</button>
+        {stage === 'select' && (
+          <button
+            onClick={processAll}
+            disabled={items.length === 0}
+            style={{ ...btnDark, flex: 2, opacity: items.length === 0 ? 0.4 : 1 }}
+          >
+            Analizar {items.length > 0 ? `${items.length} archivo${items.length !== 1 ? 's' : ''}` : ''}
+          </button>
+        )}
+        {stage === 'processing' && (
+          <button disabled style={{ ...btnDark, flex: 2, opacity: 0.5 }}>
+            <Spinner size={12} /> &nbsp;Procesando…
+          </button>
+        )}
+        {stage === 'review' && (
+          <button
+            onClick={handleSaveAll}
+            disabled={saving || activeItems.length === 0}
+            style={{ ...btnDark, flex: 2, opacity: saving || activeItems.length === 0 ? 0.5 : 1 }}
+          >
+            {saving ? 'Guardando…' : `Guardar ${activeItems.length} gasto${activeItems.length !== 1 ? 's' : ''}`}
+          </button>
+        )}
+      </div>
+    </ModalShell>
   )
 }
 
