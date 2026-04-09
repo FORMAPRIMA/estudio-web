@@ -149,12 +149,15 @@ export default function ScannerPage({ initialScans, proyectos, initialYear, init
   const totalEur = byCurrency.reduce((sum, [c, v]) => sum + v * (rates[c] ?? 1), 0)
   const hasMultiCurrency = byCurrency.some(([c]) => c !== 'EUR') && byCurrency.length > 1
 
-  const byTipo = TIPOS.map(t => ({
-    tipo: t,
-    count: filteredScans.filter(s => s.tipo === t).length,
-    total: filteredScans.filter(s => s.tipo === t).reduce((sum, s) => sum + (s.monto ?? 0), 0),
-    moneda: filteredScans.find(s => s.tipo === t)?.moneda ?? 'EUR',
-  })).filter(x => x.count > 0)
+  // byTipo: totals always in EUR-equivalent so they're comparable
+  const byTipo = TIPOS.map(t => {
+    const ts = filteredScans.filter(s => s.tipo === t)
+    return {
+      tipo: t,
+      count: ts.length,
+      totalEur: ts.reduce((sum, s) => sum + (s.monto ?? 0) * (rates[s.moneda ?? 'EUR'] ?? 1), 0),
+    }
+  }).filter(x => x.count > 0)
 
   // ── Month navigation ───────────────────────────────────────────────────────
 
@@ -267,58 +270,54 @@ export default function ScannerPage({ initialScans, proyectos, initialYear, init
       {/* ── Summary ─────────────────────────────────────────────────────────── */}
       {scans.length > 0 && (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 12 }}>
-            {/* Total per currency */}
-            {byCurrency.map(([currency, total]) => (
-              <div key={currency} style={{ padding: '14px 16px', background: '#F8F7F4', border: '1px solid #E8E6E0', borderRadius: 8 }}>
-                <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', margin: '0 0 4px' }}>
-                  Total {currency}
-                </p>
-                <p style={{ fontSize: 20, fontWeight: 600, color: '#D85A30', margin: 0 }}>
-                  {fmtMoney(total, currency)}
-                </p>
-                <p style={{ fontSize: 10, color: '#888', margin: '2px 0 0' }}>
-                  {filteredScans.filter(s => (s.moneda ?? 'EUR') === currency).length} ticket{filteredScans.filter(s => (s.moneda ?? 'EUR') === currency).length !== 1 ? 's' : ''}
-                </p>
-              </div>
-            ))}
-            {/* EUR approximation when multi-currency */}
-            {hasMultiCurrency && (
-              <div style={{ padding: '14px 16px', background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 8 }}>
-                <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#C2410C', margin: '0 0 4px' }}>
-                  ≈ Total EUR
-                </p>
-                <p style={{ fontSize: 20, fontWeight: 600, color: '#C2410C', margin: 0 }}>
-                  {fmtMoney(totalEur, 'EUR')}
-                </p>
-                <p style={{ fontSize: 10, color: '#C2410C99', margin: '2px 0 0' }}>
-                  Conversión aproximada
-                </p>
-              </div>
-            )}
-            {byTipo.map(({ tipo, count, total }) => {
-              const cfg = TIPO_CONFIG[tipo]
+          {/* Block 1: totales por divisa */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 6 }}>
+            {byCurrency.map(([currency, total]) => {
+              const n = filteredScans.filter(s => (s.moneda ?? 'EUR') === currency).length
               return (
-                <div key={tipo} style={{ padding: '14px 16px', background: cfg.bg, border: `1px solid ${cfg.color}20`, borderRadius: 8 }}>
-                  <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: cfg.color, margin: '0 0 4px' }}>{cfg.icon} {cfg.label}</p>
-                  <p style={{ fontSize: 16, fontWeight: 600, color: cfg.color, margin: 0 }}>{fmtMoney(total)}</p>
-                  <p style={{ fontSize: 10, color: cfg.color + 'BB', margin: '2px 0 0' }}>{count} ticket{count !== 1 ? 's' : ''}</p>
+                <div key={currency} style={{ padding: '12px 16px', background: '#F8F7F4', border: '1px solid #E8E6E0', borderRadius: 8, minWidth: 130 }}>
+                  <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', margin: '0 0 4px' }}>Total {currency}</p>
+                  <p style={{ fontSize: 20, fontWeight: 600, color: '#D85A30', margin: 0 }}>{fmtMoney(total, currency)}</p>
+                  <p style={{ fontSize: 10, color: '#888', margin: '2px 0 0' }}>{n} ticket{n !== 1 ? 's' : ''}</p>
                 </div>
               )
             })}
+            {hasMultiCurrency && (
+              <div style={{ padding: '12px 16px', background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 8, minWidth: 130 }}>
+                <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#C2410C', margin: '0 0 4px' }}>≈ Total EUR</p>
+                <p style={{ fontSize: 20, fontWeight: 600, color: '#C2410C', margin: 0 }}>{fmtMoney(totalEur, 'EUR')}</p>
+                <p style={{ fontSize: 10, color: '#C2410C99', margin: '2px 0 0' }}>conversión aprox.</p>
+              </div>
+            )}
           </div>
-          {/* Exchange rate info + refresh */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-            <span style={{ fontSize: 10, color: '#AAA' }}>
-              {ratesDate ? `Cambio: ${new Date(ratesDate).toLocaleDateString('es-ES')}` : 'Tipos de cambio no cargados'}
+
+          {/* Exchange rate bar */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+            <span style={{ fontSize: 10, color: '#BBB' }}>
+              {ratesDate ? `Cambio actualizado: ${new Date(ratesDate).toLocaleDateString('es-ES')}` : 'Tipos de cambio pendientes'}
             </span>
             <button
               onClick={handleRefreshRates}
               disabled={ratesUpdating}
-              style={{ fontSize: 10, padding: '3px 8px', background: 'none', border: '1px solid #E8E6E0', borderRadius: 4, cursor: 'pointer', color: '#888', opacity: ratesUpdating ? 0.5 : 1 }}
+              style={{ fontSize: 10, padding: '2px 8px', background: 'none', border: '1px solid #E8E6E0', borderRadius: 4, cursor: 'pointer', color: '#888', opacity: ratesUpdating ? 0.5 : 1 }}
             >
-              {ratesUpdating ? '…' : '↻ Actualizar cambio'}
+              {ratesUpdating ? '…' : '↻ Actualizar'}
             </button>
+          </div>
+
+          {/* Block 2: desglose por tipo (siempre en EUR equivalente) */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 8, marginBottom: 16 }}>
+            {byTipo.map(({ tipo, count, totalEur: tipoEur }) => {
+              const cfg = TIPO_CONFIG[tipo]
+              return (
+                <div key={tipo} style={{ padding: '12px 14px', background: cfg.bg, border: `1px solid ${cfg.color}25`, borderRadius: 8 }}>
+                  <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: cfg.color, margin: '0 0 4px' }}>{cfg.icon} {cfg.label}</p>
+                  <p style={{ fontSize: 15, fontWeight: 600, color: cfg.color, margin: 0 }}>{fmtMoney(tipoEur)}</p>
+                  {hasMultiCurrency && <p style={{ fontSize: 9, color: cfg.color + '99', margin: '1px 0 0' }}>≈ EUR</p>}
+                  <p style={{ fontSize: 10, color: cfg.color + 'AA', margin: '2px 0 0' }}>{count} ticket{count !== 1 ? 's' : ''}</p>
+                </div>
+              )
+            })}
           </div>
         </>
       )}
