@@ -246,7 +246,8 @@ export default function ScannerPage({ initialScans, proyectos, initialYear, init
     setBackfilling(false)
   }
 
-  const isCurrentMonth = year === initialYear && month === initialMonth
+  const now = new Date()
+  const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1
 
   return (
     <div style={{ maxWidth: 720, margin: '0 auto', padding: '28px 16px', fontFamily: 'inherit' }}>
