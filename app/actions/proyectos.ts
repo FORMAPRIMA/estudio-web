@@ -311,8 +311,20 @@ export async function iniciarFase(pfId: string, proyectoId: string, faseId: stri
 
   if (!proyecto || !catalogoFase || !pf) return { error: 'Datos no encontrados.' }
 
-  // Mark fase as iniciada — use admin client to bypass RLS for fp_team users
   const admin = createAdminClient()
+
+  // Idempotency guard: if already initiated, skip everything
+  const { data: currentPf } = await admin
+    .from('proyecto_fases')
+    .select('fase_status')
+    .eq('id', pfId)
+    .single()
+
+  if (currentPf?.fase_status === 'iniciada') {
+    return { success: true, tasks: [] }
+  }
+
+  // Mark fase as iniciada — use admin client to bypass RLS for fp_team users
   const { error: e1 } = await admin
     .from('proyecto_fases')
     .update({ fase_status: 'iniciada' })

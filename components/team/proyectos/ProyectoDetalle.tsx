@@ -1125,7 +1125,6 @@ export default function ProyectoDetalle({ proyecto: initialProyecto, tasks: init
     setFases(prev => prev.map(f => f.id === pfId ? { ...f, fase_status: 'iniciada' } : f))
     if (result.tasks && result.tasks.length > 0)
       setTasks(prev => [...prev, ...result.tasks as unknown as Task[]])
-    router.refresh()
   }
 
   const contractedFaseIds = new Set(fases.map(f => f.fase_id))
