@@ -88,6 +88,9 @@ const ALL_NAV: (NavItem & { roles: FpRole[] })[] = [
   // ── Finanzas macro ───────────────────────────────────────────────────────
   { href: '', label: 'Finanzas generales', roles: ['fp_partner'], isSection: true },
   { href: '/team/finanzas/macro/costes', label: 'Costes fijos/variables', roles: ['fp_partner'], isSubItem: true },
+  // ── Scanner de gastos ────────────────────────────────────────────────────
+  { href: '', label: 'Gastos', roles: ['fp_partner'], isSection: true },
+  { href: '/team/finanzas/scanner', label: 'Scanner de tickets', roles: ['fp_partner'], isSubItem: true },
   // ── Facturación: sección interna para fp_partner únicamente ─────────────
   { href: '', label: 'Facturación', roles: ['fp_partner'], isSection: true },
   { href: '/team/finanzas/facturacion/dashboard', label: 'Dashboard general', roles: ['fp_partner'], isSubItem: true },
