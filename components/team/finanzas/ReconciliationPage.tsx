@@ -4,6 +4,7 @@ import { useState, useRef } from 'react'
 import {
   linkTransaction,
   unlinkTransaction,
+  confirmMatch,
   updateTipoFiscal,
   deleteStatement,
   type BankStatement,
@@ -126,6 +127,7 @@ export default function ReconciliationPage({
   // Computed stats
   const total      = transactions.length
   const linked     = transactions.filter(t => t.expense_scan_id != null).length
+  const sugeridos  = transactions.filter(t => t.match_confidence === 'sugerido').length
   const noTicket   = total - linked
   const pendFiscal = transactions.filter(t => t.tipo_fiscal === 'pendiente' || !t.tipo_fiscal).length
 
@@ -228,6 +230,15 @@ export default function ReconciliationPage({
     await updateTipoFiscal(txId, value)
   }
 
+  const handleConfirmMatch = async (txId: string) => {
+    setTx(prev => prev.map(t => t.id !== txId ? t : { ...t, match_confidence: 'confirmado' }))
+    const res = await confirmMatch(txId)
+    if ('error' in res) {
+      setTx(prev => prev.map(t => t.id !== txId ? t : { ...t, match_confidence: 'sugerido' }))
+      alert(res.error)
+    }
+  }
+
   // ── Export ──────────────────────────────────────────────────────────────────
 
   const handleExport = () => {
@@ -319,7 +330,9 @@ export default function ReconciliationPage({
           <div style={{ padding: '14px 16px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 8 }}>
             <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#166534', margin: '0 0 4px' }}>Vinculadas</p>
             <p style={{ fontSize: 20, fontWeight: 600, color: '#16A34A', margin: 0 }}>{linked}</p>
-            <p style={{ fontSize: 10, color: '#166534', margin: '2px 0 0' }}>con ticket</p>
+            <p style={{ fontSize: 10, color: '#166534', margin: '2px 0 0' }}>
+              {sugeridos > 0 ? `${linked - sugeridos} auto · ${sugeridos} por revisar` : 'con ticket'}
+            </p>
           </div>
           <div style={{ padding: '14px 16px', background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 8 }}>
             <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#9A3412', margin: '0 0 4px' }}>Sin ticket</p>
@@ -446,13 +459,36 @@ export default function ReconciliationPage({
 
                   {/* Match badge */}
                   {isLinked ? (
-                    <span style={{
-                      fontSize: 10, fontWeight: 700, padding: '2px 8px',
-                      background: '#DCFCE7', color: '#166534',
-                      borderRadius: 20, letterSpacing: '0.03em',
-                    }}>
-                      ✓ Vinculado
-                    </span>
+                    tx.match_confidence === 'sugerido' ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
+                        <span style={{
+                          fontSize: 10, fontWeight: 700, padding: '2px 8px',
+                          background: '#FFFBEB', color: '#92400E',
+                          border: '1px solid #FDE68A', borderRadius: 20,
+                        }}>
+                          ⚡ Sugerido {tx.match_score ? `· ${tx.match_score}pts` : ''}
+                        </span>
+                        <button
+                          onClick={() => handleConfirmMatch(tx.id)}
+                          style={{
+                            fontSize: 10, fontWeight: 700, padding: '2px 8px',
+                            background: '#DCFCE7', color: '#166534',
+                            border: '1px solid #BBF7D0', borderRadius: 20,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          ✓ Confirmar
+                        </button>
+                      </div>
+                    ) : (
+                      <span style={{
+                        fontSize: 10, fontWeight: 700, padding: '2px 8px',
+                        background: '#DCFCE7', color: '#166534',
+                        borderRadius: 20, letterSpacing: '0.03em',
+                      }}>
+                        ✓ {tx.match_confidence === 'auto' ? `Auto · ${tx.match_score ?? ''}pts` : 'Vinculado'}
+                      </span>
+                    )
                   ) : (
                     <button
                       onClick={() => { setLinkingTxId(tx.id); setLinkingTxDate(tx.fecha) }}

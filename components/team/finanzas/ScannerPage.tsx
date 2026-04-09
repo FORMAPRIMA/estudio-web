@@ -519,10 +519,12 @@ interface BatchItem {
   moneda:      string
   proveedor:   string
   descripcion: string
-  fechaTicket: string
-  horaTicket:  string
-  proyectoId:  string
-  notas:       string
+  fechaTicket:   string
+  horaTicket:    string
+  ultimos4:      string
+  nifProveedor:  string
+  proyectoId:    string
+  notas:         string
 }
 
 function BatchUploadModal({ proyectos, onClose, onSaved }: {
@@ -550,10 +552,12 @@ function BatchUploadModal({ proyectos, onClose, onSaved }: {
     moneda:      'EUR',
     proveedor:   '',
     descripcion: '',
-    fechaTicket: '',
-    horaTicket:  '',
-    proyectoId:  '',
-    notas:       '',
+    fechaTicket:  '',
+    horaTicket:   '',
+    ultimos4:     '',
+    nifProveedor: '',
+    proyectoId:   '',
+    notas:        '',
   })
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -606,14 +610,16 @@ function BatchUploadModal({ proyectos, onClose, onSaved }: {
             // Single document — update the existing item
             const d = json.items[0]
             updateItem(item.id, {
-              status:      'done',
-              tipo:        TIPOS.includes(d.tipo) ? d.tipo : 'otro',
-              monto:       d.monto != null ? String(d.monto) : '',
-              moneda:      d.moneda ?? 'EUR',
-              proveedor:   d.proveedor ?? '',
-              descripcion: d.descripcion ?? '',
-              fechaTicket: d.fecha_ticket ?? '',
-              horaTicket:  d.hora_ticket ?? '',
+              status:       'done',
+              tipo:         TIPOS.includes(d.tipo) ? d.tipo : 'otro',
+              monto:        d.monto != null ? String(d.monto) : '',
+              moneda:       d.moneda ?? 'EUR',
+              proveedor:    d.proveedor ?? '',
+              descripcion:  d.descripcion ?? '',
+              fechaTicket:  d.fecha_ticket ?? '',
+              horaTicket:   d.hora_ticket ?? '',
+              ultimos4:     d.ultimos_4 ?? '',
+              nifProveedor: d.nif_proveedor ?? '',
             })
           } else {
             // PDF contained multiple documents — expand into individual items
@@ -629,14 +635,16 @@ function BatchUploadModal({ proyectos, onClose, onSaved }: {
                 error:       null,
                 skip:        false,
                 tipo:        (TIPOS.includes(d.tipo) ? d.tipo : 'otro') as ExpenseType,
-                monto:       d.monto != null ? String(d.monto) : '',
-                moneda:      d.moneda ?? 'EUR',
-                proveedor:   d.proveedor ?? '',
-                descripcion: d.descripcion ?? '',
-                fechaTicket: d.fecha_ticket ?? '',
-                horaTicket:  d.hora_ticket ?? '',
-                proyectoId:  '',
-                notas:       `Doc ${idx + 1}/${json.items!.length} — ${item.file.name}`,
+                monto:        d.monto != null ? String(d.monto) : '',
+                moneda:       d.moneda ?? 'EUR',
+                proveedor:    d.proveedor ?? '',
+                descripcion:  d.descripcion ?? '',
+                fechaTicket:  d.fecha_ticket ?? '',
+                horaTicket:   d.hora_ticket ?? '',
+                ultimos4:     d.ultimos_4 ?? '',
+                nifProveedor: d.nif_proveedor ?? '',
+                proyectoId:   '',
+                notas:        `Doc ${idx + 1}/${json.items!.length} — ${item.file.name}`,
               }))
               return [...without, ...expanded]
             })
@@ -660,33 +668,37 @@ function BatchUploadModal({ proyectos, onClose, onSaved }: {
     const saved: ExpenseScan[] = []
     for (const item of toSave) {
       const res = await saveExpenseScan({
-        foto_url:     item.photoUrl!,
-        fecha_ticket: item.fechaTicket || null,
-        hora_ticket:  item.horaTicket || null,
-        monto:        item.monto ? parseFloat(item.monto) : null,
-        moneda:       item.moneda,
-        tipo:         item.tipo,
-        proveedor:    item.proveedor || null,
-        descripcion:  item.descripcion || null,
-        proyecto_id:  item.proyectoId || null,
-        notas:        item.notas || null,
+        foto_url:      item.photoUrl!,
+        fecha_ticket:  item.fechaTicket || null,
+        hora_ticket:   item.horaTicket || null,
+        ultimos_4:     item.ultimos4 || null,
+        nif_proveedor: item.nifProveedor || null,
+        monto:         item.monto ? parseFloat(item.monto) : null,
+        moneda:        item.moneda,
+        tipo:          item.tipo,
+        proveedor:     item.proveedor || null,
+        descripcion:   item.descripcion || null,
+        proyecto_id:   item.proyectoId || null,
+        notas:         item.notas || null,
       })
       if ('id' in res) {
         saved.push({
-          id:           res.id,
-          user_id:      '',
-          foto_url:     item.photoUrl!,
-          fecha_ticket: item.fechaTicket || null,
-          hora_ticket:  item.horaTicket || null,
-          monto:        item.monto ? parseFloat(item.monto) : null,
-          moneda:       item.moneda,
-          tipo:         item.tipo,
-          proveedor:    item.proveedor || null,
-          descripcion:  item.descripcion || null,
-          proyecto_id:  item.proyectoId || null,
-          notas:        item.notas || null,
-          created_at:   new Date().toISOString(),
-          autor:        null,
+          id:            res.id,
+          user_id:       '',
+          foto_url:      item.photoUrl!,
+          fecha_ticket:  item.fechaTicket || null,
+          hora_ticket:   item.horaTicket || null,
+          ultimos_4:     item.ultimos4 || null,
+          nif_proveedor: item.nifProveedor || null,
+          monto:         item.monto ? parseFloat(item.monto) : null,
+          moneda:        item.moneda,
+          tipo:          item.tipo,
+          proveedor:     item.proveedor || null,
+          descripcion:   item.descripcion || null,
+          proyecto_id:   item.proyectoId || null,
+          notas:         item.notas || null,
+          created_at:    new Date().toISOString(),
+          autor:         null,
         })
       }
     }
@@ -890,10 +902,12 @@ function CaptureModal({ proyectos, onClose, onSaved }: {
   const [moneda,     setMoneda]     = useState('EUR')
   const [proveedor,  setProveedor]  = useState('')
   const [descripcion,setDescripcion]= useState('')
-  const [fechaTicket,setFechaTicket]= useState('')
-  const [horaTicket, setHoraTicket] = useState('')
-  const [proyectoId, setProyectoId] = useState('')
-  const [notas,      setNotas]      = useState('')
+  const [fechaTicket,  setFechaTicket]  = useState('')
+  const [horaTicket,   setHoraTicket]   = useState('')
+  const [ultimos4,     setUltimos4]     = useState('')
+  const [nifProveedor, setNifProveedor] = useState('')
+  const [proyectoId,   setProyectoId]   = useState('')
+  const [notas,        setNotas]        = useState('')
 
   const handleFile = async (file: File) => {
     setError(null)
@@ -933,6 +947,8 @@ function CaptureModal({ proyectos, onClose, onSaved }: {
         if (d.descripcion)                     setDescripcion(d.descripcion)
         if (d.fecha_ticket)                    setFechaTicket(d.fecha_ticket)
         if (d.hora_ticket)                     setHoraTicket(d.hora_ticket)
+        if (d.ultimos_4)                       setUltimos4(d.ultimos_4)
+        if (d.nif_proveedor)                   setNifProveedor(d.nif_proveedor)
       }
     } catch {
       // AI failed silently — user can fill in manually
@@ -945,36 +961,39 @@ function CaptureModal({ proyectos, onClose, onSaved }: {
     setSaving(true)
     setError(null)
     const res = await saveExpenseScan({
-      foto_url:     photoUrl,
-      fecha_ticket: fechaTicket || null,
-      hora_ticket:  horaTicket || null,
-      monto:        monto ? parseFloat(monto) : null,
+      foto_url:      photoUrl,
+      fecha_ticket:  fechaTicket || null,
+      hora_ticket:   horaTicket || null,
+      ultimos_4:     ultimos4 || null,
+      nif_proveedor: nifProveedor || null,
+      monto:         monto ? parseFloat(monto) : null,
       moneda,
       tipo,
-      proveedor:    proveedor || null,
-      descripcion:  descripcion || null,
-      proyecto_id:  proyectoId || null,
-      notas:        notas || null,
+      proveedor:     proveedor || null,
+      descripcion:   descripcion || null,
+      proyecto_id:   proyectoId || null,
+      notas:         notas || null,
     })
     setSaving(false)
     if ('error' in res) { setError(res.error); return }
 
-    // Build a local scan object for optimistic update
     const scan: ExpenseScan = {
-      id:           res.id,
-      user_id:      '',
-      foto_url:     photoUrl,
-      fecha_ticket: fechaTicket || null,
-      hora_ticket:  horaTicket || null,
-      monto:        monto ? parseFloat(monto) : null,
+      id:            res.id,
+      user_id:       '',
+      foto_url:      photoUrl,
+      fecha_ticket:  fechaTicket || null,
+      hora_ticket:   horaTicket || null,
+      ultimos_4:     ultimos4 || null,
+      nif_proveedor: nifProveedor || null,
+      monto:         monto ? parseFloat(monto) : null,
       moneda,
       tipo,
-      proveedor:    proveedor || null,
-      descripcion:  descripcion || null,
-      proyecto_id:  proyectoId || null,
-      notas:        notas || null,
-      created_at:   new Date().toISOString(),
-      autor:        null,
+      proveedor:     proveedor || null,
+      descripcion:   descripcion || null,
+      proyecto_id:   proyectoId || null,
+      notas:         notas || null,
+      created_at:    new Date().toISOString(),
+      autor:         null,
     }
     onSaved(scan)
   }
@@ -1065,9 +1084,11 @@ function EditModal({ scan, proyectos, onClose, onSaved }: {
   const [moneda,     setMoneda]      = useState(scan.moneda)
   const [proveedor,  setProveedor]   = useState(scan.proveedor ?? '')
   const [descripcion,setDescripcion] = useState(scan.descripcion ?? '')
-  const [fechaTicket,setFechaTicket] = useState(scan.fecha_ticket ?? '')
-  const [horaTicket, setHoraTicket]  = useState(scan.hora_ticket ?? '')
-  const [proyectoId, setProyectoId]  = useState(scan.proyecto_id ?? '')
+  const [fechaTicket,  setFechaTicket]  = useState(scan.fecha_ticket  ?? '')
+  const [horaTicket,   setHoraTicket]   = useState(scan.hora_ticket   ?? '')
+  const [ultimos4,     setUltimos4]     = useState(scan.ultimos_4     ?? '')
+  const [nifProveedor, setNifProveedor] = useState(scan.nif_proveedor ?? '')
+  const [proyectoId,   setProyectoId]   = useState(scan.proyecto_id   ?? '')
   const [notas,      setNotas]       = useState(scan.notas ?? '')
   const [saving, setSaving]          = useState(false)
   const [error, setError]            = useState<string | null>(null)
@@ -1076,19 +1097,21 @@ function EditModal({ scan, proyectos, onClose, onSaved }: {
     setSaving(true)
     setError(null)
     const res = await updateExpenseScan(scan.id, {
-      fecha_ticket: fechaTicket || null,
-      hora_ticket:  horaTicket || null,
-      monto:        monto ? parseFloat(monto) : null,
+      fecha_ticket:  fechaTicket || null,
+      hora_ticket:   horaTicket || null,
+      ultimos_4:     ultimos4 || null,
+      nif_proveedor: nifProveedor || null,
+      monto:         monto ? parseFloat(monto) : null,
       moneda,
       tipo,
-      proveedor:    proveedor || null,
-      descripcion:  descripcion || null,
-      proyecto_id:  proyectoId || null,
-      notas:        notas || null,
+      proveedor:     proveedor || null,
+      descripcion:   descripcion || null,
+      proyecto_id:   proyectoId || null,
+      notas:         notas || null,
     })
     setSaving(false)
     if ('error' in res) { setError(res.error); return }
-    onSaved({ ...scan, tipo, monto: monto ? parseFloat(monto) : null, moneda, proveedor: proveedor || null, descripcion: descripcion || null, fecha_ticket: fechaTicket || null, hora_ticket: horaTicket || null, proyecto_id: proyectoId || null, notas: notas || null })
+    onSaved({ ...scan, tipo, monto: monto ? parseFloat(monto) : null, moneda, proveedor: proveedor || null, descripcion: descripcion || null, fecha_ticket: fechaTicket || null, hora_ticket: horaTicket || null, ultimos_4: ultimos4 || null, nif_proveedor: nifProveedor || null, proyecto_id: proyectoId || null, notas: notas || null })
   }
 
   return (

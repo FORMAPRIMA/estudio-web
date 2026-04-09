@@ -38,10 +38,12 @@ export interface BankTransaction {
   fecha: string | null
   hora: string | null
   concepto: string | null
+  comercio: string | null
   importe: number | null
   moneda: string
   expense_scan_id: string | null
   match_confidence: string | null
+  match_score: number | null
   tipo_fiscal: string
   notas: string | null
   linked_scan?: {
@@ -172,6 +174,27 @@ export async function updateTipoFiscal(
       .update({ tipo_fiscal: tipoFiscal })
       .eq('id', transactionId)
 
+    if (error) return { error: error.message }
+    revalidatePath(PATH)
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
+// ── confirmMatch ──────────────────────────────────────────────────────────────
+
+export async function confirmMatch(
+  transactionId: string
+): Promise<{ success: true } | { error: string }> {
+  try {
+    await requirePartner()
+    const admin = createAdminClient()
+    const { error } = await admin
+      .from('bank_transactions')
+      .update({ match_confidence: 'confirmado' })
+      .eq('id', transactionId)
+      .not('expense_scan_id', 'is', null)
     if (error) return { error: error.message }
     revalidatePath(PATH)
     return { success: true }

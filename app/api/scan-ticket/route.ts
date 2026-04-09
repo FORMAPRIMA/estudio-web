@@ -46,7 +46,9 @@ export async function POST(req: NextRequest) {
   "moneda": "EUR",
   "tipo": one of [${TIPOS.map(t => `"${t}"`).join(', ')}],
   "proveedor": "nombre del establecimiento/empresa or null",
-  "descripcion": "descripción breve del gasto (max 80 chars) or null"
+  "descripcion": "descripción breve del gasto (max 80 chars) or null",
+  "ultimos_4": "últimos 4 dígitos de la tarjeta usada, como string, or null",
+  "nif_proveedor": "NIF/CIF/VAT del proveedor si aparece en la factura, or null"
 }`
 
   const commonRules = `Reglas por campo:
@@ -56,7 +58,9 @@ export async function POST(req: NextRequest) {
 - moneda: casi siempre EUR. Si ves otro símbolo, ponlo (USD, GBP…).
 - tipo: elige el más apropiado de la lista. "gasto_proyecto" para materiales/servicios de obra.
 - proveedor: nombre del restaurante, empresa, taxi app, etc.
-- descripcion: qué se compró o el concepto principal.`
+- descripcion: qué se compró o el concepto principal.
+- ultimos_4: si el ticket muestra los últimos 4 dígitos de la tarjeta (ej: "VISA ****1234" → "1234"), extráelos como string. Null si no aparecen.
+- nif_proveedor: si es una factura, extrae el NIF/CIF del emisor (ej: "B12345678"). Null si no aparece.`
 
   const imageSystemPrompt = `Eres un asistente de gestión de gastos de una empresa de arquitectura llamada Forma Prima.
 Analiza la imagen del ticket o factura y extrae su información.

@@ -22,6 +22,8 @@ export interface ExpenseScan {
   foto_url: string
   fecha_ticket: string | null
   hora_ticket: string | null
+  ultimos_4: string | null
+  nif_proveedor: string | null
   monto: number | null
   moneda: string
   tipo: ExpenseType
@@ -82,6 +84,8 @@ export async function saveExpenseScan(data: {
   foto_url: string
   fecha_ticket: string | null
   hora_ticket: string | null
+  ultimos_4: string | null
+  nif_proveedor: string | null
   monto: number | null
   moneda: string
   tipo: ExpenseType
@@ -98,10 +102,12 @@ export async function saveExpenseScan(data: {
       .from('expense_scans')
       .insert({
         user_id:      user.id,
-        foto_url:     data.foto_url,
-        fecha_ticket: data.fecha_ticket,
-        hora_ticket:  data.hora_ticket,
-        monto:        data.monto,
+        foto_url:      data.foto_url,
+        fecha_ticket:  data.fecha_ticket,
+        hora_ticket:   data.hora_ticket,
+        ultimos_4:     data.ultimos_4,
+        nif_proveedor: data.nif_proveedor,
+        monto:         data.monto,
         moneda:       data.moneda,
         tipo:         data.tipo,
         proveedor:    data.proveedor?.trim() || null,
@@ -127,6 +133,8 @@ export async function updateExpenseScan(
   data: Partial<{
     fecha_ticket: string | null
     hora_ticket: string | null
+    ultimos_4: string | null
+    nif_proveedor: string | null
     monto: number | null
     moneda: string
     tipo: ExpenseType
