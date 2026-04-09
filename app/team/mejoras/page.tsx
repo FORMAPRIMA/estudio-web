@@ -17,7 +17,7 @@ export default async function MejorasPageRoute() {
   const admin = createAdminClient()
   const { data: mejoras } = await admin
     .from('mejoras')
-    .select('id, tipo, titulo, descripcion, status, autor_id, created_at, autor:profiles!autor_id(nombre, rol)')
+    .select('id, tipo, titulo, descripcion, status, autor_id, created_at, imagenes_urls, autor:profiles!autor_id(nombre, rol)')
     .order('created_at', { ascending: false })
 
   return (

@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { addMejora, updateMejoraStatus, seedMejoras } from '@/app/actions/mejoras'
+import { useState, useRef } from 'react'
+import { addMejora, updateMejoraStatus, seedMejoras, uploadMejoraImages } from '@/app/actions/mejoras'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -16,6 +16,7 @@ interface Mejora {
   status: MejoraStatus
   autor_id: string
   created_at: string
+  imagenes_urls: string[]
   autor: { nombre: string; rol: string } | null
 }
 
@@ -63,6 +64,7 @@ export default function MejorasPage({ mejoras: initialMejoras, currentUserId, cu
   const [filter, setFilter] = useState<MejoraStatus | 'todas'>('todas')
   const [showForm, setShowForm] = useState(false)
   const [seeding, setSeeding] = useState(false)
+  const [lightbox, setLightbox] = useState<string | null>(null)
 
   const canManage = CAN_MANAGE.includes(currentUserRole)
   const isPartner = currentUserRole === 'fp_partner'
@@ -171,6 +173,20 @@ export default function MejorasPage({ mejoras: initialMejoras, currentUserId, cu
                     {m.descripcion && (
                       <p className="text-[11px] font-light text-meta/60 leading-relaxed">{m.descripcion}</p>
                     )}
+                    {m.imagenes_urls?.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {m.imagenes_urls.map((url, i) => (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            key={i}
+                            src={url}
+                            alt=""
+                            onClick={() => setLightbox(url)}
+                            className="w-12 h-12 object-cover border border-ink/10 cursor-pointer hover:border-ink/30 transition-colors"
+                          />
+                        ))}
+                      </div>
+                    )}
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5">
                       <span className="text-[10px] font-light text-meta/40">{m.autor?.nombre ?? '—'}</span>
                       <span className="text-meta/20">·</span>
@@ -215,6 +231,26 @@ export default function MejorasPage({ mejoras: initialMejoras, currentUserId, cu
         </div>
       )}
 
+      {/* ── Lightbox ───────────────────────────────────────────────────── */}
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 cursor-zoom-out"
+          onClick={() => setLightbox(null)}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={lightbox}
+            alt=""
+            className="max-w-full max-h-full object-contain shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          />
+          <button
+            onClick={() => setLightbox(null)}
+            className="absolute top-4 right-4 text-white/70 hover:text-white text-2xl leading-none"
+          >×</button>
+        </div>
+      )}
+
       {/* ── Nueva petición modal ────────────────────────────────────────── */}
       {showForm && (
         <NuevaPeticionModal
@@ -241,13 +277,47 @@ function NuevaPeticionModal({
   const [tipo, setTipo] = useState<MejoraTipo>('mejora')
   const [titulo, setTitulo] = useState('')
   const [descripcion, setDescripcion] = useState('')
+  const [files, setFiles] = useState<File[]>([])
+  const [previews, setPreviews] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(e.target.files ?? [])
+    if (!selected.length) return
+    const newFiles = [...files, ...selected].slice(0, 5) // max 5 images
+    setFiles(newFiles)
+    setPreviews(newFiles.map(f => URL.createObjectURL(f)))
+    // Reset input so same file can be re-added if removed
+    e.target.value = ''
+  }
+
+  const removeFile = (i: number) => {
+    URL.revokeObjectURL(previews[i])
+    setFiles(prev => prev.filter((_, idx) => idx !== i))
+    setPreviews(prev => prev.filter((_, idx) => idx !== i))
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!titulo.trim()) return
     setSaving(true)
-    const result = await addMejora({ tipo, titulo, descripcion: descripcion || undefined })
+
+    let imagenes_urls: string[] = []
+
+    if (files.length > 0) {
+      const fd = new FormData()
+      files.forEach(f => fd.append('images', f))
+      const uploadResult = await uploadMejoraImages(fd)
+      if ('error' in uploadResult) {
+        setSaving(false)
+        alert(`Error al subir imágenes: ${uploadResult.error}`)
+        return
+      }
+      imagenes_urls = uploadResult.urls
+    }
+
+    const result = await addMejora({ tipo, titulo, descripcion: descripcion || undefined, imagenes_urls })
     setSaving(false)
     if ('error' in result) { alert(`Error: ${result.error}`); return }
     // Reload to get the full record with autor info
@@ -316,6 +386,44 @@ function NuevaPeticionModal({
                 rows={4}
                 className="w-full text-[11px] font-light text-ink border border-ink/15 px-3 py-2 focus:outline-none focus:border-ink/40 bg-cream/30 placeholder:text-meta/30 resize-none"
               />
+            </div>
+
+            {/* Imágenes */}
+            <div>
+              <label className="text-[9px] tracking-widest uppercase font-light text-meta/50 block mb-1.5">
+                Imágenes <span className="text-meta/30">(opcional, máx. 5)</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={files.length >= 5}
+                className="w-full border border-dashed border-ink/20 py-2.5 text-[10px] font-light text-meta/40 hover:border-ink/40 hover:text-meta/60 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                + Añadir capturas o imágenes
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              {previews.length > 0 && (
+                <div className="grid grid-cols-5 gap-1.5 mt-2">
+                  {previews.map((url, i) => (
+                    <div key={i} className="relative aspect-square">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={url} alt="" className="w-full h-full object-cover border border-ink/10" />
+                      <button
+                        type="button"
+                        onClick={() => removeFile(i)}
+                        className="absolute top-0.5 right-0.5 bg-ink/70 text-cream text-[10px] w-4 h-4 flex items-center justify-center leading-none hover:bg-ink transition-colors"
+                      >×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Actions */}

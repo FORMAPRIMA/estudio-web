@@ -6,10 +6,41 @@ import { revalidatePath } from 'next/cache'
 
 const PATH = '/team/mejoras'
 
+export async function uploadMejoraImages(
+  formData: FormData
+): Promise<{ urls: string[] } | { error: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Sin sesión activa.' }
+
+  const admin = createAdminClient()
+  const files = formData.getAll('images') as File[]
+  const urls: string[] = []
+
+  for (const file of files) {
+    if (!file || file.size === 0) continue
+    const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg'
+    const path = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+    const buffer = Buffer.from(await file.arrayBuffer())
+
+    const { data, error } = await admin.storage
+      .from('mejoras')
+      .upload(path, buffer, { contentType: file.type, upsert: false })
+
+    if (error) return { error: error.message }
+
+    const { data: { publicUrl } } = admin.storage.from('mejoras').getPublicUrl(data.path)
+    urls.push(publicUrl)
+  }
+
+  return { urls }
+}
+
 export async function addMejora(data: {
   tipo: 'mejora' | 'bug'
   titulo: string
   descripcion?: string
+  imagenes_urls?: string[]
 }): Promise<{ success: true } | { error: string }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -22,6 +53,7 @@ export async function addMejora(data: {
     descripcion: data.descripcion?.trim() || null,
     autor_id: user.id,
     status: 'pendiente',
+    imagenes_urls: data.imagenes_urls ?? [],
   })
 
   if (error) return { error: error.message }
