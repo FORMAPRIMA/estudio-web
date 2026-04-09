@@ -24,7 +24,7 @@ export interface BankStatement {
   month: number
   filename: string | null
   row_count: number | null
-  uploaded_by: string | null
+  user_id: string | null
   created_at: string
 }
 

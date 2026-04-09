@@ -168,7 +168,7 @@ Responde ÚNICAMENTE con JSON exacto, sin markdown ni explicaciones:
       month,
       filename:    file.name,
       row_count:   parsedRows.length,
-      uploaded_by: user.id,
+      user_id: user.id,
     })
     .select('id')
     .single()
