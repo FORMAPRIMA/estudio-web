@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { deleteTimeEntry } from '@/app/actions/time-tracker'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -108,7 +109,10 @@ const AVATAR_PALETTE = [
 const mkInitials = (n: string) =>
   n.trim().split(' ').slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('')
 
-const isExtraSlot = (h: number) => h < 9 || h === 14 || h >= 19
+// h<9 o h>=19 es extra siempre; h===14 (comida) solo es extra en fin de semana
+const isExtraSlot = (h: number) => h < 9 || h >= 19
+const isWeekendDate = (d: string) => { const day = new Date(d + 'T12:00:00').getDay(); return day === 0 || day === 6 }
+const isCellExtra = (h: number, d: string) => h < 9 || h >= 19 || (h === 14 && isWeekendDate(d))
 
 const sectionColor = (sec: string): { bg: string; tc: string } => {
   if (sec === 'Anteproyecto')             return { bg: '#EAF3DE', tc: '#27500A' }
@@ -463,15 +467,10 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
     setFailedCells((s) => { const n = new Set(s); n.delete(key); return n })
     setSaving(true)
 
-    const { error: err } = await supabase
-      .from('time_entries')
-      .delete()
-      .eq('user_id', uid)
-      .eq('fecha', fecha)
-      .eq('hora_inicio', h)
+    const result = await deleteTimeEntry(uid, fecha, h)
 
     setSaving(false)
-    if (err) {
+    if ('error' in result) {
       setGrid((g) => {
         const next = { ...g }
         if (!next[uid]) next[uid] = {}
@@ -483,7 +482,7 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
     } else {
       setSessionDeletions((n) => n + 1)
     }
-  }, [supabase])
+  }, [])
 
   const setCell = useCallback(async (uid: string, fecha: string, h: number, value: string) => {
     if (value === '' && getCell(uid, fecha, h) !== '') {
@@ -527,7 +526,7 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
       fase_id,
       categoria_interna,
       proyecto_id,
-      es_extra: isExtraSlot(h),
+      es_extra: isCellExtra(h, fecha),
       origen: 'post_plataforma',
     }, { onConflict: 'user_id,fecha,hora_inicio' })
 
@@ -1152,18 +1151,19 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
             </thead>
             <tbody>
               {HOURS.map((h) => {
-                const isExtra = isExtraSlot(h)
+                const isExtraRow = isExtraSlot(h)  // para la etiqueta de hora (sin h===14)
                 const isMid = h === 14
                 return (
                   <tr key={h} style={{ borderTop: isMid ? '2px solid #ccc' : '1px solid #eee' }}>
                     <td style={{
                       ...tdStyle, fontWeight: 600, textAlign: 'center', minWidth: 36, fontSize: 10,
-                      color: isExtra ? '#D85A30' : '#555',
-                      background: isExtra ? 'rgba(216,90,48,0.04)' : '#FAFAF8',
+                      color: isExtraRow ? '#D85A30' : '#555',
+                      background: isExtraRow ? 'rgba(216,90,48,0.04)' : '#FAFAF8',
                     }}>
                       {h}:00
                     </td>
                     {displayDates.map((d) => {
+                      const isExtra = isCellExtra(h, d)  // por celda: incluye h===14 en fin de semana
                       const val = getCell(viewingUserId, d, h)
                       const isFailed = failedCells.has(cellKey(viewingUserId, d, h))
                       const disp = cellDisplay(val)
