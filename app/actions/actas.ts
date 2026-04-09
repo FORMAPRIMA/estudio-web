@@ -216,8 +216,12 @@ export async function crearActaVisita(
 // ── compartirActaPorEmail ─────────────────────────────────────────────────────
 
 export interface CompartirActaInput {
-  emails: string[]
+  /** Destinatarios del acta del cliente (clientes del proyecto + asistentes) */
+  clienteEmails: string[]
+  /** Destinatarios del acta del constructor */
+  constructorEmails: string[]
   clienteNombres: string[]
+  constructorNombre: string | null
   proyecto_id: string
   proyecto_nombre: string
   proyecto_codigo: string | null
@@ -226,7 +230,8 @@ export interface CompartirActaInput {
   acta_url: string
   asistentes: string | null
   estado_obras: string
-  instrucciones: string
+  instrucciones: string              // instrucciones para el cliente
+  instruccionesConstructor: string   // instrucciones para el constructor
   floorfy_url: string | null
 }
 
@@ -241,102 +246,173 @@ function fmtDateEs(d: string): string {
   return `${parseInt(day, 10)} de ${mes} de ${y}`
 }
 
+function buildActaEmailBody(opts: {
+  saludoNombre: string | null
+  proyecto_nombre: string
+  proyecto_codigo: string | null
+  fechaFmt: string
+  asistentes: string | null
+  estado_obras: string
+  instrucciones: string
+  floorfy_url: string | null
+  portalUrl: string
+  showPortalLink: boolean
+}): string {
+  const { saludoNombre, proyecto_nombre, proyecto_codigo, fechaFmt, asistentes, estado_obras, instrucciones, floorfy_url, portalUrl, showPortalLink } = opts
+  return `
+    ${saludoNombre ? `<p style="margin:0 0 20px;font-size:20px;font-weight:300;color:#1A1A1A;line-height:1.3;">Estimado/a ${saludoNombre},</p>` : ''}
+    <p style="margin:0 0 6px;font-size:11px;color:#888;letter-spacing:0.08em;text-transform:uppercase;font-weight:600;">
+      Nueva acta de visita de obra
+    </p>
+    <h2 style="margin:0 0 20px;font-size:20px;font-weight:300;color:#1A1A1A;letter-spacing:-0.01em;">
+      ${proyecto_nombre}${proyecto_codigo ? ` <span style="font-size:13px;color:#AAA;font-weight:400;">${proyecto_codigo}</span>` : ''}
+    </h2>
+
+    <table cellpadding="0" cellspacing="0" width="100%" style="margin-bottom:24px;border:1px solid #E8E6E0;">
+      <tr>
+        <td style="padding:12px 16px;background:#F8F7F4;border-bottom:1px solid #E8E6E0;">
+          <p style="margin:0;font-size:9px;color:#AAA;text-transform:uppercase;letter-spacing:0.1em;font-weight:600;">Fecha de visita</p>
+          <p style="margin:4px 0 0;font-size:13px;color:#1A1A1A;font-weight:400;">${fechaFmt}</p>
+        </td>
+      </tr>
+      ${asistentes ? `<tr>
+        <td style="padding:12px 16px;border-bottom:1px solid #E8E6E0;">
+          <p style="margin:0;font-size:9px;color:#AAA;text-transform:uppercase;letter-spacing:0.1em;font-weight:600;">Asistentes</p>
+          <p style="margin:4px 0 0;font-size:12px;color:#3A3A3A;line-height:1.6;">${asistentes}</p>
+        </td>
+      </tr>` : ''}
+      ${estado_obras ? `<tr>
+        <td style="padding:12px 16px;${instrucciones || floorfy_url ? 'border-bottom:1px solid #E8E6E0;' : ''}">
+          <p style="margin:0;font-size:9px;color:#AAA;text-transform:uppercase;letter-spacing:0.1em;font-weight:600;">Estado de obras</p>
+          <p style="margin:4px 0 0;font-size:12px;color:#3A3A3A;line-height:1.6;white-space:pre-wrap;">${estado_obras}</p>
+        </td>
+      </tr>` : ''}
+      ${instrucciones ? `<tr>
+        <td style="padding:12px 16px;${floorfy_url ? 'border-bottom:1px solid #E8E6E0;' : ''}">
+          <p style="margin:0;font-size:9px;color:#AAA;text-transform:uppercase;letter-spacing:0.1em;font-weight:600;">Instrucciones</p>
+          <p style="margin:4px 0 0;font-size:12px;color:#3A3A3A;line-height:1.6;white-space:pre-wrap;">${instrucciones}</p>
+        </td>
+      </tr>` : ''}
+      ${floorfy_url ? `<tr>
+        <td style="padding:12px 16px;">
+          <p style="margin:0;font-size:9px;color:#AAA;text-transform:uppercase;letter-spacing:0.1em;font-weight:600;">Tour virtual</p>
+          <p style="margin:4px 0 0;font-size:12px;"><a href="${floorfy_url}" style="color:#D85A30;text-decoration:none;">${floorfy_url}</a></p>
+        </td>
+      </tr>` : ''}
+    </table>
+
+    <p style="margin:0 0 24px;font-size:12px;color:#3A3A3A;line-height:1.7;">
+      Adjuntamos el acta completa en PDF.${showPortalLink ? ' También puede consultar el avance de su proyecto en el área privada de cliente.' : ''}
+    </p>
+
+    ${showPortalLink ? `
+    <table cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+      <tr>
+        <td style="background:#1A1A1A;border-radius:4px;">
+          <a href="${portalUrl}" style="display:inline-block;padding:12px 28px;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#F0EDE8;text-decoration:none;">
+            Ver mi proyecto →
+          </a>
+        </td>
+      </tr>
+    </table>
+    ` : ''}
+
+    <p style="margin:0;font-size:11px;color:#AAAAAA;line-height:1.6;">
+      Si tiene alguna pregunta sobre esta visita, no dude en responder a este correo.
+    </p>
+  `
+}
+
 export async function compartirActaPorEmail(
   data: CompartirActaInput
 ): Promise<{ success: true } | { error: string }> {
   try {
     await requireAnyFP()
 
-    if (!data.emails.length) return { success: true } // nothing to send
+    const hasCliente     = data.clienteEmails.length > 0
+    const hasConstructor = data.constructorEmails.length > 0
+    if (!hasCliente && !hasConstructor) return { success: true }
 
-    // 1 — Download PDF from storage
+    // Fetch fp_partner emails — always CC'd on every email
+    const admin = createAdminClient()
+    const { data: partners } = await admin
+      .from('profiles')
+      .select('email')
+      .eq('rol', 'fp_partner')
+    const partnerEmails: string[] = (partners ?? []).map((p: any) => p.email as string).filter(Boolean)
+
+    // Download PDF once (client version used for both emails)
     const pdfRes = await fetch(data.acta_url)
     if (!pdfRes.ok) return { error: `No se pudo descargar el PDF: ${pdfRes.status}` }
-    const pdfArrayBuffer = await pdfRes.arrayBuffer()
-    const pdfBuffer = Buffer.from(pdfArrayBuffer)
+    const pdfBuffer = Buffer.from(await pdfRes.arrayBuffer())
 
-    // 2 — Build email HTML
     const portalUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? 'https://portal.formaprima.es'}/portal/${data.proyecto_id}`
-    const fechaFmt = fmtDateEs(data.fecha)
+    const fechaFmt  = fmtDateEs(data.fecha)
+    const subject   = `FORMA PRIMA · Nueva visita de obra · ${data.proyecto_nombre}`
+    const attachment = {
+      filename: `Acta_visita_${data.fecha}_${data.proyecto_nombre.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`,
+      content:  pdfBuffer,
+    }
 
-    const nombres = data.clienteNombres.filter(Boolean)
-    const saludoNombre = nombres.length > 1
-      ? nombres.slice(0, -1).join(', ') + ' y ' + nombres[nombres.length - 1]
-      : nombres[0] ?? null
+    // ── 1. Email al cliente ───────────────────────────────────────────────────
+    if (hasCliente) {
+      const nombres = data.clienteNombres.filter(Boolean)
+      const saludoNombre = nombres.length > 1
+        ? nombres.slice(0, -1).join(', ') + ' y ' + nombres[nombres.length - 1]
+        : nombres[0] ?? null
 
-    const bodyHtml = `
-      ${saludoNombre ? `<p style="margin:0 0 20px;font-size:20px;font-weight:300;color:#1A1A1A;line-height:1.3;">Estimado/a ${saludoNombre},</p>` : ''}
-      <p style="margin:0 0 6px;font-size:11px;color:#888;letter-spacing:0.08em;text-transform:uppercase;font-weight:600;">
-        Nueva acta de visita de obra
-      </p>
-      <h2 style="margin:0 0 20px;font-size:20px;font-weight:300;color:#1A1A1A;letter-spacing:-0.01em;">
-        ${data.proyecto_nombre}${data.proyecto_codigo ? ` <span style="font-size:13px;color:#AAA;font-weight:400;">${data.proyecto_codigo}</span>` : ''}
-      </h2>
+      const bodyHtml = buildActaEmailBody({
+        saludoNombre,
+        proyecto_nombre:  data.proyecto_nombre,
+        proyecto_codigo:  data.proyecto_codigo,
+        fechaFmt,
+        asistentes:       data.asistentes,
+        estado_obras:     data.estado_obras,
+        instrucciones:    data.instrucciones,
+        floorfy_url:      data.floorfy_url,
+        portalUrl,
+        showPortalLink:   true,
+      })
 
-      <table cellpadding="0" cellspacing="0" width="100%" style="margin-bottom:24px;border:1px solid #E8E6E0;">
-        <tr>
-          <td style="padding:12px 16px;background:#F8F7F4;border-bottom:1px solid #E8E6E0;">
-            <p style="margin:0;font-size:9px;color:#AAA;text-transform:uppercase;letter-spacing:0.1em;font-weight:600;">Fecha de visita</p>
-            <p style="margin:4px 0 0;font-size:13px;color:#1A1A1A;font-weight:400;">${fechaFmt}</p>
-          </td>
-        </tr>
-        ${data.asistentes ? `<tr>
-          <td style="padding:12px 16px;border-bottom:1px solid #E8E6E0;">
-            <p style="margin:0;font-size:9px;color:#AAA;text-transform:uppercase;letter-spacing:0.1em;font-weight:600;">Asistentes</p>
-            <p style="margin:4px 0 0;font-size:12px;color:#3A3A3A;line-height:1.6;">${data.asistentes}</p>
-          </td>
-        </tr>` : ''}
-        ${data.estado_obras ? `<tr>
-          <td style="padding:12px 16px;${data.instrucciones || data.floorfy_url ? 'border-bottom:1px solid #E8E6E0;' : ''}">
-            <p style="margin:0;font-size:9px;color:#AAA;text-transform:uppercase;letter-spacing:0.1em;font-weight:600;">Estado de obras</p>
-            <p style="margin:4px 0 0;font-size:12px;color:#3A3A3A;line-height:1.6;white-space:pre-wrap;">${data.estado_obras}</p>
-          </td>
-        </tr>` : ''}
-        ${data.instrucciones ? `<tr>
-          <td style="padding:12px 16px;${data.floorfy_url ? 'border-bottom:1px solid #E8E6E0;' : ''}">
-            <p style="margin:0;font-size:9px;color:#AAA;text-transform:uppercase;letter-spacing:0.1em;font-weight:600;">Instrucciones</p>
-            <p style="margin:4px 0 0;font-size:12px;color:#3A3A3A;line-height:1.6;white-space:pre-wrap;">${data.instrucciones}</p>
-          </td>
-        </tr>` : ''}
-        ${data.floorfy_url ? `<tr>
-          <td style="padding:12px 16px;">
-            <p style="margin:0;font-size:9px;color:#AAA;text-transform:uppercase;letter-spacing:0.1em;font-weight:600;">Tour virtual</p>
-            <p style="margin:4px 0 0;font-size:12px;"><a href="${data.floorfy_url}" style="color:#D85A30;text-decoration:none;">${data.floorfy_url}</a></p>
-          </td>
-        </tr>` : ''}
-      </table>
+      const ccPartners = partnerEmails.filter(e => !data.clienteEmails.includes(e))
+      const r = await sendEmail({
+        to:          data.clienteEmails,
+        cc:          ccPartners.length ? ccPartners : undefined,
+        subject,
+        html:        wrapEmail(bodyHtml),
+        attachments: [attachment],
+      })
+      if (r.error) return { error: r.error }
+    }
 
-      <p style="margin:0 0 24px;font-size:12px;color:#3A3A3A;line-height:1.7;">
-        Adjuntamos el acta completa en PDF. También puede consultar el avance de su proyecto en el área privada de cliente.
-      </p>
+    // ── 2. Email al constructor ───────────────────────────────────────────────
+    if (hasConstructor) {
+      const instrCons = data.instruccionesConstructor.trim() || data.instrucciones
 
-      <table cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
-        <tr>
-          <td style="background:#1A1A1A;border-radius:4px;">
-            <a href="${portalUrl}" style="display:inline-block;padding:12px 28px;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#F0EDE8;text-decoration:none;">
-              Ver mi proyecto →
-            </a>
-          </td>
-        </tr>
-      </table>
+      const bodyHtml = buildActaEmailBody({
+        saludoNombre:    data.constructorNombre,
+        proyecto_nombre: data.proyecto_nombre,
+        proyecto_codigo: data.proyecto_codigo,
+        fechaFmt,
+        asistentes:      data.asistentes,
+        estado_obras:    data.estado_obras,
+        instrucciones:   instrCons,
+        floorfy_url:     data.floorfy_url,
+        portalUrl,
+        showPortalLink:  false,
+      })
 
-      <p style="margin:0;font-size:11px;color:#AAAAAA;line-height:1.6;">
-        Si tiene alguna pregunta sobre esta visita, no dude en responder a este correo.
-      </p>
-    `
+      const ccPartners = partnerEmails.filter(e => !data.constructorEmails.includes(e))
+      const r = await sendEmail({
+        to:          data.constructorEmails,
+        cc:          ccPartners.length ? ccPartners : undefined,
+        subject,
+        html:        wrapEmail(bodyHtml),
+        attachments: [attachment],
+      })
+      if (r.error) return { error: r.error }
+    }
 
-    // 3 — Send email
-    const result = await sendEmail({
-      to:          data.emails,
-      subject:     `FORMA PRIMA · Nueva visita de obra · ${data.proyecto_nombre}`,
-      html:        wrapEmail(bodyHtml),
-      attachments: [{
-        filename: `Acta_visita_${data.fecha}_${data.proyecto_nombre.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`,
-        content:  pdfBuffer,
-      }],
-    })
-
-    if (result.error) return { error: result.error }
     return { success: true }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
