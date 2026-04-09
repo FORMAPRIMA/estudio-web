@@ -171,28 +171,26 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Auto-match ────────────────────────────────────────────────────────────────
-
-  // Fetch unlinked expense scans (no bank_transaction references them yet)
-  const fromDate = `${year}-${String(month).padStart(2, '0')}-01`
-  const lastDay  = new Date(year, month, 0).getDate()
-  const toDate   = `${year}-${String(month).padStart(2, '0')}-${lastDay}`
+  // Fetch ALL unlinked EUR scans with a fecha_ticket — query wide window (month ±1)
+  // to catch tickets scanned in a different month than the bank statement.
+  const prevMonth  = month === 1  ? `${year - 1}-12-01` : `${year}-${String(month - 1).padStart(2, '0')}-01`
+  const nextMonth2 = month === 12 ? `${year + 1}-01-31` : `${year}-${String(month + 1).padStart(2, '0')}-${new Date(year, month + 1, 0).getDate()}`
 
   const { data: scans } = await admin
     .from('expense_scans')
-    .select('id, monto, fecha_ticket')
-    .gte('created_at', fromDate + 'T00:00:00')
-    .lte('created_at', toDate   + 'T23:59:59')
+    .select('id, monto, moneda, fecha_ticket, proveedor')
+    .gte('fecha_ticket', prevMonth)
+    .lte('fecha_ticket', nextMonth2)
     .not('monto', 'is', null)
     .not('fecha_ticket', 'is', null)
+    .eq('moneda', 'EUR')   // only match EUR tickets against bank (foreign currency can't match directly)
 
-  // Fetch scan IDs already linked to any transaction (including this batch we just created)
   const { data: alreadyLinked } = await admin
     .from('bank_transactions')
     .select('expense_scan_id')
     .not('expense_scan_id', 'is', null)
 
   const linkedScanIds = new Set((alreadyLinked ?? []).map(r => r.expense_scan_id as string))
-
   const unlinkedScans = (scans ?? []).filter(s => !linkedScanIds.has(s.id))
 
   let matched = 0
@@ -200,28 +198,47 @@ export async function POST(req: NextRequest) {
 
   if (insertedTx && unlinkedScans.length > 0) {
     for (const tx of insertedTx) {
-      if (tx.importe == null || tx.importe >= 0) continue // only match expenses (negative)
+      if (tx.importe == null) continue
       const txDate = tx.fecha ? new Date(tx.fecha) : null
       if (!txDate) continue
 
+      // Use absolute value — some banks export debits as positive, others as negative
       const absTxAmt = Math.abs(tx.importe)
+      if (absTxAmt < 0.01) continue // skip near-zero (fees, etc.)
+
+      // Amount tolerance: 1% of amount or €0.50, whichever is larger
+      const amtTolerance = Math.max(absTxAmt * 0.01, 0.50)
 
       const candidates = unlinkedScans.filter(s => {
         if (!s.monto || !s.fecha_ticket) return false
         if (usedScanIds.has(s.id)) return false
-        if (Math.abs(s.monto - absTxAmt) >= 0.10) return false
+        // Amount check
+        if (Math.abs(s.monto - absTxAmt) > amtTolerance) return false
+        // Date check: ±7 days (card payments can take 3-5 business days to settle)
         const scanDate = new Date(s.fecha_ticket)
-        const diff = Math.abs((txDate.getTime() - scanDate.getTime()) / (1000 * 60 * 60 * 24))
-        return diff <= 3
+        const diffDays = Math.abs((txDate.getTime() - scanDate.getTime()) / 86400000)
+        return diffDays <= 7
       })
 
       if (candidates.length === 1) {
-        const scan = candidates[0]
         await admin
           .from('bank_transactions')
-          .update({ expense_scan_id: scan.id, match_confidence: 'auto' })
+          .update({ expense_scan_id: candidates[0].id, match_confidence: 'auto' })
           .eq('id', tx.id)
-        usedScanIds.add(scan.id)
+        usedScanIds.add(candidates[0].id)
+        matched++
+      } else if (candidates.length > 1) {
+        // Multiple candidates — pick the one with closest date
+        candidates.sort((a, b) => {
+          const dA = Math.abs(new Date(a.fecha_ticket!).getTime() - txDate.getTime())
+          const dB = Math.abs(new Date(b.fecha_ticket!).getTime() - txDate.getTime())
+          return dA - dB
+        })
+        await admin
+          .from('bank_transactions')
+          .update({ expense_scan_id: candidates[0].id, match_confidence: 'auto_ambiguous' })
+          .eq('id', tx.id)
+        usedScanIds.add(candidates[0].id)
         matched++
       }
     }
