@@ -11,20 +11,20 @@ export default function ClientPortalGate({
   proyectoNombre: string
   imagenUrl: string | null
 }) {
-  const [fecha, setFecha] = useState('')
+  const [pin, setPin] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!fecha) return
+    if (pin.length !== 4) return
     setLoading(true)
     setError(null)
     try {
       const res = await fetch('/api/portal/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ proyectoId, fecha_nacimiento: fecha }),
+        body: JSON.stringify({ proyectoId, pin }),
       })
       const json = await res.json()
       if (res.ok) {
@@ -81,24 +81,28 @@ export default function ClientPortalGate({
             {proyectoNombre}
           </p>
           <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', margin: '0 0 28px', lineHeight: 1.6 }}>
-            Para acceder a tu portal introduce tu fecha de nacimiento.
+            Para acceder a tu portal introduce el PIN de 4 dígitos.
           </p>
 
           <form onSubmit={handleSubmit}>
             <label style={{ display: 'block', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.35)', marginBottom: 8 }}>
-              Fecha de nacimiento
+              PIN de acceso
             </label>
             <input
-              type="date"
-              value={fecha}
-              onChange={e => setFecha(e.target.value)}
+              type="password"
+              inputMode="numeric"
+              maxLength={4}
+              placeholder="••••"
+              value={pin}
+              onChange={e => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+              autoComplete="current-password"
               required
               style={{
-                width: '100%', padding: '12px 14px', fontSize: 14,
+                width: '100%', padding: '12px 14px', fontSize: 22,
+                letterSpacing: '0.4em', textAlign: 'center',
                 background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)',
                 borderRadius: 8, color: '#fff', fontFamily: 'inherit',
                 boxSizing: 'border-box', outline: 'none',
-                colorScheme: 'dark',
               }}
             />
 
@@ -110,11 +114,11 @@ export default function ClientPortalGate({
 
             <button
               type="submit"
-              disabled={loading || !fecha}
+              disabled={loading || pin.length !== 4}
               style={{
                 marginTop: 20, width: '100%', padding: '13px',
-                background: loading || !fecha ? 'rgba(216,90,48,0.4)' : '#D85A30',
-                color: '#fff', border: 'none', borderRadius: 8, cursor: loading || !fecha ? 'not-allowed' : 'pointer',
+                background: loading || pin.length !== 4 ? 'rgba(216,90,48,0.4)' : '#D85A30',
+                color: '#fff', border: 'none', borderRadius: 8, cursor: loading || pin.length !== 4 ? 'not-allowed' : 'pointer',
                 fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
                 transition: 'background 0.2s',
               }}
