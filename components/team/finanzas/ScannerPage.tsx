@@ -211,6 +211,41 @@ export default function ScannerPage({ initialScans, proyectos, initialYear, init
     window.open(`/api/expense-scans/export?year=${year}&month=${month}`, '_blank')
   }
 
+  // ── Backfill hora_ticket ───────────────────────────────────────────────────
+  const [backfilling, setBackfilling] = useState(false)
+  const [backfillMsg, setBackfillMsg] = useState<string | null>(null)
+
+  const handleBackfillHora = async () => {
+    setBackfilling(true)
+    setBackfillMsg('Procesando...')
+    let totalUpdated = 0
+    let totalFailed  = 0
+
+    // Keep running batches until no more remain
+    while (true) {
+      let res: { updated: number; failed: number; remaining: number } | { error: string }
+      try {
+        const r = await fetch('/api/expense-scans/backfill-hora', { method: 'POST' })
+        res = await r.json()
+      } catch {
+        res = { error: 'Error de red.' }
+      }
+      if ('error' in res) {
+        setBackfillMsg(`Error: ${res.error}`)
+        break
+      }
+      totalUpdated += res.updated
+      totalFailed  += res.failed
+      if (res.remaining > 0) {
+        setBackfillMsg(`Procesando… ${totalUpdated} hora(s) encontradas (quedan ~${res.remaining})`)
+      } else {
+        setBackfillMsg(`Listo: ${totalUpdated} hora(s) extraídas, ${totalFailed} sin hora visible.`)
+        break
+      }
+    }
+    setBackfilling(false)
+  }
+
   const isCurrentMonth = year === initialYear && month === initialMonth
 
   return (
@@ -259,12 +294,25 @@ export default function ScannerPage({ initialScans, proyectos, initialYear, init
           disabled={isCurrentMonth}
           style={{ background: 'none', border: '1px solid #E8E6E0', borderRadius: 6, padding: '6px 12px', cursor: isCurrentMonth ? 'default' : 'pointer', fontSize: 14, color: isCurrentMonth ? '#CCC' : '#555' }}
         >→</button>
-        <button
-          onClick={handleExport}
-          style={{ marginLeft: 'auto', padding: '7px 14px', background: '#1A1A1A', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 600, letterSpacing: '0.04em' }}
-        >
-          ↓ Exportar ZIP
-        </button>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+          {backfillMsg && (
+            <span style={{ fontSize: 11, color: backfilling ? '#888' : '#1A1A1A' }}>{backfillMsg}</span>
+          )}
+          <button
+            onClick={handleBackfillHora}
+            disabled={backfilling}
+            title="Volver a analizar todos los tickets para extraer la hora"
+            style={{ padding: '7px 12px', background: '#fff', color: '#555', border: '1px solid #E8E6E0', borderRadius: 6, cursor: backfilling ? 'default' : 'pointer', fontSize: 11, fontWeight: 600, opacity: backfilling ? 0.6 : 1 }}
+          >
+            {backfilling ? '⏳ Extrayendo horas…' : '🕐 Extraer horas'}
+          </button>
+          <button
+            onClick={handleExport}
+            style={{ padding: '7px 14px', background: '#1A1A1A', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 600, letterSpacing: '0.04em' }}
+          >
+            ↓ Exportar ZIP
+          </button>
+        </div>
       </div>
 
       {/* ── Summary ─────────────────────────────────────────────────────────── */}
