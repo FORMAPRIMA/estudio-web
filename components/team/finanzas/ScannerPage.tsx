@@ -53,11 +53,29 @@ function ScanThumb({ url, size = 56 }: { url: string | null; size?: number }) {
   const pdf = isPdfUrl(url)
   const showFallback = pdf || imgError || !url
 
+  const handleClick = (e: React.MouseEvent) => {
+    if (pdf && url) {
+      e.stopPropagation()
+      window.open(url, '_blank')
+    }
+  }
+
   return (
-    <div style={{ width: size, height: size, flexShrink: 0, borderRadius: 6, overflow: 'hidden', background: '#F8F7F4', border: '1px solid #E8E6E0', position: 'relative' }}>
+    <div
+      onClick={handleClick}
+      title={pdf ? 'Ver PDF' : undefined}
+      style={{
+        width: size, height: size, flexShrink: 0, borderRadius: 6, overflow: 'hidden',
+        background: pdf ? '#EEF2FF' : '#F8F7F4',
+        border: `1px solid ${pdf ? '#C7D2FE' : '#E8E6E0'}`,
+        position: 'relative',
+        cursor: pdf ? 'pointer' : undefined,
+      }}
+    >
       {showFallback ? (
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <span style={{ fontSize: size * 0.4 }}>{pdf ? '📄' : '🖼️'}</span>
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
+          <span style={{ fontSize: size * 0.38 }}>📄</span>
+          {pdf && size >= 48 && <span style={{ fontSize: 8, fontWeight: 700, color: '#6366F1', letterSpacing: '0.05em' }}>PDF</span>}
         </div>
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
@@ -243,8 +261,8 @@ export default function ScannerPage({ initialScans, proyectos, initialYear, init
               <div key={scan.id} style={{ display: 'flex', gap: 12, padding: '14px 16px', background: '#fff', border: '1px solid #E8E6E0', borderRadius: 10 }}>
                 {/* Thumbnail */}
                 <div
-                  onClick={() => setLightbox(scan.foto_url)}
-                  style={{ cursor: isPdfUrl(scan.foto_url) ? 'default' : 'zoom-in' }}
+                  onClick={() => { if (!isPdfUrl(scan.foto_url)) setLightbox(scan.foto_url) }}
+                  style={{ cursor: isPdfUrl(scan.foto_url) ? 'pointer' : 'zoom-in' }}
                 >
                   <ScanThumb url={scan.foto_url} />
                 </div>
