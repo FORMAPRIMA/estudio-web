@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import {
   saveExpenseScan,
   updateExpenseScan,
@@ -110,11 +110,50 @@ export default function ScannerPage({ initialScans, proyectos, initialYear, init
   const [editingScan, setEditingScan]   = useState<ExpenseScan | null>(null)
   const [lightbox, setLightbox]         = useState<string | null>(null)
 
-  const totalMonto = scans.reduce((s, sc) => s + (sc.monto ?? 0), 0)
+  // ── Filters ────────────────────────────────────────────────────────────────
+  const [filterTipo, setFilterTipo] = useState<ExpenseType | null>(null)
+
+  const filteredScans = filterTipo ? scans.filter(s => s.tipo === filterTipo) : scans
+
+  // ── Exchange rates ─────────────────────────────────────────────────────────
+  const [rates, setRates]           = useState<Record<string, number>>({ EUR: 1 })
+  const [ratesDate, setRatesDate]   = useState<string | null>(null)
+  const [ratesUpdating, setRatesUpdating] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/exchange-rates').then(r => r.json()).then(d => {
+      if (d.rates) { setRates(d.rates); setRatesDate(d.updated_at) }
+    }).catch(() => {})
+  }, [])
+
+  const handleRefreshRates = async () => {
+    setRatesUpdating(true)
+    try {
+      const res = await fetch('/api/exchange-rates', { method: 'POST' })
+      const d = await res.json()
+      if (d.rates) { setRates(d.rates); setRatesDate(d.updated_at) }
+    } catch {}
+    setRatesUpdating(false)
+  }
+
+  // ── Summary ────────────────────────────────────────────────────────────────
+  // Group by currency
+  const byCurrency = Object.entries(
+    filteredScans.reduce((acc, s) => {
+      const c = s.moneda ?? 'EUR'
+      acc[c] = (acc[c] ?? 0) + (s.monto ?? 0)
+      return acc
+    }, {} as Record<string, number>)
+  ).filter(([, v]) => v !== 0)
+
+  const totalEur = byCurrency.reduce((sum, [c, v]) => sum + v * (rates[c] ?? 1), 0)
+  const hasMultiCurrency = byCurrency.some(([c]) => c !== 'EUR') && byCurrency.length > 1
+
   const byTipo = TIPOS.map(t => ({
     tipo: t,
-    count: scans.filter(s => s.tipo === t).length,
-    total: scans.filter(s => s.tipo === t).reduce((sum, s) => sum + (s.monto ?? 0), 0),
+    count: filteredScans.filter(s => s.tipo === t).length,
+    total: filteredScans.filter(s => s.tipo === t).reduce((sum, s) => sum + (s.monto ?? 0), 0),
+    moneda: filteredScans.find(s => s.tipo === t)?.moneda ?? 'EUR',
   })).filter(x => x.count > 0)
 
   // ── Month navigation ───────────────────────────────────────────────────────
@@ -227,35 +266,100 @@ export default function ScannerPage({ initialScans, proyectos, initialYear, init
 
       {/* ── Summary ─────────────────────────────────────────────────────────── */}
       {scans.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 24 }}>
-          <div style={{ padding: '14px 16px', background: '#F8F7F4', border: '1px solid #E8E6E0', borderRadius: 8 }}>
-            <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', margin: '0 0 4px' }}>Total gastos</p>
-            <p style={{ fontSize: 20, fontWeight: 600, color: '#D85A30', margin: 0 }}>{fmtMoney(totalMonto)}</p>
-            <p style={{ fontSize: 10, color: '#888', margin: '2px 0 0' }}>{scans.length} ticket{scans.length !== 1 ? 's' : ''}</p>
-          </div>
-          {byTipo.map(({ tipo, count, total }) => {
-            const cfg = TIPO_CONFIG[tipo]
-            return (
-              <div key={tipo} style={{ padding: '14px 16px', background: cfg.bg, border: `1px solid ${cfg.color}20`, borderRadius: 8 }}>
-                <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: cfg.color, margin: '0 0 4px' }}>{cfg.icon} {cfg.label}</p>
-                <p style={{ fontSize: 16, fontWeight: 600, color: cfg.color, margin: 0 }}>{fmtMoney(total)}</p>
-                <p style={{ fontSize: 10, color: cfg.color + 'BB', margin: '2px 0 0' }}>{count} ticket{count !== 1 ? 's' : ''}</p>
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 12 }}>
+            {/* Total per currency */}
+            {byCurrency.map(([currency, total]) => (
+              <div key={currency} style={{ padding: '14px 16px', background: '#F8F7F4', border: '1px solid #E8E6E0', borderRadius: 8 }}>
+                <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', margin: '0 0 4px' }}>
+                  Total {currency}
+                </p>
+                <p style={{ fontSize: 20, fontWeight: 600, color: '#D85A30', margin: 0 }}>
+                  {fmtMoney(total, currency)}
+                </p>
+                <p style={{ fontSize: 10, color: '#888', margin: '2px 0 0' }}>
+                  {filteredScans.filter(s => (s.moneda ?? 'EUR') === currency).length} ticket{filteredScans.filter(s => (s.moneda ?? 'EUR') === currency).length !== 1 ? 's' : ''}
+                </p>
               </div>
+            ))}
+            {/* EUR approximation when multi-currency */}
+            {hasMultiCurrency && (
+              <div style={{ padding: '14px 16px', background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 8 }}>
+                <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#C2410C', margin: '0 0 4px' }}>
+                  ≈ Total EUR
+                </p>
+                <p style={{ fontSize: 20, fontWeight: 600, color: '#C2410C', margin: 0 }}>
+                  {fmtMoney(totalEur, 'EUR')}
+                </p>
+                <p style={{ fontSize: 10, color: '#C2410C99', margin: '2px 0 0' }}>
+                  Conversión aproximada
+                </p>
+              </div>
+            )}
+            {byTipo.map(({ tipo, count, total }) => {
+              const cfg = TIPO_CONFIG[tipo]
+              return (
+                <div key={tipo} style={{ padding: '14px 16px', background: cfg.bg, border: `1px solid ${cfg.color}20`, borderRadius: 8 }}>
+                  <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: cfg.color, margin: '0 0 4px' }}>{cfg.icon} {cfg.label}</p>
+                  <p style={{ fontSize: 16, fontWeight: 600, color: cfg.color, margin: 0 }}>{fmtMoney(total)}</p>
+                  <p style={{ fontSize: 10, color: cfg.color + 'BB', margin: '2px 0 0' }}>{count} ticket{count !== 1 ? 's' : ''}</p>
+                </div>
+              )
+            })}
+          </div>
+          {/* Exchange rate info + refresh */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+            <span style={{ fontSize: 10, color: '#AAA' }}>
+              {ratesDate ? `Cambio: ${new Date(ratesDate).toLocaleDateString('es-ES')}` : 'Tipos de cambio no cargados'}
+            </span>
+            <button
+              onClick={handleRefreshRates}
+              disabled={ratesUpdating}
+              style={{ fontSize: 10, padding: '3px 8px', background: 'none', border: '1px solid #E8E6E0', borderRadius: 4, cursor: 'pointer', color: '#888', opacity: ratesUpdating ? 0.5 : 1 }}
+            >
+              {ratesUpdating ? '…' : '↻ Actualizar cambio'}
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* ── Filter by tipo ──────────────────────────────────────────────────── */}
+      {scans.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', marginBottom: 16, paddingBottom: 4 }}>
+          <button
+            onClick={() => setFilterTipo(null)}
+            style={{ flexShrink: 0, fontSize: 11, padding: '5px 12px', borderRadius: 20, border: '1px solid', cursor: 'pointer', fontWeight: filterTipo === null ? 700 : 400, background: filterTipo === null ? '#1A1A1A' : 'none', color: filterTipo === null ? '#fff' : '#555', borderColor: filterTipo === null ? '#1A1A1A' : '#E8E6E0' }}
+          >
+            Todos ({scans.length})
+          </button>
+          {TIPOS.filter(t => scans.some(s => s.tipo === t)).map(t => {
+            const cfg = TIPO_CONFIG[t]
+            const active = filterTipo === t
+            return (
+              <button
+                key={t}
+                onClick={() => setFilterTipo(active ? null : t)}
+                style={{ flexShrink: 0, fontSize: 11, padding: '5px 12px', borderRadius: 20, border: '1px solid', cursor: 'pointer', fontWeight: active ? 700 : 400, background: active ? cfg.color : 'none', color: active ? '#fff' : cfg.color, borderColor: active ? cfg.color : cfg.color + '60' }}
+              >
+                {cfg.icon} {cfg.label} ({scans.filter(s => s.tipo === t).length})
+              </button>
             )
           })}
         </div>
       )}
 
       {/* ── List ────────────────────────────────────────────────────────────── */}
-      {scans.length === 0 ? (
+      {filteredScans.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '60px 20px', border: '2px dashed #E8E6E0', borderRadius: 12 }}>
           <p style={{ fontSize: 32, margin: '0 0 12px' }}>🧾</p>
-          <p style={{ fontSize: 13, color: '#888', margin: '0 0 6px', fontWeight: 500 }}>Sin gastos este mes</p>
+          <p style={{ fontSize: 13, color: '#888', margin: '0 0 6px', fontWeight: 500 }}>
+            {filterTipo ? `Sin gastos de tipo "${TIPO_CONFIG[filterTipo].label}"` : 'Sin gastos este mes'}
+          </p>
           <p style={{ fontSize: 11, color: '#BBB', margin: 0 }}>Usa el botón "Escanear ticket" para añadir</p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {scans.map(scan => {
+          {filteredScans.map(scan => {
             const cfg = TIPO_CONFIG[scan.tipo] ?? TIPO_CONFIG.otro
             return (
               <div key={scan.id} style={{ display: 'flex', gap: 12, padding: '14px 16px', background: '#fff', border: '1px solid #E8E6E0', borderRadius: 10 }}>
