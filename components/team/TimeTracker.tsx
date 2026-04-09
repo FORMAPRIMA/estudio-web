@@ -112,7 +112,7 @@ const mkInitials = (n: string) =>
 // h<9 o h>=19 es extra siempre; h===14 (comida) solo es extra en fin de semana
 const isExtraSlot = (h: number) => h < 9 || h >= 19
 const isWeekendDate = (d: string) => { const day = new Date(d + 'T12:00:00').getDay(); return day === 0 || day === 6 }
-const isCellExtra = (h: number, d: string) => h < 9 || h >= 19 || (h === 14 && isWeekendDate(d))
+const isCellExtra = (h: number, d: string) => isWeekendDate(d) || h < 9 || h >= 19
 
 const sectionColor = (sec: string): { bg: string; tc: string } => {
   if (sec === 'Anteproyecto')             return { bg: '#EAF3DE', tc: '#27500A' }
@@ -1137,9 +1137,12 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
                 <th style={thStyle('#F8F7F4')}>H</th>
                 {displayDates.map((d) => {
                   const isToday = d === todayStr()
+                  const isWeekend = isWeekendDate(d)
                   const dayIdx = weekDates.indexOf(d)
+                  const thBg = isToday ? '#1D9E75' : isWeekend ? 'rgba(216,90,48,0.08)' : '#F8F7F4'
+                  const thColor = isToday ? '#fff' : isWeekend ? '#D85A30' : '#555'
                   return (
-                    <th key={d} style={{ ...thStyle(isToday ? '#1D9E75' : '#F8F7F4'), color: isToday ? '#fff' : '#555', minWidth: isMobile ? 60 : 90 }}>
+                    <th key={d} style={{ ...thStyle(thBg), color: thColor, minWidth: isMobile ? 60 : 90 }}>
                       <div style={{ fontWeight: 600 }}>{DOW[dayIdx >= 0 ? dayIdx : 0]}</div>
                       <div style={{ fontWeight: 300, opacity: 0.8, fontSize: 10 }}>
                         {new Date(d + 'T12:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
