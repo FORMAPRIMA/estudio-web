@@ -38,9 +38,9 @@ export async function GET(req: NextRequest) {
   const { data: scans, error } = await admin
     .from('expense_scans')
     .select('*, autor:profiles!user_id(nombre)')
-    .gte('created_at', from + 'T00:00:00')
-    .lte('created_at', to   + 'T23:59:59')
-    .order('fecha_ticket', { ascending: true })
+    .or(`and(fecha_ticket.gte.${from},fecha_ticket.lte.${to}),and(fecha_ticket.is.null,created_at.gte.${from}T00:00:00,created_at.lte.${to}T23:59:59)`)
+    .order('fecha_ticket', { ascending: true,  nullsFirst: false })
+    .order('created_at',   { ascending: true })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
