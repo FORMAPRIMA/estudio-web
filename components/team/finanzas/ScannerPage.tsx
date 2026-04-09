@@ -42,6 +42,33 @@ function fmtMoney(monto: number | null, moneda = 'EUR') {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: moneda }).format(monto)
 }
 
+function isPdfUrl(url: string | null) {
+  if (!url) return false
+  const lower = url.toLowerCase().split('?')[0]
+  return lower.endsWith('.pdf')
+}
+
+function ScanThumb({ url, size = 56 }: { url: string | null; size?: number }) {
+  const [imgError, setImgError] = useState(false)
+  const pdf = isPdfUrl(url)
+
+  return (
+    <div style={{ width: size, height: size, flexShrink: 0, borderRadius: 6, overflow: 'hidden', background: '#F0EEE8', border: '1px solid #E8E6E0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {pdf || imgError || !url ? (
+        <span style={{ fontSize: size * 0.4 }}>{pdf ? '📄' : '🖼️'}</span>
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={url}
+          alt=""
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          onError={() => setImgError(true)}
+        />
+      )}
+    </div>
+  )
+}
+
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export default function ScannerPage({ initialScans, proyectos, initialYear, initialMonth }: Props) {
@@ -214,10 +241,9 @@ export default function ScannerPage({ initialScans, proyectos, initialYear, init
                 {/* Thumbnail */}
                 <div
                   onClick={() => setLightbox(scan.foto_url)}
-                  style={{ width: 56, height: 56, flexShrink: 0, borderRadius: 6, overflow: 'hidden', cursor: 'zoom-in', background: '#F8F7F4', border: '1px solid #E8E6E0' }}
+                  style={{ cursor: isPdfUrl(scan.foto_url) ? 'default' : 'zoom-in' }}
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={scan.foto_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <ScanThumb url={scan.foto_url} />
                 </div>
 
                 {/* Info */}
@@ -290,7 +316,7 @@ export default function ScannerPage({ initialScans, proyectos, initialYear, init
       )}
 
       {/* ── Lightbox ─────────────────────────────────────────────────────────── */}
-      {lightbox && (
+      {lightbox && !isPdfUrl(lightbox) && (
         <div
           onClick={() => setLightbox(null)}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, cursor: 'zoom-out' }}
