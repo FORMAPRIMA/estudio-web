@@ -2,10 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import * as XLSX from 'xlsx'
-import Anthropic from '@anthropic-ai/sdk'
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-
 // ── Auth helper ───────────────────────────────────────────────────────────────
 
 async function getPartnerUser() {
@@ -58,50 +54,16 @@ export async function POST(req: NextRequest) {
 
   if (dataRows.length < 2) return NextResponse.json({ error: 'El archivo no contiene datos suficientes.' }, { status: 422 })
 
-  // ── Ask Claude to detect columns by letter ───────────────────────────────────
-  // Send first 4 rows (may include a header row); Claude identifies column letters
-  const sample = dataRows.slice(0, 4)
-  const prompt = `Tienes filas de un extracto bancario exportado desde Excel. Las claves son las letras de columna (A, B, C, D…).
+  // ── Column mapping (fixed format: A=fecha, C=descripción, D=importe) ─────────
+  const colFecha    = 'A'
+  const colConcepto = 'C'
+  const colImporte  = 'D'
 
-Primeras filas (pueden incluir una fila de cabecera):
-${JSON.stringify(sample, null, 2)}
-
-Identifica qué LETRA DE COLUMNA corresponde a cada campo:
-- col_fecha: fecha de la operación/transacción
-- col_concepto: descripción o concepto del movimiento bancario
-- col_importe: importe numérico del movimiento (suele ser negativo para gastos)
-
-IMPORTANTE: las fechas pueden aparecer como números seriales de Excel (ej. 45370), como cadenas "15/03/2025" o como objetos Date. El importe es siempre un número relativamente pequeño (centenas o miles), nunca un número de 5+ dígitos como los seriales de fecha.
-
-Responde ÚNICAMENTE con JSON exacto, sin markdown:
-{"col_fecha": "A", "col_concepto": "C", "col_importe": "D"}`
-
-  let colMap: { col_fecha: string; col_concepto: string; col_importe: string }
-  try {
-    const msg = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 128,
-      messages: [{ role: 'user', content: prompt }],
-    })
-    const raw = msg.content[0].type === 'text' ? msg.content[0].text.trim() : '{}'
-    const cleaned = raw.replace(/^```json?\s*/i, '').replace(/\s*```$/i, '').trim()
-    colMap = JSON.parse(cleaned)
-  } catch {
-    return NextResponse.json({ error: 'No se pudo detectar las columnas del extracto.' }, { status: 422 })
-  }
-
-  const colFecha    = colMap.col_fecha?.toUpperCase()
-  const colConcepto = colMap.col_concepto?.toUpperCase()
-  const colImporte  = colMap.col_importe?.toUpperCase()
-
-  if (!colFecha || !colConcepto || !colImporte) {
-    return NextResponse.json({ error: `Columnas no detectadas. Respuesta: ${JSON.stringify(colMap)}` }, { status: 422 })
-  }
-
-  // Skip the header row if the first row contains text in the fecha column
-  // (i.e. the detected fecha column has a non-date string value in row 0)
+  // Skip first row if it looks like a header (fecha column contains non-date text)
   const firstFechaVal = dataRows[0]?.[colFecha]
-  const firstIsHeader = typeof firstFechaVal === 'string' && isNaN(Date.parse(firstFechaVal)) && !/^\d+$/.test(String(firstFechaVal))
+  const firstIsHeader = typeof firstFechaVal === 'string'
+    && isNaN(Date.parse(firstFechaVal))
+    && !/^\d+$/.test(String(firstFechaVal))
   const rowsToProcess = firstIsHeader ? dataRows.slice(1) : dataRows
 
   // ── Parse rows ───────────────────────────────────────────────────────────────
