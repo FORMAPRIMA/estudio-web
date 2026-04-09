@@ -388,24 +388,52 @@ function BatchUploadModal({ proyectos, onClose, onSaved }: {
       updateItem(item.id, { photoUrl: upRes.url, status: 'analyzing' })
 
       // 2. AI analysis
+      const uploadedUrl = upRes.url
       try {
         const res = await fetch('/api/scan-ticket', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageUrl: upRes.url }),
+          body: JSON.stringify({ imageUrl: uploadedUrl }),
         })
-        const json = await res.json() as { data?: any; error?: string }
-        if (json.data) {
-          const d = json.data
-          updateItem(item.id, {
-            status:      'done',
-            tipo:        TIPOS.includes(d.tipo) ? d.tipo : 'otro',
-            monto:       d.monto != null ? String(d.monto) : '',
-            moneda:      d.moneda ?? 'EUR',
-            proveedor:   d.proveedor ?? '',
-            descripcion: d.descripcion ?? '',
-            fechaTicket: d.fecha_ticket ?? '',
-          })
+        const json = await res.json() as { items?: any[]; error?: string }
+        if (json.items && json.items.length > 0) {
+          if (json.items.length === 1) {
+            // Single document — update the existing item
+            const d = json.items[0]
+            updateItem(item.id, {
+              status:      'done',
+              tipo:        TIPOS.includes(d.tipo) ? d.tipo : 'otro',
+              monto:       d.monto != null ? String(d.monto) : '',
+              moneda:      d.moneda ?? 'EUR',
+              proveedor:   d.proveedor ?? '',
+              descripcion: d.descripcion ?? '',
+              fechaTicket: d.fecha_ticket ?? '',
+            })
+          } else {
+            // PDF contained multiple documents — expand into individual items
+            setItems(prev => {
+              const without = prev.filter(i => i.id !== item.id)
+              const expanded: BatchItem[] = json.items!.map((d, idx) => ({
+                id:          `${item.id}-split-${idx}`,
+                file:        item.file,
+                preview:     item.preview,
+                isPdf:       item.isPdf,
+                status:      'done' as const,
+                photoUrl:    uploadedUrl,
+                error:       null,
+                skip:        false,
+                tipo:        (TIPOS.includes(d.tipo) ? d.tipo : 'otro') as ExpenseType,
+                monto:       d.monto != null ? String(d.monto) : '',
+                moneda:      d.moneda ?? 'EUR',
+                proveedor:   d.proveedor ?? '',
+                descripcion: d.descripcion ?? '',
+                fechaTicket: d.fecha_ticket ?? '',
+                proyectoId:  '',
+                notas:       `Doc ${idx + 1}/${json.items!.length} — ${item.file.name}`,
+              }))
+              return [...without, ...expanded]
+            })
+          }
         } else {
           updateItem(item.id, { status: 'done' })
         }
@@ -679,9 +707,9 @@ function CaptureModal({ proyectos, onClose, onSaved }: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imageUrl: upRes.url }),
       })
-      const scanJson = await scanRes.json() as { data?: any; error?: string }
-      if (scanJson.data) {
-        const d = scanJson.data
+      const scanJson = await scanRes.json() as { items?: any[]; error?: string }
+      if (scanJson.items && scanJson.items.length > 0) {
+        const d = scanJson.items[0]
         if (d.tipo && TIPOS.includes(d.tipo))  setTipo(d.tipo)
         if (d.monto != null)                   setMonto(String(d.monto))
         if (d.moneda)                          setMoneda(d.moneda)

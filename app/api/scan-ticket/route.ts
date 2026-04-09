@@ -39,25 +39,41 @@ export async function POST(req: NextRequest) {
 
   const today = new Date().toISOString().split('T')[0]
 
-  const systemPrompt = `Eres un asistente de gestión de gastos de una empresa de arquitectura llamada Forma Prima.
-Analiza imágenes y PDFs de tickets y facturas y extrae su información en JSON.
-Responde ÚNICAMENTE con un objeto JSON válido, sin texto adicional, sin markdown, sin explicaciones.
-Formato exacto:
-{
+  const itemShape = `{
   "fecha_ticket": "YYYY-MM-DD or null",
   "monto": number or null,
   "moneda": "EUR",
   "tipo": one of [${TIPOS.map(t => `"${t}"`).join(', ')}],
   "proveedor": "nombre del establecimiento/empresa or null",
   "descripcion": "descripción breve del gasto (max 80 chars) or null"
-}
-Reglas:
-- fecha_ticket: extrae la fecha del ticket. Si no es clara, usa null.
-- monto: el importe TOTAL en número (sin símbolo). Usa null si no está claro.
+}`
+
+  const commonRules = `Reglas por campo:
+- fecha_ticket: fecha del ticket/factura. Usa null si no está clara.
+- monto: importe TOTAL en número (sin símbolo). Usa null si no está claro.
 - moneda: casi siempre EUR. Si ves otro símbolo, ponlo (USD, GBP…).
 - tipo: elige el más apropiado de la lista. "gasto_proyecto" para materiales/servicios de obra.
 - proveedor: nombre del restaurante, empresa, taxi app, etc.
 - descripcion: qué se compró o el concepto principal.`
+
+  const imageSystemPrompt = `Eres un asistente de gestión de gastos de una empresa de arquitectura llamada Forma Prima.
+Analiza la imagen del ticket o factura y extrae su información.
+Responde ÚNICAMENTE con un array JSON de UN elemento, sin texto adicional, sin markdown, sin explicaciones.
+Formato exacto:
+[${itemShape}]
+${commonRules}`
+
+  const pdfSystemPrompt = `Eres un asistente de gestión de gastos de una empresa de arquitectura llamada Forma Prima.
+Analiza TODAS las páginas del PDF y determina cuántos documentos distintos contiene.
+
+REGLA FUNDAMENTAL:
+- Si todas las páginas pertenecen al MISMO ticket o factura (aunque sean varias páginas): devuelve un array con UN solo objeto.
+- Si el PDF agrupa VARIOS tickets o facturas diferentes (ej: paquete de recibos, varios albaranes): devuelve un array con UN objeto por cada documento distinto, en orden de aparición.
+
+Responde ÚNICAMENTE con un array JSON válido, sin texto adicional, sin markdown, sin explicaciones.
+Formato exacto (uno o varios elementos):
+[${itemShape}]
+${commonRules}`
 
   // Build content block depending on file type
   const fileContent = isPdf
@@ -80,8 +96,8 @@ Reglas:
 
   const message = await client.messages.create({
     model: 'claude-haiku-4-5-20251001',
-    max_tokens: 512,
-    system: systemPrompt,
+    max_tokens: 1024,
+    system: isPdf ? pdfSystemPrompt : imageSystemPrompt,
     messages: [
       {
         role: 'user',
@@ -89,20 +105,24 @@ Reglas:
           fileContent as any,
           {
             type: 'text',
-            text: `Analiza este ${isPdf ? 'PDF' : 'ticket/factura'} y extrae los datos. Fecha de referencia: ${today}.`,
+            text: isPdf
+              ? `Analiza este PDF, determina si contiene uno o varios documentos distintos, y extrae los datos. Fecha de referencia: ${today}.`
+              : `Analiza este ticket/factura y extrae los datos. Fecha de referencia: ${today}.`,
           },
         ],
       },
     ],
   })
 
-  const raw = message.content[0].type === 'text' ? message.content[0].text.trim() : '{}'
+  const raw = message.content[0].type === 'text' ? message.content[0].text.trim() : '[]'
 
   try {
     // Strip any accidental markdown fences
     const cleaned = raw.replace(/^```json?\s*/i, '').replace(/\s*```$/i, '').trim()
     const parsed = JSON.parse(cleaned)
-    return NextResponse.json({ data: parsed, raw })
+    // Normalise: always return { items: [...] }
+    const items = Array.isArray(parsed) ? parsed : [parsed]
+    return NextResponse.json({ items, raw })
   } catch {
     return NextResponse.json({ error: 'No se pudo interpretar la respuesta de la IA.', raw }, { status: 422 })
   }
