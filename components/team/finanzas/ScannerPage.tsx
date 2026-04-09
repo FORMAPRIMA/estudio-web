@@ -51,17 +51,20 @@ function isPdfUrl(url: string | null) {
 function ScanThumb({ url, size = 56 }: { url: string | null; size?: number }) {
   const [imgError, setImgError] = useState(false)
   const pdf = isPdfUrl(url)
+  const showFallback = pdf || imgError || !url
 
   return (
-    <div style={{ width: size, height: size, flexShrink: 0, borderRadius: 6, overflow: 'hidden', background: '#F0EEE8', border: '1px solid #E8E6E0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      {pdf || imgError || !url ? (
-        <span style={{ fontSize: size * 0.4 }}>{pdf ? '📄' : '🖼️'}</span>
+    <div style={{ width: size, height: size, flexShrink: 0, borderRadius: 6, overflow: 'hidden', background: '#F8F7F4', border: '1px solid #E8E6E0', position: 'relative' }}>
+      {showFallback ? (
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <span style={{ fontSize: size * 0.4 }}>{pdf ? '📄' : '🖼️'}</span>
+        </div>
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={url}
+          src={url!}
           alt=""
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }}
           onError={() => setImgError(true)}
         />
       )}
