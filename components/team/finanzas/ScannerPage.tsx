@@ -2,7 +2,6 @@
 
 import { useState, useRef, useCallback } from 'react'
 import {
-  uploadExpensePhoto,
   saveExpenseScan,
   updateExpenseScan,
   deleteExpenseScan,
@@ -378,7 +377,13 @@ function BatchUploadModal({ proyectos, onClose, onSaved }: {
       updateItem(item.id, { status: 'uploading' })
       const fd = new FormData()
       fd.append('photo', item.file)
-      const upRes = await uploadExpensePhoto(fd)
+      let upRes: { url: string } | { error: string }
+      try {
+        const upFetch = await fetch('/api/expense-scans/upload', { method: 'POST', body: fd })
+        upRes = await upFetch.json()
+      } catch {
+        upRes = { error: 'Error al subir el archivo.' }
+      }
 
       if ('error' in upRes) {
         updateItem(item.id, { status: 'error', error: upRes.error })
@@ -693,7 +698,13 @@ function CaptureModal({ proyectos, onClose, onSaved }: {
     setUploading(true)
     const fd = new FormData()
     fd.append('photo', file)
-    const upRes = await uploadExpensePhoto(fd)
+    let upRes: { url: string } | { error: string }
+    try {
+      const upFetch = await fetch('/api/expense-scans/upload', { method: 'POST', body: fd })
+      upRes = await upFetch.json()
+    } catch {
+      upRes = { error: 'Error al subir la foto.' }
+    }
     setUploading(false)
 
     if ('error' in upRes) { setError(upRes.error); return }
