@@ -41,6 +41,7 @@ export async function POST(req: NextRequest) {
 
   const itemShape = `{
   "fecha_ticket": "YYYY-MM-DD or null",
+  "hora_ticket": "HH:MM or null",
   "monto": number or null,
   "moneda": "EUR",
   "tipo": one of [${TIPOS.map(t => `"${t}"`).join(', ')}],
@@ -50,6 +51,7 @@ export async function POST(req: NextRequest) {
 
   const commonRules = `Reglas por campo:
 - fecha_ticket: fecha del ticket/factura. Usa null si no está clara.
+- hora_ticket: hora de la compra en formato HH:MM (24h). Extráela si aparece en el ticket. Usa null si no está visible.
 - monto: importe TOTAL en número (sin símbolo). Usa null si no está claro.
 - moneda: casi siempre EUR. Si ves otro símbolo, ponlo (USD, GBP…).
 - tipo: elige el más apropiado de la lista. "gasto_proyecto" para materiales/servicios de obra.

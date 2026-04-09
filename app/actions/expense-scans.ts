@@ -21,6 +21,7 @@ export interface ExpenseScan {
   user_id: string
   foto_url: string
   fecha_ticket: string | null
+  hora_ticket: string | null
   monto: number | null
   moneda: string
   tipo: ExpenseType
@@ -80,6 +81,7 @@ export async function uploadExpensePhoto(
 export async function saveExpenseScan(data: {
   foto_url: string
   fecha_ticket: string | null
+  hora_ticket: string | null
   monto: number | null
   moneda: string
   tipo: ExpenseType
@@ -98,6 +100,7 @@ export async function saveExpenseScan(data: {
         user_id:      user.id,
         foto_url:     data.foto_url,
         fecha_ticket: data.fecha_ticket,
+        hora_ticket:  data.hora_ticket,
         monto:        data.monto,
         moneda:       data.moneda,
         tipo:         data.tipo,
@@ -123,6 +126,7 @@ export async function updateExpenseScan(
   id: string,
   data: Partial<{
     fecha_ticket: string | null
+    hora_ticket: string | null
     monto: number | null
     moneda: string
     tipo: ExpenseType

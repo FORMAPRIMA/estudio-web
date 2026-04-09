@@ -207,6 +207,7 @@ export default function ReconciliationPage({
           tipo:         scan.tipo,
           monto:        scan.monto,
           fecha_ticket: scan.fecha_ticket,
+          hora_ticket:  scan.hora_ticket ?? null,
           proveedor:    scan.proveedor,
         } : null,
       }

@@ -472,6 +472,7 @@ interface BatchItem {
   proveedor:   string
   descripcion: string
   fechaTicket: string
+  horaTicket:  string
   proyectoId:  string
   notas:       string
 }
@@ -502,6 +503,7 @@ function BatchUploadModal({ proyectos, onClose, onSaved }: {
     proveedor:   '',
     descripcion: '',
     fechaTicket: '',
+    horaTicket:  '',
     proyectoId:  '',
     notas:       '',
   })
@@ -563,6 +565,7 @@ function BatchUploadModal({ proyectos, onClose, onSaved }: {
               proveedor:   d.proveedor ?? '',
               descripcion: d.descripcion ?? '',
               fechaTicket: d.fecha_ticket ?? '',
+              horaTicket:  d.hora_ticket ?? '',
             })
           } else {
             // PDF contained multiple documents — expand into individual items
@@ -583,6 +586,7 @@ function BatchUploadModal({ proyectos, onClose, onSaved }: {
                 proveedor:   d.proveedor ?? '',
                 descripcion: d.descripcion ?? '',
                 fechaTicket: d.fecha_ticket ?? '',
+                horaTicket:  d.hora_ticket ?? '',
                 proyectoId:  '',
                 notas:       `Doc ${idx + 1}/${json.items!.length} — ${item.file.name}`,
               }))
@@ -610,6 +614,7 @@ function BatchUploadModal({ proyectos, onClose, onSaved }: {
       const res = await saveExpenseScan({
         foto_url:     item.photoUrl!,
         fecha_ticket: item.fechaTicket || null,
+        hora_ticket:  item.horaTicket || null,
         monto:        item.monto ? parseFloat(item.monto) : null,
         moneda:       item.moneda,
         tipo:         item.tipo,
@@ -624,6 +629,7 @@ function BatchUploadModal({ proyectos, onClose, onSaved }: {
           user_id:      '',
           foto_url:     item.photoUrl!,
           fecha_ticket: item.fechaTicket || null,
+          hora_ticket:  item.horaTicket || null,
           monto:        item.monto ? parseFloat(item.monto) : null,
           moneda:       item.moneda,
           tipo:         item.tipo,
@@ -837,6 +843,7 @@ function CaptureModal({ proyectos, onClose, onSaved }: {
   const [proveedor,  setProveedor]  = useState('')
   const [descripcion,setDescripcion]= useState('')
   const [fechaTicket,setFechaTicket]= useState('')
+  const [horaTicket, setHoraTicket] = useState('')
   const [proyectoId, setProyectoId] = useState('')
   const [notas,      setNotas]      = useState('')
 
@@ -877,6 +884,7 @@ function CaptureModal({ proyectos, onClose, onSaved }: {
         if (d.proveedor)                       setProveedor(d.proveedor)
         if (d.descripcion)                     setDescripcion(d.descripcion)
         if (d.fecha_ticket)                    setFechaTicket(d.fecha_ticket)
+        if (d.hora_ticket)                     setHoraTicket(d.hora_ticket)
       }
     } catch {
       // AI failed silently — user can fill in manually
@@ -891,6 +899,7 @@ function CaptureModal({ proyectos, onClose, onSaved }: {
     const res = await saveExpenseScan({
       foto_url:     photoUrl,
       fecha_ticket: fechaTicket || null,
+      hora_ticket:  horaTicket || null,
       monto:        monto ? parseFloat(monto) : null,
       moneda,
       tipo,
@@ -908,6 +917,7 @@ function CaptureModal({ proyectos, onClose, onSaved }: {
       user_id:      '',
       foto_url:     photoUrl,
       fecha_ticket: fechaTicket || null,
+      hora_ticket:  horaTicket || null,
       monto:        monto ? parseFloat(monto) : null,
       moneda,
       tipo,
@@ -1008,6 +1018,7 @@ function EditModal({ scan, proyectos, onClose, onSaved }: {
   const [proveedor,  setProveedor]   = useState(scan.proveedor ?? '')
   const [descripcion,setDescripcion] = useState(scan.descripcion ?? '')
   const [fechaTicket,setFechaTicket] = useState(scan.fecha_ticket ?? '')
+  const [horaTicket, setHoraTicket]  = useState(scan.hora_ticket ?? '')
   const [proyectoId, setProyectoId]  = useState(scan.proyecto_id ?? '')
   const [notas,      setNotas]       = useState(scan.notas ?? '')
   const [saving, setSaving]          = useState(false)
@@ -1018,6 +1029,7 @@ function EditModal({ scan, proyectos, onClose, onSaved }: {
     setError(null)
     const res = await updateExpenseScan(scan.id, {
       fecha_ticket: fechaTicket || null,
+      hora_ticket:  horaTicket || null,
       monto:        monto ? parseFloat(monto) : null,
       moneda,
       tipo,
@@ -1028,7 +1040,7 @@ function EditModal({ scan, proyectos, onClose, onSaved }: {
     })
     setSaving(false)
     if ('error' in res) { setError(res.error); return }
-    onSaved({ ...scan, tipo, monto: monto ? parseFloat(monto) : null, moneda, proveedor: proveedor || null, descripcion: descripcion || null, fecha_ticket: fechaTicket || null, proyecto_id: proyectoId || null, notas: notas || null })
+    onSaved({ ...scan, tipo, monto: monto ? parseFloat(monto) : null, moneda, proveedor: proveedor || null, descripcion: descripcion || null, fecha_ticket: fechaTicket || null, hora_ticket: horaTicket || null, proyecto_id: proyectoId || null, notas: notas || null })
   }
 
   return (

@@ -33,6 +33,7 @@ export interface BankTransaction {
   statement_id: string
   fila: number | null
   fecha: string | null
+  hora: string | null
   concepto: string | null
   importe: number | null
   moneda: string
@@ -45,6 +46,7 @@ export interface BankTransaction {
     tipo: string
     monto: number | null
     fecha_ticket: string | null
+    hora_ticket: string | null
     proveedor: string | null
   } | null
 }
@@ -89,6 +91,7 @@ export async function getBankTransactions(
           tipo,
           monto,
           fecha_ticket,
+          hora_ticket,
           proveedor
         )
       `)
