@@ -211,13 +211,22 @@ export async function deleteStatement(
   try {
     await requirePartner()
     const admin = createAdminClient()
-    // Cascades to bank_transactions via FK
-    const { error } = await admin
+
+    // Explicitly delete child rows first — do not rely on FK cascade
+    const { error: txErr } = await admin
+      .from('bank_transactions')
+      .delete()
+      .eq('statement_id', statementId)
+
+    if (txErr) return { error: `Error al borrar transacciones: ${txErr.message}` }
+
+    const { error: stmtErr } = await admin
       .from('bank_statements')
       .delete()
       .eq('id', statementId)
 
-    if (error) return { error: error.message }
+    if (stmtErr) return { error: `Error al borrar extracto: ${stmtErr.message}` }
+
     revalidatePath(PATH)
     return { success: true }
   } catch (err) {
