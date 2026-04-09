@@ -55,7 +55,7 @@ export function buildActaVisitaObraElement(
   const { Document, Page, View, Text, Image, StyleSheet, Link } = pdf
 
   const s = StyleSheet.create({
-    page:           { paddingTop: 0, paddingBottom: 64, paddingHorizontal: 0, fontFamily: 'Helvetica', fontSize: 8.5, color: C.ink, backgroundColor: C.white },
+    page:           { paddingTop: 40, paddingBottom: 64, paddingHorizontal: 0, fontFamily: 'Helvetica', fontSize: 8.5, color: C.ink, backgroundColor: C.white },
     headerBlock:    { backgroundColor: C.headerBg, paddingTop: 40, paddingBottom: 0, paddingHorizontal: 56 },
     headerInner:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 },
     headerLeft:     { flexDirection: 'column' },
@@ -164,6 +164,26 @@ export function buildActaVisitaObraElement(
           <Text style={s.footerCenter} render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} />
           <Text style={s.footerText}>formaprima.es</Text>
         </View>
+
+        <View
+          fixed
+          style={{
+            position: 'absolute',
+            top: 0, left: 0, right: 0,
+            height: 40,
+            backgroundColor: C.headerBg,
+            paddingHorizontal: 56,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+          render={({ pageNumber }) => pageNumber <= 1 ? null : (
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+              <Image src={LOGO_BLANCO} style={{ width: 72, objectFit: 'contain' as const }} />
+              <Text style={{ fontSize: 7, color: C.hInk, fontFamily: 'Helvetica' }}>{data.proyecto_nombre}</Text>
+            </View>
+          )}
+        />
 
       </Page>
     </Document>

@@ -90,7 +90,7 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
   const today = new Date().toISOString().split('T')[0]
 
   // Step
-  const [step, setStep] = useState<'form' | 'preview' | 'emails'>('form')
+  const [step, setStep] = useState<'form' | 'preview'>('form')
 
   // Form state
   const [fecha, setFecha] = useState(today)
@@ -99,7 +99,8 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
   const [instrucciones, setInstrucciones] = useState('')
   const [instruccionesConstructor, setInstruccionesConstructor] = useState('')
   const [floorfyUrl, setFloorfyUrl] = useState('')
-  const [aiLoading, setAiLoading] = useState(false)
+  const [aiLoadingConstructor, setAiLoadingConstructor] = useState(false)
+  const [aiLoadingCliente, setAiLoadingCliente] = useState(false)
   const [compartirCliente, setCompartirCliente] = useState(true)
   const [compartirConstructor, setCompartirConstructor] = useState(true)
 
@@ -117,8 +118,9 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Email recipients step
-  const [emailRecipients, setEmailRecipients] = useState<EmailRecipient[]>([])
+  // Email recipients — split by group
+  const [clienteRecipients, setClienteRecipients] = useState<EmailRecipient[]>([])
+  const [constructorRecipients, setConstructorRecipients] = useState<EmailRecipient[]>([])
 
   // Load contacts on mount
   useEffect(() => {
@@ -281,6 +283,7 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
       asistentes:         asistentesInput,
       estado_obras:       estadoObras,
       instrucciones,
+      instruccionesConstructor,
       floorfy_url:        floorfyUrl.trim() || null,
       visible_cliente:    compartirCliente,
       proyecto_nombre:    proyecto.nombre,
@@ -295,20 +298,16 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
     }
 
     // 2 — Send emails to checked recipients (split by group)
-    const checkedRecipients = emailRecipients.filter(r => r.preChecked && r.email)
+    const checkedCliente = clienteRecipients.filter(r => r.preChecked && r.email)
+    const checkedConstructor = constructorRecipients.filter(r => r.preChecked && r.email)
 
-    const clienteEmails = checkedRecipients
-      .filter(r => r.grupo === 'cliente_proyecto' || r.grupo === 'asistente')
-      .map(r => r.email as string)
-
-    const constructorEmails = checkedRecipients
-      .filter(r => r.grupo === 'constructor')
-      .map(r => r.email as string)
+    const clienteEmails = checkedCliente.map(r => r.email as string)
+    const constructorEmails = checkedConstructor.map(r => r.email as string)
 
     // Client names for greeting — primary entries only (exclude "(CC)" duplicates)
-    const clienteNombres = checkedRecipients
+    const clienteNombres = checkedCliente
       .filter(r => r.grupo === 'cliente_proyecto' && !r.id.startsWith('cli-cc-'))
-      .map(r => r.nombre.split(' ')[0]) // first name only
+      .map(r => r.nombre.split(' ')[0])
       .filter(Boolean)
 
     if (clienteEmails.length > 0 || constructorEmails.length > 0) {
@@ -324,6 +323,7 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
         fecha,
         titulo,
         acta_url:                  res.acta_url,
+        acta_constructor_url:      res.acta_constructor_url,
         asistentes:                asistenteStr || null,
         estado_obras:              estadoObras,
         instrucciones,
@@ -571,37 +571,37 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
               {/* Instrucciones — two columns */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
 
-                {/* Left: instrucciones cliente */}
+                {/* Left: instrucciones constructor */}
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <label style={{ ...S.label, marginBottom: 0 }}>Instrucciones acta cliente</label>
+                    <label style={{ ...S.label, marginBottom: 0 }}>Instrucciones acta constructor</label>
                     <button
                       type="button"
-                      disabled={aiLoading || !instrucciones.trim()}
+                      disabled={aiLoadingConstructor || !instruccionesConstructor.trim()}
                       onClick={async () => {
-                        setAiLoading(true)
+                        setAiLoadingConstructor(true)
                         try {
                           const res = await fetch('/api/profesionalizar-instrucciones', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ notas: instrucciones }),
+                            body: JSON.stringify({ notas: instruccionesConstructor }),
                           })
                           const data = await res.json() as { texto?: string; error?: string }
-                          if (data.texto) setInstrucciones(data.texto)
+                          if (data.texto) setInstruccionesConstructor(data.texto)
                         } finally {
-                          setAiLoading(false)
+                          setAiLoadingConstructor(false)
                         }
                       }}
                       style={{
                         fontSize: 10, fontWeight: 600, padding: '4px 10px',
-                        background: aiLoading ? '#F0EDE8' : '#1A1A1A',
-                        color: aiLoading ? '#AAA' : '#fff',
-                        border: 'none', borderRadius: 4, cursor: aiLoading ? 'not-allowed' : 'pointer',
+                        background: aiLoadingConstructor ? '#F0EDE8' : '#1A1A1A',
+                        color: aiLoadingConstructor ? '#AAA' : '#fff',
+                        border: 'none', borderRadius: 4, cursor: aiLoadingConstructor ? 'not-allowed' : 'pointer',
                         letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 5,
                         transition: 'background 0.15s',
                       }}
                     >
-                      {aiLoading ? (
+                      {aiLoadingConstructor ? (
                         <>
                           <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', border: '2px solid #CCC', borderTopColor: '#888', animation: 'spin 0.7s linear infinite' }} />
                           Procesando…
@@ -613,35 +613,58 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
                   </div>
                   <textarea
                     rows={6}
-                    value={instrucciones}
-                    onChange={e => setInstrucciones(e.target.value)}
-                    placeholder="Escribe aquí las instrucciones para el cliente…"
+                    value={instruccionesConstructor}
+                    onChange={e => setInstruccionesConstructor(e.target.value)}
+                    placeholder="Escribe aquí las instrucciones para el constructor…"
                     style={S.textarea}
                   />
                 </div>
 
-                {/* Right: instrucciones constructor */}
+                {/* Right: instrucciones cliente */}
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <label style={{ ...S.label, marginBottom: 0 }}>Instrucciones acta constructor</label>
+                    <label style={{ ...S.label, marginBottom: 0 }}>Instrucciones acta cliente</label>
                     <button
                       type="button"
-                      onClick={() => setInstruccionesConstructor(instrucciones)}
+                      disabled={aiLoadingCliente || !instruccionesConstructor.trim()}
+                      onClick={async () => {
+                        setAiLoadingCliente(true)
+                        try {
+                          const res = await fetch('/api/profesionalizar-instrucciones', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ notas: instruccionesConstructor, modo: 'cliente' }),
+                          })
+                          const data = await res.json() as { texto?: string; error?: string }
+                          if (data.texto) setInstrucciones(data.texto)
+                        } finally {
+                          setAiLoadingCliente(false)
+                        }
+                      }}
                       style={{
                         fontSize: 10, fontWeight: 600, padding: '4px 10px',
                         background: 'none', color: '#888',
-                        border: '1px solid #E8E6E0', borderRadius: 4, cursor: 'pointer',
-                        letterSpacing: '0.04em',
+                        border: '1px solid #E8E6E0', borderRadius: 4,
+                        cursor: aiLoadingCliente || !instruccionesConstructor.trim() ? 'not-allowed' : 'pointer',
+                        letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 5,
+                        opacity: aiLoadingCliente || !instruccionesConstructor.trim() ? 0.5 : 1,
                       }}
                     >
-                      ← Copiar desde cliente
+                      {aiLoadingCliente ? (
+                        <>
+                          <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', border: '2px solid #CCC', borderTopColor: '#888', animation: 'spin 0.7s linear infinite' }} />
+                          Procesando…
+                        </>
+                      ) : (
+                        <>← Adaptar para cliente</>
+                      )}
                     </button>
                   </div>
                   <textarea
                     rows={6}
-                    value={instruccionesConstructor}
-                    onChange={e => setInstruccionesConstructor(e.target.value)}
-                    placeholder="Instrucciones específicas para el constructor…"
+                    value={instrucciones}
+                    onChange={e => setInstrucciones(e.target.value)}
+                    placeholder="Instrucciones para el cliente (adaptadas)…"
                     style={S.textarea}
                   />
                 </div>
@@ -665,7 +688,12 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
             <div style={{ padding: '16px 28px', borderTop: '1px solid #E8E6E0', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
               <button onClick={onClose} style={S.btnGhost}>Cancelar</button>
               <button
-                onClick={() => setStep('preview')}
+                onClick={() => {
+                  const all = buildRecipients()
+                  setClienteRecipients(all.filter(r => r.grupo === 'cliente_proyecto' || r.grupo === 'asistente').map(r => ({ ...r })))
+                  setConstructorRecipients(all.filter(r => r.grupo === 'constructor').map(r => ({ ...r })))
+                  setStep('preview')
+                }}
                 style={S.btnPrimary}
                 disabled={!fecha || !titulo.trim()}
               >
@@ -676,7 +704,86 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
         )}
 
         {/* ── PREVIEW STEP ──────────────────────────────────────────────── */}
-        {step === 'preview' && (
+        {step === 'preview' && (() => {
+          // Helper: render a mini HTML preview of the acta parameterized by instrText
+          const renderPreviewDoc = (instrText: string) => (
+            <div style={{
+              border: '1px solid #E8E6E0',
+              borderRadius: 4,
+              overflow: 'hidden',
+              fontFamily: 'Helvetica, Arial, sans-serif',
+            }}>
+              {/* Dark header */}
+              <div style={{ background: '#1A1A1A', padding: '20px 24px 14px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+                  <div>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src="/FORMA_PRIMA_BLANCO.png" alt="Forma Prima" style={{ height: 20, objectFit: 'contain', display: 'block', marginBottom: 8 }} />
+                    <span style={{ fontSize: 7, color: '#D85A30', fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase' }}>Acta de visita de obra</span>
+                  </div>
+                  <span style={{ fontSize: 10, color: '#F0EDE8' }}>{fmtDateEs(fecha)}</span>
+                </div>
+                <div style={{ height: 2, background: '#D85A30' }} />
+              </div>
+              {/* Project info */}
+              <div style={{ background: '#F8F7F4', padding: '10px 24px' }}>
+                <div style={{ fontSize: 7, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#D85A30', marginBottom: 4 }}>Proyecto</div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 2 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#1A1A1A' }}>{proyecto.nombre}</span>
+                  {proyecto.codigo && <span style={{ fontSize: 9, color: '#888', fontFamily: 'monospace' }}>{proyecto.codigo}</span>}
+                </div>
+                {proyecto.direccion && <div style={{ fontSize: 9, color: '#7A7A7A' }}>{proyecto.direccion}</div>}
+              </div>
+              {/* Body */}
+              <div style={{ padding: '14px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {asistentesSeleccionados.length > 0 && (
+                  <div>
+                    <div style={{ height: 1, background: '#E6E4DF', marginBottom: 10 }} />
+                    <div style={{ fontSize: 7, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#D85A30', marginBottom: 6 }}>Asistentes</div>
+                    {(['equipo', 'cliente', 'proveedor', 'externo'] as TipoAsistente[]).map(tipo => {
+                      const lista = asistentesSeleccionados.filter(a => a.tipo === tipo)
+                      if (!lista.length) return null
+                      const labels: Record<TipoAsistente, string> = { equipo: 'Equipo', cliente: 'Clientes', proveedor: 'Proveedores', externo: 'Externos' }
+                      return (
+                        <div key={tipo} style={{ marginBottom: 4 }}>
+                          <div style={{ fontSize: 7, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAAAAA', marginBottom: 2 }}>{labels[tipo]}</div>
+                          <div style={{ fontSize: 9, color: '#3A3A3A' }}>{lista.map(a => a.nombre).join('  ·  ')}</div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+                {estadoObras && (
+                  <div>
+                    <div style={{ height: 1, background: '#E6E4DF', marginBottom: 10 }} />
+                    <div style={{ fontSize: 7, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#D85A30', marginBottom: 6 }}>Estado de obras</div>
+                    <p style={{ fontSize: 9, color: '#3A3A3A', lineHeight: 1.6, margin: 0, whiteSpace: 'pre-wrap' }}>{estadoObras}</p>
+                  </div>
+                )}
+                {instrText.trim().length > 0 && (
+                  <div>
+                    <div style={{ height: 1, background: '#E6E4DF', marginBottom: 10 }} />
+                    <div style={{ fontSize: 7, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#D85A30', marginBottom: 6 }}>Instrucciones</div>
+                    <p style={{ fontSize: 9, color: '#3A3A3A', lineHeight: 1.6, margin: 0, whiteSpace: 'pre-wrap' }}>{instrText}</p>
+                  </div>
+                )}
+                {floorfyUrl.trim() && (
+                  <div>
+                    <div style={{ height: 1, background: '#E6E4DF', marginBottom: 10 }} />
+                    <div style={{ fontSize: 7, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#D85A30', marginBottom: 6 }}>Recorrido virtual</div>
+                    <p style={{ fontSize: 9, color: '#D85A30', margin: 0, wordBreak: 'break-all' }}>{floorfyUrl.trim()}</p>
+                  </div>
+                )}
+              </div>
+              {/* Footer */}
+              <div style={{ padding: '8px 24px', borderTop: '2px solid #D85A30', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 7, color: '#AAAAAA' }}>Forma Prima Arquitectura</span>
+                <span style={{ fontSize: 7, color: '#AAAAAA' }}>formaprima.es</span>
+              </div>
+            </div>
+          )
+
+          return (
           <>
             {/* Header */}
             <div style={{ padding: '20px 28px 16px', borderBottom: '1px solid #E8E6E0', display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -689,128 +796,94 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
                 ← Editar
               </button>
               <span style={{ fontSize: 10, color: '#CCC' }}>|</span>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#1A1A1A' }}>Previsualización del acta</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#1A1A1A' }}>Vista previa del acta</span>
             </div>
 
-            {/* Preview document */}
-            <div style={{ padding: '20px 28px' }}>
-              <div style={{
-                border: '1px solid #E8E6E0',
-                borderRadius: 8,
-                overflow: 'hidden',
-                fontFamily: 'Helvetica, Arial, sans-serif',
-              }}>
+            {/* Body */}
+            <div style={{ padding: '20px 28px', display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-                {/* Dark header */}
-                <div style={{ background: '#1A1A1A', padding: '28px 32px 20px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
-                    <div>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src="/FORMA_PRIMA_BLANCO.png"
-                        alt="Forma Prima"
-                        style={{ height: 28, objectFit: 'contain', display: 'block', marginBottom: 10 }}
-                      />
-                      <span style={{ fontSize: 9, color: '#D85A30', fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase' }}>
-                        Acta de visita de obra
-                      </span>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <span style={{ fontSize: 12, color: '#F0EDE8', lineHeight: 1.6 }}>
-                        {fmtDateEs(fecha)}
-                      </span>
+              {/* Two-column preview */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+
+                {/* Left: constructor */}
+                <div>
+                  <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', marginBottom: 8 }}>
+                    Acta constructor
+                  </div>
+                  <div style={{ overflow: 'hidden', maxHeight: 350, border: '1px solid #E8E6E0', borderRadius: 4 }}>
+                    <div style={{ width: 580, transform: 'scale(0.67)', transformOrigin: 'top left' }}>
+                      {renderPreviewDoc(instruccionesConstructor || instrucciones)}
                     </div>
                   </div>
-                  <div style={{ height: 2, background: '#D85A30' }} />
-                </div>
-
-                {/* Project info */}
-                <div style={{ background: '#F8F7F4', padding: '16px 32px' }}>
-                  <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#D85A30', marginBottom: 6 }}>
-                    Proyecto
+                  {/* Constructor recipients */}
+                  <div style={{ marginTop: 12 }}>
+                    <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', marginBottom: 6 }}>
+                      Destinatarios
+                    </div>
+                    {constructorRecipients.length === 0 ? (
+                      <p style={{ fontSize: 11, color: '#C9A227', margin: 0, fontStyle: 'italic' }}>Sin email — añadir en proveedores</p>
+                    ) : (
+                      constructorRecipients.map(r => (
+                        <label key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: '#F8F7F4', borderRadius: 5, marginBottom: 3, cursor: r.email ? 'pointer' : 'default', opacity: r.email ? 1 : 0.6 }}>
+                          <input
+                            type="checkbox"
+                            checked={r.preChecked}
+                            disabled={!r.email}
+                            onChange={e => setConstructorRecipients(prev => prev.map(x => x.id === r.id ? { ...x, preChecked: e.target.checked } : x))}
+                            style={{ width: 13, height: 13, accentColor: '#1D9E75', flexShrink: 0 }}
+                          />
+                          <span style={{ flex: 1, fontSize: 11, color: '#1A1A1A' }}>{r.nombre}</span>
+                          {r.email
+                            ? <span style={{ fontSize: 10, color: '#888', fontFamily: 'monospace' }}>{r.email}</span>
+                            : <span style={{ fontSize: 10, color: '#C9A227', fontStyle: 'italic' }}>Sin email — añadir en proveedores</span>
+                          }
+                        </label>
+                      ))
+                    )}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 4 }}>
-                    <span style={{ fontSize: 14, fontWeight: 700, color: '#1A1A1A' }}>{proyecto.nombre}</span>
-                    {proyecto.codigo && <span style={{ fontSize: 11, color: '#888', fontFamily: 'monospace' }}>{proyecto.codigo}</span>}
+                </div>
+
+                {/* Right: cliente */}
+                <div>
+                  <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', marginBottom: 8 }}>
+                    Acta cliente
                   </div>
-                  {proyecto.direccion && (
-                    <div style={{ fontSize: 11, color: '#7A7A7A' }}>{proyecto.direccion}</div>
-                  )}
-                </div>
-
-                {/* Body */}
-                <div style={{ padding: '20px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-                  {/* Asistentes */}
-                  {asistentesSeleccionados.length > 0 && (
-                    <div>
-                      <div style={{ height: 1, background: '#E6E4DF', marginBottom: 14 }} />
-                      <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#D85A30', marginBottom: 10 }}>
-                        Asistentes
-                      </div>
-                      {(['equipo', 'cliente', 'proveedor', 'externo'] as TipoAsistente[]).map(tipo => {
-                        const lista = asistentesSeleccionados.filter(a => a.tipo === tipo)
-                        if (!lista.length) return null
-                        const labels: Record<TipoAsistente, string> = { equipo: 'Equipo', cliente: 'Clientes', proveedor: 'Proveedores', externo: 'Externos' }
-                        return (
-                          <div key={tipo} style={{ marginBottom: 8 }}>
-                            <div style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#AAAAAA', marginBottom: 3 }}>
-                              {labels[tipo]}
-                            </div>
-                            <div style={{ fontSize: 11, color: '#3A3A3A' }}>
-                              {lista.map(a => a.nombre).join('  ·  ')}
-                            </div>
-                          </div>
-                        )
-                      })}
+                  <div style={{ overflow: 'hidden', maxHeight: 350, border: '1px solid #E8E6E0', borderRadius: 4 }}>
+                    <div style={{ width: 580, transform: 'scale(0.67)', transformOrigin: 'top left' }}>
+                      {renderPreviewDoc(instrucciones)}
                     </div>
-                  )}
-
-                  {/* Estado de obras */}
-                  {estadoObras && (
-                    <div>
-                      <div style={{ height: 1, background: '#E6E4DF', marginBottom: 14 }} />
-                      <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#D85A30', marginBottom: 8 }}>
-                        Estado de obras
-                      </div>
-                      <p style={{ fontSize: 11, color: '#3A3A3A', lineHeight: 1.7, margin: 0, whiteSpace: 'pre-wrap' }}>{estadoObras}</p>
+                  </div>
+                  {/* Cliente recipients */}
+                  <div style={{ marginTop: 12 }}>
+                    <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', marginBottom: 6 }}>
+                      Destinatarios
                     </div>
-                  )}
-
-                  {/* Instrucciones */}
-                  {instrucciones.trim().length > 0 && (
-                    <div>
-                      <div style={{ height: 1, background: '#E6E4DF', marginBottom: 14 }} />
-                      <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#D85A30', marginBottom: 8 }}>
-                        Instrucciones
-                      </div>
-                      <p style={{ fontSize: 11, color: '#3A3A3A', lineHeight: 1.7, margin: 0, whiteSpace: 'pre-wrap' }}>{instrucciones}</p>
-                    </div>
-                  )}
-
-                  {/* Floorfy */}
-                  {floorfyUrl.trim() && (
-                    <div>
-                      <div style={{ height: 1, background: '#E6E4DF', marginBottom: 14 }} />
-                      <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#D85A30', marginBottom: 8 }}>
-                        Recorrido virtual actualizado de visita de obra
-                      </div>
-                      <p style={{ fontSize: 11, color: '#D85A30', margin: 0, wordBreak: 'break-all' }}>{floorfyUrl.trim()}</p>
-                    </div>
-                  )}
-
-                </div>
-
-                {/* Footer */}
-                <div style={{ padding: '10px 32px', borderTop: '2px solid #D85A30', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 9, color: '#AAAAAA' }}>Forma Prima Arquitectura</span>
-                  <span style={{ fontSize: 9, color: '#AAAAAA' }}>formaprima.es</span>
+                    {clienteRecipients.length === 0 ? (
+                      <p style={{ fontSize: 11, color: '#888', margin: 0 }}>Sin destinatarios de cliente.</p>
+                    ) : (
+                      clienteRecipients.map(r => (
+                        <label key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: '#F8F7F4', borderRadius: 5, marginBottom: 3, cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={r.preChecked}
+                            onChange={e => setClienteRecipients(prev => prev.map(x => x.id === r.id ? { ...x, preChecked: e.target.checked } : x))}
+                            style={{ width: 13, height: 13, accentColor: '#D85A30', flexShrink: 0 }}
+                          />
+                          <span style={{ flex: 1, fontSize: 11, color: '#1A1A1A' }}>{r.nombre}</span>
+                          <span style={{ fontSize: 10, color: '#888', fontFamily: 'monospace' }}>{r.email}</span>
+                        </label>
+                      ))
+                    )}
+                    <p style={{ fontSize: 10, color: '#AAA', margin: '6px 0 0', fontStyle: 'italic' }}>
+                      Partners (José y Gabriela) siempre en copia automática.
+                    </p>
+                  </div>
                 </div>
 
               </div>
 
-              {/* Sharing options */}
-              <div style={{ marginTop: 16, padding: '14px 16px', background: '#F8F7F4', borderRadius: 8, border: '1px solid #E8E6E0', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {/* Portal sharing toggle */}
+              <div style={{ padding: '12px 14px', background: '#F8F7F4', borderRadius: 8, border: '1px solid #E8E6E0' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12, color: '#1A1A1A' }}>
                   <input
                     type="checkbox"
@@ -818,153 +891,17 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
                     onChange={e => setCompartirCliente(e.target.checked)}
                     style={{ width: 14, height: 14, accentColor: '#1D9E75', flexShrink: 0 }}
                   />
-                  <span>Compartir con el cliente <span style={{ color: '#888' }}>(visible en el portal)</span></span>
+                  <span>Visible en el portal del cliente</span>
                 </label>
-                {proyectoConstructor && (
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12, color: '#1A1A1A' }}>
-                    <input
-                      type="checkbox"
-                      checked={compartirConstructor}
-                      onChange={e => setCompartirConstructor(e.target.checked)}
-                      style={{ width: 14, height: 14, accentColor: '#1D9E75', flexShrink: 0 }}
-                    />
-                    <span>Compartir con el constructor <span style={{ color: '#888' }}>({proyectoConstructor.nombre})</span></span>
-                  </label>
-                )}
               </div>
 
               {/* Error message */}
               {error && (
-                <div style={{ marginTop: 12, padding: '10px 14px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 6, fontSize: 12, color: '#DC2626' }}>
+                <div style={{ padding: '10px 14px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 6, fontSize: 12, color: '#DC2626' }}>
                   {error}
                 </div>
               )}
 
-            </div>
-
-            {/* Footer */}
-            <div style={{ padding: '16px 28px', borderTop: '1px solid #E8E6E0', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-              <button onClick={onClose} style={S.btnGhost}>Cancelar</button>
-              <button
-                onClick={() => {
-                  setEmailRecipients(buildRecipients().map(r => ({ ...r })))
-                  setStep('emails')
-                }}
-                style={S.btnDark}
-              >
-                Verificar destinatarios →
-              </button>
-            </div>
-          </>
-        )}
-
-        {/* ── EMAILS STEP ───────────────────────────────────────────────── */}
-        {step === 'emails' && (
-          <>
-            {/* Header */}
-            <div style={{ padding: '20px 28px 16px', borderBottom: '1px solid #E8E6E0', display: 'flex', alignItems: 'center', gap: 12 }}>
-              <button
-                onClick={() => setStep('preview')}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#888', padding: 0, display: 'flex', alignItems: 'center', gap: 4 }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#1A1A1A' }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#888' }}
-              >
-                ← Previsualización
-              </button>
-              <span style={{ fontSize: 10, color: '#CCC' }}>|</span>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#1A1A1A' }}>Destinatarios del acta</span>
-            </div>
-
-            {/* Recipients list */}
-            <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {emailRecipients.length === 0 ? (
-                <p style={{ fontSize: 12, color: '#888', margin: 0 }}>
-                  No hay destinatarios con correo electrónico disponible. Se generará el acta sin enviar emails.
-                </p>
-              ) : (
-                <>
-                  <p style={{ fontSize: 11, color: '#888', margin: '0 0 4px' }}>
-                    El acta en PDF se enviará a los correos seleccionados.
-                  </p>
-                  <p style={{ fontSize: 11, color: '#AAA', margin: '0 0 8px', fontStyle: 'italic' }}>
-                    José y Gabriela (partners) siempre en copia automática.
-                  </p>
-
-                  {/* Clientes del proyecto */}
-                  {emailRecipients.filter(r => r.grupo === 'cliente_proyecto').length > 0 && (
-                    <div style={{ marginBottom: 4 }}>
-                      <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', marginBottom: 6 }}>
-                        Cliente del proyecto
-                      </div>
-                      {emailRecipients.filter(r => r.grupo === 'cliente_proyecto').map(r => (
-                        <label key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#F8F7F4', borderRadius: 6, marginBottom: 4, cursor: 'pointer' }}>
-                          <input
-                            type="checkbox"
-                            checked={r.preChecked}
-                            onChange={e => setEmailRecipients(prev => prev.map(x => x.id === r.id ? { ...x, preChecked: e.target.checked } : x))}
-                            style={{ width: 14, height: 14, accentColor: '#D85A30', flexShrink: 0 }}
-                          />
-                          <span style={{ flex: 1, fontSize: 12, color: '#1A1A1A' }}>{r.nombre}</span>
-                          <span style={{ fontSize: 11, color: '#888', fontFamily: 'monospace' }}>{r.email}</span>
-                        </label>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Constructor */}
-                  {emailRecipients.filter(r => r.grupo === 'constructor').length > 0 && (
-                    <div style={{ marginBottom: 4 }}>
-                      <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', marginBottom: 6 }}>
-                        Constructor
-                      </div>
-                      {emailRecipients.filter(r => r.grupo === 'constructor').map(r => (
-                        <label key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#F8F7F4', borderRadius: 6, marginBottom: 4, cursor: r.email ? 'pointer' : 'default', opacity: r.email ? 1 : 0.6 }}>
-                          <input
-                            type="checkbox"
-                            checked={r.preChecked}
-                            disabled={!r.email}
-                            onChange={e => setEmailRecipients(prev => prev.map(x => x.id === r.id ? { ...x, preChecked: e.target.checked } : x))}
-                            style={{ width: 14, height: 14, accentColor: '#1D9E75', flexShrink: 0 }}
-                          />
-                          <span style={{ flex: 1, fontSize: 12, color: '#1A1A1A' }}>{r.nombre}</span>
-                          {r.email
-                            ? <span style={{ fontSize: 11, color: '#888', fontFamily: 'monospace' }}>{r.email}</span>
-                            : <span style={{ fontSize: 10, color: '#C9A227', fontStyle: 'italic' }}>Sin email — añadir en proveedores</span>
-                          }
-                        </label>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Asistentes */}
-                  {emailRecipients.filter(r => r.grupo === 'asistente').length > 0 && (
-                    <div>
-                      <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', marginBottom: 6 }}>
-                        Asistentes
-                      </div>
-                      {emailRecipients.filter(r => r.grupo === 'asistente').map(r => (
-                        <label key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#F8F7F4', borderRadius: 6, marginBottom: 4, cursor: 'pointer' }}>
-                          <input
-                            type="checkbox"
-                            checked={r.preChecked}
-                            onChange={e => setEmailRecipients(prev => prev.map(x => x.id === r.id ? { ...x, preChecked: e.target.checked } : x))}
-                            style={{ width: 14, height: 14, accentColor: '#378ADD', flexShrink: 0 }}
-                          />
-                          <span style={{ flex: 1, fontSize: 12, color: '#1A1A1A' }}>{r.nombre}</span>
-                          <span style={{ fontSize: 11, color: '#888', fontFamily: 'monospace' }}>{r.email}</span>
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* Error message */}
-              {error && (
-                <div style={{ marginTop: 8, padding: '10px 14px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 6, fontSize: 12, color: '#DC2626' }}>
-                  {error}
-                </div>
-              )}
             </div>
 
             {/* Footer */}
@@ -975,11 +912,13 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
                 disabled={saving}
                 style={{ ...S.btnDark, opacity: saving ? 0.6 : 1 }}
               >
-                {saving ? 'Generando acta…' : emailRecipients.some(r => r.preChecked) ? 'Generar acta y enviar' : 'Generar acta'}
+                {saving ? 'Generando actas…' : 'Generar actas y enviar'}
               </button>
             </div>
           </>
-        )}
+          )
+        })()}
+
       </div>
     </div>
     </>
