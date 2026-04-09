@@ -22,6 +22,9 @@ export interface BankStatement {
   id: string
   year: number
   month: number
+  month_to: number | null
+  date_from: string | null
+  date_to: string | null
   filename: string | null
   row_count: number | null
   user_id: string | null
@@ -60,11 +63,18 @@ export async function getBankStatements(
   try {
     await requirePartner()
     const admin = createAdminClient()
+
+    // Find statements whose date range overlaps the browsed month:
+    // statement.date_from <= last_day_of(month) AND statement.date_to >= first_day_of(month)
+    const firstDay = `${year}-${String(month).padStart(2, '0')}-01`
+    const lastDay  = new Date(year, month, 0).getDate()
+    const lastDayStr = `${year}-${String(month).padStart(2, '0')}-${lastDay}`
+
     const { data, error } = await admin
       .from('bank_statements')
       .select('*')
-      .eq('year', year)
-      .eq('month', month)
+      .lte('date_from', lastDayStr)   // statement starts on or before end of month
+      .gte('date_to',   firstDay)     // statement ends on or after start of month
       .order('created_at', { ascending: false })
 
     if (error) return { error: error.message }

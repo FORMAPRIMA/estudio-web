@@ -160,17 +160,17 @@ export default function ReconciliationPage({
     try {
       const fd = new FormData()
       fd.append('file', uploadFile)
-      fd.append('year', String(year))
-      fd.append('month', String(month))
       const res = await fetch('/api/bank-statement', { method: 'POST', body: fd })
       const json = await res.json()
       if (!res.ok || json.error) {
         setUploadError(json.error ?? 'Error al procesar el extracto.')
       } else {
         setUploadResult({ total: json.total, matched: json.matched, unmatched: json.unmatched })
-        // Reload to show new data
+        // Navigate to the first month of the detected period
+        const destYear  = json.year  ?? year
+        const destMonth = json.month ?? month
         setTimeout(() => {
-          window.location.href = `/team/finanzas/conciliacion?year=${year}&month=${month}`
+          window.location.href = `/team/finanzas/conciliacion?year=${destYear}&month=${destMonth}`
         }, 1500)
       }
     } catch (e) {
@@ -348,7 +348,10 @@ export default function ReconciliationPage({
                 {activeStatement.filename ?? 'Extracto bancario'}
               </p>
               <p style={{ fontSize: 10, color: '#888', margin: 0 }}>
-                Subido el {new Date(activeStatement.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
+                {activeStatement.date_from && activeStatement.date_to
+                  ? `${new Date(activeStatement.date_from + 'T12:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })} – ${new Date(activeStatement.date_to + 'T12:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}`
+                  : `${MESES_ES[activeStatement.month - 1]} ${activeStatement.year}`
+                }
                 {' · '}{activeStatement.row_count ?? 0} filas
               </p>
             </div>
@@ -540,12 +543,12 @@ export default function ReconciliationPage({
               style={{ display: 'none' }}
             />
 
-            {/* Month display */}
-            <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
-              <div style={{ flex: 1, padding: '10px 12px', background: '#F8F7F4', border: '1px solid #E8E6E0', borderRadius: 6 }}>
-                <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', margin: '0 0 2px' }}>Mes</p>
-                <p style={{ fontSize: 13, fontWeight: 600, color: '#1A1A1A', margin: 0 }}>{MESES_ES[month - 1]} {year}</p>
-              </div>
+            {/* Info */}
+            <div style={{ padding: '10px 12px', background: '#F8F7F4', border: '1px solid #E8E6E0', borderRadius: 6, marginBottom: 16 }}>
+              <p style={{ fontSize: 11, color: '#888', margin: 0 }}>
+                El período se detecta automáticamente de las fechas del extracto.
+                Puedes subir extractos mensuales, trimestrales o anuales.
+              </p>
             </div>
 
             {/* Error */}

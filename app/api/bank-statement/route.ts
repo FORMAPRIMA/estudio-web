@@ -79,12 +79,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'FormData inválido' }, { status: 400 })
   }
 
-  const file  = formData.get('file') as File | null
-  const year  = parseInt(formData.get('year')  as string ?? '', 10)
-  const month = parseInt(formData.get('month') as string ?? '', 10)
-
+  const file = formData.get('file') as File | null
   if (!file || file.size === 0) return NextResponse.json({ error: 'No se recibió ningún archivo.' }, { status: 400 })
-  if (isNaN(year) || isNaN(month)) return NextResponse.json({ error: 'Año/mes inválido.' }, { status: 400 })
 
   // ── Parse Excel ─────────────────────────────────────────────────────────────
   const buffer = Buffer.from(await file.arrayBuffer())
@@ -205,6 +201,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No se encontraron filas válidas en el extracto.' }, { status: 422 })
   }
 
+  // ── Auto-detect date range from transactions ──────────────────────────────────
+  const sortedFechas = parsedRows.map(r => r.fecha).sort()
+  const dateFrom = sortedFechas[0]
+  const dateTo   = sortedFechas[sortedFechas.length - 1]
+  // year/month derived from the earliest transaction in the file
+  const year     = parseInt(dateFrom.split('-')[0])
+  const month    = parseInt(dateFrom.split('-')[1])
+  const monthTo  = parseInt(dateTo.split('-')[1])
+  // year_to handles cross-year statements (Dec→Jan)
+  const yearTo   = parseInt(dateTo.split('-')[0])
+
   // ── Store in Supabase ─────────────────────────────────────────────────────────
   const admin = createAdminClient()
 
@@ -213,6 +220,9 @@ export async function POST(req: NextRequest) {
     .insert({
       year,
       month,
+      month_to:  monthTo,
+      date_from: dateFrom,
+      date_to:   dateTo,
       filename:  file.name,
       row_count: parsedRows.length,
       user_id:   user.id,
@@ -249,19 +259,19 @@ export async function POST(req: NextRequest) {
   }
 
   // ── AI-assisted auto-match ────────────────────────────────────────────────────
-  // Fetch unlinked EUR scans in a wide window (month ±2) with hora_ticket
-  const twoMonthsBefore = month <= 2
-    ? `${year - 1}-${String(12 - (2 - month)).padStart(2, '0')}-01`
-    : `${year}-${String(month - 2).padStart(2, '0')}-01`
-  const twoMonthsAfter = month >= 11
-    ? `${year + 1}-${String((month + 2) - 12).padStart(2, '0')}-28`
-    : `${year}-${String(month + 2).padStart(2, '0')}-28`
+  // Use the actual date range from the transactions (±14 days buffer for settlement)
+  const scanFrom = new Date(dateFrom)
+  const scanTo   = new Date(dateTo)
+  scanFrom.setDate(scanFrom.getDate() - 14)
+  scanTo.setDate(scanTo.getDate() + 14)
+  const scanFromStr = scanFrom.toISOString().split('T')[0]
+  const scanToStr   = scanTo.toISOString().split('T')[0]
 
   const { data: scans } = await admin
     .from('expense_scans')
     .select('id, monto, moneda, fecha_ticket, hora_ticket, proveedor, descripcion')
-    .gte('fecha_ticket', twoMonthsBefore)
-    .lte('fecha_ticket', twoMonthsAfter)
+    .gte('fecha_ticket', scanFromStr)
+    .lte('fecha_ticket', scanToStr)
     .not('monto', 'is', null)
     .not('fecha_ticket', 'is', null)
     .eq('moneda', 'EUR')
@@ -336,5 +346,16 @@ export async function POST(req: NextRequest) {
   const total     = parsedRows.length
   const unmatched = total - matched
 
-  return NextResponse.json({ statement_id: statementId, total, matched, unmatched })
+  return NextResponse.json({
+    statement_id: statementId,
+    total,
+    matched,
+    unmatched,
+    year,
+    month,
+    month_to: monthTo,
+    year_to:  yearTo,
+    date_from: dateFrom,
+    date_to:   dateTo,
+  })
 }

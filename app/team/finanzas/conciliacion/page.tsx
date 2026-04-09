@@ -24,16 +24,16 @@ export default async function Page({
   const year  = searchParams.year  ? parseInt(searchParams.year,  10) : now.getFullYear()
   const month = searchParams.month ? parseInt(searchParams.month, 10) : now.getMonth() + 1
 
-  const fromDate = `${year}-${String(month).padStart(2, '0')}-01`
-  const lastDay  = new Date(year, month, 0).getDate()
-  const toDate   = `${year}-${String(month).padStart(2, '0')}-${lastDay}`
+  const fromDate   = `${year}-${String(month).padStart(2, '0')}-01`
+  const lastDay    = new Date(year, month, 0).getDate()
+  const toDate     = `${year}-${String(month).padStart(2, '0')}-${lastDay}`
 
-  // Fetch bank statements for this month
+  // Fetch statements whose date range overlaps the browsed month
   const { data: statements } = await admin
     .from('bank_statements')
     .select('*')
-    .eq('year', year)
-    .eq('month', month)
+    .lte('date_from', toDate)
+    .gte('date_to',   fromDate)
     .order('created_at', { ascending: false })
 
   const latestStatement = (statements ?? [])[0] ?? null
@@ -59,8 +59,19 @@ export default async function Page({
     transactions = txData ?? []
   }
 
-  // Fetch unlinked scans for the month
-  // (expense_scans that are NOT referenced in any bank_transaction for this period)
+  // Fetch unlinked scans for the statement's full date range (not just the browsed month)
+  // Use date_from/date_to from the statement if available; fall back to browsed month
+  const scanRangeFrom = latestStatement?.date_from ?? fromDate
+  const scanRangeTo   = latestStatement?.date_to   ?? toDate
+
+  // Add ±14 days buffer for card settlement lag
+  const scanFrom = new Date(scanRangeFrom)
+  const scanTo   = new Date(scanRangeTo)
+  scanFrom.setDate(scanFrom.getDate() - 14)
+  scanTo.setDate(scanTo.getDate() + 14)
+  const scanFromStr = scanFrom.toISOString().split('T')[0]
+  const scanToStr   = scanTo.toISOString().split('T')[0]
+
   const { data: linkedScanRows } = await admin
     .from('bank_transactions')
     .select('expense_scan_id')
@@ -70,14 +81,12 @@ export default async function Page({
     .map(r => r.expense_scan_id as string)
     .filter(Boolean)
 
-  const scansQuery = admin
+  const { data: allScans } = await admin
     .from('expense_scans')
     .select('*, autor:profiles!user_id(nombre)')
-    .gte('created_at', fromDate + 'T00:00:00')
-    .lte('created_at', toDate   + 'T23:59:59')
+    .gte('fecha_ticket', scanFromStr)
+    .lte('fecha_ticket', scanToStr)
     .order('fecha_ticket', { ascending: true })
-
-  const { data: allScans } = await scansQuery
 
   const unlinkedScans = (allScans ?? []).filter(
     s => !linkedScanIds.includes(s.id)
