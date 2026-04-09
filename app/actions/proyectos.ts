@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 
 interface FaseInput {
@@ -310,8 +311,9 @@ export async function iniciarFase(pfId: string, proyectoId: string, faseId: stri
 
   if (!proyecto || !catalogoFase || !pf) return { error: 'Datos no encontrados.' }
 
-  // Mark fase as iniciada
-  const { error: e1 } = await supabase
+  // Mark fase as iniciada — use admin client to bypass RLS for fp_team users
+  const admin = createAdminClient()
+  const { error: e1 } = await admin
     .from('proyecto_fases')
     .update({ fase_status: 'iniciada' })
     .eq('id', pfId)

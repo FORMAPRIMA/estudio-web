@@ -56,13 +56,13 @@ export default async function ProyectoDetallePage({
     .select('id, numero, label, seccion, orden, ratio')
     .order('orden')
 
-  const { data: teamMembers } = await supabase
+  const admin = createAdminClient()
+
+  const { data: teamMembers } = await admin
     .from('profiles')
     .select('id, nombre, rol, email, avatar_url')
     .neq('rol', 'cliente')
     .order('nombre')
-
-  const admin = createAdminClient()
   const [{ data: clientes }, { data: titularesRaw }, { data: proveedoresRaw }] = await Promise.all([
     admin
       .from('clientes')

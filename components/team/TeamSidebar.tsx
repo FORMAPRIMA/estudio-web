@@ -15,6 +15,7 @@ interface NavItem {
   isSection?: boolean
   isGroup?: boolean
   pinBottom?: boolean
+  small?: boolean
 }
 
 interface NavSectionNode {
@@ -442,6 +443,23 @@ export default function TeamSidebar({ nombre, rol, navItems }: TeamSidebarProps)
           <div className="px-3 pb-2 border-t border-white/10 pt-3 space-y-0.5">
             {pinnedItems.map(item => {
               const active = pathname === item.href || pathname.startsWith(item.href + '/')
+              if (item.small) {
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded text-[9px] tracking-widest uppercase font-light transition-all duration-200 ${
+                      active ? 'text-white/70 bg-white/5' : 'text-white/25 hover:text-white/55 hover:bg-white/5'
+                    }`}
+                  >
+                    <span
+                      className="w-[2px] h-2.5 rounded-full shrink-0 transition-all duration-200"
+                      style={{ background: active ? roleColor : 'transparent' }}
+                    />
+                    {item.label}
+                  </Link>
+                )
+              }
               return (
                 <Link
                   key={item.href}

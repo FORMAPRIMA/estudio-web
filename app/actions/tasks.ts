@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import type { TaskStatus } from '@/lib/types'
 
@@ -21,7 +22,8 @@ export async function updateTaskResponsables(taskId: string, responsableIds: str
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Sin sesión activa.' }
 
-  const { error } = await supabase.from('tasks').update({ responsable_ids: responsableIds }).eq('id', taskId)
+  const admin = createAdminClient()
+  const { error } = await admin.from('tasks').update({ responsable_ids: responsableIds }).eq('id', taskId)
   if (error) return { error: error.message }
 
   if (proyectoId) revalidatePath(`/team/proyectos/${proyectoId}`)

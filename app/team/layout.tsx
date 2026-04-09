@@ -13,6 +13,7 @@ interface NavItem {
   isSection?: boolean
   isGroup?: boolean
   pinBottom?: boolean
+  small?: boolean
 }
 
 const ALL_NAV: (NavItem & { roles: FpRole[] })[] = [
@@ -25,6 +26,13 @@ const ALL_NAV: (NavItem & { roles: FpRole[] })[] = [
     href: '/team/time-tracker',
     label: 'Time Tracker',
     roles: ['fp_team', 'fp_manager', 'fp_partner'],
+  },
+  {
+    href: '/team/mejoras',
+    label: 'Mejoras & Bugs',
+    roles: ['fp_team', 'fp_manager', 'fp_partner'],
+    pinBottom: true,
+    small: true,
   },
   {
     href: '/team/area-interna',
@@ -146,7 +154,7 @@ export default async function TeamLayout({
 
   const rol = profile.rol as FpRole
   const navItems = ALL_NAV.filter((item) => item.roles.includes(rol)).map(
-    ({ href, label, isSubItem, isSection, isGroup, pinBottom }) => ({ href, label, isSubItem, isSection, isGroup, pinBottom })
+    ({ href, label, isSubItem, isSection, isGroup, pinBottom, small }) => ({ href, label, isSubItem, isSection, isGroup, pinBottom, small })
   )
 
   return (
