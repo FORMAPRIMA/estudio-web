@@ -51,34 +51,36 @@ export async function POST(req: NextRequest) {
   if (!sheetName) return NextResponse.json({ error: 'El archivo no contiene hojas.' }, { status: 422 })
 
   const sheet = workbook.Sheets[sheetName]
-  const rawRows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: null })
+  // Use header:'A' so each row is keyed by column letter (A, B, C, D...)
+  // This avoids ambiguity with unnamed headers or numeric header values
+  const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { header: 'A', defval: null })
+  const dataRows = rawRows.filter(r => Object.values(r).some(v => v != null))
 
-  if (rawRows.length < 2) return NextResponse.json({ error: 'El archivo no contiene datos suficientes.' }, { status: 422 })
+  if (dataRows.length < 2) return NextResponse.json({ error: 'El archivo no contiene datos suficientes.' }, { status: 422 })
 
-  const headers = rawRows[0] as (string | null)[]
-  const dataRows = rawRows.slice(1).filter(r => (r as unknown[]).some(c => c != null))
+  // ── Ask Claude to detect columns by letter ───────────────────────────────────
+  // Send first 4 rows (may include a header row); Claude identifies column letters
+  const sample = dataRows.slice(0, 4)
+  const prompt = `Tienes filas de un extracto bancario exportado desde Excel. Las claves son las letras de columna (A, B, C, D…).
 
-  if (headers.length === 0) return NextResponse.json({ error: 'Sin cabeceras detectadas.' }, { status: 422 })
+Primeras filas (pueden incluir una fila de cabecera):
+${JSON.stringify(sample, null, 2)}
 
-  // ── Ask Claude to detect columns ─────────────────────────────────────────────
-  const sampleRows = dataRows.slice(0, 3)
-  const prompt = `Tienes los headers y primeras filas de un extracto bancario en Excel.
-Headers: ${JSON.stringify(headers)}
-Primeras filas de datos: ${JSON.stringify(sampleRows)}
+Identifica qué LETRA DE COLUMNA corresponde a cada campo:
+- col_fecha: fecha de la operación/transacción
+- col_concepto: descripción o concepto del movimiento bancario
+- col_importe: importe numérico del movimiento (suele ser negativo para gastos)
 
-Identifica cuál columna corresponde a:
-- col_fecha: fecha de la transacción
-- col_concepto: descripción o concepto
-- col_importe: importe o cantidad (puede ser negativo para gastos)
+IMPORTANTE: las fechas pueden aparecer como números seriales de Excel (ej. 45370), como cadenas "15/03/2025" o como objetos Date. El importe es siempre un número relativamente pequeño (centenas o miles), nunca un número de 5+ dígitos como los seriales de fecha.
 
-Responde ÚNICAMENTE con JSON exacto, sin markdown ni explicaciones:
-{"col_fecha": "NombreColumna", "col_concepto": "NombreColumna", "col_importe": "NombreColumna"}`
+Responde ÚNICAMENTE con JSON exacto, sin markdown:
+{"col_fecha": "A", "col_concepto": "C", "col_importe": "D"}`
 
   let colMap: { col_fecha: string; col_concepto: string; col_importe: string }
   try {
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 256,
+      max_tokens: 128,
       messages: [{ role: 'user', content: prompt }],
     })
     const raw = msg.content[0].type === 'text' ? msg.content[0].text.trim() : '{}'
@@ -88,13 +90,19 @@ Responde ÚNICAMENTE con JSON exacto, sin markdown ni explicaciones:
     return NextResponse.json({ error: 'No se pudo detectar las columnas del extracto.' }, { status: 422 })
   }
 
-  const idxFecha    = headers.indexOf(colMap.col_fecha)
-  const idxConcepto = headers.indexOf(colMap.col_concepto)
-  const idxImporte  = headers.indexOf(colMap.col_importe)
+  const colFecha    = colMap.col_fecha?.toUpperCase()
+  const colConcepto = colMap.col_concepto?.toUpperCase()
+  const colImporte  = colMap.col_importe?.toUpperCase()
 
-  if (idxFecha < 0 || idxConcepto < 0 || idxImporte < 0) {
-    return NextResponse.json({ error: `Columnas no encontradas. Claude detectó: ${JSON.stringify(colMap)}. Headers disponibles: ${JSON.stringify(headers)}` }, { status: 422 })
+  if (!colFecha || !colConcepto || !colImporte) {
+    return NextResponse.json({ error: `Columnas no detectadas. Respuesta: ${JSON.stringify(colMap)}` }, { status: 422 })
   }
+
+  // Skip the header row if the first row contains text in the fecha column
+  // (i.e. the detected fecha column has a non-date string value in row 0)
+  const firstFechaVal = dataRows[0]?.[colFecha]
+  const firstIsHeader = typeof firstFechaVal === 'string' && isNaN(Date.parse(firstFechaVal)) && !/^\d+$/.test(String(firstFechaVal))
+  const rowsToProcess = firstIsHeader ? dataRows.slice(1) : dataRows
 
   // ── Parse rows ───────────────────────────────────────────────────────────────
 
@@ -107,11 +115,11 @@ Responde ÚNICAMENTE con JSON exacto, sin markdown ni explicaciones:
 
   const parsedRows: ParsedRow[] = []
 
-  for (let i = 0; i < dataRows.length; i++) {
-    const row = dataRows[i] as (unknown)[]
-    const rawFecha    = row[idxFecha]
-    const rawConcepto = row[idxConcepto]
-    const rawImporte  = row[idxImporte]
+  for (let i = 0; i < rowsToProcess.length; i++) {
+    const row = rowsToProcess[i]
+    const rawFecha    = row[colFecha]
+    const rawConcepto = row[colConcepto]
+    const rawImporte  = row[colImporte]
 
     if (rawFecha == null || rawConcepto == null || rawImporte == null) continue
 
