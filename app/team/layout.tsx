@@ -55,6 +55,7 @@ const ALL_NAV: (NavItem & { roles: FpRole[] })[] = [
   { href: '/team/captacion/propuestas', label: 'Propuestas', roles: ['fp_partner', 'fp_manager'], isSubItem: true },
   { href: '/team/captacion/contratos', label: 'Contratos', roles: ['fp_partner', 'fp_manager'], isSubItem: true },
   { href: '/team/captacion/plantilla-propuestas', label: 'Plantilla prop', roles: ['fp_partner', 'fp_manager'], isSubItem: true },
+  { href: '/team/captacion/due-diligencia', label: 'Due Diligence Tec.', roles: ['fp_partner', 'fp_manager'], isSubItem: true },
   // ──────────────────────────────────────────────────────────────────────────
   {
     href: '/team/proyectos',
