@@ -8,6 +8,7 @@ interface FormState {
   nombre_proyecto:        string
   superficie:             string
   tarifa_m2:              string
+  fee_base:               string
   fecha:                  string
   ciudad:                 string
   cuestiones_especificas: string
@@ -105,6 +106,7 @@ export default function DueDiligenciaPage() {
     nombre_proyecto:        'Sierra Bullones',
     superficie:             '531',
     tarifa_m2:              '8',
+    fee_base:               '1500',
     fecha:                  today,
     ciudad:                 'Madrid, España',
     cuestiones_especificas: '',
@@ -116,10 +118,12 @@ export default function DueDiligenciaPage() {
   const [sendMsg, setSendMsg]   = useState<{ ok: boolean; text: string } | null>(null)
   const [previewing, setPreviewing] = useState(false)
 
-  const sup  = parseFloat(form.superficie)  || 0
-  const tar  = parseFloat(form.tarifa_m2)   || 0
-  const honorarios = sup * tar
-  const hito = honorarios / 2
+  const sup              = parseFloat(form.superficie) || 0
+  const tar              = parseFloat(form.tarifa_m2)  || 0
+  const feeBase          = parseFloat(form.fee_base)   || 0
+  const honorariosVar    = sup * tar
+  const honorarios       = honorariosVar + feeBase
+  const hito             = honorarios / 2
 
   const set = (key: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm(prev => ({ ...prev, [key]: e.target.value }))
@@ -128,6 +132,7 @@ export default function DueDiligenciaPage() {
     nombre_proyecto:        form.nombre_proyecto.trim() || 'Sin nombre',
     superficie:             sup,
     tarifa_m2:              tar,
+    fee_base:               feeBase,
     fecha:                  form.fecha || today,
     ciudad:                 form.ciudad.trim() || 'Madrid',
     cuestiones_especificas: form.cuestiones_especificas.trim() || null,
@@ -226,8 +231,15 @@ export default function DueDiligenciaPage() {
             </div>
 
             <div>
-              <label style={label}>Tarifa (€/m²)</label>
+              <label style={label}>Tarifa variable (€/m²)</label>
               <input style={input} type="number" min="1" step="0.5" value={form.tarifa_m2} onChange={set('tarifa_m2')} placeholder="8" />
+            </div>
+
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={label}>
+                Fee base — Movilización, Coordinación Técnica y Estructuración de Informe (€)
+              </label>
+              <input style={input} type="number" min="0" step="100" value={form.fee_base} onChange={set('fee_base')} placeholder="1500" />
             </div>
 
             <div style={{ gridColumn: '1 / -1' }}>
@@ -248,21 +260,23 @@ export default function DueDiligenciaPage() {
           <p style={sectionTitle}>Resumen de honorarios</p>
           <div style={{ display: 'flex', gap: 0 }}>
             <div style={{ flex: 1 }}>
-              <p style={{ fontSize: 10, color: '#AAA', margin: '0 0 3px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Superficie</p>
-              <p style={{ fontSize: 18, fontWeight: 600, color: '#1A1A1A', margin: 0 }}>{sup > 0 ? `${sup} m²` : '—'}</p>
+              <p style={{ fontSize: 10, color: '#AAA', margin: '0 0 3px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Fee variable</p>
+              <p style={{ fontSize: 16, fontWeight: 600, color: '#1A1A1A', margin: 0 }}>{sup > 0 && tar > 0 ? fmtEur(honorariosVar) : '—'}</p>
+              <p style={{ fontSize: 10, color: '#CCC', margin: '2px 0 0' }}>{sup > 0 && tar > 0 ? `${sup} m² × ${fmtEur(tar)}` : ''}</p>
             </div>
             <div style={{ flex: 1, borderLeft: '1px solid #E8E6E0', paddingLeft: 20 }}>
-              <p style={{ fontSize: 10, color: '#AAA', margin: '0 0 3px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Tarifa</p>
-              <p style={{ fontSize: 18, fontWeight: 600, color: '#1A1A1A', margin: 0 }}>{tar > 0 ? `${fmtEur(tar)}/m²` : '—'}</p>
+              <p style={{ fontSize: 10, color: '#AAA', margin: '0 0 3px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Fee base</p>
+              <p style={{ fontSize: 16, fontWeight: 600, color: '#1A1A1A', margin: 0 }}>{feeBase > 0 ? fmtEur(feeBase) : '—'}</p>
+              <p style={{ fontSize: 10, color: '#CCC', margin: '2px 0 0' }}>Movilización + coord.</p>
             </div>
-            <div style={{ flex: 1, borderLeft: '1px solid #E8E6E0', paddingLeft: 20 }}>
+            <div style={{ flex: 1.3, borderLeft: '1px solid #E8E6E0', paddingLeft: 20 }}>
               <p style={{ fontSize: 10, color: '#AAA', margin: '0 0 3px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Total honorarios</p>
               <p style={{ fontSize: 22, fontWeight: 700, color: '#D85A30', margin: 0 }}>{honorarios > 0 ? fmtEur(honorarios) : '—'}</p>
             </div>
           </div>
           {honorarios > 0 && (
             <p style={{ fontSize: 11, color: '#AAA', marginTop: 10, marginBottom: 0 }}>
-              Pago en 2 hitos iguales: {fmtEur(hito)} a la aceptación + {fmtEur(hito)} a la entrega del informe. IVA no incluido.
+              Pago en 2 hitos: {fmtEur(hito)} a la aceptación + {fmtEur(hito)} a la entrega del informe. IVA no incluido.
             </p>
           )}
         </div>

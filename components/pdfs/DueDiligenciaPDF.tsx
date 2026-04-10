@@ -41,7 +41,7 @@ const C = {
 
 const s = StyleSheet.create({
   page: {
-    paddingTop: 48,
+    paddingTop: 0,          // header is flush to top edge on page 1
     paddingBottom: 64,
     paddingHorizontal: 0,
     fontFamily: 'Helvetica',
@@ -231,6 +231,7 @@ export interface DueDiligenciaPDFData {
   nombre_proyecto:        string
   superficie:             number
   tarifa_m2:              number
+  fee_base:               number   // fee fijo de movilización + coord técnica + estructuración
   fecha:                  string   // ISO date yyyy-mm-dd
   ciudad:                 string
   cuestiones_especificas: string | null
@@ -239,9 +240,10 @@ export interface DueDiligenciaPDFData {
 // ── PDF Component ─────────────────────────────────────────────────────────────
 
 export function DueDiligenciaPDF({ data }: { data: DueDiligenciaPDFData }) {
-  const honorarios = data.superficie * data.tarifa_m2
-  const hito1      = honorarios / 2
-  const hito2      = honorarios / 2
+  const honorariosVariable = data.superficie * data.tarifa_m2
+  const honorarios         = honorariosVariable + data.fee_base
+  const hito1              = honorarios / 2
+  const hito2              = honorarios / 2
 
   return (
     <Document
@@ -249,6 +251,14 @@ export function DueDiligenciaPDF({ data }: { data: DueDiligenciaPDFData }) {
       author="Forma Prima"
     >
       <Page size="A4" style={s.page}>
+
+        {/* Spacer: página 2+ recibe margen superior; página 1 queda en 0 */}
+        <View
+          fixed
+          render={({ pageNumber }) => (
+            <View style={{ height: pageNumber > 1 ? 40 : 0 }} />
+          )}
+        />
 
         {/* ── Header ──────────────────────────────────────────────────────── */}
         <View style={s.headerBlock}>
@@ -296,8 +306,14 @@ export function DueDiligenciaPDF({ data }: { data: DueDiligenciaPDFData }) {
               <Text style={s.summaryValue}>{data.superficie} m²</Text>
             </View>
             <View style={s.summaryItem}>
-              <Text style={s.summaryLabel}>Tarifa unitaria</Text>
+              <Text style={s.summaryLabel}>Tarifa variable</Text>
               <Text style={s.summaryValue}>{fmtEur(data.tarifa_m2)}/m²</Text>
+              <Text style={s.summarySubValue}>{fmtEur(honorariosVariable)}</Text>
+            </View>
+            <View style={s.summaryItem}>
+              <Text style={s.summaryLabel}>Fee base moviliz.</Text>
+              <Text style={s.summaryValue}>{fmtEur(data.fee_base)}</Text>
+              <Text style={s.summarySubValue}>fijo</Text>
             </View>
             <View style={s.summaryItem}>
               <Text style={s.summaryLabel}>Honorarios totales</Text>
@@ -445,8 +461,12 @@ export function DueDiligenciaPDF({ data }: { data: DueDiligenciaPDFData }) {
             <Text style={s.tableValue}>{data.superficie} m²</Text>
           </View>
           <View style={s.tableRow}>
-            <Text style={s.tableLabel}>Tarifa unitaria</Text>
-            <Text style={s.tableValue}>{fmtEur(data.tarifa_m2)}/m²</Text>
+            <Text style={s.tableLabel}>Fee variable — Inspección técnica ({fmtEur(data.tarifa_m2)}/m²)</Text>
+            <Text style={s.tableValue}>{fmtEur(honorariosVariable)}</Text>
+          </View>
+          <View style={s.tableRow}>
+            <Text style={s.tableLabel}>Fee base — Movilización, Coordinación Técnica y Estructuración de Informe</Text>
+            <Text style={s.tableValue}>{fmtEur(data.fee_base)}</Text>
           </View>
           <View style={s.totalRow}>
             <Text style={s.totalLabel}>HONORARIOS TOTALES</Text>
@@ -459,7 +479,7 @@ export function DueDiligenciaPDF({ data }: { data: DueDiligenciaPDFData }) {
           {/* 10. Ajuste de superficie */}
           <Text style={s.sectionTitle}>10. Ajuste de superficie</Text>
           <Text style={s.bodyText}>
-            {`Los honorarios anteriores han sido calculados sobre la superficie estimada de ${data.superficie} m² facilitada a la fecha de emisión de esta propuesta. En caso de que la superficie finalmente accesible e inspeccionable difiera de la inicialmente informada, FORMA PRIMA podrá ajustar proporcionalmente los honorarios conforme a la tarifa unitaria pactada de ${fmtEur(data.tarifa_m2)}/m².`}
+            {`Los honorarios anteriores han sido calculados sobre la superficie estimada de ${data.superficie} m² facilitada a la fecha de emisión de esta propuesta. En caso de que la superficie finalmente accesible e inspeccionable difiera de la inicialmente informada, FORMA PRIMA podrá ajustar proporcionalmente el fee variable de inspección conforme a la tarifa unitaria pactada de ${fmtEur(data.tarifa_m2)}/m². El fee base de movilización, coordinación técnica y estructuración de informe permanecerá fijo en ${fmtEur(data.fee_base)} con independencia de la variación de superficie.`}
           </Text>
 
           {/* 11. Condiciones de pago */}
