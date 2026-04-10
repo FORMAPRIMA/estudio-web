@@ -512,17 +512,19 @@ export async function getDocUploadToken(
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return { error: 'Sin sesión activa.' }
 
+    // Use admin client to create signed URL — bypasses storage bucket RLS
+    const admin = createAdminClient()
     const ext = fileName.split('.').pop() ?? (tipo === 'planos' ? 'pdf' : 'jpg')
     const bucket = tipo === 'planos' ? 'proyecto-planos' : 'proyecto-renders'
     const storagePath = `${proyectoId}/${Date.now()}.${ext}`
 
-    const { data, error } = await supabase.storage
+    const { data, error } = await admin.storage
       .from(bucket)
       .createSignedUploadUrl(storagePath)
 
     if (error || !data) return { error: error?.message ?? 'Error al generar token.' }
 
-    const { data: { publicUrl } } = supabase.storage
+    const { data: { publicUrl } } = admin.storage
       .from(bucket)
       .getPublicUrl(storagePath)
 
@@ -542,13 +544,15 @@ export async function addProyectoRender(
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return { error: 'Sin sesión activa.' }
 
-    const { error } = await supabase.rpc('append_proyecto_render', {
-      p_proyecto_id: proyectoId,
-      p_url:         url,
-      p_nombre:      nombre,
-    })
-    if (error) return { error: error.message }
+    const admin = createAdminClient()
+    const { data: p } = await admin.from('proyectos').select('renders').eq('id', proyectoId).single()
+    const current: { url: string; nombre: string }[] = Array.isArray(p?.renders) ? p.renders : []
+    const { error } = await admin
+      .from('proyectos')
+      .update({ renders: [...current, { url, nombre }] })
+      .eq('id', proyectoId)
 
+    if (error) return { error: error.message }
     revalidatePath(`/team/proyectos/${proyectoId}`)
     return { success: true }
   } catch (err) {
@@ -565,12 +569,15 @@ export async function deleteProyectoRender(
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return { error: 'Sin sesión activa.' }
 
-    const { error } = await supabase.rpc('remove_proyecto_render', {
-      p_proyecto_id: proyectoId,
-      p_url:         url,
-    })
-    if (error) return { error: error.message }
+    const admin = createAdminClient()
+    const { data: p } = await admin.from('proyectos').select('renders').eq('id', proyectoId).single()
+    const current: { url: string; nombre: string }[] = Array.isArray(p?.renders) ? p.renders : []
+    const { error } = await admin
+      .from('proyectos')
+      .update({ renders: current.filter(r => r.url !== url) })
+      .eq('id', proyectoId)
 
+    if (error) return { error: error.message }
     revalidatePath(`/team/proyectos/${proyectoId}`)
     return { success: true }
   } catch (err) {
@@ -587,13 +594,13 @@ export async function updateProyectoPlanos(
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return { error: 'Sin sesión activa.' }
 
-    const { error } = await supabase
+    const admin = createAdminClient()
+    const { error } = await admin
       .from('proyectos')
       .update({ planos_pdf_url: url })
       .eq('id', proyectoId)
 
     if (error) return { error: error.message }
-
     revalidatePath(`/team/proyectos/${proyectoId}`)
     return { success: true }
   } catch (err) {
