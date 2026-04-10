@@ -5,6 +5,7 @@ import {
   saveExpenseScan,
   updateExpenseScan,
   deleteExpenseScan,
+  getAllExpenseScans,
   type ExpenseType,
   type ExpenseScan,
 } from '@/app/actions/expense-scans'
@@ -105,15 +106,31 @@ export default function ScannerPage({ initialScans, proyectos, initialYear, init
   const [month, setMonth]     = useState(initialMonth)
   const [loadingMonth, setLoadingMonth] = useState(false)
 
+  const [activeTab, setActiveTab]       = useState<'mes' | 'recientes'>('mes')
+  const [recentScans, setRecentScans]   = useState<ExpenseScan[]>([])
+  const [loadingRecent, setLoadingRecent] = useState(false)
+
   const [showCapture, setShowCapture]   = useState(false)
   const [showBatch, setShowBatch]       = useState(false)
   const [editingScan, setEditingScan]   = useState<ExpenseScan | null>(null)
   const [lightbox, setLightbox]         = useState<string | null>(null)
 
+  // ── Tab switch ─────────────────────────────────────────────────────────────
+  const handleTabSwitch = async (tab: 'mes' | 'recientes') => {
+    setActiveTab(tab)
+    if (tab === 'recientes' && recentScans.length === 0) {
+      setLoadingRecent(true)
+      const res = await getAllExpenseScans()
+      if (!('error' in res)) setRecentScans(res)
+      setLoadingRecent(false)
+    }
+  }
+
   // ── Filters ────────────────────────────────────────────────────────────────
   const [filterTipo, setFilterTipo] = useState<ExpenseType | null>(null)
 
-  const filteredScans = filterTipo ? scans.filter(s => s.tipo === filterTipo) : scans
+  const activeScans = activeTab === 'recientes' ? recentScans : scans
+  const filteredScans = filterTipo ? activeScans.filter(s => s.tipo === filterTipo) : activeScans
 
   // ── Exchange rates ─────────────────────────────────────────────────────────
   const [rates, setRates]           = useState<Record<string, number>>({ EUR: 1 })
@@ -184,6 +201,7 @@ export default function ScannerPage({ initialScans, proyectos, initialYear, init
   const handleDelete = async (id: string) => {
     if (!confirm('¿Eliminar este gasto?')) return
     setScans(prev => prev.filter(s => s.id !== id))
+    setRecentScans(prev => prev.filter(s => s.id !== id))
     const res = await deleteExpenseScan(id)
     if ('error' in res) {
       alert(res.error)
@@ -193,16 +211,15 @@ export default function ScannerPage({ initialScans, proyectos, initialYear, init
 
   // ── After save ─────────────────────────────────────────────────────────────
 
+  const upsertInList = (prev: ExpenseScan[], scan: ExpenseScan) => {
+    const idx = prev.findIndex(s => s.id === scan.id)
+    if (idx >= 0) { const next = [...prev]; next[idx] = scan; return next }
+    return [scan, ...prev]
+  }
+
   const handleSaved = (scan: ExpenseScan) => {
-    setScans(prev => {
-      const idx = prev.findIndex(s => s.id === scan.id)
-      if (idx >= 0) {
-        const next = [...prev]
-        next[idx] = scan
-        return next
-      }
-      return [scan, ...prev]
-    })
+    setScans(prev => upsertInList(prev, scan))
+    setRecentScans(prev => upsertInList(prev, scan))
   }
 
   // ── Export ─────────────────────────────────────────────────────────────────
@@ -284,7 +301,24 @@ export default function ScannerPage({ initialScans, proyectos, initialYear, init
         </div>
       </div>
 
+      {/* ── Tabs ────────────────────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', gap: 0, marginBottom: 16, borderBottom: '1px solid #E8E6E0' }}>
+        {([['mes', 'Por mes'], ['recientes', 'Añadidos recientemente']] as const).map(([tab, label]) => (
+          <button
+            key={tab}
+            onClick={() => handleTabSwitch(tab)}
+            style={{
+              padding: '8px 16px', background: 'none', border: 'none',
+              borderBottom: activeTab === tab ? '2px solid #D85A30' : '2px solid transparent',
+              cursor: 'pointer', fontSize: 12, fontWeight: activeTab === tab ? 700 : 500,
+              color: activeTab === tab ? '#D85A30' : '#888', marginBottom: -1,
+            }}
+          >{label}</button>
+        ))}
+      </div>
+
       {/* ── Month navigation ────────────────────────────────────────────────── */}
+      {activeTab === 'mes' && (
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
         <button onClick={prevMonth} style={{ background: 'none', border: '1px solid #E8E6E0', borderRadius: 6, padding: '6px 12px', cursor: 'pointer', fontSize: 14, color: '#555' }}>←</button>
         <span style={{ fontSize: 14, fontWeight: 500, color: '#1A1A1A', minWidth: 140, textAlign: 'center' }}>
@@ -315,9 +349,19 @@ export default function ScannerPage({ initialScans, proyectos, initialYear, init
           </button>
         </div>
       </div>
+      )}
+
+      {/* ── Recientes header ────────────────────────────────────────────────── */}
+      {activeTab === 'recientes' && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          <span style={{ fontSize: 13, color: '#888' }}>
+            {loadingRecent ? 'Cargando…' : `${recentScans.length} gastos en total`}
+          </span>
+        </div>
+      )}
 
       {/* ── Summary ─────────────────────────────────────────────────────────── */}
-      {scans.length > 0 && (
+      {activeScans.length > 0 && (
         <>
           {/* Block 1: totales por divisa */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 6 }}>
@@ -401,7 +445,7 @@ export default function ScannerPage({ initialScans, proyectos, initialYear, init
         <div style={{ textAlign: 'center', padding: '60px 20px', border: '2px dashed #E8E6E0', borderRadius: 12 }}>
           <p style={{ fontSize: 32, margin: '0 0 12px' }}>🧾</p>
           <p style={{ fontSize: 13, color: '#888', margin: '0 0 6px', fontWeight: 500 }}>
-            {filterTipo ? `Sin gastos de tipo "${TIPO_CONFIG[filterTipo].label}"` : 'Sin gastos este mes'}
+            {filterTipo ? `Sin gastos de tipo "${TIPO_CONFIG[filterTipo].label}"` : activeTab === 'recientes' ? 'Sin gastos registrados' : 'Sin gastos este mes'}
           </p>
           <p style={{ fontSize: 11, color: '#BBB', margin: 0 }}>Usa el botón "Escanear ticket" para añadir</p>
         </div>
@@ -427,6 +471,11 @@ export default function ScannerPage({ initialScans, proyectos, initialYear, init
                     </span>
                     {scan.fecha_ticket && (
                       <span style={{ fontSize: 10, color: '#888' }}>{scan.fecha_ticket}</span>
+                    )}
+                    {activeTab === 'recientes' && (
+                      <span style={{ fontSize: 10, color: '#BBB' }}>
+                        · añadido {new Date(scan.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </span>
                     )}
                   </div>
                   <p style={{ fontSize: 13, fontWeight: 500, color: '#1A1A1A', margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

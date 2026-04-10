@@ -187,6 +187,26 @@ export async function deleteExpenseScan(
   }
 }
 
+// ── getAllExpenseScans ────────────────────────────────────────────────────────
+
+export async function getAllExpenseScans(
+  limit = 500
+): Promise<ExpenseScan[] | { error: string }> {
+  try {
+    await requirePartner()
+    const admin = createAdminClient()
+    const { data, error } = await admin
+      .from('expense_scans')
+      .select('*, autor:profiles!user_id(nombre)')
+      .order('created_at', { ascending: false })
+      .limit(limit)
+    if (error) return { error: error.message }
+    return (data ?? []) as unknown as ExpenseScan[]
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
 // ── getExpenseScans ───────────────────────────────────────────────────────────
 
 export async function getExpenseScans(
@@ -204,9 +224,9 @@ export async function getExpenseScans(
     const { data, error } = await admin
       .from('expense_scans')
       .select('*, autor:profiles!user_id(nombre)')
-      .gte('created_at', from + 'T00:00:00')
-      .lte('created_at', to   + 'T23:59:59')
-      .order('created_at', { ascending: false })
+      .or(`and(fecha_ticket.gte.${from},fecha_ticket.lte.${to}),and(fecha_ticket.is.null,created_at.gte.${from}T00:00:00,created_at.lte.${to}T23:59:59)`)
+      .order('fecha_ticket', { ascending: false, nullsFirst: false })
+      .order('created_at',   { ascending: false })
 
     if (error) return { error: error.message }
     return (data ?? []) as unknown as ExpenseScan[]
