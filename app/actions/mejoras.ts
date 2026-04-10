@@ -90,8 +90,8 @@ export async function updateMejoraStatus(
         nivel: 'informativo',
         autor_id: user.id,
         destinatario_id: mejora.autor_id,
-        titulo: '¡Tu petición ha sido implementada!',
-        contenido: `Tu petición "${mejora.titulo}" ya está activa en la plataforma. ¡Gracias por contribuir a mejorar Forma Prima!`,
+        titulo: mejora.titulo,
+        contenido: `¡Tu propuesta ha sido revisada e implementada! Ya está activa en la plataforma. Gracias a tu aportación, Forma Prima sigue mejorando — sigue compartiendo tus ideas, cada una cuenta.`,
         fecha_activa: today,
         fecha_caducidad: caducidad,
       })

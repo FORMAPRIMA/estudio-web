@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/facturas-cobrables",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/horas-faltantes",
+      "schedule": "0 9 * * *"
     }
   ]
 }

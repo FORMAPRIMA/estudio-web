@@ -372,7 +372,7 @@ export default function ContratoDetalle({
 
   // ── Compartir modal ───────────────────────────────────────────────────────
   const [showCompartir,    setShowCompartir]    = useState(false)
-  const [compartirEmails,  setCompartirEmails]  = useState<string[]>([])
+  const [compartirEmails,  setCompartirEmails]  = useState<{ email: string; nombre?: string }[]>([])
   const [compartirNewEmail,setCompartirNewEmail]= useState('')
   const [compartirPdfLang, setCompartirPdfLang] = useState<'es' | 'en' | 'both'>('es')
   const [compartirEmailLang,setCompartirEmailLang]=useState<'es' | 'en'>('es')
@@ -380,9 +380,12 @@ export default function ContratoDetalle({
   const [compartirError,   setCompartirError]   = useState<string | null>(null)
 
   function openCompartir() {
-    const emails: string[] = []
-    if (clienteEmail) emails.push(clienteEmail)
-    setCompartirEmails(emails)
+    const recipients: { email: string; nombre?: string }[] = []
+    if (clienteEmail) {
+      const nombre = [clienteNombre, clienteApellidos].filter(Boolean).join(' ') || undefined
+      recipients.push({ email: clienteEmail, nombre })
+    }
+    setCompartirEmails(recipients)
     setCompartirNewEmail('')
     setCompartirPdfLang('es')
     setCompartirEmailLang('es')
@@ -398,13 +401,13 @@ export default function ContratoDetalle({
       const res = await fetch(`/api/contratos/${initial.id}/compartir`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ emails: compartirEmails, pdfLang: compartirPdfLang, emailLang: compartirEmailLang }),
+        body:    JSON.stringify({ emails: compartirEmails.map(r => r.email), pdfLang: compartirPdfLang, emailLang: compartirEmailLang }),
       })
       const data = await res.json() as { ok?: boolean; error?: string }
       if (!res.ok || data.error) { setCompartirError(data.error ?? 'Error al enviar.'); return }
       setShowCompartir(false)
       setStatus('enviado')
-      setSuccessMsg(`Contrato enviado a ${compartirEmails.join(', ')}`)
+      setSuccessMsg(`Contrato enviado a ${compartirEmails.map(r => r.email).join(', ')}`)
     } catch {
       setCompartirError('Error de conexión.')
     } finally {
@@ -1043,9 +1046,12 @@ export default function ContratoDetalle({
             <div>
               <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', marginBottom: 8 }}>Destinatarios</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {compartirEmails.map((em, i) => (
+                {compartirEmails.map((r, i) => (
                   <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: '#F8F7F4', borderRadius: 5, border: '1px solid #E8E6E0' }}>
-                    <span style={{ flex: 1, fontSize: 12 }}>{em}</span>
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      {r.nombre && <span style={{ fontSize: 11, fontWeight: 500, color: '#444', lineHeight: 1.3 }}>{r.nombre}</span>}
+                      <span style={{ fontSize: 12, color: r.nombre ? '#888' : '#333' }}>{r.email}</span>
+                    </div>
                     <button onClick={() => setCompartirEmails(prev => prev.filter((_, j) => j !== i))}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#CCC', fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
                   </div>
@@ -1057,7 +1063,7 @@ export default function ContratoDetalle({
                     onChange={e => setCompartirNewEmail(e.target.value)}
                     onKeyDown={e => {
                       if (e.key === 'Enter' && compartirNewEmail.trim()) {
-                        setCompartirEmails(prev => [...prev, compartirNewEmail.trim()])
+                        setCompartirEmails(prev => [...prev, { email: compartirNewEmail.trim() }])
                         setCompartirNewEmail('')
                       }
                     }}
@@ -1065,7 +1071,7 @@ export default function ContratoDetalle({
                     style={{ flex: 1, padding: '7px 10px', fontSize: 12, border: '1px solid #E8E6E0', borderRadius: 5, fontFamily: 'inherit', outline: 'none' }}
                   />
                   <button
-                    onClick={() => { if (compartirNewEmail.trim()) { setCompartirEmails(prev => [...prev, compartirNewEmail.trim()]); setCompartirNewEmail('') } }}
+                    onClick={() => { if (compartirNewEmail.trim()) { setCompartirEmails(prev => [...prev, { email: compartirNewEmail.trim() }]); setCompartirNewEmail('') } }}
                     style={{ padding: '7px 14px', background: '#F0EEE8', border: '1px solid #E8E6E0', borderRadius: 5, fontSize: 12, cursor: 'pointer', color: '#555' }}
                   >+ Añadir</button>
                 </div>

@@ -4,11 +4,11 @@ import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { updateProyecto, addProyectoFase, getProyectoImageUploadToken, updateProyectoStatus, deleteProyecto, deleteProyectoFase, iniciarFase } from '@/app/actions/proyectos'
+import { updateProyecto, addProyectoFase, updateFaseResponsables, getProyectoImageUploadToken, updateProyectoStatus, deleteProyecto, deleteProyectoFase, iniciarFase } from '@/app/actions/proyectos'
 import TitularesSection from '@/components/team/proyectos/TitularesSection'
 import type { Titular, ClienteOption } from '@/components/team/proyectos/TitularesSection'
 import { updateTaskStatus, updateTaskResponsables, updateTaskPrioridad, updateTaskTitulo, updateTaskFechaLimite, deleteTask } from '@/app/actions/tasks'
-import type { ProyectoInterno, ProyectoFase, Task, TaskStatus, CatalogoFase, UserProfile, ProyectoStatus } from '@/lib/types'
+import type { ProyectoInterno, ProyectoFase, Task, TaskStatus, CatalogoFase, UserProfile, ProyectoStatus, NivelCalidad } from '@/lib/types'
 
 interface Props {
   proyecto: ProyectoInterno
@@ -31,8 +31,8 @@ const ROLE_COLORS: Record<string, string> = {
 
 const STATUS_TRACK = [
   { key: 'pendiente' as TaskStatus,   color: '#9CA3AF', label: 'Pendiente' },
-  { key: 'en_progreso' as TaskStatus, color: '#3B82F6', label: 'En progreso' },
   { key: 'bloqueado' as TaskStatus,   color: '#EF4444', label: 'Bloqueado' },
+  { key: 'en_progreso' as TaskStatus, color: '#3B82F6', label: 'En progreso' },
   { key: 'completado' as TaskStatus,  color: '#22C55E', label: 'Completado' },
 ]
 
@@ -51,6 +51,12 @@ const PROYECTO_STATUS_LABELS: Record<ProyectoStatus, string> = {
 }
 
 const DESIGN_SECTION_ORDER = ['Anteproyecto', 'Proyecto de ejecución', 'Obra', 'Interiorismo', 'Post venta']
+
+const NIVEL_CALIDAD_CONFIG: Record<NivelCalidad, { label: string; badge: string }> = {
+  master_piece: { label: 'Master Piece', badge: 'bg-amber-50 border-amber-300 text-amber-700' },
+  select:       { label: 'Select',       badge: 'bg-indigo-50 border-indigo-200 text-indigo-600' },
+  functional:   { label: 'Functional',   badge: 'bg-ink/5 border-ink/20 text-meta' },
+}
 
 const TASK_SCORE: Record<string, number> = {
   pendiente:   0,
@@ -716,6 +722,7 @@ function EditProyectoPanel({ proyecto, proveedores, onSaved, onCancel, onDeleted
     superficie_util: proyecto.superficie_util?.toString() ?? '',
     constructor_id: proyecto.constructor_id ?? '',
     status: proyecto.status ?? 'activo',
+    nivel_calidad: proyecto.nivel_calidad ?? null as NivelCalidad | null,
   })
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(proyecto.imagen_url ?? null)
@@ -769,6 +776,7 @@ function EditProyectoPanel({ proyecto, proveedores, onSaved, onCancel, onDeleted
       cliente_id: proyecto.cliente_id,
       constructor_id: form.constructor_id || null,
       status: form.status,
+      nivel_calidad: form.nivel_calidad,
       imagen_url,
     })
     if (result.error) { setError(result.error); setLoading(false); return }
@@ -781,6 +789,7 @@ function EditProyectoPanel({ proyecto, proveedores, onSaved, onCancel, onDeleted
       superficie_util: form.superficie_util ? Number(form.superficie_util) : null,
       constructor_id: form.constructor_id || null,
       status: form.status as ProyectoStatus,
+      nivel_calidad: form.nivel_calidad,
       imagen_url: imagen_url !== undefined ? imagen_url : proyecto.imagen_url,
     })
     setLoading(false)
@@ -851,6 +860,29 @@ function EditProyectoPanel({ proyecto, proveedores, onSaved, onCancel, onDeleted
             className="w-full text-sm font-light text-ink border border-ink/15 px-3 py-2 bg-cream focus:outline-none focus:border-ink/40">
             {Object.entries(PROYECTO_STATUS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
+        </div>
+        <div className="col-span-2">
+          <label className="block text-[10px] tracking-widest uppercase font-light text-meta mb-1.5">Nivel de calidad</label>
+          <div className="flex gap-2 flex-wrap">
+            {([null, ...Object.keys(NIVEL_CALIDAD_CONFIG)] as (NivelCalidad | null)[]).map(val => {
+              const active = form.nivel_calidad === val
+              const cfg = val ? NIVEL_CALIDAD_CONFIG[val] : null
+              return (
+                <button
+                  key={val ?? '__none'}
+                  type="button"
+                  onClick={() => setForm(f => ({ ...f, nivel_calidad: val }))}
+                  className={`text-[10px] tracking-widest uppercase font-light px-3 py-1.5 border transition-colors ${
+                    active
+                      ? cfg ? cfg.badge + ' font-medium' : 'bg-ink text-cream border-ink'
+                      : 'border-ink/15 text-meta hover:border-ink/40 hover:text-ink'
+                  }`}
+                >
+                  {cfg ? cfg.label : '— Sin clasificar'}
+                </button>
+              )
+            })}
+          </div>
         </div>
         <div className="col-span-2">
           <label className="block text-[10px] tracking-widest uppercase font-light text-meta mb-1.5">Constructor <span className="normal-case tracking-normal font-light text-meta/60">(opcional)</span></label>
@@ -925,7 +957,7 @@ function EditProyectoPanel({ proyecto, proveedores, onSaved, onCancel, onDeleted
 
 // ── Fase row ──────────────────────────────────────────────────────────────────
 
-function FaseRow({ pf, catalogo, faseTasks, faseProgress, responsableNames, canEditProject, canEdit, addingFaseId, teamMembers, proyecto, horasEjecutadas, onAddTask, onSetAddingFaseId, onUpdateTask, onDeleteTask, onDeleteFase, onIniciar }: {
+function FaseRow({ pf, catalogo, faseTasks, faseProgress, responsableNames, canEditProject, canEdit, addingFaseId, teamMembers, proyecto, horasEjecutadas, onAddTask, onSetAddingFaseId, onUpdateTask, onDeleteTask, onDeleteFase, onIniciar, onUpdateFaseResponsables }: {
   pf: ProyectoFase
   catalogo: CatalogoFase
   faseTasks: Task[]
@@ -943,10 +975,21 @@ function FaseRow({ pf, catalogo, faseTasks, faseProgress, responsableNames, canE
   onDeleteTask: (id: string) => void
   onDeleteFase: (pfId: string, faseId: string) => void
   onIniciar: (pfId: string, faseId: string) => void
+  onUpdateFaseResponsables: (pfId: string, responsables: string[]) => void
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [starting, setStarting] = useState(false)
+  const [editingResp, setEditingResp] = useState(false)
+  const [localResp, setLocalResp] = useState<string[]>(pf.responsables)
+  const [savingResp, setSavingResp] = useState(false)
+
+  const handleSaveResp = async () => {
+    setSavingResp(true)
+    await onUpdateFaseResponsables(pf.id, localResp)
+    setSavingResp(false)
+    setEditingResp(false)
+  }
 
   const faseStatus = pf.fase_status ?? 'en_espera'
 
@@ -969,8 +1012,31 @@ function FaseRow({ pf, catalogo, faseTasks, faseProgress, responsableNames, canE
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <span className="text-[10px] tracking-widest uppercase font-light text-meta shrink-0">F{catalogo.numero}</span>
           <span className="text-[11px] font-light text-ink">{catalogo.label}</span>
-          {responsableNames.length > 0 && (
-            <span className="text-[9px] text-meta/60 font-light truncate hidden sm:inline">· {responsableNames.join(', ')}</span>
+          {!editingResp && (
+            <span className="text-[9px] text-meta/60 font-light truncate hidden sm:inline">
+              {responsableNames.length > 0 ? `· ${responsableNames.join(', ')}` : ''}
+            </span>
+          )}
+          {canEdit && !editingResp && (
+            <button
+              onClick={() => { setLocalResp(pf.responsables); setEditingResp(true) }}
+              className="text-[8px] tracking-widest uppercase font-light text-meta/40 hover:text-ink transition-colors hidden sm:inline shrink-0"
+            >
+              {responsableNames.length > 0 ? '✎' : '+ Responsables'}
+            </button>
+          )}
+          {editingResp && (
+            <div className="flex items-center gap-2 hidden sm:flex">
+              <ResponsablesDropdown teamMembers={teamMembers} selected={localResp} onChange={setLocalResp} />
+              <button onClick={handleSaveResp} disabled={savingResp}
+                className="text-[9px] tracking-widest uppercase font-light px-2.5 py-1 bg-ink text-cream hover:bg-ink/80 transition-colors disabled:opacity-40">
+                {savingResp ? '…' : 'Guardar'}
+              </button>
+              <button onClick={() => setEditingResp(false)}
+                className="text-[9px] tracking-widest uppercase font-light text-meta hover:text-ink transition-colors">
+                Cancelar
+              </button>
+            </div>
           )}
           {/* Fase status badge */}
           <span className={`text-[8px] tracking-widest uppercase font-medium px-2 py-0.5 shrink-0 ${
@@ -1119,6 +1185,13 @@ export default function ProyectoDetalle({ proyecto: initialProyecto, tasks: init
     setTasks(prev => prev.filter(t => t.fase_id !== faseId))
   }
 
+  const handleUpdateFaseResponsables = async (pfId: string, responsables: string[]) => {
+    const result = await updateFaseResponsables(pfId, proyecto.id, responsables)
+    if (!result.error) {
+      setFases(prev => prev.map(f => f.id === pfId ? { ...f, responsables } : f))
+    }
+  }
+
   const handleIniciarFase = async (pfId: string, faseId: string) => {
     const result = await iniciarFase(pfId, proyecto.id, faseId)
     if (result.error) {
@@ -1233,6 +1306,11 @@ export default function ProyectoDetalle({ proyecto: initialProyecto, tasks: init
               </div>
               <h1 className="text-3xl font-light text-ink tracking-tight mb-1">{proyecto.nombre}</h1>
               {proyecto.direccion && <p className="text-sm font-light text-meta">{proyecto.direccion}</p>}
+              {proyecto.nivel_calidad && (
+                <span className={`inline-block mt-2 text-[9px] tracking-widest uppercase font-medium px-2.5 py-1 border ${NIVEL_CALIDAD_CONFIG[proyecto.nivel_calidad].badge}`}>
+                  {NIVEL_CALIDAD_CONFIG[proyecto.nivel_calidad].label}
+                </span>
+              )}
             </div>
             {canEditProject && (
               <button onClick={() => setEditingProyecto(true)}
@@ -1359,6 +1437,7 @@ export default function ProyectoDetalle({ proyecto: initialProyecto, tasks: init
                     onDeleteTask={deleteTask}
                     onDeleteFase={handleDeleteFase}
                     onIniciar={handleIniciarFase}
+                    onUpdateFaseResponsables={handleUpdateFaseResponsables}
                   />
                 )
               })}
@@ -1367,7 +1446,7 @@ export default function ProyectoDetalle({ proyecto: initialProyecto, tasks: init
         ))}
 
         {/* ── Agregar fase ────────────────────────────────────────────────── */}
-        {canEditProject && (
+        {canEdit && (
           <div>
             {showAddFase ? (
               <AddFasePanel

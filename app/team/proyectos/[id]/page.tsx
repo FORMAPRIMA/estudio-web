@@ -28,7 +28,7 @@ export default async function ProyectoDetallePage({
     .from('proyectos')
     .select(`
       id, nombre, codigo, direccion, imagen_url, superficie_diseno,
-      superficie_catastral, superficie_util, cliente_id, constructor_id, status,
+      superficie_catastral, superficie_util, cliente_id, constructor_id, status, nivel_calidad,
       created_by, created_at,
       clientes!cliente_id(id, nombre),
       proyecto_fases(

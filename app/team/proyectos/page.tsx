@@ -24,7 +24,7 @@ export default async function ProyectosPage() {
     .from('proyectos')
     .select(`
       id, nombre, direccion, imagen_url, superficie_diseno,
-      superficie_catastral, superficie_util, cliente_id, status,
+      superficie_catastral, superficie_util, cliente_id, status, nivel_calidad,
       created_by, created_at,
       clientes!cliente_id(id, nombre),
       proyecto_fases(

@@ -86,6 +86,7 @@ export const isFpRole = (rol: string): rol is FpRole => FP_ROLES.includes(rol as
 // ── Proyectos module types ────────────────────────────────────────────────
 
 export type ProyectoStatus = 'activo' | 'on_hold' | 'terminado' | 'archivado'
+export type NivelCalidad = 'master_piece' | 'select' | 'functional'
 
 export interface ProyectoInterno {
   id: string
@@ -99,6 +100,7 @@ export interface ProyectoInterno {
   cliente_id: string | null
   constructor_id: string | null
   status: ProyectoStatus
+  nivel_calidad: NivelCalidad | null
   created_by: string | null
   created_at: string
   // joined

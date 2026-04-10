@@ -168,6 +168,7 @@ export async function updateProyecto(
     cliente_id: string | null
     constructor_id?: string | null
     status: string
+    nivel_calidad?: string | null
     imagen_url?: string | null
   }
 ) {
@@ -194,6 +195,7 @@ export async function updateProyecto(
   if (data.imagen_url !== undefined) updatePayload.imagen_url = data.imagen_url
   if (data.constructor_id !== undefined) updatePayload.constructor_id = data.constructor_id || null
   if (data.codigo !== undefined) updatePayload.codigo = data.codigo.toUpperCase()
+  if (data.nivel_calidad !== undefined) updatePayload.nivel_calidad = data.nivel_calidad || null
 
   const { error } = await supabase.from('proyectos').update(updatePayload).eq('id', id)
 
@@ -216,7 +218,7 @@ export async function addProyectoFase(
   if (!user) return { error: 'Sin sesión activa.' }
 
   const { data: profile } = await supabase.from('profiles').select('rol').eq('id', user.id).single()
-  if (!profile || !['fp_manager', 'fp_partner'].includes(profile.rol)) {
+  if (!profile || !['fp_team', 'fp_manager', 'fp_partner'].includes(profile.rol)) {
     return { error: 'Sin permisos.' }
   }
 
@@ -248,6 +250,34 @@ export async function addProyectoFase(
 
   revalidatePath(`/team/proyectos/${proyectoId}`)
   return { success: true, pfId: pf.id, horas_objetivo: pf.horas_objetivo ?? null }
+}
+
+// ── Update responsables on an existing fase ───────────────────────────────────
+
+export async function updateFaseResponsables(
+  pfId: string,
+  proyectoId: string,
+  responsables: string[]
+) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Sin sesión activa.' }
+
+  const { data: profile } = await supabase.from('profiles').select('rol').eq('id', user.id).single()
+  if (!profile || !['fp_team', 'fp_manager', 'fp_partner'].includes(profile.rol)) {
+    return { error: 'Sin permisos.' }
+  }
+
+  const admin = createAdminClient()
+  const { error } = await admin
+    .from('proyecto_fases')
+    .update({ responsables })
+    .eq('id', pfId)
+
+  if (error) return { error: error.message }
+
+  revalidatePath(`/team/proyectos/${proyectoId}`)
+  return { success: true }
 }
 
 // ── Delete contracted fase ────────────────────────────────────────────────────

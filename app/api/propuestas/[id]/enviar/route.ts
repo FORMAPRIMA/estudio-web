@@ -19,8 +19,8 @@ export async function POST(
     if (!user) return NextResponse.json({ error: 'Sin sesión' }, { status: 401 })
 
     const { data: profile } = await supabase
-      .from('profiles').select('rol').eq('id', user.id).single()
-    if (!profile || profile.rol !== 'fp_partner') {
+      .from('profiles').select('rol, email').eq('id', user.id).single()
+    if (!profile || !['fp_manager', 'fp_partner'].includes(profile.rol)) {
       return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
     }
 
@@ -89,7 +89,7 @@ export async function POST(
     const buffer = await renderToBuffer(createElement(PropuestaPDF, { data: pdfData }) as any)
 
     // Send email
-    const clientName = lead.empresa ?? `${lead.nombre} ${lead.apellidos}`
+    const clientName = [lead.nombre, lead.apellidos].filter(Boolean).join(' ') || lead.empresa || 'Cliente'
     const body = `
       <h2 style="font-size:20px;font-weight:300;color:#1A1A1A;margin:0 0 8px;">
         Propuesta de honorarios${propuesta.titulo ? ` — ${propuesta.titulo}` : ''}
@@ -109,8 +109,22 @@ export async function POST(
       </p>
     `
 
+    // Build internal CC list:
+    // - Partner sends → CC all partners (sender included as they're a partner)
+    // - Manager sends → CC sender + all partners
+    const { data: partnerProfiles } = await admin
+      .from('profiles')
+      .select('email')
+      .eq('rol', 'fp_partner')
+
+    const partnerEmails = (partnerProfiles ?? []).map(p => p.email).filter(Boolean) as string[]
+    const ccEmails: string[] = profile.rol === 'fp_manager'
+      ? Array.from(new Set([profile.email, ...partnerEmails].filter((e): e is string => !!e)))
+      : partnerEmails
+
     const result = await sendEmail({
       to:      lead.email,
+      cc:      ccEmails.length ? ccEmails : undefined,
       subject: `Propuesta de honorarios ${propuesta.numero}${propuesta.titulo ? ` · ${propuesta.titulo}` : ''}`,
       html:    wrapEmail(body),
       attachments: [{

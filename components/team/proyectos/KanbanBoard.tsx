@@ -100,6 +100,17 @@ function ProyectoCard({
             </p>
           )}
 
+          {proyecto.nivel_calidad && (
+            <span className={`inline-block text-[8px] tracking-widest uppercase font-medium px-2 py-0.5 border ${
+              proyecto.nivel_calidad === 'master_piece' ? 'bg-amber-50 border-amber-300 text-amber-700' :
+              proyecto.nivel_calidad === 'select'       ? 'bg-indigo-50 border-indigo-200 text-indigo-600' :
+              'bg-ink/5 border-ink/20 text-meta'
+            }`}>
+              {proyecto.nivel_calidad === 'master_piece' ? 'Master Piece' :
+               proyecto.nivel_calidad === 'select'       ? 'Select' : 'Functional'}
+            </span>
+          )}
+
           {fases.length > 0 && (
             <div className="flex flex-wrap gap-1 pt-1">
               {fases.map(pf => {

@@ -1,7 +1,23 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { addAviso, archivarAviso } from '@/app/actions/avisos'
+
+// Module-level: tracks which aviso IDs have already played their entrance animation
+// this session. Resets on full page reload.
+const animatedIds = new Set<string>()
+
+const ATTENTION_CSS = `
+@keyframes aviso-pop {
+  0%   { transform: scaleX(1)     scaleY(1);     opacity: 0.8; }
+  28%  { transform: scaleX(1.012) scaleY(1.022); opacity: 1;   box-shadow: 0 8px 28px rgba(0,0,0,0.09); }
+  52%  { transform: scaleX(0.997) scaleY(0.997);               box-shadow: 0 3px 10px rgba(0,0,0,0.04); }
+  72%  { transform: scaleX(1.005) scaleY(1.009);               box-shadow: 0 5px 16px rgba(0,0,0,0.06); }
+  100% { transform: scaleX(1)     scaleY(1);     opacity: 1;   box-shadow: none; }
+}
+.aviso-pop {
+  animation: aviso-pop 0.75s cubic-bezier(0.34, 1.4, 0.64, 1) both;
+}`
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -14,6 +30,7 @@ export interface Aviso {
   titulo:          string
   contenido:       string | null
   fecha_activa:    string
+  hora_activa:     string | null
   fecha_caducidad: string | null
   autor_nombre:    string | null
 }
@@ -102,14 +119,22 @@ function todayIso() {
 
 // ── Single aviso card (full-width) ────────────────────────────────────────────
 
-function AvisoCard({ aviso, onArchivar }: { aviso: Aviso; onArchivar: () => void }) {
+function AvisoCard({ aviso, onArchivar, isNew, animDelay }: {
+  aviso: Aviso
+  onArchivar: () => void
+  isNew?: boolean
+  animDelay?: number
+}) {
   const [expanded, setExpanded] = useState(false)
   const cfg = NIVEL[aviso.nivel] ?? NIVEL.informativo
 
   return (
     <div
-      className="relative flex items-center gap-4 px-8 lg:px-14 py-4 border-b border-ink/[0.05] group transition-colors"
-      style={{ background: cfg.bgRgba }}
+      className={`relative flex items-center gap-4 px-8 lg:px-14 py-4 border-b border-ink/[0.05] group transition-colors${isNew ? ' aviso-pop' : ''}`}
+      style={{
+        background: cfg.bgRgba,
+        ...(isNew && animDelay ? { animationDelay: `${animDelay}ms` } : {}),
+      }}
     >
       {/* Left accent bar */}
       <div
@@ -426,13 +451,17 @@ const NIVELES: NivelAviso[] = ['informativo', 'recordatorio', 'importante', 'urg
 
 function AddAvisoModal({ onClose }: { onClose: () => void }) {
   const today = todayIso()
+  const [scope,          setScope]          = useState<'equipo' | 'personal'>('equipo')
   const [titulo,         setTitulo]         = useState('')
   const [contenido,      setContenido]      = useState('')
   const [nivel,          setNivel]          = useState<NivelAviso>('informativo')
   const [fechaActiva,    setFechaActiva]    = useState(today)
+  const [horaActiva,     setHoraActiva]     = useState('')
   const [fechaCaducidad, setFechaCaducidad] = useState('')
   const [pending,        setPending]        = useState(false)
   const [error,          setError]          = useState<string | null>(null)
+
+  const isPersonal = scope === 'personal'
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -442,7 +471,9 @@ function AddAvisoModal({ onClose }: { onClose: () => void }) {
     const result = await addAviso({
       titulo,
       contenido:       contenido || undefined,
-      nivel,
+      nivel:           isPersonal ? 'recordatorio' : nivel,
+      tipo:            scope,
+      hora_activa:     isPersonal && horaActiva ? horaActiva : null,
       fecha_activa:    fechaActiva,
       fecha_caducidad: fechaCaducidad || undefined,
     })
@@ -465,66 +496,74 @@ function AddAvisoModal({ onClose }: { onClose: () => void }) {
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-ink/[0.08]">
           <p className="text-[10px] tracking-widest uppercase font-medium text-ink/50">
-            Notificación al equipo
+            {isPersonal ? 'Recordatorio personal' : 'Notificación al equipo'}
           </p>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-ink/30 hover:text-ink/60 transition-colors text-xl leading-none"
-          >
-            ×
-          </button>
+          <button type="button" onClick={onClose}
+            className="text-ink/30 hover:text-ink/60 transition-colors text-xl leading-none">×</button>
         </div>
 
         <div className="px-6 py-5 space-y-5">
 
-          {/* Nivel selector */}
-          <div>
-            <label className="block text-[9px] tracking-widest uppercase text-ink/40 mb-2.5">
-              Nivel de importancia
-            </label>
-            <div className="grid grid-cols-4 gap-2">
-              {NIVELES.map(n => {
-                const cfg   = NIVEL[n]
-                const active = nivel === n
-                return (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setNivel(n)}
-                    className="flex flex-col items-center gap-1.5 py-2.5 px-1 border transition-all duration-150"
-                    style={{
-                      borderColor: active ? cfg.barColor : 'rgba(0,0,0,0.1)',
-                      background:  active ? cfg.bgRgba   : 'transparent',
-                    }}
-                  >
-                    <span
-                      className="w-2.5 h-2.5 rounded-full"
-                      style={{ background: cfg.barColor, opacity: active ? 1 : 0.35 }}
-                    />
-                    <span
-                      className="text-[8px] tracking-widest uppercase font-medium"
-                      style={{ color: active ? cfg.color : 'rgba(0,0,0,0.3)' }}
-                    >
-                      {cfg.label}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
+          {/* Scope toggle */}
+          <div className="grid grid-cols-2 gap-0 border border-ink/15 overflow-hidden">
+            {(['equipo', 'personal'] as const).map(s => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setScope(s)}
+                className="py-2.5 text-[10px] tracking-widest uppercase font-medium transition-colors"
+                style={{
+                  background: scope === s ? '#1A1A1A' : 'transparent',
+                  color:      scope === s ? '#F2F2F0' : 'rgba(0,0,0,0.35)',
+                }}
+              >
+                {s === 'equipo' ? '↑ Para el equipo' : '⏰ Solo para mí'}
+              </button>
+            ))}
           </div>
+
+          {/* Nivel selector — only for team */}
+          {!isPersonal && (
+            <div>
+              <label className="block text-[9px] tracking-widest uppercase text-ink/40 mb-2.5">
+                Nivel de importancia
+              </label>
+              <div className="grid grid-cols-4 gap-2">
+                {NIVELES.map(n => {
+                  const cfg    = NIVEL[n]
+                  const active = nivel === n
+                  return (
+                    <button key={n} type="button" onClick={() => setNivel(n)}
+                      className="flex flex-col items-center gap-1.5 py-2.5 px-1 border transition-all duration-150"
+                      style={{
+                        borderColor: active ? cfg.barColor : 'rgba(0,0,0,0.1)',
+                        background:  active ? cfg.bgRgba   : 'transparent',
+                      }}
+                    >
+                      <span className="w-2.5 h-2.5 rounded-full"
+                        style={{ background: cfg.barColor, opacity: active ? 1 : 0.35 }} />
+                      <span className="text-[8px] tracking-widest uppercase font-medium"
+                        style={{ color: active ? cfg.color : 'rgba(0,0,0,0.3)' }}>
+                        {cfg.label}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Título */}
           <div>
             <label className="block text-[9px] tracking-widest uppercase text-ink/40 mb-1.5">
-              Mensaje <span className="text-ink/25">*</span>
+              {isPersonal ? 'Recordatorio' : 'Mensaje'} <span className="text-ink/25">*</span>
             </label>
             <input
               value={titulo}
               onChange={e => setTitulo(e.target.value)}
               required
               autoFocus
-              placeholder="Ej. Reunión de equipo el martes a las 10 h"
+              placeholder={isPersonal ? 'Ej. Llamar a proveedor sobre entrega' : 'Ej. Reunión de equipo el martes a las 10 h'}
               className="w-full border border-ink/20 px-3 py-2.5 text-[13px] text-ink placeholder:text-ink/25 focus:outline-none focus:border-ink/50 transition-colors"
             />
           </div>
@@ -538,58 +577,64 @@ function AddAvisoModal({ onClose }: { onClose: () => void }) {
               value={contenido}
               onChange={e => setContenido(e.target.value)}
               rows={2}
-              placeholder="Información adicional que aparece al expandir el aviso…"
+              placeholder="Notas adicionales que aparecen al expandir…"
               className="w-full border border-ink/20 px-3 py-2.5 text-[13px] text-ink placeholder:text-ink/25 focus:outline-none focus:border-ink/50 transition-colors resize-none"
             />
           </div>
 
-          {/* Fechas */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* Fechas — date + optional time for personal, date + expiry for team */}
+          <div className="grid gap-3" style={{ gridTemplateColumns: isPersonal ? '1fr 1fr' : '1fr 1fr' }}>
             <div>
               <label className="block text-[9px] tracking-widest uppercase text-ink/40 mb-1.5">
-                Activa desde
+                {isPersonal ? 'Día' : 'Activa desde'}
               </label>
-              <input
-                type="date"
-                value={fechaActiva}
-                onChange={e => setFechaActiva(e.target.value)}
-                className="w-full border border-ink/20 px-3 py-2 text-[13px] text-ink focus:outline-none focus:border-ink/50 transition-colors"
-              />
+              <input type="date" value={fechaActiva} onChange={e => setFechaActiva(e.target.value)}
+                className="w-full border border-ink/20 px-3 py-2 text-[13px] text-ink focus:outline-none focus:border-ink/50 transition-colors" />
             </div>
-            <div>
-              <label className="block text-[9px] tracking-widest uppercase text-ink/40 mb-1.5">
-                Caduca <span className="text-ink/25">opcional</span>
-              </label>
-              <input
-                type="date"
-                value={fechaCaducidad}
-                min={fechaActiva}
-                onChange={e => setFechaCaducidad(e.target.value)}
-                className="w-full border border-ink/20 px-3 py-2 text-[13px] text-ink focus:outline-none focus:border-ink/50 transition-colors"
-              />
-            </div>
+            {isPersonal ? (
+              <div>
+                <label className="block text-[9px] tracking-widest uppercase text-ink/40 mb-1.5">
+                  Hora <span className="text-ink/25">opcional</span>
+                </label>
+                <input type="time" value={horaActiva} onChange={e => setHoraActiva(e.target.value)}
+                  className="w-full border border-ink/20 px-3 py-2 text-[13px] text-ink focus:outline-none focus:border-ink/50 transition-colors" />
+              </div>
+            ) : (
+              <div>
+                <label className="block text-[9px] tracking-widest uppercase text-ink/40 mb-1.5">
+                  Caduca <span className="text-ink/25">opcional</span>
+                </label>
+                <input type="date" value={fechaCaducidad} min={fechaActiva}
+                  onChange={e => setFechaCaducidad(e.target.value)}
+                  className="w-full border border-ink/20 px-3 py-2 text-[13px] text-ink focus:outline-none focus:border-ink/50 transition-colors" />
+              </div>
+            )}
           </div>
 
-          {error && (
-            <p className="text-[11px] text-red-500">{error}</p>
+          {/* Expiry for personal too */}
+          {isPersonal && (
+            <div>
+              <label className="block text-[9px] tracking-widest uppercase text-ink/40 mb-1.5">
+                Archivar automáticamente <span className="text-ink/25">opcional</span>
+              </label>
+              <input type="date" value={fechaCaducidad} min={fechaActiva}
+                onChange={e => setFechaCaducidad(e.target.value)}
+                className="w-full border border-ink/20 px-3 py-2 text-[13px] text-ink focus:outline-none focus:border-ink/50 transition-colors" />
+            </div>
           )}
+
+          {error && <p className="text-[11px] text-red-500">{error}</p>}
         </div>
 
         {/* Footer */}
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-ink/[0.08]">
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-[9px] tracking-widest uppercase font-medium text-ink/40 hover:text-ink/70 transition-colors px-3 py-2"
-          >
+          <button type="button" onClick={onClose}
+            className="text-[9px] tracking-widest uppercase font-medium text-ink/40 hover:text-ink/70 transition-colors px-3 py-2">
             Cancelar
           </button>
-          <button
-            type="submit"
-            disabled={pending || !titulo.trim()}
-            className="text-[9px] tracking-widest uppercase font-medium text-white bg-ink px-5 py-2.5 hover:bg-ink/80 transition-colors disabled:opacity-30"
-          >
-            {pending ? 'Publicando…' : 'Publicar'}
+          <button type="submit" disabled={pending || !titulo.trim()}
+            className="text-[9px] tracking-widest uppercase font-medium text-white bg-ink px-5 py-2.5 hover:bg-ink/80 transition-colors disabled:opacity-30">
+            {pending ? 'Guardando…' : isPersonal ? 'Crear recordatorio' : 'Publicar'}
           </button>
         </div>
       </form>
@@ -603,6 +648,20 @@ export default function AvisosStrip({ avisos, facturasPendientes = [] }: Props) 
   const [hidden,           setHidden]           = useState<Set<string>>(new Set())
   const [hiddenFacturas,   setHiddenFacturas]   = useState<Set<string>>(new Set())
   const [showForm,         setShowForm]         = useState(false)
+
+  // Determine which avisos are "new" this session and compute their stagger delays
+  const newAvisoData = useRef<Map<string, number>>((() => {
+    const map = new Map<string, number>()
+    let delay = 80
+    for (const a of avisos) {
+      if (!animatedIds.has(a.id)) {
+        map.set(a.id, delay)
+        delay += 180
+        animatedIds.add(a.id)
+      }
+    }
+    return map
+  })())
 
   const visible         = avisos.filter(a => !hidden.has(a.id))
   const visibleFacturas = facturasPendientes.filter(f => !hiddenFacturas.has(f.id))
@@ -620,6 +679,7 @@ export default function AvisosStrip({ avisos, facturasPendientes = [] }: Props) 
 
   return (
     <>
+      <style dangerouslySetInnerHTML={{ __html: ATTENTION_CSS }} />
       <div className="border-b border-ink/[0.06]">
 
         {/* Factura pendiente cards — shown before regular avisos */}
@@ -637,6 +697,8 @@ export default function AvisosStrip({ avisos, facturasPendientes = [] }: Props) 
             key={a.id}
             aviso={a}
             onArchivar={() => handleArchivar(a.id)}
+            isNew={newAvisoData.current.has(a.id)}
+            animDelay={newAvisoData.current.get(a.id)}
           />
         ))}
 

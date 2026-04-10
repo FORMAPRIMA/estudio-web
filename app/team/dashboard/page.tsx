@@ -46,13 +46,15 @@ export default async function DashboardPage() {
 
   if (!profile) redirect('/login')
 
-  const today = new Date().toISOString().split('T')[0]
+  const now   = new Date()
+  const today = now.toISOString().split('T')[0]
+  const nowTime = now.toTimeString().slice(0, 8) // "HH:MM:SS"
 
   // ── Avisos ────────────────────────────────────────────────────────────────
   const [{ data: avisosRaw }, { data: archivadosRaw }] = await Promise.all([
     supabase
       .from('avisos')
-      .select('id, tipo, nivel, titulo, contenido, fecha_activa, fecha_caducidad, autor:profiles!autor_id(nombre)')
+      .select('id, tipo, nivel, titulo, contenido, fecha_activa, hora_activa, fecha_caducidad, autor:profiles!autor_id(nombre)')
       .lte('fecha_activa', today)
       .or(`fecha_caducidad.is.null,fecha_caducidad.gte.${today}`)
       .or(`destinatario_id.is.null,destinatario_id.eq.${user.id}`)
@@ -66,6 +68,8 @@ export default async function DashboardPage() {
   const archivedIds = new Set((archivadosRaw ?? []).map((r: any) => r.aviso_id))
   const avisos: Aviso[] = (avisosRaw ?? [])
     .filter((a: any) => !archivedIds.has(a.id))
+    // If hora_activa is set, only show once that time has passed today
+    .filter((a: any) => !a.hora_activa || a.fecha_activa < today || a.hora_activa <= nowTime)
     .map((a: any) => ({
       id:              a.id,
       tipo:            a.tipo  as Aviso['tipo'],
@@ -73,6 +77,7 @@ export default async function DashboardPage() {
       titulo:          a.titulo,
       contenido:       a.contenido ?? null,
       fecha_activa:    a.fecha_activa,
+      hora_activa:     a.hora_activa ?? null,
       fecha_caducidad: a.fecha_caducidad ?? null,
       autor_nombre:    a.autor?.nombre ?? null,
     }))

@@ -491,18 +491,10 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
     const result = await deleteTimeEntry(uid, fecha, h)
 
     setSaving(false)
-    if ('error' in result) {
-      setGrid((g) => {
-        const next = { ...g }
-        if (!next[uid]) next[uid] = {}
-        if (!next[uid][fecha]) next[uid][fecha] = {}
-        next[uid][fecha][h] = prev
-        return next
-      })
-      setFailedCells((s) => new Set(s).add(key))
-    } else {
+    if (!('error' in result)) {
       setSessionDeletions((n) => n + 1)
     }
+    // On error: keep the cell empty (user's intent) — don't restore or mark as failed
   }, [])
 
   const setCell = useCallback(async (uid: string, fecha: string, h: number, value: string) => {

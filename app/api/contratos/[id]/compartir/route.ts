@@ -97,10 +97,8 @@ export async function POST(
       })
     }
 
-    // Always use personal name, not company
-    const clientName = [contrato.cliente_nombre, contrato.cliente_apellidos].filter(Boolean).join(' ')
-      || contrato.cliente_empresa
-      || 'Cliente'
+    // Always use personal name, not company name
+    const clientName = [contrato.cliente_nombre, contrato.cliente_apellidos].filter(Boolean).join(' ') || 'Cliente'
 
     const projectLabel = contrato.proyecto_nombre
       ? (body.emailLang === 'en' ? ` for ${contrato.proyecto_nombre}` : ` para el proyecto ${contrato.proyecto_nombre}`)
