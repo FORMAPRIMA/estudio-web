@@ -313,27 +313,21 @@ export async function iniciarFase(pfId: string, proyectoId: string, faseId: stri
 
   const admin = createAdminClient()
 
-  // Idempotency guard: if already initiated, skip everything
-  const { data: currentPf } = await admin
-    .from('proyecto_fases')
-    .select('fase_status')
-    .eq('id', pfId)
-    .single()
+  // Idempotency guard: check via admin (bypasses RLS) whether tasks already exist
+  const { count: existingCount } = await admin
+    .from('tasks')
+    .select('id', { count: 'exact', head: true })
+    .eq('proyecto_id', proyectoId)
+    .eq('fase_id', faseId)
 
-  if (currentPf?.fase_status === 'iniciada') {
+  if ((existingCount ?? 0) > 0) {
+    // Tasks were already created for this phase — nothing to do
+    revalidatePath(`/team/proyectos/${proyectoId}`)
     return { success: true, tasks: [] }
   }
 
-  // Mark fase as iniciada — use admin client to bypass RLS for fp_team users
-  const { error: e1 } = await admin
-    .from('proyecto_fases')
-    .update({ fase_status: 'iniciada' })
-    .eq('id', pfId)
-
-  if (e1) return { error: e1.message }
-
   // Create tasks from plantilla
-  const { data: plantillas } = await supabase
+  const { data: plantillas } = await admin
     .from('plantilla_tasks')
     .select('*')
     .eq('fase_id', faseId)
@@ -344,17 +338,9 @@ export async function iniciarFase(pfId: string, proyectoId: string, faseId: stri
     return { success: true, tasks: [] }
   }
 
-  // Count existing tasks for this fase to avoid codigo collisions
-  const { count: existingCount } = await supabase
-    .from('tasks')
-    .select('id', { count: 'exact', head: true })
-    .eq('proyecto_id', proyectoId)
-    .eq('fase_id', faseId)
-
-  const offset = existingCount ?? 0
   const proyCodigo = proyecto.codigo || proyecto.nombre.slice(0, 5).toUpperCase()
   const tasksToInsert = plantillas.map((pt, i) => ({
-    codigo: `${proyCodigo}-F${catalogoFase.numero}-${String(offset + i + 1).padStart(3, '0')}`,
+    codigo: `${proyCodigo}-F${catalogoFase.numero}-${String(i + 1).padStart(3, '0')}`,
     titulo: pt.titulo,
     descripcion: pt.descripcion,
     proyecto_id: proyectoId,
@@ -365,7 +351,7 @@ export async function iniciarFase(pfId: string, proyectoId: string, faseId: stri
     origen: 'post_plataforma',
   }))
 
-  const { data: insertedTasks, error: e2 } = await supabase
+  const { data: insertedTasks, error: e2 } = await admin
     .from('tasks')
     .insert(tasksToInsert)
     .select('id, codigo, titulo, descripcion, proyecto_id, fase_id, responsable_ids, status, orden_urgencia, prioridad, created_at')
