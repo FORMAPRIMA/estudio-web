@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { CatalogoFase, PlantillaTask } from '@/lib/types'
 
@@ -11,6 +11,7 @@ export interface ProyectoNegocio {
   nombre: string
   activo: boolean
   orden: number
+  visible_para: string[] | null
 }
 
 export interface SeccionNegocio {
@@ -33,17 +34,26 @@ export interface OfertaFP {
   cliente_potencial: string | null
   activo: boolean
   orden: number
+  visible_para: string[] | null
+}
+
+export interface TeamMemberSimple {
+  id: string
+  nombre: string
+  initials: string
+  color: string
 }
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 interface Props {
-  catalogoFases: CatalogoFase[]
-  initialTasks:  PlantillaTask[]
+  catalogoFases:    CatalogoFase[]
+  initialTasks:     PlantillaTask[]
   proyectosNegocio: ProyectoNegocio[]
   seccionesNegocio: SeccionNegocio[]
   fasesNegocio:     FaseNegocio[]
   ofertasFP:        OfertaFP[]
+  teamMembers:      TeamMemberSimple[]
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -382,15 +392,125 @@ function AddFaseForm({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// PEOPLE PICKER — visibility per proyecto / oferta
+// ─────────────────────────────────────────────────────────────────────────────
+
+function PeoplePickerField({
+  teamMembers, visiblePara, onChange,
+}: {
+  teamMembers: TeamMemberSimple[]
+  visiblePara: string[] | null
+  onChange:    (val: string[] | null) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const isTodos = !visiblePara || visiblePara.length === 0
+  const selected = teamMembers.filter(m => !isTodos && visiblePara.includes(m.id))
+
+  const toggle = (id: string) => {
+    if (isTodos) {
+      onChange([id])
+    } else {
+      const next = visiblePara!.includes(id)
+        ? visiblePara!.filter(x => x !== id)
+        : [...visiblePara!, id]
+      onChange(next.length === 0 ? null : next)
+    }
+  }
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-1.5 group/pp"
+        title="Configurar visibilidad en Time Tracker"
+      >
+        {isTodos ? (
+          <span className="text-[9px] tracking-widest uppercase font-light text-meta/40 border border-ink/10 px-2 py-0.5 rounded-sm group-hover/pp:border-ink/30 group-hover/pp:text-meta/70 transition-colors">
+            Todos
+          </span>
+        ) : (
+          <div className="flex items-center gap-0.5">
+            {selected.map(m => (
+              <span
+                key={m.id}
+                style={{ background: m.color }}
+                className="w-4 h-4 rounded-full flex items-center justify-center text-[7px] text-white font-bold"
+                title={m.nombre}
+              >
+                {m.initials}
+              </span>
+            ))}
+          </div>
+        )}
+        <span className="text-[9px] text-meta/30 group-hover/pp:text-meta/60">▾</span>
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-1 bg-white border border-ink/15 shadow-lg z-50 min-w-[200px] py-1">
+          <p className="px-3 py-1.5 text-[9px] tracking-widest uppercase font-light text-meta/50 border-b border-ink/8">
+            Visible en Time Tracker para
+          </p>
+          <div
+            className="flex items-center gap-2 px-3 py-2 hover:bg-ink/5 cursor-pointer"
+            onClick={() => { onChange(null); setOpen(false) }}
+          >
+            <span className="w-4 h-4 rounded-sm border border-ink/20 flex items-center justify-center text-[8px] text-ink/60 shrink-0">
+              {isTodos ? '✓' : ''}
+            </span>
+            <span className={`text-[11px] font-light ${isTodos ? 'text-ink' : 'text-meta'}`}>
+              Todo el equipo
+            </span>
+          </div>
+          <div className="border-t border-ink/8" />
+          {teamMembers.map(m => {
+            const isSelected = !isTodos && visiblePara!.includes(m.id)
+            return (
+              <div
+                key={m.id}
+                className="flex items-center gap-2 px-3 py-2 hover:bg-ink/5 cursor-pointer"
+                onClick={() => toggle(m.id)}
+              >
+                <span
+                  style={{ background: isSelected ? m.color : 'transparent', borderColor: isSelected ? m.color : undefined }}
+                  className={`w-4 h-4 rounded-full flex items-center justify-center text-[7px] text-white font-bold shrink-0 border ${isSelected ? '' : 'border-ink/20'}`}
+                >
+                  {isSelected ? m.initials : ''}
+                </span>
+                <span className={`text-[11px] font-light ${isSelected ? 'text-ink' : 'text-meta'}`}>
+                  {m.nombre}
+                </span>
+                {isSelected && <span className="text-[9px] text-ink/30 ml-auto">✓</span>}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // PROYECTOS INTERNOS TAB
 // ─────────────────────────────────────────────────────────────────────────────
 
 function ProyectosInternosTab({
-  initialProyectos, initialSecciones, initialFases,
+  initialProyectos, initialSecciones, initialFases, teamMembers,
 }: {
   initialProyectos: ProyectoNegocio[]
   initialSecciones: SeccionNegocio[]
   initialFases:     FaseNegocio[]
+  teamMembers:      TeamMemberSimple[]
 }) {
   const [proyectos, setProyectos] = useState(initialProyectos)
   const [secciones, setSecciones] = useState(initialSecciones)
@@ -437,6 +557,14 @@ function ProyectosInternosTab({
       setSecciones(prev => prev.filter(s => s.proyecto_id !== id))
       setFases(prev => prev.filter(f => !sectIds.includes(f.seccion_id)))
     }
+  }
+
+  const updateVisibleParaProyecto = async (id: string, visiblePara: string[] | null) => {
+    const { error } = await supabase
+      .from('proyectos_internos')
+      .update({ visible_para: visiblePara })
+      .eq('id', id)
+    if (!error) setProyectos(prev => prev.map(p => p.id === id ? { ...p, visible_para: visiblePara } : p))
   }
 
   // ── CRUD secciones ────────────────────────────────────────────────────────
@@ -510,9 +638,16 @@ function ProyectosInternosTab({
                 {isOpen ? '▾' : '▸'}
               </button>
               <span className="text-sm font-light text-ink flex-1">{proyecto.nombre}</span>
-              <span className="text-[10px] text-meta/40 mr-2">
+              <span className="text-[10px] text-meta/40">
                 {proySecciones.length} secciones · {totalFases} fases
               </span>
+              <div className="mx-2" onClick={e => e.stopPropagation()}>
+                <PeoplePickerField
+                  teamMembers={teamMembers}
+                  visiblePara={proyecto.visible_para}
+                  onChange={val => updateVisibleParaProyecto(proyecto.id, val)}
+                />
+              </div>
               <button
                 onClick={() => deleteProyecto(proyecto.id)}
                 className="text-[10px] tracking-widest uppercase font-light text-meta/30 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
@@ -663,7 +798,7 @@ function ProyectosInternosTab({
 // OFERTAS TAB
 // ─────────────────────────────────────────────────────────────────────────────
 
-function OfertasTab({ initialOfertas }: { initialOfertas: OfertaFP[] }) {
+function OfertasTab({ initialOfertas, teamMembers }: { initialOfertas: OfertaFP[]; teamMembers: TeamMemberSimple[] }) {
   const [ofertas, setOfertas] = useState(initialOfertas)
   const [adding, setAdding]   = useState(false)
   const [form, setForm]       = useState({ nombre: '', cliente_potencial: '' })
@@ -695,6 +830,11 @@ function OfertasTab({ initialOfertas }: { initialOfertas: OfertaFP[] }) {
     if (!error) setOfertas(prev => prev.filter(o => o.id !== id))
   }
 
+  const updateVisibleParaOferta = async (id: string, visiblePara: string[] | null) => {
+    const { error } = await supabase.from('ofertas_fp').update({ visible_para: visiblePara }).eq('id', id)
+    if (!error) setOfertas(prev => prev.map(o => o.id === id ? { ...o, visible_para: visiblePara } : o))
+  }
+
   return (
     <div className="max-w-2xl">
       <p className="text-sm font-light text-meta mb-6">
@@ -714,6 +854,11 @@ function OfertasTab({ initialOfertas }: { initialOfertas: OfertaFP[] }) {
                   <p className="text-[10px] text-meta font-light mt-0.5">{oferta.cliente_potencial}</p>
                 )}
               </div>
+              <PeoplePickerField
+                teamMembers={teamMembers}
+                visiblePara={oferta.visible_para}
+                onChange={val => updateVisibleParaOferta(oferta.id, val)}
+              />
               <label className="flex items-center gap-2 cursor-pointer shrink-0">
                 <input
                   type="checkbox"
@@ -800,7 +945,7 @@ function OfertasTab({ initialOfertas }: { initialOfertas: OfertaFP[] }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function PlantillaManager({
-  catalogoFases, initialTasks, proyectosNegocio, seccionesNegocio, fasesNegocio, ofertasFP,
+  catalogoFases, initialTasks, proyectosNegocio, seccionesNegocio, fasesNegocio, ofertasFP, teamMembers,
 }: Props) {
   const [activeTab, setActiveTab]         = useState<'plantilla' | 'internos' | 'ofertas'>('plantilla')
   const [localFases, setLocalFases]       = useState<CatalogoFase[]>(catalogoFases)
@@ -1018,12 +1163,13 @@ export default function PlantillaManager({
           initialProyectos={proyectosNegocio}
           initialSecciones={seccionesNegocio}
           initialFases={fasesNegocio}
+          teamMembers={teamMembers}
         />
       )}
 
       {/* Tab: Ofertas */}
       {activeTab === 'ofertas' && (
-        <OfertasTab initialOfertas={ofertasFP} />
+        <OfertasTab initialOfertas={ofertasFP} teamMembers={teamMembers} />
       )}
     </div>
   )

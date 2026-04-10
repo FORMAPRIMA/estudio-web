@@ -53,10 +53,10 @@ interface TimeEntry {
 // Grid: [user_id][fecha][hora_inicio] = fase_id | 'int_CAT' | ''
 type Grid = Record<string, Record<string, Record<number, string>>>
 
-interface ProyectoNegocio { id: string; nombre: string; activo: boolean; orden: number }
+interface ProyectoNegocio { id: string; nombre: string; activo: boolean; orden: number; visible_para: string[] | null }
 interface SeccionNegocio { id: string; proyecto_id: string; nombre: string; orden: number }
 interface FaseNegocio { id: string; seccion_id: string; nombre: string; orden: number }
-interface OfertaFP { id: string; nombre: string; cliente_potencial: string | null; activo: boolean; orden: number }
+interface OfertaFP { id: string; nombre: string; cliente_potencial: string | null; activo: boolean; orden: number; visible_para: string[] | null }
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -295,10 +295,10 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
 
     // Load proyectos internos + ofertas
     const [{ data: pnData }, { data: snData }, { data: fnData }, { data: ofData }] = await Promise.all([
-      supabase.from('proyectos_internos').select('id, nombre, activo, orden').order('orden'),
+      supabase.from('proyectos_internos').select('id, nombre, activo, orden, visible_para').order('orden'),
       supabase.from('proyectos_internos_secciones').select('id, proyecto_id, nombre, orden').order('orden'),
       supabase.from('proyectos_internos_fases').select('id, seccion_id, nombre, orden').order('orden'),
-      supabase.from('ofertas_fp').select('id, nombre, cliente_potencial, activo, orden').order('orden'),
+      supabase.from('ofertas_fp').select('id, nombre, cliente_potencial, activo, orden, visible_para').order('orden'),
     ])
     if (pnData) setProyectosNegocio(pnData as ProyectoNegocio[])
     if (snData) setSeccionesNegocio(snData as SeccionNegocio[])
@@ -785,6 +785,7 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
 
     const filteredProyectosNegocio = proyectosNegocio
       .filter(p => p.activo)
+      .filter(p => !p.visible_para || p.visible_para.length === 0 || p.visible_para.includes(currentUserId))
       .filter(p => !q || p.nombre.toLowerCase().includes(q) || 'interno negocio'.includes(q))
       .map(p => {
         const secciones = seccionesNegocio.filter(s => s.proyecto_id === p.id)
@@ -797,6 +798,7 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
 
     const filteredOfertas = ofertasFP
       .filter(o => o.activo)
+      .filter(o => !o.visible_para || o.visible_para.length === 0 || o.visible_para.includes(currentUserId))
       .filter(o => !q || o.nombre.toLowerCase().includes(q) || 'oferta'.includes(q) ||
         (o.cliente_potencial ?? '').toLowerCase().includes(q))
 
