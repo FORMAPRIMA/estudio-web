@@ -129,11 +129,32 @@ export default function PropuestaDetalle({
   const [contactoId,     setContactoId]     = useState<string | null>(initContactoId)
   const [contactoSource, setContactoSource] = useState<'lead' | 'cliente'>(initContactoSource as 'lead' | 'cliente')
   // Manual honorarios overrides for ratio-based services (keyed by ServicioId)
-  const [honorariosOverride, setHonorariosOverride] = useState<Record<string, string>>(
-    Object.fromEntries(
+  const [honorariosOverride, setHonorariosOverride] = useState<Record<string, string>>(() => {
+    const raw = Object.fromEntries(
       Object.entries(initial.honorarios_override ?? {}).map(([k, v]) => [k, String(v)])
     )
-  )
+    // Migration: if 'interiorismo' has a combined override but 'gestion_interiorismo' doesn't,
+    // and both services are selected, split the combined amount proportionally by ratio.
+    if (
+      raw['interiorismo'] &&
+      !raw['gestion_interiorismo'] &&
+      (initial.servicios ?? []).includes('gestion_interiorismo' as ServicioId)
+    ) {
+      const rInter = ratiosFases
+        .filter(r => (r.seccion ?? '').toLowerCase().includes('interiorismo') && !(r.label ?? '').toLowerCase().includes('gesti'))
+        .reduce((s, r) => s + (r.ratio ?? 0), 0)
+      const rGesti = ratiosFases
+        .filter(r => (r.seccion ?? '').toLowerCase().includes('interiorismo') && (r.label ?? '').toLowerCase().includes('gesti'))
+        .reduce((s, r) => s + (r.ratio ?? 0), 0)
+      const rTotal = rInter + rGesti
+      if (rGesti > 0 && rTotal > 0) {
+        const combined = parseFloat(raw['interiorismo']) || 0
+        raw['interiorismo']        = String(Math.round(combined * rInter / rTotal))
+        raw['gestion_interiorismo'] = String(Math.round(combined * rGesti / rTotal))
+      }
+    }
+    return raw
+  })
   const [entregablesOverride, setEntregablesOverride] = useState<Record<string, { grupo: string; items: string[] }[]>>(
     (initial as any).entregables_override ?? {}
   )
@@ -146,7 +167,9 @@ export default function PropuestaDetalle({
     .filter(r => (r.seccion ?? '').toLowerCase().includes('interiorismo'))
     .map(r => ({
       label:    r.label,
-      servicio: 'interiorismo' as ServicioId,
+      servicio: ((r.label ?? '').toLowerCase().includes('gesti')
+        ? 'gestion_interiorismo'
+        : 'interiorismo') as ServicioId,
       ratio:    r.ratio ?? 0,
     }))
 

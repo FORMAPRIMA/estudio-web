@@ -17,6 +17,7 @@ interface CreateProyectoInput {
   superficie_diseno: number | null
   superficie_catastral: number | null
   superficie_util: number | null
+  nivel_calidad?: string | null
   cliente_ids: string[]
   selectedFases: FaseInput[]
   fasesResponsables: Record<string, string[]>
@@ -75,6 +76,7 @@ export async function createProyecto(input: CreateProyectoInput) {
         superficie_catastral: input.superficie_catastral,
         superficie_util: input.superficie_util,
         cliente_id: input.cliente_ids[0] ?? null,
+        nivel_calidad: input.nivel_calidad ?? null,
         status: 'activo',
         created_by: user.id,
         ubicacion: input.direccion || '-',

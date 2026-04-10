@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { createProyecto, getProyectoImageUploadToken } from '@/app/actions/proyectos'
 import { createClient as createBrowserClient } from '@/lib/supabase/client'
-import type { CatalogoFase, UserProfile } from '@/lib/types'
+import type { CatalogoFase, UserProfile, NivelCalidad } from '@/lib/types'
 
 interface Props {
   catalogoFases: CatalogoFase[]
@@ -21,8 +21,15 @@ interface FormState {
   superficie_diseno: string
   superficie_catastral: string
   superficie_util: string
+  nivel_calidad: NivelCalidad | null
   cliente_ids: string[]
   es_diseno: boolean
+}
+
+const NIVEL_CALIDAD_CONFIG: Record<NivelCalidad, { label: string; active: string }> = {
+  master_piece: { label: 'Master Piece', active: 'bg-amber-100 border-amber-400 text-amber-800' },
+  select:       { label: 'Select',       active: 'bg-indigo-50 border-indigo-400 text-indigo-700' },
+  functional:   { label: 'Functional',   active: 'bg-ink/10 border-ink/40 text-ink/80' },
 }
 
 // ── ClientesMultiSelect ───────────────────────────────────────────────────────
@@ -245,6 +252,7 @@ export default function ProyectoModal({
     superficie_diseno: '',
     superficie_catastral: '',
     superficie_util: '',
+    nivel_calidad: null,
     cliente_ids: [],
     es_diseno: true,
   })
@@ -315,6 +323,7 @@ export default function ProyectoModal({
         superficie_diseno: form.es_diseno && form.superficie_diseno ? Number(form.superficie_diseno) : null,
         superficie_catastral: form.es_diseno && form.superficie_catastral ? Number(form.superficie_catastral) : null,
         superficie_util: form.es_diseno && form.superficie_util ? Number(form.superficie_util) : null,
+        nivel_calidad: form.nivel_calidad,
         cliente_ids: form.cliente_ids,
         selectedFases: fasesOrdenadas.map(f => ({ id: f.id, numero: f.numero })),
         fasesResponsables,
@@ -417,6 +426,40 @@ export default function ProyectoModal({
                 className="w-full border border-ink/15 px-3 py-2 text-sm font-light text-ink bg-white focus:outline-none focus:border-ink/40 transition-colors"
                 placeholder="Av. Reforma 123, CDMX"
               />
+            </div>
+
+            {/* Nivel de calidad */}
+            <div>
+              <label className="block text-[10px] tracking-widest uppercase font-light text-meta mb-1.5">
+                Nivel de calidad
+              </label>
+              <div className="flex gap-1.5 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setForm(f => ({ ...f, nivel_calidad: null }))}
+                  className={`px-3 py-1.5 text-[10px] tracking-widest uppercase font-light border transition-colors ${
+                    form.nivel_calidad === null
+                      ? 'bg-ink/8 border-ink/30 text-ink/70'
+                      : 'border-ink/10 text-ink/30 hover:border-ink/20 hover:text-ink/50'
+                  }`}
+                >
+                  Sin clasificar
+                </button>
+                {(Object.entries(NIVEL_CALIDAD_CONFIG) as [NivelCalidad, { label: string; active: string }][]).map(([val, cfg]) => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, nivel_calidad: val }))}
+                    className={`px-3 py-1.5 text-[10px] tracking-widest uppercase font-light border transition-colors ${
+                      form.nivel_calidad === val
+                        ? cfg.active
+                        : 'border-ink/10 text-ink/30 hover:border-ink/20 hover:text-ink/50'
+                    }`}
+                  >
+                    {cfg.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Tipo de proyecto */}
