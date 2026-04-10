@@ -4,12 +4,51 @@ import { useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { CatalogoFase, PlantillaTask } from '@/lib/types'
 
+// ── New exported types ────────────────────────────────────────────────────────
+
+export interface ProyectoNegocio {
+  id: string
+  nombre: string
+  activo: boolean
+  orden: number
+}
+
+export interface SeccionNegocio {
+  id: string
+  proyecto_id: string
+  nombre: string
+  orden: number
+}
+
+export interface FaseNegocio {
+  id: string
+  seccion_id: string
+  nombre: string
+  orden: number
+}
+
+export interface OfertaFP {
+  id: string
+  nombre: string
+  cliente_potencial: string | null
+  activo: boolean
+  orden: number
+}
+
+// ── Props ─────────────────────────────────────────────────────────────────────
+
 interface Props {
   catalogoFases: CatalogoFase[]
   initialTasks:  PlantillaTask[]
+  proyectosNegocio: ProyectoNegocio[]
+  seccionesNegocio: SeccionNegocio[]
+  fasesNegocio:     FaseNegocio[]
+  ofertasFP:        OfertaFP[]
 }
 
-// ── Task row (edit / delete) ──────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Existing sub-components (PLANTILLA TAB)
+// ─────────────────────────────────────────────────────────────────────────────
 
 function TaskRow({
   task, onUpdate, onDelete,
@@ -85,8 +124,6 @@ function TaskRow({
   )
 }
 
-// ── Add task form ─────────────────────────────────────────────────────────────
-
 function AddTaskForm({ faseId, nextOrden, onAdded }: {
   faseId:    string
   nextOrden: number
@@ -149,8 +186,6 @@ function AddTaskForm({ faseId, nextOrden, onAdded }: {
   )
 }
 
-// ── Fase row (reorder + rename + delete) ─────────────────────────────────────
-
 function FaseRow({
   fase, tasks, isFirst, isLast, isExpanded,
   onToggle, onMoveUp, onMoveDown, onRename, onDelete,
@@ -187,7 +222,6 @@ function FaseRow({
   return (
     <div className="border border-ink/10">
       {renaming ? (
-        /* ── Rename mode ── */
         <div className="flex items-center gap-3 px-4 py-2.5 bg-ink/[0.02]">
           <span className="text-[10px] tracking-widest uppercase font-light text-meta/60 w-6 shrink-0">
             F{fase.numero}
@@ -197,99 +231,49 @@ function FaseRow({
             value={newLabel}
             onChange={e => setNewLabel(e.target.value)}
             onKeyDown={e => {
-              if (e.key === 'Enter')  saveRename()
+              if (e.key === 'Enter') saveRename()
               if (e.key === 'Escape') { setRenaming(false); setNewLabel(fase.label) }
             }}
-            className="flex-1 text-sm font-light text-ink border border-ink/30 px-2 py-1 bg-white focus:outline-none focus:border-ink/60"
+            className="flex-1 text-sm font-light text-ink border border-ink/20 px-2 py-0.5 bg-white focus:outline-none focus:border-ink/40"
           />
-          <button onClick={saveRename} className="text-[10px] tracking-widest uppercase font-light text-ink hover:opacity-60 transition-opacity">
-            Guardar
-          </button>
-          <button
-            onClick={() => { setRenaming(false); setNewLabel(fase.label) }}
-            className="text-[10px] tracking-widest uppercase font-light text-meta hover:text-ink transition-colors"
-          >
-            Cancelar
-          </button>
+          <button onClick={saveRename} className="text-[10px] tracking-widest uppercase font-light text-ink hover:opacity-60">Guardar</button>
+          <button onClick={() => { setRenaming(false); setNewLabel(fase.label) }} className="text-[10px] tracking-widest uppercase font-light text-meta">Cancelar</button>
         </div>
       ) : (
-        /* ── Normal mode ── */
-        <div className="flex items-stretch group">
-
-          {/* ↑↓ reorder arrows — visible on hover */}
-          <div className="flex flex-col justify-center shrink-0 border-r border-ink/8 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button
-              onClick={e => { e.stopPropagation(); onMoveUp() }}
-              disabled={isFirst}
-              title="Mover arriba"
-              className="px-2.5 py-1 text-[9px] text-meta hover:text-ink hover:bg-ink/5 disabled:opacity-20 disabled:cursor-not-allowed transition-colors leading-none"
-            >
-              ▲
-            </button>
-            <button
-              onClick={e => { e.stopPropagation(); onMoveDown() }}
-              disabled={isLast}
-              title="Mover abajo"
-              className="px-2.5 py-1 text-[9px] text-meta hover:text-ink hover:bg-ink/5 disabled:opacity-20 disabled:cursor-not-allowed transition-colors leading-none"
-            >
-              ▼
-            </button>
+        <button
+          onClick={onToggle}
+          className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-ink/[0.02] transition-colors group"
+        >
+          <span className="text-[10px] tracking-widest uppercase font-light text-meta/60 w-6 shrink-0">
+            F{fase.numero}
+          </span>
+          <span className="text-sm font-light text-ink flex-1">{fase.label}</span>
+          <span className="text-[10px] text-meta/40">{tasks.length} tasks</span>
+          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-2" onClick={e => e.stopPropagation()}>
+            <button onClick={onMoveUp} disabled={isFirst} className="px-1.5 py-0.5 text-[10px] text-meta/60 hover:text-ink disabled:opacity-20">↑</button>
+            <button onClick={onMoveDown} disabled={isLast} className="px-1.5 py-0.5 text-[10px] text-meta/60 hover:text-ink disabled:opacity-20">↓</button>
+            <button onClick={() => setRenaming(true)} className="px-1.5 py-0.5 text-[10px] text-meta/60 hover:text-ink">renombrar</button>
+            <button onClick={onDelete} className="px-1.5 py-0.5 text-[10px] text-meta/60 hover:text-red-600">eliminar</button>
           </div>
-
-          {/* Main row — click to expand tasks */}
-          <button
-            onClick={onToggle}
-            className="flex-1 flex items-center justify-between px-4 py-3 hover:bg-ink/[0.02] transition-colors min-w-0"
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <span className="text-[10px] tracking-widest uppercase font-light text-meta/60 w-6 shrink-0">
-                F{fase.numero}
-              </span>
-              <span className="text-[11px] font-light text-ink text-left truncate">{fase.label}</span>
-            </div>
-            <div className="flex items-center gap-3 shrink-0 ml-3">
-              <span className="text-[10px] text-meta font-light">{tasks.length} tasks</span>
-              <span className="text-meta text-xs">{isExpanded ? '▲' : '▼'}</span>
-            </div>
-          </button>
-
-          {/* Rename / delete — visible on hover */}
-          <div className="flex items-center gap-2 pr-3 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-            <button
-              onClick={e => { e.stopPropagation(); setRenaming(true); setNewLabel(fase.label) }}
-              className="text-[9px] tracking-widest uppercase font-light text-meta hover:text-ink transition-colors"
-            >
-              Renombrar
-            </button>
-            <span className="text-meta/30 select-none">·</span>
-            <button
-              onClick={e => { e.stopPropagation(); onDelete() }}
-              className="text-[9px] tracking-widest uppercase font-light text-meta hover:text-red-500 transition-colors"
-            >
-              Eliminar
-            </button>
-          </div>
-        </div>
+          <span className="text-meta/40 text-xs ml-1">{isExpanded ? '▴' : '▾'}</span>
+        </button>
       )}
 
-      {/* Tasks panel */}
       {isExpanded && (
-        <div className="border-t border-ink/10">
-          {tasks.length === 0 ? (
-            <p className="px-4 py-3 text-[10px] text-meta/50 font-light">Sin tasks en esta fase</p>
-          ) : (
-            tasks.map(task => (
-              <TaskRow key={task.id} task={task} onUpdate={onUpdateTask} onDelete={onDeleteTask} />
-            ))
-          )}
-          <AddTaskForm faseId={fase.id} nextOrden={tasks.length} onAdded={onAddTask} />
+        <div className="border-t border-ink/8">
+          {tasks.map(task => (
+            <TaskRow key={task.id} task={task} onUpdate={onUpdateTask} onDelete={onDeleteTask} />
+          ))}
+          <AddTaskForm
+            faseId={fase.id}
+            nextOrden={tasks.length + 1}
+            onAdded={onAddTask}
+          />
         </div>
       )}
     </div>
   )
 }
-
-// ── Add fase form ─────────────────────────────────────────────────────────────
 
 function AddFaseForm({
   existingSecciones, nextNumero, onAdded, onCancel,
@@ -315,7 +299,6 @@ function AddFaseForm({
     setLoading(true)
     setError(null)
 
-    // Insert with nextNumero (guaranteed unique); parent will reassign correct values via applyOrder
     const { data, error: err } = await supabase
       .from('catalogo_fases')
       .insert({ label: label.trim(), seccion: seccionFinal, numero: nextNumero, orden: nextNumero })
@@ -398,9 +381,428 @@ function AddFaseForm({
   )
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// PROYECTOS INTERNOS TAB
+// ─────────────────────────────────────────────────────────────────────────────
 
-export default function PlantillaManager({ catalogoFases, initialTasks }: Props) {
+function ProyectosInternosTab({
+  initialProyectos, initialSecciones, initialFases,
+}: {
+  initialProyectos: ProyectoNegocio[]
+  initialSecciones: SeccionNegocio[]
+  initialFases:     FaseNegocio[]
+}) {
+  const [proyectos, setProyectos] = useState(initialProyectos)
+  const [secciones, setSecciones] = useState(initialSecciones)
+  const [fases, setFases]         = useState(initialFases)
+  const [expanded, setExpanded]   = useState<Set<string>>(new Set())
+
+  // Adding state
+  const [addingProyecto, setAddingProyecto]     = useState(false)
+  const [newProyectoNombre, setNewProyectoNombre] = useState('')
+  const [addingSeccion, setAddingSeccion]         = useState<string | null>(null)
+  const [newSeccionNombre, setNewSeccionNombre]   = useState('')
+  const [addingFase, setAddingFase]               = useState<string | null>(null)
+  const [newFaseNombre, setNewFaseNombre]         = useState('')
+
+  const supabase = createClient()
+
+  const toggle = (id: string) =>
+    setExpanded(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
+
+  // ── CRUD proyectos ────────────────────────────────────────────────────────
+
+  const addProyecto = async () => {
+    const nombre = newProyectoNombre.trim()
+    if (!nombre) return
+    const { data, error } = await supabase
+      .from('proyectos_internos')
+      .insert({ nombre, orden: proyectos.length })
+      .select('id, nombre, activo, orden')
+      .single()
+    if (!error && data) {
+      setProyectos(prev => [...prev, data as ProyectoNegocio])
+      setNewProyectoNombre('')
+      setAddingProyecto(false)
+      setExpanded(prev => new Set(prev).add(data.id))
+    }
+  }
+
+  const deleteProyecto = async (id: string) => {
+    if (!confirm('¿Eliminar este proyecto y todas sus secciones y fases? Los registros de horas existentes no se borran.')) return
+    const { error } = await supabase.from('proyectos_internos').delete().eq('id', id)
+    if (!error) {
+      const sectIds = secciones.filter(s => s.proyecto_id === id).map(s => s.id)
+      setProyectos(prev => prev.filter(p => p.id !== id))
+      setSecciones(prev => prev.filter(s => s.proyecto_id !== id))
+      setFases(prev => prev.filter(f => !sectIds.includes(f.seccion_id)))
+    }
+  }
+
+  // ── CRUD secciones ────────────────────────────────────────────────────────
+
+  const addSeccion = async (proyectoId: string) => {
+    const nombre = newSeccionNombre.trim()
+    if (!nombre) return
+    const orden = secciones.filter(s => s.proyecto_id === proyectoId).length
+    const { data, error } = await supabase
+      .from('proyectos_internos_secciones')
+      .insert({ proyecto_id: proyectoId, nombre, orden })
+      .select('id, proyecto_id, nombre, orden')
+      .single()
+    if (!error && data) {
+      setSecciones(prev => [...prev, data as SeccionNegocio])
+      setNewSeccionNombre('')
+      setAddingSeccion(null)
+      setExpanded(prev => new Set(prev).add(data.id))
+    }
+  }
+
+  const deleteSeccion = async (id: string) => {
+    if (!confirm('¿Eliminar esta sección y sus fases?')) return
+    const { error } = await supabase.from('proyectos_internos_secciones').delete().eq('id', id)
+    if (!error) {
+      setSecciones(prev => prev.filter(s => s.id !== id))
+      setFases(prev => prev.filter(f => f.seccion_id !== id))
+    }
+  }
+
+  // ── CRUD fases ────────────────────────────────────────────────────────────
+
+  const addFase = async (seccionId: string) => {
+    const nombre = newFaseNombre.trim()
+    if (!nombre) return
+    const orden = fases.filter(f => f.seccion_id === seccionId).length
+    const { data, error } = await supabase
+      .from('proyectos_internos_fases')
+      .insert({ seccion_id: seccionId, nombre, orden })
+      .select('id, seccion_id, nombre, orden')
+      .single()
+    if (!error && data) {
+      setFases(prev => [...prev, data as FaseNegocio])
+      setNewFaseNombre('')
+      setAddingFase(null)
+    }
+  }
+
+  const deleteFase = async (id: string) => {
+    const { error } = await supabase.from('proyectos_internos_fases').delete().eq('id', id)
+    if (!error) setFases(prev => prev.filter(f => f.id !== id))
+  }
+
+  return (
+    <div className="max-w-2xl">
+      <p className="text-sm font-light text-meta mb-6">
+        Proyectos de negocio internos: marketing, producto, formación, etc.
+        Aparecen en el Time Tracker para registrar las horas invertidas.
+      </p>
+
+      {proyectos.map(proyecto => {
+        const proySecciones = secciones.filter(s => s.proyecto_id === proyecto.id)
+        const totalFases    = proySecciones.reduce((acc, s) => acc + fases.filter(f => f.seccion_id === s.id).length, 0)
+        const isOpen        = expanded.has(proyecto.id)
+
+        return (
+          <div key={proyecto.id} className="mb-3 border border-ink/10">
+            {/* Proyecto header */}
+            <div className="flex items-center gap-2 px-4 py-3 bg-ink/[0.02] group">
+              <button onClick={() => toggle(proyecto.id)} className="text-meta/60 text-xs w-4 shrink-0 text-left">
+                {isOpen ? '▾' : '▸'}
+              </button>
+              <span className="text-sm font-light text-ink flex-1">{proyecto.nombre}</span>
+              <span className="text-[10px] text-meta/40 mr-2">
+                {proySecciones.length} secciones · {totalFases} fases
+              </span>
+              <button
+                onClick={() => deleteProyecto(proyecto.id)}
+                className="text-[10px] tracking-widest uppercase font-light text-meta/30 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+              >
+                Eliminar
+              </button>
+            </div>
+
+            {isOpen && (
+              <div>
+                {proySecciones.map(seccion => {
+                  const secFases    = fases.filter(f => f.seccion_id === seccion.id)
+                  const isSecOpen   = expanded.has(seccion.id)
+
+                  return (
+                    <div key={seccion.id} className="border-t border-ink/5">
+                      {/* Sección header */}
+                      <div className="flex items-center gap-2 px-8 py-2 group/sec">
+                        <button onClick={() => toggle(seccion.id)} className="text-meta/40 text-xs w-4 shrink-0 text-left">
+                          {isSecOpen ? '▾' : '▸'}
+                        </button>
+                        <span className="text-xs font-light text-ink/80 flex-1 uppercase tracking-widest">{seccion.nombre}</span>
+                        <span className="text-[10px] text-meta/40 mr-2">{secFases.length} fases</span>
+                        <button
+                          onClick={() => deleteSeccion(seccion.id)}
+                          className="text-[10px] text-meta/30 hover:text-red-500 transition-colors opacity-0 group-hover/sec:opacity-100"
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+
+                      {isSecOpen && (
+                        <div className="pb-1">
+                          {secFases.map(fase => (
+                            <div key={fase.id} className="flex items-center gap-2 px-14 py-1.5 border-t border-ink/5 group/fase">
+                              <span className="text-[11px] font-light text-soft flex-1">{fase.nombre}</span>
+                              <button
+                                onClick={() => deleteFase(fase.id)}
+                                className="text-[11px] text-meta/30 hover:text-red-500 opacity-0 group-hover/fase:opacity-100"
+                              >×</button>
+                            </div>
+                          ))}
+
+                          {addingFase === seccion.id ? (
+                            <div className="flex items-center gap-2 px-14 py-2 border-t border-ink/5">
+                              <input
+                                autoFocus
+                                value={newFaseNombre}
+                                onChange={e => setNewFaseNombre(e.target.value)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') addFase(seccion.id)
+                                  if (e.key === 'Escape') { setAddingFase(null); setNewFaseNombre('') }
+                                }}
+                                placeholder="Nombre de la fase…"
+                                className="flex-1 text-xs font-light border border-ink/20 px-2 py-1 focus:outline-none bg-white"
+                              />
+                              <button onClick={() => addFase(seccion.id)} className="text-[10px] text-ink hover:opacity-60">Agregar</button>
+                              <button onClick={() => { setAddingFase(null); setNewFaseNombre('') }} className="text-[10px] text-meta">Cancelar</button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => { setAddingFase(seccion.id); setNewFaseNombre('') }}
+                              className="w-full text-left px-14 py-2 text-[10px] tracking-widest uppercase font-light text-meta/40 hover:text-meta border-t border-ink/5"
+                            >
+                              + Agregar fase
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+
+                {/* Add sección */}
+                {addingSeccion === proyecto.id ? (
+                  <div className="flex items-center gap-2 px-8 py-2 border-t border-ink/10">
+                    <input
+                      autoFocus
+                      value={newSeccionNombre}
+                      onChange={e => setNewSeccionNombre(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') addSeccion(proyecto.id)
+                        if (e.key === 'Escape') { setAddingSeccion(null); setNewSeccionNombre('') }
+                      }}
+                      placeholder="Nombre de la sección…"
+                      className="flex-1 text-xs font-light border border-ink/20 px-2 py-1 focus:outline-none bg-white"
+                    />
+                    <button onClick={() => addSeccion(proyecto.id)} className="text-[10px] text-ink hover:opacity-60">Agregar</button>
+                    <button onClick={() => { setAddingSeccion(null); setNewSeccionNombre('') }} className="text-[10px] text-meta">Cancelar</button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => { setAddingSeccion(proyecto.id); setNewSeccionNombre('') }}
+                    className="w-full text-left px-8 py-2 text-[10px] tracking-widest uppercase font-light text-meta/40 hover:text-meta border-t border-ink/10"
+                  >
+                    + Agregar sección
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })}
+
+      {/* Add proyecto */}
+      {addingProyecto ? (
+        <div className="border border-dashed border-ink/30 p-4 mt-3">
+          <input
+            autoFocus
+            value={newProyectoNombre}
+            onChange={e => setNewProyectoNombre(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') addProyecto()
+              if (e.key === 'Escape') { setAddingProyecto(false); setNewProyectoNombre('') }
+            }}
+            placeholder="Nombre del proyecto (ej. Marketing, Producto, Formación…)"
+            className="w-full text-sm font-light border border-ink/20 px-3 py-2 mb-3 focus:outline-none bg-white"
+          />
+          <div className="flex gap-3">
+            <button
+              onClick={addProyecto}
+              disabled={!newProyectoNombre.trim()}
+              className="text-[10px] tracking-widest uppercase font-light px-4 py-2 bg-ink text-cream hover:bg-ink/80 disabled:opacity-30"
+            >
+              Crear proyecto
+            </button>
+            <button
+              onClick={() => { setAddingProyecto(false); setNewProyectoNombre('') }}
+              className="text-[10px] tracking-widest uppercase font-light text-meta hover:text-ink"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => setAddingProyecto(true)}
+          className="mt-3 text-[10px] tracking-widest uppercase font-light text-meta hover:text-ink transition-colors border border-dashed border-ink/20 hover:border-ink/40 px-4 py-3 w-full text-center"
+        >
+          + Nuevo proyecto interno
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OFERTAS TAB
+// ─────────────────────────────────────────────────────────────────────────────
+
+function OfertasTab({ initialOfertas }: { initialOfertas: OfertaFP[] }) {
+  const [ofertas, setOfertas] = useState(initialOfertas)
+  const [adding, setAdding]   = useState(false)
+  const [form, setForm]       = useState({ nombre: '', cliente_potencial: '' })
+  const supabase = createClient()
+
+  const addOferta = async () => {
+    const nombre = form.nombre.trim()
+    if (!nombre) return
+    const { data, error } = await supabase
+      .from('ofertas_fp')
+      .insert({ nombre, cliente_potencial: form.cliente_potencial.trim() || null, orden: ofertas.length })
+      .select('id, nombre, cliente_potencial, activo, orden')
+      .single()
+    if (!error && data) {
+      setOfertas(prev => [...prev, data as OfertaFP])
+      setForm({ nombre: '', cliente_potencial: '' })
+      setAdding(false)
+    }
+  }
+
+  const toggleActivo = async (id: string, activo: boolean) => {
+    const { error } = await supabase.from('ofertas_fp').update({ activo }).eq('id', id)
+    if (!error) setOfertas(prev => prev.map(o => o.id === id ? { ...o, activo } : o))
+  }
+
+  const deleteOferta = async (id: string) => {
+    if (!confirm('¿Eliminar esta oferta? Los registros de horas existentes no se borran.')) return
+    const { error } = await supabase.from('ofertas_fp').delete().eq('id', id)
+    if (!error) setOfertas(prev => prev.filter(o => o.id !== id))
+  }
+
+  return (
+    <div className="max-w-2xl">
+      <p className="text-sm font-light text-meta mb-6">
+        Proyectos en negociación. Registra las horas invertidas en ofertas antes de que se conviertan en proyectos contratados.
+        Las ofertas marcadas como cerradas dejan de aparecer en el Time Tracker.
+      </p>
+
+      {ofertas.length > 0 && (
+        <div className="mb-4 space-y-2">
+          {ofertas.map(oferta => (
+            <div key={oferta.id} className="flex items-center gap-3 px-4 py-3 border border-ink/10 group">
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm font-light ${oferta.activo ? 'text-ink' : 'text-meta/50 line-through'}`}>
+                  {oferta.nombre}
+                </p>
+                {oferta.cliente_potencial && (
+                  <p className="text-[10px] text-meta font-light mt-0.5">{oferta.cliente_potencial}</p>
+                )}
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer shrink-0">
+                <input
+                  type="checkbox"
+                  checked={oferta.activo}
+                  onChange={e => toggleActivo(oferta.id, e.target.checked)}
+                  className="accent-ink"
+                />
+                <span className="text-[10px] tracking-widest uppercase font-light text-meta">
+                  {oferta.activo ? 'Activa' : 'Cerrada'}
+                </span>
+              </label>
+              <button
+                onClick={() => deleteOferta(oferta.id)}
+                className="text-[10px] tracking-widest uppercase font-light text-meta/30 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+              >
+                Eliminar
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {adding ? (
+        <div className="border border-dashed border-ink/30 p-4">
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <div>
+              <label className="block text-[9px] tracking-widest uppercase font-light text-meta/60 mb-1">
+                Nombre del proyecto *
+              </label>
+              <input
+                autoFocus
+                value={form.nombre}
+                onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') addOferta()
+                  if (e.key === 'Escape') { setAdding(false); setForm({ nombre: '', cliente_potencial: '' }) }
+                }}
+                placeholder="Ej. Villa García"
+                className="w-full text-sm font-light border border-ink/20 px-2 py-1.5 bg-white focus:outline-none focus:border-ink/40"
+              />
+            </div>
+            <div>
+              <label className="block text-[9px] tracking-widest uppercase font-light text-meta/60 mb-1">
+                Cliente potencial
+              </label>
+              <input
+                value={form.cliente_potencial}
+                onChange={e => setForm(f => ({ ...f, cliente_potencial: e.target.value }))}
+                placeholder="Nombre del cliente"
+                className="w-full text-sm font-light border border-ink/20 px-2 py-1.5 bg-white focus:outline-none focus:border-ink/40"
+              />
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={addOferta}
+              disabled={!form.nombre.trim()}
+              className="text-[10px] tracking-widest uppercase font-light px-4 py-2 bg-ink text-cream hover:bg-ink/80 transition-colors disabled:opacity-30"
+            >
+              Agregar oferta
+            </button>
+            <button
+              onClick={() => { setAdding(false); setForm({ nombre: '', cliente_potencial: '' }) }}
+              className="text-[10px] tracking-widest uppercase font-light text-meta hover:text-ink transition-colors"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => setAdding(true)}
+          className="mt-1 text-[10px] tracking-widest uppercase font-light text-meta hover:text-ink transition-colors border border-dashed border-ink/20 hover:border-ink/40 px-4 py-3 w-full text-center"
+        >
+          + Agregar oferta
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN COMPONENT
+// ─────────────────────────────────────────────────────────────────────────────
+
+export default function PlantillaManager({
+  catalogoFases, initialTasks, proyectosNegocio, seccionesNegocio, fasesNegocio, ofertasFP,
+}: Props) {
+  const [activeTab, setActiveTab]         = useState<'plantilla' | 'internos' | 'ofertas'>('plantilla')
   const [localFases, setLocalFases]       = useState<CatalogoFase[]>(catalogoFases)
   const [tasks, setTasks]                 = useState<PlantillaTask[]>(initialTasks)
   const [expandedFases, setExpandedFases] = useState<string[]>([])
@@ -408,13 +810,11 @@ export default function PlantillaManager({ catalogoFases, initialTasks }: Props)
   const [saving, setSaving]               = useState(false)
   const supabase = createClient()
 
-  // Global sort by orden
   const sortedFases = useMemo(
     () => [...localFases].sort((a, b) => a.orden - b.orden),
     [localFases],
   )
 
-  // Sections ordered by their first fase's position
   const secciones = useMemo(() => {
     const seen = new Set<string>()
     for (const f of sortedFases) {
@@ -423,7 +823,6 @@ export default function PlantillaManager({ catalogoFases, initialTasks }: Props)
     return Array.from(seen)
   }, [sortedFases])
 
-  // ── Task helpers ──────────────────────────────────────────────────────────
   const updateTask = (id: string, data: Partial<PlantillaTask>) =>
     setTasks(prev => prev.map(t => t.id === id ? { ...t, ...data } : t))
   const deleteTask = (id: string) =>
@@ -431,12 +830,6 @@ export default function PlantillaManager({ catalogoFases, initialTasks }: Props)
   const addTask = (task: PlantillaTask) =>
     setTasks(prev => [...prev, task])
 
-  // ── Order helpers ─────────────────────────────────────────────────────────
-
-  /**
-   * Given a desired order of fases, assign sequential orden (1..N) and numero (1..N),
-   * persist only the rows that changed, and update local state.
-   */
   const applyOrder = async (orderedFases: CatalogoFase[]) => {
     setSaving(true)
     const reassigned = orderedFases.map((f, i) => ({ ...f, orden: i + 1, numero: i + 1 }))
@@ -453,7 +846,6 @@ export default function PlantillaManager({ catalogoFases, initialTasks }: Props)
     setSaving(false)
   }
 
-  // Move fase up within its section (swaps with previous sibling)
   const moveFaseUp = async (faseId: string) => {
     const fase = localFases.find(f => f.id === faseId)
     if (!fase) return
@@ -468,7 +860,6 @@ export default function PlantillaManager({ catalogoFases, initialTasks }: Props)
     await applyOrder(newSorted)
   }
 
-  // Move fase down within its section (swaps with next sibling)
   const moveFaseDown = async (faseId: string) => {
     const fase = localFases.find(f => f.id === faseId)
     if (!fase) return
@@ -483,11 +874,9 @@ export default function PlantillaManager({ catalogoFases, initialTasks }: Props)
     await applyOrder(newSorted)
   }
 
-  // Rename: only updates label — all data links via fase_id (UUID), not the label
   const renameFase = (faseId: string, newLabel: string) =>
     setLocalFases(prev => prev.map(f => f.id === faseId ? { ...f, label: newLabel } : f))
 
-  // Delete fase + its plantilla_tasks
   const deleteFase = async (faseId: string) => {
     const tasksInFase = tasks.filter(t => t.fase_id === faseId)
     if (
@@ -507,7 +896,6 @@ export default function PlantillaManager({ catalogoFases, initialTasks }: Props)
     setExpandedFases(prev => prev.filter(id => id !== faseId))
   }
 
-  // Add fase: insert after the last existing fase of the same section, then renumber
   const addFase = async (fase: CatalogoFase) => {
     const lastIdx = sortedFases.reduce<number>(
       (last, f, i) => (f.seccion === fase.seccion ? i : last),
@@ -529,75 +917,114 @@ export default function PlantillaManager({ catalogoFases, initialTasks }: Props)
       prev.includes(faseId) ? prev.filter(id => id !== faseId) : [...prev, faseId]
     )
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  const TABS = [
+    { id: 'plantilla' as const, label: 'Plantilla de tasks' },
+    { id: 'internos'  as const, label: 'Proyectos internos' },
+    { id: 'ofertas'   as const, label: 'Ofertas' },
+  ]
 
   return (
     <div className="p-8 lg:p-10">
-      <div className="mb-8">
+      {/* Header */}
+      <div className="mb-6">
         <p className="text-[10px] tracking-widest uppercase font-light text-meta mb-2">
           Proyectos · Configuración
         </p>
-        <h1 className="text-3xl font-light text-ink tracking-tight mb-2">Plantilla de tasks</h1>
+        <h1 className="text-3xl font-light text-ink tracking-tight mb-2">Plantilla y recursos</h1>
         <p className="text-sm font-light text-meta">
-          Tasks genéricos por fase. Se copian automáticamente al iniciar cada fase en un proyecto.
+          Gestiona la plantilla de tasks, proyectos internos y ofertas activas para el Time Tracker.
         </p>
       </div>
 
-      <div className="max-w-2xl">
-        {secciones.map(seccion => {
-          const fases = sortedFases.filter(f => f.seccion === seccion)
-          if (fases.length === 0) return null
-          return (
-            <div key={seccion} className="mb-6">
-              <p className="text-[9px] tracking-widest uppercase font-light text-meta/50 mb-2">
-                {seccion}
-              </p>
-              <div className="space-y-2">
-                {fases.map((fase, idx) => (
-                  <FaseRow
-                    key={fase.id}
-                    fase={fase}
-                    tasks={tasks.filter(t => t.fase_id === fase.id)}
-                    isFirst={idx === 0}
-                    isLast={idx === fases.length - 1}
-                    isExpanded={expandedFases.includes(fase.id)}
-                    onToggle={() => toggleFase(fase.id)}
-                    onMoveUp={() => moveFaseUp(fase.id)}
-                    onMoveDown={() => moveFaseDown(fase.id)}
-                    onRename={label => renameFase(fase.id, label)}
-                    onDelete={() => deleteFase(fase.id)}
-                    onUpdateTask={updateTask}
-                    onDeleteTask={deleteTask}
-                    onAddTask={addTask}
-                  />
-                ))}
-              </div>
-            </div>
-          )
-        })}
-
-        {showAddFase ? (
-          <AddFaseForm
-            existingSecciones={secciones}
-            nextNumero={Math.max(0, ...localFases.map(f => f.numero)) + 1}
-            onAdded={addFase}
-            onCancel={() => setShowAddFase(false)}
-          />
-        ) : (
+      {/* Tab bar */}
+      <div className="flex gap-0 border-b border-ink/10 mb-8">
+        {TABS.map(tab => (
           <button
-            onClick={() => setShowAddFase(true)}
-            className="mt-2 text-[10px] tracking-widest uppercase font-light text-meta hover:text-ink transition-colors border border-dashed border-ink/20 hover:border-ink/40 px-4 py-3 w-full text-center"
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`px-5 py-2.5 text-[10px] tracking-widest uppercase font-light transition-colors border-b-2 -mb-px ${
+              activeTab === tab.id
+                ? 'text-ink border-ink'
+                : 'text-meta border-transparent hover:text-ink hover:border-ink/20'
+            }`}
           >
-            + Agregar fase
+            {tab.label}
           </button>
-        )}
-
-        {saving && (
-          <p className="mt-3 text-[9px] tracking-widest uppercase font-light text-meta/50 animate-pulse">
-            Guardando orden…
-          </p>
-        )}
+        ))}
       </div>
+
+      {/* Tab: Plantilla */}
+      {activeTab === 'plantilla' && (
+        <div className="max-w-2xl">
+          {secciones.map(seccion => {
+            const fases = sortedFases.filter(f => f.seccion === seccion)
+            if (fases.length === 0) return null
+            return (
+              <div key={seccion} className="mb-6">
+                <p className="text-[9px] tracking-widest uppercase font-light text-meta/50 mb-2">
+                  {seccion}
+                </p>
+                <div className="space-y-2">
+                  {fases.map((fase, idx) => (
+                    <FaseRow
+                      key={fase.id}
+                      fase={fase}
+                      tasks={tasks.filter(t => t.fase_id === fase.id)}
+                      isFirst={idx === 0}
+                      isLast={idx === fases.length - 1}
+                      isExpanded={expandedFases.includes(fase.id)}
+                      onToggle={() => toggleFase(fase.id)}
+                      onMoveUp={() => moveFaseUp(fase.id)}
+                      onMoveDown={() => moveFaseDown(fase.id)}
+                      onRename={label => renameFase(fase.id, label)}
+                      onDelete={() => deleteFase(fase.id)}
+                      onUpdateTask={updateTask}
+                      onDeleteTask={deleteTask}
+                      onAddTask={addTask}
+                    />
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+
+          {showAddFase ? (
+            <AddFaseForm
+              existingSecciones={secciones}
+              nextNumero={Math.max(0, ...localFases.map(f => f.numero)) + 1}
+              onAdded={addFase}
+              onCancel={() => setShowAddFase(false)}
+            />
+          ) : (
+            <button
+              onClick={() => setShowAddFase(true)}
+              className="mt-2 text-[10px] tracking-widest uppercase font-light text-meta hover:text-ink transition-colors border border-dashed border-ink/20 hover:border-ink/40 px-4 py-3 w-full text-center"
+            >
+              + Agregar fase
+            </button>
+          )}
+
+          {saving && (
+            <p className="mt-3 text-[9px] tracking-widest uppercase font-light text-meta/50 animate-pulse">
+              Guardando orden…
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Tab: Proyectos Internos */}
+      {activeTab === 'internos' && (
+        <ProyectosInternosTab
+          initialProyectos={proyectosNegocio}
+          initialSecciones={seccionesNegocio}
+          initialFases={fasesNegocio}
+        />
+      )}
+
+      {/* Tab: Ofertas */}
+      {activeTab === 'ofertas' && (
+        <OfertasTab initialOfertas={ofertasFP} />
+      )}
     </div>
   )
 }

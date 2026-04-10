@@ -19,6 +19,8 @@ interface Props {
   titulares: Titular[]
   proveedores: { id: string; nombre: string }[]
   currentUserRole: string
+  horasEjecutadasByFase: Record<string, number>
+  totalHorasEjecutadas: number
 }
 
 const ROLE_COLORS: Record<string, string> = {
@@ -923,7 +925,7 @@ function EditProyectoPanel({ proyecto, proveedores, onSaved, onCancel, onDeleted
 
 // ── Fase row ──────────────────────────────────────────────────────────────────
 
-function FaseRow({ pf, catalogo, faseTasks, faseProgress, responsableNames, canEditProject, canEdit, addingFaseId, teamMembers, proyecto, onAddTask, onSetAddingFaseId, onUpdateTask, onDeleteTask, onDeleteFase, onIniciar }: {
+function FaseRow({ pf, catalogo, faseTasks, faseProgress, responsableNames, canEditProject, canEdit, addingFaseId, teamMembers, proyecto, horasEjecutadas, onAddTask, onSetAddingFaseId, onUpdateTask, onDeleteTask, onDeleteFase, onIniciar }: {
   pf: ProyectoFase
   catalogo: CatalogoFase
   faseTasks: Task[]
@@ -934,6 +936,7 @@ function FaseRow({ pf, catalogo, faseTasks, faseProgress, responsableNames, canE
   addingFaseId: string | null
   teamMembers: UserProfile[]
   proyecto: ProyectoInterno
+  horasEjecutadas: number
   onAddTask: (t: Task) => void
   onSetAddingFaseId: (id: string | null) => void
   onUpdateTask: (id: string, data: Partial<Task>) => void
@@ -983,7 +986,7 @@ function FaseRow({ pf, catalogo, faseTasks, faseProgress, responsableNames, canE
           {/* Horas — only when iniciada */}
           {faseStatus === 'iniciada' && pf.horas_objetivo != null && (
             <span className="text-[11px] font-light text-ink tabular-nums whitespace-nowrap hidden sm:inline">
-              <span className="text-meta/50">0 hrs.</span>
+              <span className={horasEjecutadas > pf.horas_objetivo ? 'text-amber-500' : 'text-meta/50'}>{Math.round(horasEjecutadas * 10) / 10} hrs.</span>
               <span className="text-meta/30 mx-1">/</span>
               {pf.horas_objetivo} hrs.
             </span>
@@ -1090,7 +1093,7 @@ function FaseRow({ pf, catalogo, faseTasks, faseProgress, responsableNames, canE
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function ProyectoDetalle({ proyecto: initialProyecto, tasks: initialTasks, catalogoFases, teamMembers, clientes, titulares, proveedores, currentUserRole }: Props) {
+export default function ProyectoDetalle({ proyecto: initialProyecto, tasks: initialTasks, catalogoFases, teamMembers, clientes, titulares, proveedores, currentUserRole, horasEjecutadasByFase, totalHorasEjecutadas }: Props) {
   const router = useRouter()
   const [proyecto, setProyecto] = useState<ProyectoInterno>(initialProyecto)
   const [tasks, setTasks] = useState<Task[]>(initialTasks)
@@ -1159,6 +1162,9 @@ export default function ProyectoDetalle({ proyecto: initialProyecto, tasks: init
   const horasIniciadas = fases
     .filter(pf => (pf.fase_status ?? 'en_espera') === 'iniciada')
     .reduce((acc, pf) => acc + (pf.horas_objetivo ?? 0), 0)
+  const horasEjecutadasIniciadas = fases
+    .filter(pf => (pf.fase_status ?? 'en_espera') === 'iniciada')
+    .reduce((acc, pf) => acc + (horasEjecutadasByFase[pf.id] ?? 0), 0)
 
   const handleStatusChange = async (newStatus: ProyectoStatus) => {
     setProyecto(p => ({ ...p, status: newStatus }))
@@ -1289,7 +1295,7 @@ export default function ProyectoDetalle({ proyecto: initialProyecto, tasks: init
                         Fases iniciadas
                       </p>
                       <p className="text-[11px] font-light tabular-nums">
-                        <span className="text-meta/50">0 hrs.</span>
+                        <span className={horasEjecutadasIniciadas > horasIniciadas ? 'text-amber-500' : 'text-meta/50'}>{Math.round(horasEjecutadasIniciadas * 10) / 10} hrs.</span>
                         <span className="text-meta/30 mx-1">/</span>
                         <span className="text-ink">{horasIniciadas} hrs.</span>
                       </p>
@@ -1301,7 +1307,7 @@ export default function ProyectoDetalle({ proyecto: initialProyecto, tasks: init
                         Total contratado
                       </p>
                       <p className="text-[11px] font-light tabular-nums">
-                        <span className="text-meta/50">0 hrs.</span>
+                        <span className={totalHorasEjecutadas > totalHorasObjetivo ? 'text-amber-500' : 'text-meta/50'}>{Math.round(totalHorasEjecutadas * 10) / 10} hrs.</span>
                         <span className="text-meta/30 mx-1">/</span>
                         <span className="text-ink">{totalHorasObjetivo} hrs.</span>
                       </p>
@@ -1346,6 +1352,7 @@ export default function ProyectoDetalle({ proyecto: initialProyecto, tasks: init
                     addingFaseId={addingFaseId}
                     teamMembers={teamMembers}
                     proyecto={proyecto}
+                    horasEjecutadas={horasEjecutadasByFase[pf.id] ?? 0}
                     onAddTask={addTask}
                     onSetAddingFaseId={setAddingFaseId}
                     onUpdateTask={updateTask}

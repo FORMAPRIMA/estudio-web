@@ -5,6 +5,9 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: '20mb',
     },
+    outputFileTracingIncludes: {
+      '**': ['./public/FORMA_PRIMA_BLANCO.png'],
+    },
   },
   images: {
     remotePatterns: [

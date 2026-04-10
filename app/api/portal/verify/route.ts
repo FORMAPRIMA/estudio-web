@@ -72,18 +72,27 @@ export async function POST(req: NextRequest) {
 
     const admin = createAdminClient()
 
-    // Fetch project + its PIN (defaults to '0000' if not set)
-    const { data: proyecto } = await admin
+    // First verify the project exists
+    const { data: proyectoBasic } = await admin
       .from('proyectos')
-      .select('id, portal_pin')
+      .select('id')
       .eq('id', proyectoId)
       .single()
 
-    if (!proyecto) {
+    if (!proyectoBasic) {
       return NextResponse.json({ error: 'Proyecto no encontrado.' }, { status: 404 })
     }
 
-    const correctPin: string = (proyecto as any).portal_pin ?? '0000'
+    // Fetch portal_pin separately — graceful fallback if column doesn't exist yet
+    let correctPin = '0000'
+    try {
+      const { data: pinRow } = await admin
+        .from('proyectos')
+        .select('portal_pin')
+        .eq('id', proyectoId)
+        .single()
+      if ((pinRow as any)?.portal_pin) correctPin = (pinRow as any).portal_pin
+    } catch { /* column may not exist yet — use default 0000 */ }
 
     if (pin !== correctPin) {
       await new Promise(resolve => setTimeout(resolve, FAILURE_DELAY_MS))

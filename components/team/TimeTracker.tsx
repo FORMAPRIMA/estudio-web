@@ -53,6 +53,11 @@ interface TimeEntry {
 // Grid: [user_id][fecha][hora_inicio] = fase_id | 'int_CAT' | ''
 type Grid = Record<string, Record<string, Record<number, string>>>
 
+interface ProyectoNegocio { id: string; nombre: string; activo: boolean; orden: number }
+interface SeccionNegocio { id: string; proyecto_id: string; nombre: string; orden: number }
+interface FaseNegocio { id: string; seccion_id: string; nombre: string; orden: number }
+interface OfertaFP { id: string; nombre: string; cliente_potencial: string | null; activo: boolean; orden: number }
+
 // ── Constants ──────────────────────────────────────────────────────────────
 
 const INTERNAL_CATS = [
@@ -164,6 +169,10 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [proyectos, setProyectos] = useState<Proyecto[]>([])
   const [fases, setFases] = useState<Fase[]>([])
+  const [proyectosNegocio, setProyectosNegocio] = useState<ProyectoNegocio[]>([])
+  const [seccionesNegocio, setSeccionesNegocio] = useState<SeccionNegocio[]>([])
+  const [fasesNegocio, setFasesNegocio] = useState<FaseNegocio[]>([])
+  const [ofertasFP, setOfertasFP] = useState<OfertaFP[]>([])
   const [grid, setGrid] = useState<Grid>({})
   const [allEntries, setAllEntries] = useState<TimeEntry[]>([])
 
@@ -283,6 +292,18 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
         }
       }
     }
+
+    // Load proyectos internos + ofertas
+    const [{ data: pnData }, { data: snData }, { data: fnData }, { data: ofData }] = await Promise.all([
+      supabase.from('proyectos_internos').select('id, nombre, activo, orden').order('orden'),
+      supabase.from('proyectos_internos_secciones').select('id, proyecto_id, nombre, orden').order('orden'),
+      supabase.from('proyectos_internos_fases').select('id, seccion_id, nombre, orden').order('orden'),
+      supabase.from('ofertas_fp').select('id, nombre, cliente_potencial, activo, orden').order('orden'),
+    ])
+    if (pnData) setProyectosNegocio(pnData as ProyectoNegocio[])
+    if (snData) setSeccionesNegocio(snData as SeccionNegocio[])
+    if (fnData) setFasesNegocio(fnData as FaseNegocio[])
+    if (ofData) setOfertasFP(ofData as OfertaFP[])
   }, [supabase])
 
   const loadWeek = useCallback(async (monday: string) => {
@@ -718,6 +739,21 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
     if (!value) return { bg: 'transparent', label: '', tc: '#444', line1: '', line2: '' }
     if (value.startsWith('int_')) {
       const cat = value.slice(4)
+      if (cat.startsWith('iproj_')) {
+        const faseId = cat.slice(6)
+        const fase = fasesNegocio.find(f => f.id === faseId)
+        const seccion = fase ? seccionesNegocio.find(s => s.id === fase.seccion_id) : null
+        const proyecto = seccion ? proyectosNegocio.find(p => p.id === seccion.proyecto_id) : null
+        const line1 = proyecto ? (proyecto.nombre.length > 11 ? proyecto.nombre.slice(0, 10) + '…' : proyecto.nombre) : 'Int.'
+        const line2 = fase?.nombre ?? 'Fase'
+        return { bg: '#EDF4F1', label: '', tc: '#2A5C4E', line1, line2 }
+      }
+      if (cat.startsWith('oferta_')) {
+        const ofertaId = cat.slice(7)
+        const oferta = ofertasFP.find(o => o.id === ofertaId)
+        const lbl = oferta?.nombre ?? 'Oferta'
+        return { bg: '#F0EBF8', label: lbl.length > 13 ? lbl.slice(0, 12) + '…' : lbl, tc: '#5B3A7E', line1: '', line2: '' }
+      }
       const intLabel = INTERNAL_CATS_LABELS[cat] ?? cat.replace(/_/g, ' ')
       return { bg: '#F1EFE8', label: intLabel, tc: '#666', line1: '', line2: '' }
     }
@@ -747,8 +783,25 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
       fases: phasesByProject[p.id]?.fases ?? [],
     })).filter((pg) => pg.fases.length > 0)
 
-    return { filteredIntCats, filteredProjects }
-  }, [dropSearch, proyectos, phasesByProject])
+    const filteredProyectosNegocio = proyectosNegocio
+      .filter(p => p.activo)
+      .filter(p => !q || p.nombre.toLowerCase().includes(q) || 'interno negocio'.includes(q))
+      .map(p => {
+        const secciones = seccionesNegocio.filter(s => s.proyecto_id === p.id)
+        const fasesDeProy = secciones.flatMap(s =>
+          fasesNegocio.filter(f => f.seccion_id === s.id).map(f => ({ ...f, seccionNombre: s.nombre }))
+        )
+        return { proyecto: p, fases: fasesDeProy }
+      })
+      .filter(pg => pg.fases.length > 0)
+
+    const filteredOfertas = ofertasFP
+      .filter(o => o.activo)
+      .filter(o => !q || o.nombre.toLowerCase().includes(q) || 'oferta'.includes(q) ||
+        (o.cliente_potencial ?? '').toLowerCase().includes(q))
+
+    return { filteredIntCats, filteredProjects, filteredProyectosNegocio, filteredOfertas }
+  }, [dropSearch, proyectos, phasesByProject, proyectosNegocio, seccionesNegocio, fasesNegocio, ofertasFP])
 
   // ── Notes ──
 
@@ -803,7 +856,20 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
           projectMap[proy.id].extra += e.horas
         }
       } else if (e.categoria_interna) {
-        const label = INTERNAL_CATS_LABELS[e.categoria_interna] ?? e.categoria_interna.replace(/_/g, ' ')
+        let label: string
+        if (e.categoria_interna.startsWith('iproj_')) {
+          const faseId = e.categoria_interna.slice(6)
+          const fase = fasesNegocio.find(f => f.id === faseId)
+          const sec = fase ? seccionesNegocio.find(s => s.id === fase.seccion_id) : null
+          const proy = sec ? proyectosNegocio.find(p => p.id === sec.proyecto_id) : null
+          label = proy ? `${proy.nombre} · ${fase?.nombre ?? ''}` : (fase?.nombre ?? 'Interno')
+        } else if (e.categoria_interna.startsWith('oferta_')) {
+          const ofertaId = e.categoria_interna.slice(7)
+          const oferta = ofertasFP.find(o => o.id === ofertaId)
+          label = oferta ? `Oferta: ${oferta.nombre}` : 'Oferta'
+        } else {
+          label = INTERNAL_CATS_LABELS[e.categoria_interna] ?? e.categoria_interna.replace(/_/g, ' ')
+        }
         internalSections[label] = (internalSections[label] ?? 0) + e.horas
         if (e.es_extra) {
           internalExtraSections[label] = (internalExtraSections[label] ?? 0) + e.horas
@@ -841,7 +907,7 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
     const grandTotal = rows.reduce((a, r) => a + r.total, 0)
     const grandExtra = rows.reduce((a, r) => a + r.extra, 0)
     return { rows, maxTotal, grandTotal, grandExtra }
-  }, [analysisEntries, fases, proyectos])
+  }, [analysisEntries, fases, proyectos, fasesNegocio, seccionesNegocio, proyectosNegocio, ofertasFP])
 
   // ── Team analysis chart data ──
 
@@ -867,7 +933,19 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
         if (!projectNames[projectId]) projectNames[projectId] = { nombre: proy.nombre, codigo: proy.codigo }
       } else if (e.categoria_interna) {
         projectId = '__interno__'
-        seccion = INTERNAL_CATS_LABELS[e.categoria_interna] ?? e.categoria_interna.replace(/_/g, ' ')
+        if (e.categoria_interna.startsWith('iproj_')) {
+          const faseId = e.categoria_interna.slice(6)
+          const fase = fasesNegocio.find(f => f.id === faseId)
+          const sec = fase ? seccionesNegocio.find(s => s.id === fase.seccion_id) : null
+          const proy = sec ? proyectosNegocio.find(p => p.id === sec.proyecto_id) : null
+          seccion = proy ? `${proy.nombre} · ${fase?.nombre ?? ''}` : (fase?.nombre ?? 'Interno')
+        } else if (e.categoria_interna.startsWith('oferta_')) {
+          const ofertaId = e.categoria_interna.slice(7)
+          const oferta = ofertasFP.find(o => o.id === ofertaId)
+          seccion = oferta ? `Oferta: ${oferta.nombre}` : 'Oferta'
+        } else {
+          seccion = INTERNAL_CATS_LABELS[e.categoria_interna] ?? e.categoria_interna.replace(/_/g, ' ')
+        }
         if (!projectNames[projectId]) projectNames[projectId] = { nombre: 'Interno', codigo: '' }
       } else {
         return
@@ -921,7 +999,7 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
     const grandExtra = projects.reduce((a, p) => a + p.members.reduce((b, m) => b + m.extra, 0), 0)
 
     return { projects, globalMax, grandTotal, grandExtra }
-  }, [teamAnalysisEntries, fases, proyectos, teamMembers])
+  }, [teamAnalysisEntries, fases, proyectos, teamMembers, fasesNegocio, seccionesNegocio, proyectosNegocio, ofertasFP])
 
   // ── Team analysis: grouped by phase ──
 
@@ -1907,7 +1985,7 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
 
   // ── Main Render ──
 
-  const { filteredIntCats, filteredProjects } = dropdownOptions
+  const { filteredIntCats, filteredProjects, filteredProyectosNegocio, filteredOfertas } = dropdownOptions
 
   return (
     <div style={{ fontFamily: "'Inter', 'system-ui', sans-serif", background: '#F8F7F4', minHeight: '100vh', color: '#222' }}>
@@ -2082,7 +2160,73 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
                 </div>
               ))}
 
-              {filteredIntCats.length === 0 && filteredProjects.length === 0 && (
+              {/* Proyectos internos de negocio */}
+              {filteredProyectosNegocio.map(({ proyecto, fases: pFases }) => (
+                <div key={`negocio-${proyecto.id}`}>
+                  <div style={{
+                    padding: '8px 12px 3px', borderTop: '1px solid #F0EEE8',
+                    display: 'flex', gap: 7, alignItems: 'center',
+                  }}>
+                    <span style={{ fontSize: 8, color: '#2A5C4E', fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700 }}>INT</span>
+                    <span style={{ fontSize: 11, fontWeight: 500, color: '#222' }}>{proyecto.nombre}</span>
+                  </div>
+                  {pFases.map((f) => {
+                    const val = `int_iproj_${f.id}`
+                    const isSelected = getCell(openCell.uid, openCell.fecha, openCell.h) === val
+                    return (
+                      <div
+                        key={f.id}
+                        onClick={() => { setCell(openCell.uid, openCell.fecha, openCell.h, val); setOpenCell(null) }}
+                        style={{
+                          padding: '4px 12px 4px 22px', fontSize: 11, cursor: 'pointer',
+                          background: isSelected ? '#EDF4F1' : 'transparent',
+                          color: isSelected ? '#2A5C4E' : '#444',
+                          display: 'flex', alignItems: 'center', gap: 8,
+                        }}
+                        onMouseEnter={(e) => { if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = '#F8F6F1' }}
+                        onMouseLeave={(e) => { if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = 'transparent' }}
+                      >
+                        <span style={{ fontSize: 9, color: '#BBB', minWidth: 48, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.seccionNombre}</span>
+                        <span style={{ lineHeight: 1.3 }}>{f.nombre}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              ))}
+
+              {/* Ofertas */}
+              {filteredOfertas.length > 0 && (
+                <>
+                  <div style={{ padding: '7px 12px 3px', borderTop: '1px solid #F0EEE8', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#BBB', fontWeight: 600 }}>
+                    Ofertas
+                  </div>
+                  {filteredOfertas.map((oferta) => {
+                    const val = `int_oferta_${oferta.id}`
+                    const isSelected = getCell(openCell.uid, openCell.fecha, openCell.h) === val
+                    return (
+                      <div
+                        key={oferta.id}
+                        onClick={() => { setCell(openCell.uid, openCell.fecha, openCell.h, val); setOpenCell(null) }}
+                        style={{
+                          padding: '5px 12px', fontSize: 11, cursor: 'pointer',
+                          background: isSelected ? '#F0EBF8' : 'transparent',
+                          color: isSelected ? '#5B3A7E' : '#666',
+                          fontWeight: isSelected ? 500 : 400,
+                        }}
+                        onMouseEnter={(e) => { if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = '#F8F6F1' }}
+                        onMouseLeave={(e) => { if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = 'transparent' }}
+                      >
+                        {oferta.nombre}
+                        {oferta.cliente_potencial && (
+                          <span style={{ fontSize: 9, color: '#BBB', marginLeft: 6 }}>— {oferta.cliente_potencial}</span>
+                        )}
+                      </div>
+                    )
+                  })}
+                </>
+              )}
+
+              {filteredIntCats.length === 0 && filteredProjects.length === 0 && filteredProyectosNegocio.length === 0 && filteredOfertas.length === 0 && (
                 <div style={{ padding: '18px 12px', fontSize: 11, color: '#BBB', textAlign: 'center' }}>
                   Sin resultados
                 </div>

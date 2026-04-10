@@ -17,6 +17,7 @@ interface Props {
   progressByProject: Record<string, number>
   horasByProject: Record<string, number>
   horasIniciadasByProject: Record<string, number>
+  horasEjecutadasByProject: Record<string, number>
   completedFaseKeys: Set<string>
 }
 
@@ -36,6 +37,7 @@ function ProyectoCard({
   progress,
   horasObjetivo,
   horasIniciadas,
+  horasEjecutadas,
   completedFaseKeys,
   canDrag,
   onDragStart,
@@ -46,6 +48,7 @@ function ProyectoCard({
   progress: number
   horasObjetivo: number
   horasIniciadas: number
+  horasEjecutadas: number
   completedFaseKeys: Set<string>
   canDrag: boolean
   onDragStart: (id: string) => void
@@ -134,7 +137,7 @@ function ProyectoCard({
               <div className="flex items-center justify-between">
                 <span className="text-[9px] font-light text-meta/40 tracking-wide">Iniciadas</span>
                 <p className="text-[10px] font-light tabular-nums">
-                  <span className="text-meta/50">0 hrs.</span>
+                  <span className={horasEjecutadas > horasIniciadas ? 'text-amber-500' : 'text-meta/50'}>{Math.round(horasEjecutadas * 10) / 10} hrs.</span>
                   <span className="text-meta/30 mx-1">/</span>
                   <span className="text-ink">{Math.round(horasIniciadas * 10) / 10} hrs.</span>
                 </p>
@@ -144,7 +147,7 @@ function ProyectoCard({
               <div className="flex items-center justify-between">
                 <span className="text-[9px] font-light text-meta/40 tracking-wide">Total</span>
                 <p className="text-[10px] font-light tabular-nums">
-                  <span className="text-meta/50">0 hrs.</span>
+                  <span className={horasEjecutadas > horasObjetivo ? 'text-amber-500' : 'text-meta/50'}>{Math.round(horasEjecutadas * 10) / 10} hrs.</span>
                   <span className="text-meta/30 mx-1">/</span>
                   <span className="text-ink">{Math.round(horasObjetivo * 10) / 10} hrs.</span>
                 </p>
@@ -164,6 +167,7 @@ function KanbanColumn({
   progressByProject,
   horasByProject,
   horasIniciadasByProject,
+  horasEjecutadasByProject,
   completedFaseKeys,
   canDrop,
   isDragOver,
@@ -181,6 +185,7 @@ function KanbanColumn({
   progressByProject: Record<string, number>
   horasByProject: Record<string, number>
   horasIniciadasByProject: Record<string, number>
+  horasEjecutadasByProject: Record<string, number>
   completedFaseKeys: Set<string>
   canDrop: boolean
   isDragOver: boolean
@@ -211,6 +216,7 @@ function KanbanColumn({
             progress={progressByProject[p.id] ?? 0}
             horasObjetivo={horasByProject[p.id] ?? 0}
             horasIniciadas={horasIniciadasByProject[p.id] ?? 0}
+            horasEjecutadas={horasEjecutadasByProject[p.id] ?? 0}
             completedFaseKeys={completedFaseKeys}
             canDrag={canDrag}
             onDragStart={onDragStart}
@@ -238,6 +244,7 @@ export default function KanbanBoard({
   progressByProject,
   horasByProject,
   horasIniciadasByProject,
+  horasEjecutadasByProject,
   completedFaseKeys,
 }: Props) {
   const router = useRouter()
@@ -362,6 +369,7 @@ export default function KanbanBoard({
                 progressByProject={progressByProject}
                 horasByProject={horasByProject}
                 horasIniciadasByProject={horasIniciadasByProject}
+                horasEjecutadasByProject={horasEjecutadasByProject}
                 completedFaseKeys={completedFaseKeys}
                 canDrop={false}
                 isDragOver={false}
@@ -388,6 +396,7 @@ export default function KanbanBoard({
               progressByProject={progressByProject}
               horasByProject={horasByProject}
               horasIniciadasByProject={horasIniciadasByProject}
+              horasEjecutadasByProject={horasEjecutadasByProject}
               completedFaseKeys={completedFaseKeys}
               canDrop={canEdit && !!draggedId && draggedFromStatus.current !== col.status}
               isDragOver={dragOverCol === col.status}

@@ -86,6 +86,21 @@ export default async function ProyectoDetallePage({
 
   const proveedores = (proveedoresRaw ?? []).map(p => ({ id: p.id as string, nombre: p.nombre as string }))
 
+  // Sum executed hours from time_entries per fase for this project
+  const { data: timeEntriesRaw } = await admin
+    .from('time_entries')
+    .select('fase_id, horas')
+    .eq('proyecto_id', params.id)
+
+  const horasEjecutadasByFase: Record<string, number> = {}
+  let totalHorasEjecutadas = 0
+  for (const e of timeEntriesRaw ?? []) {
+    totalHorasEjecutadas += e.horas ?? 0
+    if (e.fase_id) {
+      horasEjecutadasByFase[e.fase_id] = (horasEjecutadasByFase[e.fase_id] ?? 0) + (e.horas ?? 0)
+    }
+  }
+
   return (
     <ProyectoDetalle
       proyecto={proyectoRaw as unknown as ProyectoInterno}
@@ -96,6 +111,8 @@ export default async function ProyectoDetallePage({
       titulares={titulares}
       proveedores={proveedores}
       currentUserRole={profile.rol}
+      horasEjecutadasByFase={horasEjecutadasByFase}
+      totalHorasEjecutadas={totalHorasEjecutadas}
     />
   )
 }

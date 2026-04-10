@@ -23,12 +23,13 @@ export default async function Page({ searchParams }: { searchParams: { year?: st
   const lastDay = new Date(year, month, 0).getDate()
   const to    = `${year}-${String(month).padStart(2, '0')}-${lastDay}`
 
+  // Filter by fecha_ticket when available; fall back to created_at for scans with no ticket date
   const { data: scans } = await admin
     .from('expense_scans')
     .select('*, autor:profiles!user_id(nombre)')
-    .gte('created_at', from + 'T00:00:00')
-    .lte('created_at', to   + 'T23:59:59')
-    .order('created_at', { ascending: false })
+    .or(`and(fecha_ticket.gte.${from},fecha_ticket.lte.${to}),and(fecha_ticket.is.null,created_at.gte.${from}T00:00:00,created_at.lte.${to}T23:59:59)`)
+    .order('fecha_ticket', { ascending: false, nullsFirst: false })
+    .order('created_at',   { ascending: false })
 
   const { data: proyectos } = await admin
     .from('proyectos')

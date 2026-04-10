@@ -3,10 +3,22 @@
 // The caller (actas.ts) passes the already-dynamically-imported pdf modules in,
 // so @react-pdf/renderer is only ever loaded via the dynamic import in the server action.
 
+import fs from 'fs'
 import path from 'path'
 import type * as ReactPDF from '@react-pdf/renderer'
 
-const LOGO_BLANCO = path.join(process.cwd(), 'public', 'FORMA_PRIMA_BLANCO.png')
+// Read logo as base64 data URI — more reliable than filesystem paths in serverless envs
+let _logoCache: string | null = null
+function getLogo(): string {
+  if (_logoCache) return _logoCache
+  try {
+    const buf = fs.readFileSync(path.join(process.cwd(), 'public', 'FORMA_PRIMA_BLANCO.png'))
+    _logoCache = `data:image/png;base64,${buf.toString('base64')}`
+  } catch {
+    _logoCache = path.join(process.cwd(), 'public', 'FORMA_PRIMA_BLANCO.png')
+  }
+  return _logoCache
+}
 
 const C = {
   headerBg: '#1A1A1A',
@@ -30,6 +42,8 @@ export interface ActaData {
   estado_obras: string
   instrucciones: string
   floorfy_url?: string | null
+  numero_visita?: number
+  fotos?: string[]
 }
 
 const MESES_ES = [
@@ -55,7 +69,7 @@ export function buildActaVisitaObraElement(
   const { Document, Page, View, Text, Image, StyleSheet, Link } = pdf
 
   const s = StyleSheet.create({
-    page:           { paddingTop: 40, paddingBottom: 64, paddingHorizontal: 0, fontFamily: 'Helvetica', fontSize: 8.5, color: C.ink, backgroundColor: C.white },
+    page:           { paddingTop: 0, paddingBottom: 64, paddingHorizontal: 0, fontFamily: 'Helvetica', fontSize: 8.5, color: C.ink, backgroundColor: C.white },
     headerBlock:    { backgroundColor: C.headerBg, paddingTop: 40, paddingBottom: 0, paddingHorizontal: 56 },
     headerInner:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 },
     headerLeft:     { flexDirection: 'column' },
@@ -97,8 +111,10 @@ export function buildActaVisitaObraElement(
         <View style={s.headerBlock}>
           <View style={s.headerInner}>
             <View style={s.headerLeft}>
-              <Image src={LOGO_BLANCO} style={s.logo} />
-              <Text style={s.actaLabel}>Acta de visita de obra</Text>
+              <Image src={getLogo()} style={s.logo} />
+              <Text style={s.actaLabel}>
+                Acta de visita de obra{data.numero_visita != null ? ` · Nº ${data.numero_visita}` : ''}
+              </Text>
             </View>
             <View style={s.headerRight}>
               <Text style={s.headerDate}>{fmtDateEs(data.fecha)}</Text>
@@ -148,6 +164,18 @@ export function buildActaVisitaObraElement(
             </>
           )}
 
+          {data.fotos && data.fotos.length > 0 && (
+            <>
+              <View style={s.rule} />
+              <Text style={s.sectionLabel}>Fotografías de obra</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
+                {data.fotos.map((url, i) => (
+                  <Image key={i} src={url} style={{ width: 154, height: 116, objectFit: 'cover' as const }} />
+                ))}
+              </View>
+            </>
+          )}
+
           {data.floorfy_url && (
             <>
               <View style={s.rule} />
@@ -165,23 +193,11 @@ export function buildActaVisitaObraElement(
           <Text style={s.footerText}>formaprima.es</Text>
         </View>
 
+        {/* Top spacer for pages 2+ — no repeat header, just margin */}
         <View
           fixed
-          style={{
-            position: 'absolute',
-            top: 0, left: 0, right: 0,
-            height: 40,
-            backgroundColor: C.headerBg,
-            paddingHorizontal: 56,
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}
           render={({ pageNumber }) => pageNumber <= 1 ? null : (
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-              <Image src={LOGO_BLANCO} style={{ width: 72, objectFit: 'contain' as const }} />
-              <Text style={{ fontSize: 7, color: C.hInk, fontFamily: 'Helvetica' }}>{data.proyecto_nombre}</Text>
-            </View>
+            <View style={{ height: 40 }} />
           )}
         />
 

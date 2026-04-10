@@ -97,6 +97,18 @@ export default async function ProyectosPage() {
     }
   }
 
+  // Sum executed hours from time_entries per project
+  const { data: timeEntriesRaw } = await admin
+    .from('time_entries')
+    .select('proyecto_id, horas')
+    .not('proyecto_id', 'is', null)
+
+  const horasEjecutadasByProject: Record<string, number> = {}
+  for (const e of timeEntriesRaw ?? []) {
+    if (!e.proyecto_id) continue
+    horasEjecutadasByProject[e.proyecto_id] = (horasEjecutadasByProject[e.proyecto_id] ?? 0) + (e.horas ?? 0)
+  }
+
   return (
     <KanbanBoard
       proyectos={(proyectosRaw ?? []) as unknown as ProyectoInterno[]}
@@ -108,6 +120,7 @@ export default async function ProyectosPage() {
       progressByProject={progressByProject}
       horasByProject={horasByProject}
       horasIniciadasByProject={horasIniciadasByProject}
+      horasEjecutadasByProject={horasEjecutadasByProject}
       completedFaseKeys={completedFaseKeys}
     />
   )

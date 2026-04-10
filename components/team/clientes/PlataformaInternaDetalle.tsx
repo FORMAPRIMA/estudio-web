@@ -34,7 +34,7 @@ interface Render {
 
 interface Visita {
   id: string; fecha: string; titulo: string | null; asistentes: string | null
-  notas: string | null; acta_url: string | null; floorfy_url: string | null; visible_cliente: boolean
+  notas: string | null; acta_url: string | null; acta_constructor_url: string | null; floorfy_url: string | null; visible_cliente: boolean
 }
 
 interface Partida {
@@ -587,7 +587,7 @@ function VisitasSection({
         setVisitas(prev => [{
           id: res.id, fecha, titulo: titulo.trim() || null,
           asistentes: asistentes.trim() || null, notas: notas.trim() || null,
-          acta_url: null, floorfy_url: floorfy.trim() || null, visible_cliente: visibleCliente,
+          acta_url: null, acta_constructor_url: null, floorfy_url: floorfy.trim() || null, visible_cliente: visibleCliente,
         }, ...prev])
         setFecha(new Date().toISOString().split('T')[0]); setTitulo('')
         setAsistentes(''); setNotas(''); setFloorfy(''); setVisibleCliente(false); setShowForm(false)
@@ -617,9 +617,6 @@ function VisitasSection({
     startTransition(async () => { await updateVisita(v.id, proyectoId, { visible_cliente: next }) })
   }
 
-  const visitasPublicas = visitas.filter(v => v.visible_cliente)
-  const actasInternas  = visitas.filter(v => !v.visible_cliente)
-
   const renderVisitaRow = (v: Visita) => (
     <React.Fragment key={v.id}>
       <tr
@@ -632,16 +629,26 @@ function VisitasSection({
           {v.notas && <span style={{ fontSize: 9, color: '#AAA', marginLeft: 6 }}>{expandedId === v.id ? '▲' : '▼'}</span>}
         </td>
         <td style={{ padding: '10px 12px 10px 0', fontSize: 11, color: '#888', borderBottom: '1px solid #F0EEE8' }}>{v.asistentes ?? '—'}</td>
+        {/* Acta cliente */}
         <td style={{ padding: '10px 12px 10px 0', borderBottom: '1px solid #F0EEE8' }} onClick={e => e.stopPropagation()}>
           {v.acta_url ? (
-            <a href={v.acta_url} target="_blank" rel="noreferrer" style={{ fontSize: 10, color: '#D85A30', textDecoration: 'none', fontWeight: 600 }}>📄 Ver</a>
+            <a href={v.acta_url} target="_blank" rel="noreferrer" style={{ fontSize: 10, color: '#1D9E75', textDecoration: 'none', fontWeight: 600 }}>📄 Cliente</a>
           ) : (
             <UploadButton accept=".pdf" label="↑ Subir" path={`${proyectoId}/visitas`} onUploaded={(url) => handleActaUploaded(v.id, url)} />
           )}
         </td>
+        {/* Acta constructor */}
         <td style={{ padding: '10px 12px 10px 0', borderBottom: '1px solid #F0EEE8' }} onClick={e => e.stopPropagation()}>
-          <button onClick={() => toggleVisible(v)} style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', padding: '2px 8px', borderRadius: 3, border: 'none', cursor: 'pointer', background: v.visible_cliente ? '#EEF8F4' : '#FDF8EE', color: v.visible_cliente ? '#1D9E75' : '#C9A227' }}>
-            {v.visible_cliente ? '↓ Hacer interna' : '↑ Publicar'}
+          {v.acta_constructor_url ? (
+            <a href={v.acta_constructor_url} target="_blank" rel="noreferrer" style={{ fontSize: 10, color: '#C9A227', textDecoration: 'none', fontWeight: 600 }}>📄 Constructor</a>
+          ) : (
+            <span style={{ fontSize: 10, color: '#DDD' }}>—</span>
+          )}
+        </td>
+        {/* Portal visibility toggle */}
+        <td style={{ padding: '10px 12px 10px 0', borderBottom: '1px solid #F0EEE8' }} onClick={e => e.stopPropagation()}>
+          <button onClick={() => toggleVisible(v)} style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', padding: '2px 8px', borderRadius: 3, border: 'none', cursor: 'pointer', background: v.visible_cliente ? '#EEF8F4' : '#F4F4F4', color: v.visible_cliente ? '#1D9E75' : '#AAA' }}>
+            {v.visible_cliente ? '● Portal' : '○ Interna'}
           </button>
         </td>
         <td style={{ padding: '10px 0', borderBottom: '1px solid #F0EEE8' }} onClick={e => e.stopPropagation()}>
@@ -652,7 +659,7 @@ function VisitasSection({
       </tr>
       {expandedId === v.id && v.notas && (
         <tr>
-          <td colSpan={5} style={{ padding: '0 0 12px', borderBottom: '1px solid #F0EEE8' }}>
+          <td colSpan={7} style={{ padding: '0 0 12px', borderBottom: '1px solid #F0EEE8' }}>
             <div style={{ background: '#F8F7F4', borderRadius: 6, padding: '10px 14px', fontSize: 12, color: '#555', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{v.notas}</div>
           </td>
         </tr>
@@ -673,10 +680,12 @@ function VisitasSection({
       />
     )}
 
-    {/* ── Visitas de obra (públicas) ─── */}
     <div style={S.card}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <p style={{ ...S.sectionTitle, margin: 0 }}>Visitas de obra</p>
+        <div>
+          <p style={{ ...S.sectionTitle, margin: 0 }}>Visitas de obra</p>
+          <p style={{ fontSize: 10, color: '#AAA', margin: '4px 0 0' }}>Historial completo · las marcadas como Portal son visibles para el cliente</p>
+        </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button
             onClick={() => { setShowActaModal(true); setShowForm(false) }}
@@ -719,60 +728,31 @@ function VisitasSection({
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#666', cursor: 'pointer' }}>
               <input type="checkbox" checked={visibleCliente} onChange={e => setVisibleCliente(e.target.checked)} style={{ accentColor: '#1D9E75' }} />
-              Visible para el cliente
+              Visible para el cliente (Portal)
             </label>
             <button onClick={submit} style={S.btnPrimary}>Guardar visita</button>
           </div>
         </div>
       )}
 
-      {visitasPublicas.length === 0 && !showForm ? (
+      {visitas.length === 0 && !showForm ? (
         <div style={{ textAlign: 'center', padding: '24px', color: '#CCC', fontSize: 12, border: '1px dashed #DDD', borderRadius: 8 }}>
-          Sin visitas publicadas
+          Sin visitas registradas
         </div>
-      ) : visitasPublicas.length > 0 ? (
+      ) : visitas.length > 0 ? (
         <div className="fp-table-wrap">
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
-                {['Fecha', 'Título', 'Asistentes', 'Acta PDF', '', ''].map((h, i) => (
+                {['Fecha', 'Título', 'Asistentes', 'Acta cliente', 'Acta constructor', 'Visibilidad', ''].map((h, i) => (
                   <th key={i} style={thStyle}>{h}</th>
                 ))}
               </tr>
             </thead>
-            <tbody>{visitasPublicas.map(renderVisitaRow)}</tbody>
+            <tbody>{visitas.map(renderVisitaRow)}</tbody>
           </table>
         </div>
       ) : null}
-    </div>
-
-    {/* ── Actas internas ─── */}
-    <div style={{ ...S.card, borderLeft: '3px solid #C9A227' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: actasInternas.length > 0 ? 16 : 0 }}>
-        <div>
-          <p style={{ ...S.sectionTitle, margin: 0 }}>Actas internas</p>
-          <p style={{ fontSize: 10, color: '#AAA', margin: '4px 0 0' }}>No visibles para el cliente · solo para uso interno del equipo</p>
-        </div>
-      </div>
-
-      {actasInternas.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '24px', color: '#CCC', fontSize: 12, border: '1px dashed #DDD', borderRadius: 8 }}>
-          Sin actas internas
-        </div>
-      ) : (
-        <div className="fp-table-wrap">
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                {['Fecha', 'Título', 'Asistentes', 'Acta PDF', '', ''].map((h, i) => (
-                  <th key={i} style={thStyle}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>{actasInternas.map(renderVisitaRow)}</tbody>
-          </table>
-        </div>
-      )}
     </div>
     </>
   )

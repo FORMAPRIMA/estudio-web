@@ -52,6 +52,7 @@ export interface ContactosParaVisita {
   equipo: EquipoMember[]
   clientes: ClienteContacto[]
   proveedores: ProveedorContacto[]
+  proximoNumeroVisita: number
 }
 
 export interface AsistenteInput {
@@ -72,6 +73,11 @@ export interface CrearActaInput {
   proyecto_nombre: string
   proyecto_codigo: string | null
   proyecto_direccion: string | null
+  numero_visita?: number
+  fotos_constructor?: string[]
+  fotos_cliente?: string[]
+  generarConstructor?: boolean
+  generarCliente?: boolean
 }
 
 // ── getContactosParaVisita ────────────────────────────────────────────────────
@@ -87,6 +93,7 @@ export async function getContactosParaVisita(
       { data: equipoData },
       { data: clientesData },
       { data: proveedoresData },
+      { count: visitasCount },
     ] = await Promise.all([
       admin
         .from('profiles')
@@ -101,6 +108,10 @@ export async function getContactosParaVisita(
         .from('proveedores')
         .select('id, nombre, tipo, email')
         .order('nombre'),
+      admin
+        .from('visitas_obra')
+        .select('id', { count: 'exact', head: true })
+        .eq('proyecto_id', proyectoId),
     ])
 
     const equipo: EquipoMember[] = (equipoData ?? []).map(e => ({
@@ -127,7 +138,39 @@ export async function getContactosParaVisita(
       email: (p.email ?? null) as string | null,
     }))
 
-    return { equipo, clientes, proveedores }
+    return { equipo, clientes, proveedores, proximoNumeroVisita: (visitasCount ?? 0) + 1 }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
+// ── uploadFotoVisita ──────────────────────────────────────────────────────────
+
+export async function uploadFotoVisita(
+  formData: FormData
+): Promise<{ url: string } | { error: string }> {
+  try {
+    await requireAnyFP()
+    const admin = createAdminClient()
+
+    const file = formData.get('foto') as File
+    const proyectoId = formData.get('proyecto_id') as string
+    if (!file || file.size === 0) return { error: 'No se recibió ninguna foto.' }
+    if (file.size > 20 * 1024 * 1024) return { error: 'La foto no puede superar 20 MB.' }
+
+    const ext  = file.name.split('.').pop()?.toLowerCase() ?? 'jpg'
+    const ts   = Date.now()
+    const rand = Math.random().toString(36).slice(2, 8)
+    const path = `${proyectoId}/fotos-visita/${ts}-${rand}.${ext}`
+
+    const buffer = Buffer.from(await file.arrayBuffer())
+    const { error: upErr } = await admin.storage
+      .from('portal')
+      .upload(path, buffer, { contentType: file.type || 'image/jpeg', upsert: false })
+    if (upErr) return { error: upErr.message }
+
+    const url = admin.storage.from('portal').getPublicUrl(path).data.publicUrl
+    return { url }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
   }
@@ -156,44 +199,54 @@ export async function crearActaVisita(
       asistentes:         data.asistentes,
       estado_obras:       data.estado_obras,
       floorfy_url:        data.floorfy_url,
+      numero_visita:      data.numero_visita,
     }
 
-    // 2a — Constructor PDF
-    const constructorPdfElement = buildActaVisitaObraElement(reactPdf, {
-      ...baseActaData,
-      instrucciones: data.instruccionesConstructor || data.instrucciones,
-    })
-    const constructorPdfBuffer = await reactPdf.renderToBuffer(
-      constructorPdfElement as unknown as Parameters<typeof reactPdf.renderToBuffer>[0]
-    )
+    const doConstructor = data.generarConstructor !== false
+    const doCliente     = data.generarCliente     !== false
 
-    // 2b — Client PDF
-    const clientPdfElement = buildActaVisitaObraElement(reactPdf, {
-      ...baseActaData,
-      instrucciones: data.instrucciones,
-    })
-    const clientePdfBuffer = await reactPdf.renderToBuffer(
-      clientPdfElement as unknown as Parameters<typeof reactPdf.renderToBuffer>[0]
-    )
-
-    // 3 — Upload PDFs to storage
     const ts = Date.now()
-    const constructorPath = `${data.proyecto_id}/actas/${data.fecha}-acta-constructor-${ts}.pdf`
-    const clientePath     = `${data.proyecto_id}/actas/${data.fecha}-acta-cliente-${ts}.pdf`
+    let acta_constructor_url = ''
+    let acta_url = ''
 
-    const { error: upErr1 } = await admin.storage
-      .from('portal')
-      .upload(constructorPath, constructorPdfBuffer, { contentType: 'application/pdf', upsert: true })
-    if (upErr1) return { error: `Error al subir PDF constructor: ${upErr1.message}` }
+    // 2a — Constructor PDF (only if requested)
+    if (doConstructor) {
+      const constructorPdfElement = buildActaVisitaObraElement(reactPdf, {
+        ...baseActaData,
+        instrucciones: data.instruccionesConstructor || data.instrucciones,
+        fotos:         data.fotos_constructor ?? [],
+      })
+      const constructorPdfBuffer = await reactPdf.renderToBuffer(
+        constructorPdfElement as unknown as Parameters<typeof reactPdf.renderToBuffer>[0]
+      )
+      const constructorPath = `${data.proyecto_id}/actas/${data.fecha}-acta-constructor-${ts}.pdf`
+      const { error: upErr1 } = await admin.storage
+        .from('portal')
+        .upload(constructorPath, constructorPdfBuffer, { contentType: 'application/pdf', upsert: true })
+      if (upErr1) return { error: `Error al subir PDF constructor: ${upErr1.message}` }
+      acta_constructor_url = admin.storage.from('portal').getPublicUrl(constructorPath).data.publicUrl
+    }
 
-    const { error: upErr2 } = await admin.storage
-      .from('portal')
-      .upload(clientePath, clientePdfBuffer, { contentType: 'application/pdf', upsert: true })
-    if (upErr2) return { error: `Error al subir PDF cliente: ${upErr2.message}` }
+    // 2b — Client PDF (only if requested)
+    if (doCliente) {
+      const clientPdfElement = buildActaVisitaObraElement(reactPdf, {
+        ...baseActaData,
+        instrucciones: data.instrucciones,
+        fotos:         data.fotos_cliente ?? [],
+      })
+      const clientePdfBuffer = await reactPdf.renderToBuffer(
+        clientPdfElement as unknown as Parameters<typeof reactPdf.renderToBuffer>[0]
+      )
+      const clientePath = `${data.proyecto_id}/actas/${data.fecha}-acta-cliente-${ts}.pdf`
+      const { error: upErr2 } = await admin.storage
+        .from('portal')
+        .upload(clientePath, clientePdfBuffer, { contentType: 'application/pdf', upsert: true })
+      if (upErr2) return { error: `Error al subir PDF cliente: ${upErr2.message}` }
+      acta_url = admin.storage.from('portal').getPublicUrl(clientePath).data.publicUrl
+    }
 
-    // 4 — Get public URLs
-    const acta_constructor_url = admin.storage.from('portal').getPublicUrl(constructorPath).data.publicUrl
-    const acta_url             = admin.storage.from('portal').getPublicUrl(clientePath).data.publicUrl
+    // If only constructor was generated, use that as the main acta_url
+    if (!doCliente && doConstructor) acta_url = acta_constructor_url
 
     // 5 — Format asistentes as comma-separated string
     const asistenteStr = data.asistentes.map(a => a.nombre).join(', ')
@@ -211,14 +264,15 @@ export async function crearActaVisita(
     const { data: row, error: insertError } = await admin
       .from('visitas_obra')
       .insert({
-        proyecto_id:     data.proyecto_id,
-        fecha:           data.fecha,
-        titulo:          data.titulo,
-        asistentes:      asistenteStr || null,
-        notas:           notas || null,
+        proyecto_id:          data.proyecto_id,
+        fecha:                data.fecha,
+        titulo:               data.titulo,
+        asistentes:           asistenteStr || null,
+        notas:                notas || null,
         acta_url,
-        floorfy_url:     data.floorfy_url || null,
-        visible_cliente: data.visible_cliente,
+        acta_constructor_url: acta_constructor_url || null,
+        floorfy_url:          data.floorfy_url || null,
+        visible_cliente:      data.visible_cliente,
       })
       .select('id')
       .single()
@@ -363,15 +417,23 @@ export async function compartirActaPorEmail(
       .eq('rol', 'fp_partner')
     const partnerEmails: string[] = (partners ?? []).map((p: any) => p.email as string).filter(Boolean)
 
-    // Download client PDF
-    const clientPdfRes = await fetch(data.acta_url)
-    if (!clientPdfRes.ok) return { error: `No se pudo descargar el PDF del cliente: ${clientPdfRes.status}` }
-    const clientPdfBuffer = Buffer.from(await clientPdfRes.arrayBuffer())
+    // Download only the PDFs that are actually needed
+    let clientPdfBuffer: Buffer | null = null
+    let constructorPdfBuffer: Buffer | null = null
 
-    // Download constructor PDF
-    const constructorPdfRes = await fetch(data.acta_constructor_url)
-    if (!constructorPdfRes.ok) return { error: `No se pudo descargar el PDF del constructor: ${constructorPdfRes.status}` }
-    const constructorPdfBuffer = Buffer.from(await constructorPdfRes.arrayBuffer())
+    if (hasCliente && data.acta_url) {
+      const r = await fetch(data.acta_url)
+      if (!r.ok) return { error: `No se pudo descargar el PDF del cliente: ${r.status}` }
+      clientPdfBuffer = Buffer.from(await r.arrayBuffer())
+    }
+    if (hasConstructor && data.acta_constructor_url) {
+      const r = await fetch(data.acta_constructor_url)
+      if (!r.ok) return { error: `No se pudo descargar el PDF del constructor: ${r.status}` }
+      constructorPdfBuffer = Buffer.from(await r.arrayBuffer())
+    }
+    // Fallback: if only one PDF was generated, reuse it for both
+    if (!clientPdfBuffer && constructorPdfBuffer) clientPdfBuffer = constructorPdfBuffer
+    if (!constructorPdfBuffer && clientPdfBuffer) constructorPdfBuffer = clientPdfBuffer
 
     const portalUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? 'https://portal.formaprima.es'}/portal/${data.proyecto_id}`
     const fechaFmt  = fmtDateEs(data.fecha)
@@ -404,7 +466,7 @@ export async function compartirActaPorEmail(
         cc:          ccPartners.length ? ccPartners : undefined,
         subject,
         html:        wrapEmail(bodyHtml),
-        attachments: [{ filename: pdfFilename, content: clientPdfBuffer }],
+        attachments: clientPdfBuffer ? [{ filename: pdfFilename, content: clientPdfBuffer }] : undefined,
       })
       if (r.error) return { error: r.error }
     }
@@ -432,7 +494,7 @@ export async function compartirActaPorEmail(
         cc:          ccPartners.length ? ccPartners : undefined,
         subject,
         html:        wrapEmail(bodyHtml),
-        attachments: [{ filename: pdfFilename, content: constructorPdfBuffer }],
+        attachments: constructorPdfBuffer ? [{ filename: pdfFilename, content: constructorPdfBuffer }] : undefined,
       })
       if (r.error) return { error: r.error }
     }
