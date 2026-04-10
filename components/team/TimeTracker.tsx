@@ -498,7 +498,7 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
   }, [])
 
   const setCell = useCallback(async (uid: string, fecha: string, h: number, value: string) => {
-    if (value === '' && getCell(uid, fecha, h) !== '') {
+    if (value === '') {
       if (sessionDeletions >= 10) {
         setPendingDelete({ uid, fecha, h })
         return
