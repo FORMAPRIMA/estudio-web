@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Se requiere al menos un destinatario.' }, { status: 400 })
     }
 
-    const honorarios = pdfData.superficie * pdfData.tarifa_m2
+    const honorarios = pdfData.superficie * pdfData.tarifa_m2 + pdfData.fee_base
     const fmtEur = (n: number) =>
       new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(n)
 
