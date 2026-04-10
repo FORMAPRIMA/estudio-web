@@ -297,26 +297,21 @@ export function DueDiligenciaPDF({ data }: { data: DueDiligenciaPDFData }) {
         <View style={s.body}>
           <View style={s.summaryBox}>
             <View style={s.summaryItemFirst}>
-              <Text style={s.summaryLabel}>Tipo de encargo</Text>
-              <Text style={[s.summaryValue, { fontSize: 9 }]}>Due Diligence Técnica</Text>
-              <Text style={s.summarySubValue}>Inspección no invasiva</Text>
-            </View>
-            <View style={s.summaryItem}>
-              <Text style={s.summaryLabel}>Superficie análisis</Text>
+              <Text style={s.summaryLabel}>Superficie</Text>
               <Text style={s.summaryValue}>{data.superficie} m²</Text>
             </View>
             <View style={s.summaryItem}>
-              <Text style={s.summaryLabel}>Tarifa variable</Text>
+              <Text style={s.summaryLabel}>Tarifa</Text>
               <Text style={s.summaryValue}>{fmtEur(data.tarifa_m2)}/m²</Text>
               <Text style={s.summarySubValue}>{fmtEur(honorariosVariable)}</Text>
             </View>
             <View style={s.summaryItem}>
-              <Text style={s.summaryLabel}>Fee base moviliz.</Text>
+              <Text style={s.summaryLabel}>Fee base</Text>
               <Text style={s.summaryValue}>{fmtEur(data.fee_base)}</Text>
-              <Text style={s.summarySubValue}>fijo</Text>
+              <Text style={s.summarySubValue}>movilización</Text>
             </View>
             <View style={s.summaryItem}>
-              <Text style={s.summaryLabel}>Honorarios totales</Text>
+              <Text style={s.summaryLabel}>Total</Text>
               <Text style={s.summaryValueBrand}>{fmtEur(honorarios)}</Text>
               <Text style={s.summarySubValue}>+ IVA si aplica</Text>
             </View>
