@@ -59,15 +59,62 @@ function Badge({ bg, color, label }: { bg: string; color: string; label: string 
 
 // ── Main component ────────────────────────────────────────────────────────────
 
+// ── IA Prompt state (per-mejora) ─────────────────────────────────────────────
+
+interface PromptState {
+  loading: boolean
+  prompt:  string | null
+  error:   string | null
+}
+
 export default function MejorasPage({ mejoras: initialMejoras, currentUserId, currentUserRole }: Props) {
   const [mejoras, setMejoras] = useState<Mejora[]>(initialMejoras)
   const [filter, setFilter] = useState<MejoraStatus | 'todas'>('todas')
+  const [activeView, setActiveView] = useState<'lista' | 'ia'>('lista')
   const [showForm, setShowForm] = useState(false)
   const [seeding, setSeeding] = useState(false)
   const [lightbox, setLightbox] = useState<string | null>(null)
+  const [promptStates, setPromptStates] = useState<Record<string, PromptState>>({})
+  const [copiedId, setCopiedId] = useState<string | null>(null)
 
   const canManage = CAN_MANAGE.includes(currentUserRole)
   const isPartner = currentUserRole === 'fp_partner'
+
+  const handleGeneratePrompt = async (m: Mejora) => {
+    setPromptStates(prev => ({ ...prev, [m.id]: { loading: true, prompt: null, error: null } }))
+    try {
+      const res = await fetch('/api/mejoras/generar-prompt', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          mejora: {
+            tipo:          m.tipo,
+            titulo:        m.titulo,
+            descripcion:   m.descripcion,
+            imagenes_urls: m.imagenes_urls ?? [],
+            autor:         m.autor?.nombre ?? '—',
+            status:        m.status,
+            created_at:    m.created_at,
+          },
+        }),
+      })
+      const json = await res.json()
+      if (json.error) throw new Error(json.error)
+      setPromptStates(prev => ({ ...prev, [m.id]: { loading: false, prompt: json.prompt, error: null } }))
+    } catch (err) {
+      setPromptStates(prev => ({
+        ...prev,
+        [m.id]: { loading: false, prompt: null, error: err instanceof Error ? err.message : 'Error' },
+      }))
+    }
+  }
+
+  const handleCopy = (id: string, text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedId(id)
+      setTimeout(() => setCopiedId(null), 2000)
+    })
+  }
 
   const filtered = filter === 'todas'
     ? mejoras
@@ -122,8 +169,35 @@ export default function MejorasPage({ mejoras: initialMejoras, currentUserId, cu
         </button>
       </div>
 
-      {/* ── Filters ────────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap gap-1 border-b border-ink/10 pb-4">
+      {/* ── View tabs ──────────────────────────────────────────────────── */}
+      <div className="flex gap-0 border-b border-ink/10">
+        <button
+          onClick={() => setActiveView('lista')}
+          className={`text-[9px] tracking-widest uppercase font-medium px-4 py-2.5 transition-colors border-b-2 -mb-px ${
+            activeView === 'lista'
+              ? 'border-ink text-ink'
+              : 'border-transparent text-meta/40 hover:text-ink'
+          }`}
+        >
+          Lista
+        </button>
+        {isPartner && (
+          <button
+            onClick={() => setActiveView('ia')}
+            className={`text-[9px] tracking-widest uppercase font-medium px-4 py-2.5 transition-colors border-b-2 -mb-px ${
+              activeView === 'ia'
+                ? 'border-[#D85A30] text-[#D85A30]'
+                : 'border-transparent text-meta/40 hover:text-[#D85A30]'
+            }`}
+          >
+            IA Prompt
+          </button>
+        )}
+      </div>
+
+      {/* ── Status filters (lista view only) ───────────────────────────── */}
+      {activeView === 'lista' && (
+      <div className="flex flex-wrap gap-1">
         {(['todas', ...STATUS_ORDER] as const).map(s => {
           const active = filter === s
           const cfg = s === 'todas' ? null : STATUS_CONFIG[s]
@@ -145,9 +219,96 @@ export default function MejorasPage({ mejoras: initialMejoras, currentUserId, cu
           )
         })}
       </div>
+      )}
+
+      {/* ── IA Prompt view ─────────────────────────────────────────────── */}
+      {activeView === 'ia' && (
+        <div className="space-y-3">
+          <p className="text-[10px] font-light text-meta/50 leading-relaxed">
+            Selecciona una petición y genera un prompt listo para pegar en Claude Code.
+          </p>
+          {mejoras.length === 0 ? (
+            <p className="text-[11px] font-light text-meta/40 text-center py-10">No hay peticiones todavía.</p>
+          ) : (
+            mejoras.map(m => {
+              const ps = promptStates[m.id]
+              const tipo = TIPO_CONFIG[m.tipo]
+              const status = STATUS_CONFIG[m.status]
+              const date = new Date(m.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
+              return (
+                <div key={m.id} className="border border-ink/10 bg-white">
+                  {/* Mejora header */}
+                  <div className="flex items-start gap-3 px-4 py-3">
+                    <div className="pt-0.5 shrink-0 flex flex-col gap-1">
+                      <Badge bg={tipo.bg} color={tipo.color} label={tipo.label} />
+                      <Badge bg={status.bg} color={status.color} label={status.label} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[12px] font-light text-ink leading-snug">{m.titulo}</p>
+                      {m.descripcion && (
+                        <p className="text-[10px] font-light text-meta/50 leading-relaxed mt-0.5 line-clamp-2">{m.descripcion}</p>
+                      )}
+                      <p className="text-[9px] font-light text-meta/35 mt-1">{m.autor?.nombre ?? '—'} · {date}</p>
+                    </div>
+                    <button
+                      onClick={() => handleGeneratePrompt(m)}
+                      disabled={ps?.loading}
+                      className="shrink-0 text-[9px] tracking-widest uppercase font-medium px-3 py-1.5 border transition-colors disabled:opacity-40"
+                      style={
+                        ps?.prompt
+                          ? { background: '#D1FAE5', color: '#065F46', borderColor: '#6EE7B7' }
+                          : { background: '#FFF7ED', color: '#D85A30', borderColor: '#FED7AA' }
+                      }
+                    >
+                      {ps?.loading ? 'Generando…' : ps?.prompt ? 'Regenerar' : 'Generar prompt'}
+                    </button>
+                  </div>
+
+                  {/* Error */}
+                  {ps?.error && (
+                    <div className="px-4 pb-3">
+                      <p className="text-[10px] text-red-500">{ps.error}</p>
+                    </div>
+                  )}
+
+                  {/* Generated prompt */}
+                  {ps?.loading && (
+                    <div className="px-4 pb-4 border-t border-ink/8">
+                      <p className="text-[10px] font-light text-meta/40 mt-3 animate-pulse">Analizando petición y generando prompt…</p>
+                    </div>
+                  )}
+                  {ps?.prompt && (
+                    <div className="px-4 pb-4 border-t border-ink/8 pt-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-[9px] tracking-widest uppercase font-medium text-meta/40">Prompt generado</p>
+                        <button
+                          onClick={() => handleCopy(m.id, ps.prompt!)}
+                          className="text-[9px] tracking-widest uppercase font-medium px-3 py-1 border transition-colors"
+                          style={
+                            copiedId === m.id
+                              ? { background: '#D1FAE5', color: '#065F46', borderColor: '#6EE7B7' }
+                              : { background: 'transparent', color: '#1A1A1A', borderColor: '#E8E6E0' }
+                          }
+                        >
+                          {copiedId === m.id ? '✓ Copiado' : 'Copiar'}
+                        </button>
+                      </div>
+                      <pre
+                        className="text-[10px] font-mono text-ink/80 leading-relaxed whitespace-pre-wrap bg-cream/60 border border-ink/8 p-3 max-h-64 overflow-y-auto"
+                      >
+                        {ps.prompt}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              )
+            })
+          )}
+        </div>
+      )}
 
       {/* ── List ───────────────────────────────────────────────────────── */}
-      {filtered.length === 0 ? (
+      {activeView === 'lista' && (filtered.length === 0 ? (
         <div className="text-center py-16">
           <p className="text-[11px] font-light text-meta/40 tracking-wide">
             {filter === 'todas' ? 'No hay peticiones todavía.' : `No hay peticiones con estado "${STATUS_CONFIG[filter].label}".`}
@@ -216,7 +377,7 @@ export default function MejorasPage({ mejoras: initialMejoras, currentUserId, cu
             )
           })}
         </div>
-      )}
+      ))}
 
       {/* ── Seed button (partner only, first time) ──────────────────────── */}
       {isPartner && mejoras.length === 0 && (
