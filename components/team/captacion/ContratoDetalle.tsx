@@ -370,6 +370,12 @@ export default function ContratoDetalle({
   const [firmandoError,   setFirmandoError]   = useState<string | null>(null)
   const [successMsg,      setSuccessMsg]      = useState<string | null>(null)
 
+  // ── DocuSign state ────────────────────────────────────────────────────────
+  const [dsLoading,       setDsLoading]       = useState(false)
+  const [dsError,         setDsError]         = useState<string | null>(null)
+  const [dsEnvelopeId,    setDsEnvelopeId]    = useState<string | null>(initial.docusign_envelope_id ?? null)
+  const [dsStatus,        setDsStatus]        = useState<string | null>(initial.docusign_status ?? null)
+
   // ── Compartir modal ───────────────────────────────────────────────────────
   const [showCompartir,    setShowCompartir]    = useState(false)
   const [compartirEmails,  setCompartirEmails]  = useState<{ email: string; nombre?: string }[]>([])
@@ -571,6 +577,28 @@ export default function ContratoDetalle({
     }
   }
 
+  const handleDocuSign = async () => {
+    if (!confirm('¿Enviar a DocuSign? Se enviará el contrato por email a ambas partes para firma electrónica.')) return
+    setDsLoading(true)
+    setDsError(null)
+    try {
+      const res = await fetch(`/api/contratos/${initial.id}/docusign`, { method: 'POST' })
+      const data = await res.json() as { ok?: boolean; envelopeId?: string; error?: string }
+      if (!res.ok || data.error) {
+        setDsError(data.error ?? 'Error al enviar a DocuSign.')
+        return
+      }
+      setDsEnvelopeId(data.envelopeId ?? null)
+      setDsStatus('sent')
+      if (status === 'borrador') setStatus('enviado')
+      setSuccessMsg('✓ Contrato enviado a DocuSign. Ambas partes recibirán un email para firmar.')
+    } catch {
+      setDsError('Error de conexión.')
+    } finally {
+      setDsLoading(false)
+    }
+  }
+
   const meta = STATUS_META[status] ?? STATUS_META.borrador
 
   return (
@@ -670,6 +698,51 @@ export default function ContratoDetalle({
               </button>
             )}
 
+            {/* DocuSign button + status */}
+            {status !== 'firmado' && status !== 'cancelado' && (
+              dsEnvelopeId ? (
+                <span style={{
+                  height: 34, padding: '0 14px', display: 'inline-flex', alignItems: 'center',
+                  fontSize: 11, fontWeight: 600, borderRadius: 4, gap: 6,
+                  background: dsStatus === 'completed' ? '#EEF8F4' : dsStatus === 'declined' || dsStatus === 'voided' ? '#FEF2F2' : '#FFF8ED',
+                  color:      dsStatus === 'completed' ? '#1D9E75' : dsStatus === 'declined' || dsStatus === 'voided' ? '#DC2626' : '#B45309',
+                  border:     '1px solid',
+                  borderColor:dsStatus === 'completed' ? '#86EFAC' : dsStatus === 'declined' || dsStatus === 'voided' ? '#FCA5A5' : '#FCD34D',
+                }}>
+                  DocuSign · {dsStatus === 'completed' ? 'Firmado' : dsStatus === 'declined' ? 'Rechazado' : dsStatus === 'voided' ? 'Anulado' : 'Pendiente de firma'}
+                </span>
+              ) : (
+                <button
+                  onClick={handleDocuSign}
+                  disabled={dsLoading}
+                  title="Enviar a DocuSign para firma electrónica"
+                  style={{
+                    height: 36, padding: '0 18px',
+                    background: dsLoading ? '#888' : '#1A1A1A',
+                    color: '#fff', border: 'none', borderRadius: 4,
+                    cursor: dsLoading ? 'not-allowed' : 'pointer',
+                    fontSize: 11, fontWeight: 600, letterSpacing: '0.03em',
+                    opacity: dsLoading ? 0.7 : 1,
+                  }}
+                  onMouseEnter={e => { if (!dsLoading) (e.currentTarget as HTMLElement).style.background = '#333' }}
+                  onMouseLeave={e => { if (!dsLoading) (e.currentTarget as HTMLElement).style.background = '#1A1A1A' }}
+                >
+                  {dsLoading ? 'Enviando…' : '✍ DocuSign'}
+                </button>
+              )
+            )}
+
+            {isFirmado && initial.pdf_firmado_url && (
+              <a
+                href={initial.pdf_firmado_url as string}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ height: 36, padding: '0 16px', display: 'inline-flex', alignItems: 'center', background: 'none', border: '1px solid #1D9E75', borderRadius: 4, cursor: 'pointer', fontSize: 11, color: '#1D9E75', fontWeight: 500, textDecoration: 'none' }}
+              >
+                ↓ PDF firmado
+              </a>
+            )}
+
             {isFirmado && initial.proyecto_id && (
               <button
                 onClick={() => router.push(`/team/proyectos/${initial.proyecto_id}`)}
@@ -686,6 +759,12 @@ export default function ContratoDetalle({
           <div style={{ marginTop: 12, padding: '10px 16px', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 6, fontSize: 12, color: '#DC2626', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span>{firmandoError}</span>
             <button onClick={() => setFirmandoError(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', fontSize: 16 }}>×</button>
+          </div>
+        )}
+        {dsError && (
+          <div style={{ marginTop: 12, padding: '10px 16px', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 6, fontSize: 12, color: '#DC2626', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span>DocuSign: {dsError}</span>
+            <button onClick={() => setDsError(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', fontSize: 16 }}>×</button>
           </div>
         )}
         {successMsg && (

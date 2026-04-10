@@ -271,6 +271,8 @@ export interface ContratoPDFData {
   honorarios:         ContratoHonorario[]
   notas:              string | null
   lang?:              'es' | 'en'
+  // When true: omit pre-printed Gabriela signature image so DocuSign places the digital one
+  forDocuSign?:       boolean
   // DB-stored EN translations keyed by service id
   plantilla_en?: Record<string, {
     label_en?:           string | null
@@ -361,7 +363,8 @@ function sortServicios<T extends { id: string }>(items: T[]): T[] {
 }
 
 export function ContratoPDF({ data }: { data: ContratoPDFData }) {
-  const lang = data.lang ?? 'es'
+  const lang         = data.lang       ?? 'es'
+  const forDocuSign  = data.forDocuSign ?? false
   const sortedServicios = sortServicios(data.servicios_contrato)
   const totalHonorarios = data.honorarios.reduce((s, h) => s + (h.importe ?? 0), 0)
 
@@ -386,12 +389,19 @@ export function ContratoPDF({ data }: { data: ContratoPDFData }) {
     })
     .join(', ')
 
+  const clienteSignatario = [data.cliente_nombre, data.cliente_apellidos].filter(Boolean).join(' ') || '—'
+
   const Footer = () => (
     <View style={s.footer} fixed>
       <Text style={s.footerText}>
         {lang === 'en'
           ? `${STUDIO.razon_social} (trading as ${STUDIO.nombre_comercial}) · Tax ID ${STUDIO.nif}`
           : `${STUDIO.razon_social} (nombre comercial ${STUDIO.nombre_comercial}) · NIF ${STUDIO.nif}`}
+      </Text>
+      <Text style={{ ...s.footerText, textAlign: 'center' }}>
+        {lang === 'en'
+          ? `Signed by: ${clienteSignatario} · ${STUDIO.rep_nombre}`
+          : `Firmantes: ${clienteSignatario} · ${STUDIO.rep_nombre}`}
       </Text>
       <Text style={s.footerText} render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} />
     </View>
@@ -933,6 +943,8 @@ export function ContratoPDF({ data }: { data: ContratoPDFData }) {
           {/* Signatures */}
           <View style={s.firmaBlock} wrap={false}>
             <View style={s.firmaCol}>
+              {/* DocuSign anchor — white 1pt text, invisible but present in PDF text layer */}
+              <Text style={{ fontSize: 1, color: C.white }}>«FP_FIRMA_CLIENTE»</Text>
               <View style={s.firmaLinea} />
               <Text style={s.firmaLabel}>{T.firmaCliente}</Text>
               <Text style={s.firmaNombre}>
@@ -943,21 +955,26 @@ export function ContratoPDF({ data }: { data: ContratoPDFData }) {
               )}
             </View>
             <View style={s.firmaCol}>
-              {/* Same container as client firmaLinea — keeps lines aligned */}
-              <View style={{ position: 'relative', width: '80%', height: 36, borderBottomWidth: 1, borderBottomColor: C.ink, marginBottom: 6 }}>
-                {/* Signature overlaps upward from the line, doesn't push layout */}
-                <Image
-                  src={FIRMA_GABRIELA}
-                  style={{
-                    position: 'absolute',
-                    bottom: 0,
-                    left: 0,
-                    width: '100%',
-                    height: 100,
-                    objectFit: 'contain',
-                  }}
-                />
-              </View>
+              {/* DocuSign anchor */}
+              <Text style={{ fontSize: 1, color: C.white }}>«FP_FIRMA_ESTUDIO»</Text>
+              {/* Signature image only when not sending to DocuSign */}
+              {forDocuSign ? (
+                <View style={{ width: '80%', height: 36, borderBottomWidth: 1, borderBottomColor: C.ink, marginBottom: 6 }} />
+              ) : (
+                <View style={{ position: 'relative', width: '80%', height: 36, borderBottomWidth: 1, borderBottomColor: C.ink, marginBottom: 6 }}>
+                  <Image
+                    src={FIRMA_GABRIELA}
+                    style={{
+                      position: 'absolute',
+                      bottom: 0,
+                      left: 0,
+                      width: '100%',
+                      height: 100,
+                      objectFit: 'contain',
+                    }}
+                  />
+                </View>
+              )}
               <Text style={s.firmaLabel}>{T.firmaEstudio}</Text>
               <Text style={s.firmaNombre}>{STUDIO.rep_nombre}</Text>
               <Text style={{ ...s.firmaLabel, marginTop: 2 }}>{STUDIO.nombre_comercial}</Text>

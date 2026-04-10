@@ -499,3 +499,104 @@ export async function updateProyectoClienteRol(
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
   }
 }
+
+// ── Documentación: renders + planos ─────────────────────────────────────────
+
+export async function getDocUploadToken(
+  proyectoId: string,
+  fileName: string,
+  tipo: 'render' | 'planos',
+): Promise<{ token: string; path: string; publicUrl: string } | { error: string }> {
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'Sin sesión activa.' }
+
+    const ext = fileName.split('.').pop() ?? (tipo === 'planos' ? 'pdf' : 'jpg')
+    const bucket = tipo === 'planos' ? 'proyecto-planos' : 'proyecto-renders'
+    const storagePath = `${proyectoId}/${Date.now()}.${ext}`
+
+    const { data, error } = await supabase.storage
+      .from(bucket)
+      .createSignedUploadUrl(storagePath)
+
+    if (error || !data) return { error: error?.message ?? 'Error al generar token.' }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from(bucket)
+      .getPublicUrl(storagePath)
+
+    return { token: data.token, path: storagePath, publicUrl }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+export async function addProyectoRender(
+  proyectoId: string,
+  url: string,
+  nombre: string,
+): Promise<{ success: true } | { error: string }> {
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'Sin sesión activa.' }
+
+    const { error } = await supabase.rpc('append_proyecto_render', {
+      p_proyecto_id: proyectoId,
+      p_url:         url,
+      p_nombre:      nombre,
+    })
+    if (error) return { error: error.message }
+
+    revalidatePath(`/team/proyectos/${proyectoId}`)
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+export async function deleteProyectoRender(
+  proyectoId: string,
+  url: string,
+): Promise<{ success: true } | { error: string }> {
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'Sin sesión activa.' }
+
+    const { error } = await supabase.rpc('remove_proyecto_render', {
+      p_proyecto_id: proyectoId,
+      p_url:         url,
+    })
+    if (error) return { error: error.message }
+
+    revalidatePath(`/team/proyectos/${proyectoId}`)
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+export async function updateProyectoPlanos(
+  proyectoId: string,
+  url: string | null,
+): Promise<{ success: true } | { error: string }> {
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'Sin sesión activa.' }
+
+    const { error } = await supabase
+      .from('proyectos')
+      .update({ planos_pdf_url: url })
+      .eq('id', proyectoId)
+
+    if (error) return { error: error.message }
+
+    revalidatePath(`/team/proyectos/${proyectoId}`)
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) }
+  }
+}

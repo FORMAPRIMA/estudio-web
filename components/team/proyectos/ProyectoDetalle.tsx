@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { updateProyecto, addProyectoFase, updateFaseResponsables, getProyectoImageUploadToken, updateProyectoStatus, deleteProyecto, deleteProyectoFase, iniciarFase } from '@/app/actions/proyectos'
 import TitularesSection from '@/components/team/proyectos/TitularesSection'
+import DocumentacionTab from '@/components/team/proyectos/DocumentacionTab'
 import type { Titular, ClienteOption } from '@/components/team/proyectos/TitularesSection'
 import { updateTaskStatus, updateTaskResponsables, updateTaskPrioridad, updateTaskTitulo, updateTaskFechaLimite, deleteTask } from '@/app/actions/tasks'
 import type { ProyectoInterno, ProyectoFase, Task, TaskStatus, CatalogoFase, UserProfile, ProyectoStatus, NivelCalidad } from '@/lib/types'
@@ -1167,6 +1168,7 @@ export default function ProyectoDetalle({ proyecto: initialProyecto, tasks: init
   const [editingProyecto, setEditingProyecto] = useState(false)
   const [addingFaseId, setAddingFaseId] = useState<string | null>(null)
   const [showAddFase, setShowAddFase] = useState(false)
+  const [activeTab, setActiveTab] = useState<'fases' | 'documentacion'>('fases')
 
   // Editar info del proyecto, fases, status — solo manager/partner
   const canEditProject = currentUserRole === 'fp_manager' || currentUserRole === 'fp_partner'
@@ -1398,76 +1400,105 @@ export default function ProyectoDetalle({ proyecto: initialProyecto, tasks: init
         </div>
       )}
 
-      {/* ── Fases + tasks ─────────────────────────────────────────────────── */}
-      <div className="space-y-8">
-        <p className="text-[10px] tracking-widest uppercase font-light text-meta">Fases y tasks</p>
-
-        {fasesEnriched.length === 0 && (
-          <p className="text-sm font-light text-meta">No hay fases contratadas en este proyecto.</p>
-        )}
-
-        {fasesBySection.map(group => (
-          <div key={group.seccion}>
-            <p className="text-[9px] tracking-widest uppercase font-light text-meta/50 mb-3">{group.seccion}</p>
-            <div className="space-y-3">
-              {group.items.map(({ pf, catalogo }) => {
-                const faseTasks = tasksForFase(catalogo!.id)
-                const responsableNames = pf.responsables
-                  .map(uid => teamMembers.find(m => m.id === uid)?.nombre).filter(Boolean)
-
-                const faseProgress = calcProgress(faseTasks)
-
-                return (
-                  <FaseRow
-                    key={pf.id}
-                    pf={pf}
-                    catalogo={catalogo!}
-                    faseTasks={faseTasks}
-                    faseProgress={faseProgress}
-                    responsableNames={responsableNames as string[]}
-                    canEditProject={canEditProject}
-                    canEdit={canEdit}
-                    addingFaseId={addingFaseId}
-                    teamMembers={teamMembers}
-                    proyecto={proyecto}
-                    horasEjecutadas={horasEjecutadasByFase[pf.id] ?? 0}
-                    onAddTask={addTask}
-                    onSetAddingFaseId={setAddingFaseId}
-                    onUpdateTask={updateTask}
-                    onDeleteTask={deleteTask}
-                    onDeleteFase={handleDeleteFase}
-                    onIniciar={handleIniciarFase}
-                    onUpdateFaseResponsables={handleUpdateFaseResponsables}
-                  />
-                )
-              })}
-            </div>
-          </div>
+      {/* ── Tab navigation ───────────────────────────────────────────────── */}
+      <div className="flex border-b border-ink/10 mb-8">
+        {(['fases', 'documentacion'] as const).map(tab => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`
+              px-4 py-2.5 text-[10px] tracking-widest uppercase font-light transition-colors
+              ${activeTab === tab
+                ? 'text-ink border-b-2 border-ink -mb-px'
+                : 'text-meta hover:text-ink'
+              }
+            `}
+          >
+            {tab === 'fases' ? 'Fases y tasks' : 'Documentación'}
+          </button>
         ))}
-
-        {/* ── Agregar fase ────────────────────────────────────────────────── */}
-        {canEdit && (
-          <div>
-            {showAddFase ? (
-              <AddFasePanel
-                proyectoId={proyecto.id}
-                availableFases={availableFases}
-                teamMembers={teamMembers}
-                onAdded={(pf) => {
-                  setFases(prev => [...prev, pf as unknown as typeof prev[0]])
-                  setShowAddFase(false)
-                }}
-                onCancel={() => setShowAddFase(false)}
-              />
-            ) : availableFases.length > 0 ? (
-              <button onClick={() => setShowAddFase(true)}
-                className="text-[10px] tracking-widest uppercase font-light text-meta hover:text-ink border border-dashed border-ink/20 hover:border-ink/40 px-4 py-3 w-full text-center transition-colors">
-                + Agregar fase contratada
-              </button>
-            ) : null}
-          </div>
-        )}
       </div>
+
+      {/* ── Tab: Fases + tasks ───────────────────────────────────────────── */}
+      {activeTab === 'fases' && (
+        <div className="space-y-8">
+          {fasesEnriched.length === 0 && (
+            <p className="text-sm font-light text-meta">No hay fases contratadas en este proyecto.</p>
+          )}
+
+          {fasesBySection.map(group => (
+            <div key={group.seccion}>
+              <p className="text-[9px] tracking-widest uppercase font-light text-meta/50 mb-3">{group.seccion}</p>
+              <div className="space-y-3">
+                {group.items.map(({ pf, catalogo }) => {
+                  const faseTasks = tasksForFase(catalogo!.id)
+                  const responsableNames = pf.responsables
+                    .map(uid => teamMembers.find(m => m.id === uid)?.nombre).filter(Boolean)
+
+                  const faseProgress = calcProgress(faseTasks)
+
+                  return (
+                    <FaseRow
+                      key={pf.id}
+                      pf={pf}
+                      catalogo={catalogo!}
+                      faseTasks={faseTasks}
+                      faseProgress={faseProgress}
+                      responsableNames={responsableNames as string[]}
+                      canEditProject={canEditProject}
+                      canEdit={canEdit}
+                      addingFaseId={addingFaseId}
+                      teamMembers={teamMembers}
+                      proyecto={proyecto}
+                      horasEjecutadas={horasEjecutadasByFase[pf.id] ?? 0}
+                      onAddTask={addTask}
+                      onSetAddingFaseId={setAddingFaseId}
+                      onUpdateTask={updateTask}
+                      onDeleteTask={deleteTask}
+                      onDeleteFase={handleDeleteFase}
+                      onIniciar={handleIniciarFase}
+                      onUpdateFaseResponsables={handleUpdateFaseResponsables}
+                    />
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+
+          {/* ── Agregar fase ──────────────────────────────────────────────── */}
+          {canEdit && (
+            <div>
+              {showAddFase ? (
+                <AddFasePanel
+                  proyectoId={proyecto.id}
+                  availableFases={availableFases}
+                  teamMembers={teamMembers}
+                  onAdded={(pf) => {
+                    setFases(prev => [...prev, pf as unknown as typeof prev[0]])
+                    setShowAddFase(false)
+                  }}
+                  onCancel={() => setShowAddFase(false)}
+                />
+              ) : availableFases.length > 0 ? (
+                <button onClick={() => setShowAddFase(true)}
+                  className="text-[10px] tracking-widest uppercase font-light text-meta hover:text-ink border border-dashed border-ink/20 hover:border-ink/40 px-4 py-3 w-full text-center transition-colors">
+                  + Agregar fase contratada
+                </button>
+              ) : null}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Tab: Documentación ──────────────────────────────────────────── */}
+      {activeTab === 'documentacion' && (
+        <DocumentacionTab
+          proyectoId={proyecto.id}
+          renders={proyecto.renders ?? []}
+          planosPdfUrl={proyecto.planos_pdf_url ?? null}
+          canEdit={canEdit}
+        />
+      )}
     </div>
   </div>
   )

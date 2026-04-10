@@ -103,6 +103,9 @@ export interface ProyectoInterno {
   nivel_calidad: NivelCalidad | null
   created_by: string | null
   created_at: string
+  // documentation
+  renders: { url: string; nombre: string }[] | null
+  planos_pdf_url: string | null
   // joined
   clientes?: { id: string; nombre: string } | null
   proyecto_fases?: ProyectoFase[]
