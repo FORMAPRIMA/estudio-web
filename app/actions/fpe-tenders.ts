@@ -14,14 +14,15 @@ export interface ScopeUnitRow {
 }
 
 export interface TenderBidRow {
-  id:             string
-  invitation_id:  string
-  partner_nombre: string
-  partner_email:  string | null
-  submitted_at:   string
-  notas:          string | null
-  status:         string
-  prices:         Record<string, number>  // fpe_project_line_items.id → precio_unitario
+  id:              string
+  invitation_id:   string
+  partner_nombre:  string
+  partner_email:   string | null
+  submitted_at:    string
+  notas:           string | null
+  status:          string
+  prices:          Record<string, number>   // fpe_project_line_items.id → precio_unitario
+  totalDaysByUnit: Record<string, number>   // project_unit_id → total días laborales propuestos
 }
 
 const LIST_PATH = '/team/fp-execution/projects'
@@ -311,6 +312,23 @@ export async function getTenderBids(
           .in('invitation_id', invIds)
       : { data: [] as { id: string; invitation_id: string; notas: string | null; status: string; submitted_at: string; line_items: unknown[] }[] }
 
+    // Fetch phase durations for all bids
+    const bidIds = (rawBids ?? []).map(b => b.id)
+    const { data: phaseDurData } = bidIds.length > 0
+      ? await admin
+          .from('fpe_bid_phase_durations')
+          .select('bid_id, project_unit_id, duracion_dias')
+          .in('bid_id', bidIds)
+      : { data: [] as { bid_id: string; project_unit_id: string; duracion_dias: number }[] }
+
+    // Group: bid_id → unit_id → total days
+    const daysByBidUnit: Record<string, Record<string, number>> = {}
+    for (const pd of (phaseDurData ?? [])) {
+      if (!daysByBidUnit[pd.bid_id]) daysByBidUnit[pd.bid_id] = {}
+      daysByBidUnit[pd.bid_id][pd.project_unit_id] =
+        (daysByBidUnit[pd.bid_id][pd.project_unit_id] ?? 0) + pd.duracion_dias
+    }
+
     // Build scope
     type RawUnit = {
       id: string; orden: number
@@ -344,10 +362,12 @@ export async function getTenderBids(
       const partner = invMap[bid.invitation_id] ?? { nombre: '?', email_contacto: null }
       const prices: Record<string, number> = {}
       for (const li of bid.line_items) prices[li.project_line_item_id] = li.precio_unitario
+      const totalDaysByUnit = daysByBidUnit[bid.id] ?? {}
       return {
         id: bid.id, invitation_id: bid.invitation_id,
         partner_nombre: partner.nombre, partner_email: partner.email_contacto,
-        submitted_at: bid.submitted_at, notas: bid.notas, status: bid.status, prices,
+        submitted_at: bid.submitted_at, notas: bid.notas, status: bid.status,
+        prices, totalDaysByUnit,
       }
     })
 
@@ -358,22 +378,140 @@ export async function getTenderBids(
 }
 
 // ── Award a bid ───────────────────────────────────────────────────────────────
+// Awards bid, records in fpe_awards, creates draft fpe_contract, sends via DocuSign.
 
 export async function awardBid(data: {
   bid_id:     string
   project_id: string
-}): Promise<{ success: true } | { error: string }> {
+}): Promise<{ success: true; contract_id: string } | { error: string }> {
   try {
     await requireManagerOrPartner()
     const admin = createAdminClient()
+
+    // ── 1. Mark bid + project as awarded ─────────────────────────────────────
     const [{ error: e1 }, { error: e2 }] = await Promise.all([
       admin.from('fpe_bids').update({ status: 'awarded', updated_at: new Date().toISOString() }).eq('id', data.bid_id),
       admin.from('fpe_projects').update({ status: 'awarded' }).eq('id', data.project_id),
     ])
     if (e1) return { error: e1.message }
     if (e2) return { error: e2.message }
+
+    // ── 2. Fetch bid → invitation → tender + partner ──────────────────────────
+    const { data: bid } = await admin
+      .from('fpe_bids')
+      .select(`
+        id,
+        invitation:fpe_tender_invitations (
+          id, tender_id,
+          partner:fpe_partners ( id, nombre, contacto_nombre, email_contacto, email_notificaciones )
+        )
+      `)
+      .eq('id', data.bid_id)
+      .single()
+
+    if (!bid) return { error: 'Oferta no encontrada tras adjudicación.' }
+
+    type BidRaw = {
+      id: string
+      invitation: {
+        id: string; tender_id: string
+        partner: { id: string; nombre: string; contacto_nombre: string | null; email_contacto: string | null; email_notificaciones: string | null }
+      } | null
+    }
+    const bidTyped = bid as unknown as BidRaw
+    const partnerId = bidTyped.invitation?.partner?.id
+    const tenderId  = bidTyped.invitation?.tender_id
+
+    if (!partnerId || !tenderId) return { error: 'Datos de partner o licitación incompletos.' }
+
+    // ── 3. Insert fpe_award ───────────────────────────────────────────────────
+    const { data: award, error: awdErr } = await admin
+      .from('fpe_awards')
+      .insert({ tender_id: tenderId, partner_id: partnerId, bid_id: data.bid_id })
+      .select('id')
+      .single()
+    if (awdErr) return { error: awdErr.message }
+
+    // ── 4. Fetch project + bid line items for contract JSON ───────────────────
+    const [{ data: project }, { data: bidLineItems }] = await Promise.all([
+      admin.from('fpe_projects').select('id, nombre, descripcion, direccion, ciudad').eq('id', data.project_id).single(),
+      admin.from('fpe_bid_line_items').select(`
+        project_line_item_id, precio_unitario,
+        project_line_item:fpe_project_line_items (
+          id, cantidad,
+          template_line_item:fpe_template_line_items ( nombre, unidad_medida ),
+          project_unit:fpe_project_units (
+            id,
+            template_unit:fpe_template_units ( nombre )
+          )
+        )
+      `).eq('bid_id', data.bid_id),
+    ])
+
+    const partner = bidTyped.invitation!.partner
+
+    // Build contenido_json
+    const contenido = {
+      project:  { id: data.project_id, nombre: project?.nombre ?? '', ciudad: project?.ciudad ?? '', direccion: project?.direccion ?? '' },
+      partner:  { id: partnerId, nombre: partner.nombre, email: partner.email_contacto ?? partner.email_notificaciones ?? '' },
+      awarded_at: new Date().toISOString(),
+      line_items: (bidLineItems ?? []).map((li: any) => ({
+        nombre:        li.project_line_item?.template_line_item?.nombre ?? '—',
+        unidad:        li.project_line_item?.template_line_item?.unidad_medida ?? '',
+        cantidad:      li.project_line_item?.cantidad ?? 0,
+        precio_unitario: li.precio_unitario,
+        total:         (li.project_line_item?.cantidad ?? 0) * li.precio_unitario,
+        unit_nombre:   li.project_line_item?.project_unit?.template_unit?.nombre ?? '—',
+      })),
+    }
+
+    // ── 5. Create fpe_contract (draft) ────────────────────────────────────────
+    const { data: contract, error: ctrErr } = await admin
+      .from('fpe_contracts')
+      .insert({ award_id: award.id, contenido_json: contenido, status: 'draft' })
+      .select('id')
+      .single()
+    if (ctrErr) return { error: ctrErr.message }
+
+    // ── 6. Generate PDF + send via DocuSign ───────────────────────────────────
+    try {
+      const { createElement } = await import('react')
+      const { renderToBuffer } = await import('@react-pdf/renderer')
+      const { FpeContractPDF } = await import('@/components/pdfs/FpeContractPDF')
+
+      const pdfBuffer = Buffer.from(
+        await renderToBuffer(createElement(FpeContractPDF, { data: contenido }) as any)
+      )
+
+      const { createAndSendEnvelope } = await import('@/lib/docusign/client')
+      const webhookUrl = `${SITE_URL}/api/webhooks/docusign`
+      const partnerEmail = partner.email_contacto ?? partner.email_notificaciones ?? ''
+
+      if (partnerEmail) {
+        const { envelopeId } = await createAndSendEnvelope({
+          contratoId: contract.id,
+          numero:     `FPE-${project?.nombre ?? contract.id}`,
+          pdfBuffer,
+          signers: {
+            cliente: { email: partnerEmail, name: partner.nombre },
+            estudio: { email: 'contacto@formaprima.es', name: 'Forma Prima' },
+          },
+          webhookUrl,
+        })
+
+        await admin
+          .from('fpe_contracts')
+          .update({ docusign_envelope_id: envelopeId, status: 'sent_to_sign', sent_at: new Date().toISOString() })
+          .eq('id', contract.id)
+      }
+    } catch (docuErr) {
+      console.error('[awardBid] DocuSign error:', docuErr)
+      // Non-fatal: award is created, contract is draft — DocuSign can be retried
+    }
+
     revalidatePath(`${LIST_PATH}/${data.project_id}`)
-    return { success: true }
+    revalidatePath('/team/fp-execution/control-room')
+    return { success: true, contract_id: contract.id }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
   }

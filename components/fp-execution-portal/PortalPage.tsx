@@ -27,6 +27,21 @@ interface Tender {
   status: string
 }
 
+interface TemplatePhase {
+  id: string
+  nombre: string
+  descripcion: string | null
+  orden: number
+  lead_time_days: number | null
+}
+
+interface BidPhaseDuration {
+  id: string
+  template_phase_id: string
+  project_unit_id: string
+  duracion_dias: number
+}
+
 interface TemplateLineItem {
   id: string
   nombre: string
@@ -48,6 +63,7 @@ interface ProjectUnit {
     id: string
     nombre: string
     descripcion: string | null
+    phases: TemplatePhase[]
   } | null
   line_items: ProjectLineItem[]
 }
@@ -76,6 +92,7 @@ interface ExistingBid {
   status: string
   submitted_at: string | null
   line_items: BidLineItem[]
+  phase_durations: BidPhaseDuration[]
 }
 
 interface PortalQuestion {
@@ -206,7 +223,22 @@ export default function PortalPage({
     return m
   }
 
+  const initPhaseDays = (): Record<string, number> => {
+    const m: Record<string, number> = {}
+    for (const unit of projectUnits) {
+      for (const phase of unit.template_unit?.phases ?? []) {
+        const key = `${unit.id}_${phase.id}`
+        const existing = existingBid?.phase_durations?.find(
+          pd => pd.project_unit_id === unit.id && pd.template_phase_id === phase.id
+        )
+        m[key] = existing?.duracion_dias ?? 0
+      }
+    }
+    return m
+  }
+
   const [prices, setPrices]         = useState<Record<string, number>>(initPrices)
+  const [phaseDays, setPhaseDays]   = useState<Record<string, number>>(initPhaseDays)
   const [bidNotas, setBidNotas]     = useState(existingBid?.notas ?? '')
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted]   = useState(existingBid?.status === 'submitted' || existingBid?.status === 'accepted')
@@ -257,10 +289,20 @@ export default function PortalPage({
       return
     }
 
+    const phase_durations = projectUnits.flatMap(u =>
+      (u.template_unit?.phases ?? [])
+        .map(ph => ({
+          template_phase_id: ph.id,
+          project_unit_id:   u.id,
+          duracion_dias:     phaseDays[`${u.id}_${ph.id}`] ?? 0,
+        }))
+        .filter(pd => pd.duracion_dias > 0)
+    )
+
     const res = await fetch('/api/fpe-portal/bid', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token, notas: bidNotas || null, line_items }),
+      body: JSON.stringify({ token, notas: bidNotas || null, line_items, phase_durations }),
     })
     const json = await res.json()
     setSubmitting(false)
@@ -428,8 +470,12 @@ export default function PortalPage({
                   </p>
                 </div>
                 <p style={S.sectionTitle}>Detalle de la oferta</p>
-                {projectUnits.map(unit => (
-                  <div key={unit.id} style={{ marginBottom: 16 }}>
+                {projectUnits.map(unit => {
+                  const unitPhaseDurations = (existingBid?.phase_durations ?? []).filter(
+                    pd => pd.project_unit_id === unit.id
+                  )
+                  return (
+                  <div key={unit.id} style={{ marginBottom: 20 }}>
                     <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 600, color: '#555' }}>{unit.template_unit?.nombre}</p>
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <thead>
@@ -454,8 +500,29 @@ export default function PortalPage({
                         })}
                       </tbody>
                     </table>
+
+                    {/* Phase durations submitted */}
+                    {unitPhaseDurations.length > 0 && (
+                      <div style={{ marginTop: 8, padding: '10px 14px', background: '#F0F7FF', borderRadius: 6, border: '1px solid #BAD7F2' }}>
+                        <p style={{ margin: '0 0 7px', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: '#4A90C0' }}>
+                          Plazos propuestos
+                        </p>
+                        <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 6 }}>
+                          {[...(unit.template_unit?.phases ?? [])].sort((a, b) => a.orden - b.orden).map(ph => {
+                            const pd = unitPhaseDurations.find(d => d.template_phase_id === ph.id)
+                            if (!pd) return null
+                            return (
+                              <span key={ph.id} style={{ fontSize: 11, padding: '3px 9px', background: '#fff', borderRadius: 20, color: '#1A1A1A', border: '1px solid #BAD7F2' }}>
+                                {ph.nombre}: <strong style={{ color: '#0369A1' }}>{pd.duracion_dias}d</strong>
+                              </span>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                ))}
+                  )
+                })}
                 <div style={{ textAlign: 'right', padding: '14px 0', borderTop: '2px solid #1A1A1A', marginTop: 8 }}>
                   <span style={{ fontSize: 13, color: '#AAA', marginRight: 16 }}>Total oferta</span>
                   <span style={{ fontSize: 20, fontWeight: 700, color: '#1A1A1A', fontFamily: 'monospace' }}>{formatEur(total)}</span>
@@ -520,6 +587,45 @@ export default function PortalPage({
                           })}
                         </tbody>
                       </table>
+
+                      {/* ── Phase duration inputs ── */}
+                      {(unit.template_unit?.phases?.length ?? 0) > 0 && (
+                        <div style={{ padding: '14px 16px', borderTop: '1px solid #E8E6E0', background: '#F8F7F4' }}>
+                          <p style={{ margin: '0 0 10px', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: '#888' }}>
+                            Plazos de ejecución (días laborales)
+                          </p>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                            {[...(unit.template_unit?.phases ?? [])].sort((a, b) => a.orden - b.orden).map(phase => {
+                              const key  = `${unit.id}_${phase.id}`
+                              const days = phaseDays[key] ?? 0
+                              return (
+                                <div key={phase.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                  <span style={{ flex: 1, fontSize: 12, color: '#444' }}>{phase.nombre}</span>
+                                  {phase.lead_time_days != null && (
+                                    <span style={{ fontSize: 10, color: '#BBB', flexShrink: 0 }}>Ref: {phase.lead_time_days}d</span>
+                                  )}
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+                                    <input
+                                      type="number"
+                                      min={1}
+                                      value={days || ''}
+                                      placeholder="0"
+                                      onChange={e => setPhaseDays(prev => ({ ...prev, [key]: parseInt(e.target.value) || 0 }))}
+                                      style={{
+                                        width: 64, padding: '5px 8px', fontSize: 13,
+                                        border: `1px solid ${days > 0 ? '#378ADD' : '#E8E6E0'}`,
+                                        borderRadius: 5, fontFamily: 'monospace', color: '#1A1A1A',
+                                        background: days > 0 ? '#F0F7FF' : '#fff', outline: 'none', textAlign: 'right',
+                                      }}
+                                    />
+                                    <span style={{ fontSize: 11, color: '#AAA' }}>días</span>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}

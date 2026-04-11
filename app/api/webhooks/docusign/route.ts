@@ -52,15 +52,48 @@ export async function POST(req: NextRequest) {
 
     const admin = createAdminClient()
 
-    // ── Look up contrato by envelope ID ───────────────────────────────────────
-    const { data: contrato } = await admin
-      .from('contratos')
-      .select('id, status, docusign_status')
-      .eq('docusign_envelope_id', envelopeId)
-      .maybeSingle()
+    // ── Look up contrato or fpe_contract by envelope ID ───────────────────────
+    const [{ data: contrato }, { data: fpeContract }] = await Promise.all([
+      admin.from('contratos').select('id, status, docusign_status').eq('docusign_envelope_id', envelopeId).maybeSingle(),
+      admin.from('fpe_contracts').select('id, status').eq('docusign_envelope_id', envelopeId).maybeSingle(),
+    ])
+
+    if (!contrato && !fpeContract) {
+      // Envelope not in our system — acknowledge anyway
+      return NextResponse.json({ ok: true })
+    }
+
+    // ── Handle FPE contract ───────────────────────────────────────────────────
+    if (fpeContract) {
+      if (envelopeStatus === 'completed' && fpeContract.status !== 'signed') {
+        try {
+          const signedPdf   = await downloadCompletedDocument(envelopeId)
+          const storagePath = `contracts/${fpeContract.id}/${envelopeId}-signed.pdf`
+          await admin.storage
+            .from('fpe-documents')
+            .upload(storagePath, signedPdf, { contentType: 'application/pdf', upsert: true })
+
+          // Fetch existing contenido_json so we can merge the signed path
+          const { data: existing } = await admin
+            .from('fpe_contracts')
+            .select('contenido_json')
+            .eq('id', fpeContract.id)
+            .single()
+
+          await admin.from('fpe_contracts').update({
+            status:        'signed',
+            signed_at:     new Date().toISOString(),
+            contenido_json: { ...(existing?.contenido_json as object ?? {}), pdf_signed_path: storagePath },
+          }).eq('id', fpeContract.id)
+        } catch (err) {
+          console.error('[docusign/webhook] fpe_contract complete error:', err)
+        }
+      } else if (envelopeStatus === 'declined' || envelopeStatus === 'voided') {
+        await admin.from('fpe_contracts').update({ status: 'cancelled' }).eq('id', fpeContract.id)
+      }
+    }
 
     if (!contrato) {
-      // Envelope not in our system — acknowledge anyway
       return NextResponse.json({ ok: true })
     }
 

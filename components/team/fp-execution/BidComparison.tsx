@@ -14,6 +14,13 @@ import {
 const euros = (n: number) =>
   n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'
 
+function minBidIds(values: Record<string, number>): string[] {
+  const entries = Object.entries(values).filter(([, v]) => v > 0)
+  if (entries.length === 0) return []
+  const min = Math.min(...entries.map(([, v]) => v))
+  return entries.filter(([, v]) => v === min).map(([k]) => k)
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function BidComparison({
@@ -29,6 +36,7 @@ export default function BidComparison({
   const [error, setError]       = useState<string | null>(null)
   const [scope, setScope]       = useState<ScopeUnitRow[]>([])
   const [bids, setBids]         = useState<TenderBidRow[]>([])
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [awarding, setAwarding] = useState<string | null>(null)
   const [flashMsg, setFlash]    = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
 
@@ -41,8 +49,11 @@ export default function BidComparison({
     })
   }, [tenderId, projectId])
 
+  const toggleExpanded = (unitId: string) =>
+    setExpanded(prev => ({ ...prev, [unitId]: !prev[unitId] }))
+
   const handleAward = async (bid: TenderBidRow) => {
-    if (!confirm(`¿Adjudicar el proyecto a ${bid.partner_nombre}?\n\nEl estado del proyecto cambiará a "Adjudicado".`)) return
+    if (!confirm(`¿Adjudicar el proyecto a ${bid.partner_nombre}?\n\nSe generará y enviará el contrato vía DocuSign automáticamente.`)) return
     setAwarding(bid.id)
     const res = await awardBid({ bid_id: bid.id, project_id: projectId })
     setAwarding(null)
@@ -51,7 +62,7 @@ export default function BidComparison({
       return
     }
     setBids(prev => prev.map(b => b.id === bid.id ? { ...b, status: 'awarded' } : b))
-    setFlash({ type: 'ok', text: `Proyecto adjudicado a ${bid.partner_nombre}.` })
+    setFlash({ type: 'ok', text: `Proyecto adjudicado a ${bid.partner_nombre}. Contrato enviado vía DocuSign.` })
     router.refresh()
   }
 
@@ -61,29 +72,24 @@ export default function BidComparison({
     const q = (s: string) => `"${s.replace(/"/g, '""')}"`
     const rows: string[] = []
 
-    // Header
     rows.push([
       q('Partida'), q('Ud.'), q('Cantidad'),
       ...bids.flatMap(b => [q(`${b.partner_nombre} — P/Ud`), q(`${b.partner_nombre} — Importe`)]),
     ].join(','))
 
     for (const unit of scope) {
-      // Unit row
       rows.push([q(unit.unit_nombre), '', '', ...bids.flatMap(() => ['', ''])].join(','))
       for (const li of unit.line_items) {
         rows.push([
           q(li.nombre), q(li.unidad_medida), String(li.cantidad),
           ...bids.flatMap(b => {
             const p = b.prices[li.id]
-            return p !== undefined
-              ? [p.toFixed(2), (p * li.cantidad).toFixed(2)]
-              : ['', '']
+            return p !== undefined ? [p.toFixed(2), (p * li.cantidad).toFixed(2)] : ['', '']
           }),
         ].join(','))
       }
     }
 
-    // Total row
     rows.push([
       q('TOTAL GENERAL'), '', '',
       ...bids.flatMap(b => ['', (grandTotals[b.id]?.total ?? 0).toFixed(2)]),
@@ -97,35 +103,29 @@ export default function BidComparison({
     URL.revokeObjectURL(url)
   }
 
-  // ── Loading / error states ─────────────────────────────────────────────────
+  // ── Loading / error states ────────────────────────────────────────────────
 
-  if (loading) {
-    return (
-      <div style={{ padding: '40px 20px', textAlign: 'center', color: '#AAA', fontSize: 13 }}>
-        Cargando comparativa…
-      </div>
-    )
-  }
+  if (loading) return (
+    <div style={{ padding: '40px 20px', textAlign: 'center', color: '#AAA', fontSize: 13 }}>
+      Cargando comparativa…
+    </div>
+  )
 
-  if (error) {
-    return (
-      <div style={{ padding: '14px 16px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, fontSize: 13, color: '#DC2626' }}>
-        Error: {error}
-      </div>
-    )
-  }
+  if (error) return (
+    <div style={{ padding: '14px 16px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, fontSize: 13, color: '#DC2626' }}>
+      Error: {error}
+    </div>
+  )
 
-  if (bids.length === 0) {
-    return (
-      <div style={{ padding: '60px 20px', textAlign: 'center', color: '#888', fontSize: 13 }}>
-        No hay ofertas enviadas todavía.
-      </div>
-    )
-  }
+  if (bids.length === 0) return (
+    <div style={{ padding: '60px 20px', textAlign: 'center', color: '#888', fontSize: 13 }}>
+      No hay ofertas enviadas todavía.
+    </div>
+  )
 
   // ── Totals ────────────────────────────────────────────────────────────────
 
-  const allLineItems = scope.flatMap(u => u.line_items.map(li => ({ liId: li.id, cant: li.cantidad })))
+  const allLineItems = scope.flatMap(u => u.line_items.map(li => ({ liId: li.id, unitId: u.unit_id, cant: li.cantidad })))
 
   const grandTotals: Record<string, { total: number; missing: number }> = {}
   for (const bid of bids) {
@@ -138,26 +138,31 @@ export default function BidComparison({
     grandTotals[bid.id] = { total, missing }
   }
 
-  const minTotal = Math.min(...bids.map(b => grandTotals[b.id]?.total ?? Infinity))
+  // Total days across all units per bid
+  const grandTotalDays: Record<string, number> = {}
+  for (const bid of bids) {
+    grandTotalDays[bid.id] = Object.values(bid.totalDaysByUnit).reduce((s, d) => s + d, 0)
+  }
+
+  const minTotal = Math.min(...bids.map(b => grandTotals[b.id]?.total ?? Infinity).filter(v => v > 0))
+  const minDays  = Math.min(...bids.map(b => grandTotalDays[b.id] ?? Infinity).filter(v => v > 0))
   const alreadyAwarded = bids.some(b => b.status === 'awarded')
 
-  const COL_W = 160
+  const COL_W = 180
 
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div>
       {/* Export button */}
-      {bids.length > 0 && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-          <button
-            onClick={handleExportCSV}
-            style={{ padding: '6px 14px', fontSize: 11, borderRadius: 5, border: '1px solid #E8E6E0', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500, background: '#fff', color: '#555' }}
-          >
-            Exportar CSV
-          </button>
-        </div>
-      )}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+        <button
+          onClick={handleExportCSV}
+          style={{ padding: '6px 14px', fontSize: 11, borderRadius: 5, border: '1px solid #E8E6E0', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500, background: '#fff', color: '#555' }}
+        >
+          Exportar CSV
+        </button>
+      </div>
 
       {/* Flash message */}
       {flashMsg && (
@@ -165,11 +170,26 @@ export default function BidComparison({
           padding: '10px 16px', borderRadius: 8, fontSize: 13, fontWeight: 500, marginBottom: 16,
           background: flashMsg.type === 'ok' ? '#ECFDF5' : '#FEF2F2',
           border: `1px solid ${flashMsg.type === 'ok' ? '#6EE7B7' : '#FECACA'}`,
-          color: flashMsg.type === 'ok' ? '#059669' : '#DC2626',
+          color:  flashMsg.type === 'ok' ? '#059669' : '#DC2626',
         }}>
           {flashMsg.text}
         </div>
       )}
+
+      {/* Legend */}
+      <div style={{ display: 'flex', gap: 16, marginBottom: 10 }}>
+        <span style={{ fontSize: 10, color: '#888', display: 'flex', alignItems: 'center', gap: 5 }}>
+          <span style={{ width: 10, height: 10, borderRadius: 2, background: '#ECFDF5', border: '1px solid #6EE7B7', display: 'inline-block' }} />
+          Oferta más baja en esa fila
+        </span>
+        <span style={{ fontSize: 10, color: '#888', display: 'flex', alignItems: 'center', gap: 5 }}>
+          <span style={{ width: 10, height: 10, borderRadius: 2, background: '#EFF6FF', border: '1px solid #93C5FD', display: 'inline-block' }} />
+          Plazo más corto
+        </span>
+        <span style={{ fontSize: 10, color: '#888' }}>
+          · Click en una UE para ver / ocultar sus partidas
+        </span>
+      </div>
 
       <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid #E8E6E0' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 420 + bids.length * COL_W }}>
@@ -178,7 +198,7 @@ export default function BidComparison({
           <thead>
             <tr style={{ background: '#1A1A1A' }}>
               <th style={{ padding: '14px 16px', textAlign: 'left', color: '#fff', fontSize: 11, fontWeight: 600, letterSpacing: '0.04em', width: 280 }}>
-                Partida
+                Unidad / Partida
               </th>
               <th style={{ padding: '14px 10px', textAlign: 'center', color: 'rgba(255,255,255,0.45)', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', width: 55 }}>
                 UD.
@@ -199,67 +219,127 @@ export default function BidComparison({
             </tr>
           </thead>
 
-          {/* ── Body: units + line items ─────────────────────────────────── */}
+          {/* ── Body ────────────────────────────────────────────────────── */}
           <tbody>
             {scope.map(unit => {
-              const unitTotals: Record<string, number> = {}
+              const isExpanded = !!expanded[unit.unit_id]
+
+              // Unit totals per bid
+              const unitTotalValues: Record<string, number> = {}
               for (const bid of bids) {
                 let sub = 0
                 for (const li of unit.line_items) {
                   const p = bid.prices[li.id]
                   if (p !== undefined) sub += p * li.cantidad
                 }
-                unitTotals[bid.id] = sub
+                unitTotalValues[bid.id] = sub
               }
+              const minUnitTotalIds = minBidIds(unitTotalValues)
+
+              // Unit days per bid
+              const unitDaysValues: Record<string, number> = {}
+              for (const bid of bids) {
+                const d = bid.totalDaysByUnit[unit.unit_id]
+                if (d) unitDaysValues[bid.id] = d
+              }
+              const minUnitDaysIds = minBidIds(unitDaysValues)
+              const hasDays = Object.keys(unitDaysValues).length > 0
 
               return (
                 <React.Fragment key={unit.unit_id}>
-                  {/* Unit subheader */}
-                  <tr style={{ background: '#F5F4F0', borderTop: '2px solid #E8E6E0' }}>
+                  {/* ── Unit collapsible header row ── */}
+                  <tr
+                    onClick={() => toggleExpanded(unit.unit_id)}
+                    style={{ background: '#F5F4F0', borderTop: '2px solid #E8E6E0', cursor: 'pointer' }}
+                  >
                     <td colSpan={3} style={{ padding: '10px 16px', fontSize: 11, fontWeight: 700, color: '#333', letterSpacing: '0.02em', textTransform: 'uppercase' }}>
+                      <span style={{ marginRight: 8, fontSize: 10, color: '#AAA' }}>
+                        {isExpanded ? '▼' : '▶'}
+                      </span>
                       {unit.unit_nombre}
+                      <span style={{ fontSize: 9, color: '#BBB', marginLeft: 8, fontWeight: 400, letterSpacing: 0, textTransform: 'none' }}>
+                        {unit.line_items.length} partida{unit.line_items.length !== 1 ? 's' : ''}
+                      </span>
                     </td>
-                    {bids.map(bid => (
-                      <td key={bid.id} style={{ padding: '10px 16px', textAlign: 'right', fontSize: 12, fontWeight: 700, color: '#555', borderLeft: '1px solid #E8E6E0' }}>
-                        {euros(unitTotals[bid.id] ?? 0)}
-                      </td>
-                    ))}
+                    {bids.map(bid => {
+                      const val   = unitTotalValues[bid.id] ?? 0
+                      const days  = unitDaysValues[bid.id]
+                      const isCheapest  = minUnitTotalIds.includes(bid.id) && val > 0
+                      const isFastest   = minUnitDaysIds.includes(bid.id) && !!days
+                      return (
+                        <td key={bid.id} style={{
+                          padding: '10px 16px', textAlign: 'right', fontSize: 12, fontWeight: 700,
+                          borderLeft: '1px solid #E8E6E0',
+                          background: isCheapest ? '#ECFDF5' : 'transparent',
+                        }}>
+                          <div style={{ color: isCheapest ? '#059669' : '#555' }}>
+                            {euros(val)}
+                          </div>
+                          {hasDays && (
+                            <div style={{
+                              marginTop: 3, fontSize: 10, fontWeight: 600,
+                              color: isFastest ? '#1D4ED8' : '#AAA',
+                              background: isFastest ? '#EFF6FF' : 'transparent',
+                              borderRadius: 3, padding: isFastest ? '1px 4px' : 0,
+                              display: 'inline-block',
+                            }}>
+                              {days != null ? `${days}d` : '—'}
+                              {isFastest && <span style={{ marginLeft: 3 }}>✓</span>}
+                            </div>
+                          )}
+                        </td>
+                      )
+                    })}
                   </tr>
 
-                  {/* Line items */}
-                  {unit.line_items.map((li, idx) => (
-                    <tr key={li.id} style={{ borderBottom: '1px solid #F0EEE8', background: idx % 2 === 0 ? '#fff' : '#FAFAF8' }}>
-                      <td style={{ padding: '9px 16px 9px 28px', fontSize: 12, color: '#333' }}>
-                        {li.nombre}
-                      </td>
-                      <td style={{ padding: '9px 10px', textAlign: 'center', fontSize: 11, color: '#999', fontWeight: 600 }}>
-                        {li.unidad_medida}
-                      </td>
-                      <td style={{ padding: '9px 10px', textAlign: 'right', fontSize: 12, color: '#555', fontFamily: 'monospace' }}>
-                        {li.cantidad.toLocaleString('es-ES')}
-                      </td>
-                      {bids.map(bid => {
-                        const price   = bid.prices[li.id]
-                        const importe = price !== undefined ? price * li.cantidad : null
-                        return (
-                          <td key={bid.id} style={{ padding: '9px 16px', textAlign: 'right', borderLeft: '1px solid #F0EEE8' }}>
-                            {price !== undefined ? (
-                              <>
-                                <div style={{ fontSize: 10, color: '#BBB', marginBottom: 1 }}>
-                                  {euros(price)}/{li.unidad_medida}
-                                </div>
-                                <div style={{ fontSize: 12, fontWeight: 600, color: '#1A1A1A', fontFamily: 'monospace' }}>
-                                  {euros(importe!)}
-                                </div>
-                              </>
-                            ) : (
-                              <span style={{ fontSize: 12, color: '#DDD' }}>—</span>
-                            )}
-                          </td>
-                        )
-                      })}
-                    </tr>
-                  ))}
+                  {/* ── Expanded line items ── */}
+                  {isExpanded && unit.line_items.map((li, idx) => {
+                    const liPriceValues: Record<string, number> = {}
+                    for (const bid of bids) {
+                      const p = bid.prices[li.id]
+                      if (p !== undefined) liPriceValues[bid.id] = p * li.cantidad
+                    }
+                    const minLiIds = minBidIds(liPriceValues)
+
+                    return (
+                      <tr key={li.id} style={{ borderBottom: '1px solid #F0EEE8', background: idx % 2 === 0 ? '#fff' : '#FAFAF8' }}>
+                        <td style={{ padding: '9px 16px 9px 36px', fontSize: 12, color: '#333' }}>
+                          {li.nombre}
+                        </td>
+                        <td style={{ padding: '9px 10px', textAlign: 'center', fontSize: 11, color: '#999', fontWeight: 600 }}>
+                          {li.unidad_medida}
+                        </td>
+                        <td style={{ padding: '9px 10px', textAlign: 'right', fontSize: 12, color: '#555', fontFamily: 'monospace' }}>
+                          {li.cantidad.toLocaleString('es-ES')}
+                        </td>
+                        {bids.map(bid => {
+                          const price   = bid.prices[li.id]
+                          const importe = price !== undefined ? price * li.cantidad : null
+                          const isCheap = minLiIds.includes(bid.id) && importe != null
+                          return (
+                            <td key={bid.id} style={{
+                              padding: '9px 16px', textAlign: 'right',
+                              borderLeft: '1px solid #F0EEE8',
+                              background: isCheap ? '#ECFDF5' : 'transparent',
+                            }}>
+                              {price !== undefined ? (
+                                <>
+                                  <div style={{ fontSize: 10, color: '#BBB', marginBottom: 1 }}>
+                                    {euros(price)}/{li.unidad_medida}
+                                  </div>
+                                  <div style={{ fontSize: 12, fontWeight: 600, color: isCheap ? '#059669' : '#1A1A1A', fontFamily: 'monospace' }}>
+                                    {euros(importe!)}
+                                  </div>
+                                </>
+                              ) : (
+                                <span style={{ fontSize: 12, color: '#DDD' }}>—</span>
+                              )}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    )
+                  })}
                 </React.Fragment>
               )
             })}
@@ -271,7 +351,9 @@ export default function BidComparison({
               </td>
               {bids.map(bid => {
                 const { total, missing } = grandTotals[bid.id] ?? { total: 0, missing: 0 }
-                const isMin = total > 0 && total === minTotal
+                const days    = grandTotalDays[bid.id] ?? 0
+                const isMin   = total > 0 && total === minTotal
+                const isFast  = days > 0 && days === minDays
                 return (
                   <td key={bid.id} style={{ padding: '16px 16px', textAlign: 'right', verticalAlign: 'top', borderLeft: '1px solid rgba(255,255,255,0.08)' }}>
                     <div style={{ fontSize: 16, fontWeight: 700, color: isMin ? '#34D399' : '#fff', fontFamily: 'monospace' }}>
@@ -283,8 +365,13 @@ export default function BidComparison({
                       </div>
                     )}
                     {isMin && (
-                      <div style={{ fontSize: 9, color: '#34D399', marginTop: 3, fontWeight: 700, letterSpacing: '0.06em' }}>
+                      <div style={{ fontSize: 9, color: '#34D399', marginTop: 2, fontWeight: 700, letterSpacing: '0.06em' }}>
                         OFERTA MÁS BAJA
+                      </div>
+                    )}
+                    {days > 0 && (
+                      <div style={{ marginTop: 6, fontSize: 11, fontWeight: 600, color: isFast ? '#93C5FD' : 'rgba(255,255,255,0.4)' }}>
+                        {days}d {isFast && <span style={{ fontSize: 9 }}>· PLAZO MÁS CORTO</span>}
                       </div>
                     )}
                   </td>

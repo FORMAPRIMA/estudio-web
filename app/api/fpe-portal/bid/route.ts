@@ -4,9 +4,10 @@ import { createAdminClient } from '@/lib/supabase/admin'
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json() as {
-      token:       string
-      notas?:      string | null
-      line_items:  { project_line_item_id: string; precio_unitario: number; notas?: string | null }[]
+      token:            string
+      notas?:           string | null
+      line_items:       { project_line_item_id: string; precio_unitario: number; notas?: string | null }[]
+      phase_durations?: { template_phase_id: string; project_unit_id: string; duracion_dias: number }[]
     }
 
     if (!body.token) return NextResponse.json({ error: 'Token requerido.' }, { status: 400 })
@@ -87,6 +88,22 @@ export async function POST(req: NextRequest) {
           }))
         )
       if (liErr) return NextResponse.json({ error: liErr.message }, { status: 500 })
+    }
+
+    // ── Upsert phase durations ────────────────────────────────────────────────
+    if (body.phase_durations && body.phase_durations.length > 0) {
+      await admin.from('fpe_bid_phase_durations').delete().eq('bid_id', bid_id)
+      const { error: pdErr } = await admin
+        .from('fpe_bid_phase_durations')
+        .insert(
+          body.phase_durations.map(pd => ({
+            bid_id,
+            template_phase_id: pd.template_phase_id,
+            project_unit_id:   pd.project_unit_id,
+            duracion_dias:     pd.duracion_dias,
+          }))
+        )
+      if (pdErr) console.error('[fpe-portal/bid] phase_durations insert error:', pdErr.message)
     }
 
     // ── Update invitation status ──────────────────────────────────────────────

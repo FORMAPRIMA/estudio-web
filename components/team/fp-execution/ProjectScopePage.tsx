@@ -438,7 +438,21 @@ export default function ProjectScopePage({
                 </div>
               </div>
             </div>
-            <button onClick={() => setEditingProject(true)} style={S.btn()}>Editar proyecto</button>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              {(project.status === 'awarded' || project.status === 'contracted') && (
+                <Link
+                  href={`/team/fp-execution/projects/${project.id}/dream-team`}
+                  style={{
+                    padding: '8px 14px', fontSize: 12, borderRadius: 6, border: 'none',
+                    background: '#D85A30', color: '#fff', fontFamily: 'inherit',
+                    fontWeight: 600, textDecoration: 'none', display: 'inline-block',
+                  }}
+                >
+                  Dream Team
+                </Link>
+              )}
+              <button onClick={() => setEditingProject(true)} style={S.btn()}>Editar proyecto</button>
+            </div>
           </div>
 
           {/* Tabs */}

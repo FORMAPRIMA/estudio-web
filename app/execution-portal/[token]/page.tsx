@@ -77,6 +77,7 @@ export default async function ExecutionPortalTokenPage({
         id, template_unit_id, notas,
         template_unit:fpe_template_units (
           id, nombre, descripcion,
+          phases:fpe_template_phases ( id, nombre, descripcion, orden, lead_time_days ),
           line_items:fpe_template_line_items ( id, nombre, unidad_medida, orden, activo )
         ),
         line_items:fpe_project_line_items (
@@ -106,6 +107,9 @@ export default async function ExecutionPortalTokenPage({
         id, notas, status, submitted_at,
         line_items:fpe_bid_line_items (
           id, project_line_item_id, precio_unitario, notas
+        ),
+        phase_durations:fpe_bid_phase_durations (
+          id, template_phase_id, project_unit_id, duracion_dias
         )
       `)
       .eq('invitation_id', inv.id)
