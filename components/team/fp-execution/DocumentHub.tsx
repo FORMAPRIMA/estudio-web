@@ -142,6 +142,58 @@ function DocRow({ doc, onDeleted }: { doc: FpeDoc; onDeleted: (id: string) => vo
   )
 }
 
+// ── Direct-upload helper ──────────────────────────────────────────────────────
+// 1. Server generates a signed URL (no file bytes through Vercel)
+// 2. Browser uploads directly to Supabase Storage via PUT
+// 3. Server registers the metadata in DB
+
+async function directUpload(
+  file: File,
+  projectId: string,
+  opts: { chapterId?: string; projectUnitId?: string } = {},
+): Promise<FpeDoc> {
+  // Step 1: get signed URL
+  const urlRes = await fetch('/api/fpe-documents/upload-url', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({
+      project_id:      projectId,
+      filename:        file.name,
+      size_bytes:      file.size,
+      chapter_id:      opts.chapterId      ?? null,
+      project_unit_id: opts.projectUnitId  ?? null,
+    }),
+  })
+  const urlData = await urlRes.json()
+  if (!urlRes.ok || urlData.error) throw new Error(urlData.error ?? 'Error generando URL.')
+
+  // Step 2: upload file directly to Supabase Storage (no Vercel function involved)
+  const putRes = await fetch(urlData.signed_url, {
+    method:  'PUT',
+    headers: { 'Content-Type': file.type || 'application/octet-stream' },
+    body:    file,
+  })
+  if (!putRes.ok) throw new Error(`Error subiendo al storage (${putRes.status}).`)
+
+  // Step 3: register in DB
+  const regRes = await fetch('/api/fpe-documents/upload', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({
+      project_id:      projectId,
+      storage_path:    urlData.storage_path,
+      filename:        file.name,
+      mime_type:       file.type || null,
+      size_bytes:      file.size,
+      chapter_id:      opts.chapterId      ?? null,
+      project_unit_id: opts.projectUnitId  ?? null,
+    }),
+  })
+  const regData = await regRes.json()
+  if (!regRes.ok || regData.error) throw new Error(regData.error ?? 'Error registrando.')
+  return regData.doc as FpeDoc
+}
+
 // ── General Upload Zone (no chapter_id, no project_unit_id) ──────────────────
 // Files here are sent to ALL partners in ALL packages.
 
@@ -162,15 +214,14 @@ function GeneralUploadZone({
 
   const upload = async (file: File) => {
     setUploading(true); setError(null)
-    const fd = new FormData()
-    fd.append('file', file)
-    fd.append('project_id', projectId)
-    // No chapter_id, no project_unit_id → general doc
-    const res  = await fetch('/api/fpe-documents/upload', { method: 'POST', body: fd })
-    const json = await res.json()
-    setUploading(false)
-    if (!res.ok || json.error) { setError(json.error ?? 'Error subiendo.'); return }
-    onUploaded(json.doc as FpeDoc)
+    try {
+      const doc = await directUpload(file, projectId)
+      onUploaded(doc)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error subiendo.')
+    } finally {
+      setUploading(false)
+    }
   }
 
   const handleDrop = (e: React.DragEvent) => {
@@ -267,15 +318,14 @@ function ChapterUploadZone({
 
   const upload = async (file: File) => {
     setUploading(true); setError(null)
-    const fd = new FormData()
-    fd.append('file', file)
-    fd.append('project_id', projectId)
-    fd.append('chapter_id', chapterId)
-    const res  = await fetch('/api/fpe-documents/upload', { method: 'POST', body: fd })
-    const json = await res.json()
-    setUploading(false)
-    if (!res.ok || json.error) { setError(json.error ?? 'Error subiendo.'); return }
-    onUploaded(json.doc as FpeDoc)
+    try {
+      const doc = await directUpload(file, projectId, { chapterId })
+      onUploaded(doc)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error subiendo.')
+    } finally {
+      setUploading(false)
+    }
   }
 
   const handleDrop = (e: React.DragEvent) => {
