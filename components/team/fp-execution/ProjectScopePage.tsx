@@ -4,6 +4,7 @@ import React, { useState, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import { updateProject, saveProjectScope } from '@/app/actions/fpe-projects'
 import DocumentHub, { FpeDoc, ReadinessCheck } from '@/components/team/fp-execution/DocumentHub'
+import TenderPanel, { type FpeTender, type FpePartnerSummary, type TenderProjectUnit } from '@/components/team/fp-execution/TenderPanel'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -365,12 +366,18 @@ export default function ProjectScopePage({
   linkedProyectos,
   initialDocs,
   initialChecks,
+  initialTender,
+  partners,
+  enrichedProjectUnits: enrichedProjectUnitsProp,
 }: {
   project: Project
   chapters: TemplateChapter[]
   linkedProyectos: LinkedProyecto[]
   initialDocs: FpeDoc[]
   initialChecks: ReadinessCheck[]
+  initialTender: FpeTender | null
+  partners: FpePartnerSummary[]
+  enrichedProjectUnits: TenderProjectUnit[]
 }) {
   const [project, setProject] = useState<Project>(initialProject)
   const [scope, setScope] = useState<ScopeState>(() =>
@@ -388,14 +395,12 @@ export default function ProjectScopePage({
     return m
   }, [chapters])
 
-  // Enrich project_units with template unit name for DocumentHub
+  // Enrich project_units with template unit name for DocumentHub + TenderPanel
+  // Use the server-computed prop (already has names), memoize to keep referential stability
   const enrichedProjectUnits = useMemo(
-    () => initialProject.project_units.map(pu => ({
-      id:               pu.id,
-      template_unit_id: pu.template_unit_id,
-      nombre:           unitNameMap[pu.template_unit_id],
-    })),
-    [initialProject.project_units, unitNameMap]
+    () => enrichedProjectUnitsProp,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
   )
 
   // Derived counts
@@ -557,7 +562,7 @@ export default function ProjectScopePage({
             <button style={tabStyle(activeTab === 'scope')} onClick={() => setActiveTab('scope')}>Scope</button>
             <button style={tabStyle(activeTab === 'docs')} onClick={() => setActiveTab('docs')}>Documentos</button>
             <button style={tabStyle(activeTab === 'tender')} onClick={() => setActiveTab('tender')}>
-              <span style={{ opacity: 0.4 }}>Licitación</span>
+              Licitación
             </button>
           </div>
         </div>
@@ -661,16 +666,14 @@ export default function ProjectScopePage({
           />
         )}
 
-        {/* ── Tender tab (Fase 4) ── */}
+        {/* ── Tender tab ── */}
         {activeTab === 'tender' && (
-          <div style={{ textAlign: 'center', padding: '80px 20px' }}>
-            <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#888', marginBottom: 8 }}>
-              Licitación — Fase 4
-            </p>
-            <p style={{ margin: 0, fontSize: 13, color: '#BBB' }}>
-              Lanza paquetes a partners externos y gestiona sus ofertas.
-            </p>
-          </div>
+          <TenderPanel
+            projectId={project.id}
+            projectUnits={enrichedProjectUnits}
+            initialTender={initialTender}
+            partners={partners}
+          />
         )}
       </div>
 
