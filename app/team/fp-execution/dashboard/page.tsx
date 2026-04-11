@@ -26,6 +26,13 @@ const modules = [
     status: 'live' as const,
     phase: 'Fase 2',
   },
+  {
+    label: 'Control Room',
+    description: 'Vista global de todas las licitaciones activas: plazos, ofertas recibidas, Q&A pendiente y adjudicaciones.',
+    href: '/team/fp-execution/control-room',
+    status: 'live' as const,
+    phase: 'Fase 7',
+  },
 ]
 
 export default async function FpExecutionDashboard() {
@@ -54,9 +61,9 @@ export default async function FpExecutionDashboard() {
       <div className="mb-8 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 flex items-start gap-3">
         <div className="mt-0.5 h-2 w-2 rounded-full bg-emerald-400 flex-shrink-0" />
         <div>
-          <p className="text-sm font-medium text-emerald-800">Fases 1 + 2 activas — Template, Partners y Proyectos</p>
+          <p className="text-sm font-medium text-emerald-800">Fases 1–7 activas — Plataforma completa de licitación</p>
           <p className="text-xs text-emerald-600 mt-0.5">
-            Configura el template, registra partners y crea proyectos con scope builder.
+            Template · Partners · Proyectos · Portal externo · Ofertas · Q&amp;A · Control Room · Contratación
           </p>
         </div>
       </div>

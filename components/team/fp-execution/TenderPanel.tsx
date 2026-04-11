@@ -1,6 +1,8 @@
 'use client'
 
 import React, { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { contractProject } from '@/app/actions/fpe-projects'
 import {
   createTender,
   updateTender,
@@ -466,19 +468,25 @@ export default function TenderPanel({
   projectUnits,
   initialTender,
   partners,
+  initialProjectStatus,
 }: {
-  projectId:      string
-  projectUnits:   TenderProjectUnit[]
-  initialTender:  FpeTender | null
-  partners:       FpePartnerSummary[]
+  projectId:            string
+  projectUnits:         TenderProjectUnit[]
+  initialTender:        FpeTender | null
+  partners:             FpePartnerSummary[]
+  initialProjectStatus: string
 }) {
+  const router = useRouter()
+
   const [tender, setTender]             = useState<FpeTender | null>(initialTender)
+  const [projectStatus, setProjStatus]  = useState(initialProjectStatus)
   const [showTenderModal, setShowTM]    = useState(false)
   const [showInviteModal, setShowIM]    = useState(false)
   const [showComparison, setShowComp]   = useState(false)
   const [showQA, setShowQA]             = useState(false)
   const [launching, setLaunching]       = useState(false)
   const [closing, setClosing]           = useState(false)
+  const [contracting, setContracting]   = useState(false)
   const [msg, setMsg]                   = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
 
   const flash = (type: 'ok' | 'err', text: string) => {
@@ -506,6 +514,17 @@ export default function TenderPanel({
     if ('error' in res) { flash('err', res.error); return }
     setTender(t => t ? { ...t, status: 'closed', closed_at: new Date().toISOString() } : t)
     flash('ok', 'Licitación cerrada.')
+  }
+
+  const handleContract = async () => {
+    if (!confirm('¿Marcar este proyecto como Contratado?\n\nSe actualizará el estado del proyecto.')) return
+    setContracting(true)
+    const res = await contractProject(projectId)
+    setContracting(false)
+    if ('error' in res) { flash('err', res.error); return }
+    setProjStatus('contracted')
+    flash('ok', 'Proyecto marcado como contratado.')
+    router.refresh()
   }
 
   const handleInvitationStatus = (invId: string, newStatus: InvitationStatus) => {
@@ -576,11 +595,12 @@ export default function TenderPanel({
 
   // ── Tender exists ─────────────────────────────────────────────────────────
 
-  const ts       = TENDER_STATUS_MAP[tender.status]
-  const canEdit   = ['draft', 'launched'].includes(tender.status)
-  const canLaunch = tender.status === 'draft'
-  const canClose  = tender.status === 'launched'
-  const canInvite = tender.status === 'launched'
+  const ts         = TENDER_STATUS_MAP[tender.status]
+  const canEdit    = ['draft', 'launched'].includes(tender.status)
+  const canLaunch  = tender.status === 'draft'
+  const canClose   = tender.status === 'launched'
+  const canInvite  = tender.status === 'launched'
+  const canContract = projectStatus === 'awarded'
 
   return (
     <div>
@@ -623,6 +643,11 @@ export default function TenderPanel({
           {canClose && (
             <button onClick={handleClose} disabled={closing} style={{ ...S.btn(false, true), padding: '7px 14px' }}>
               {closing ? 'Cerrando…' : 'Cerrar licitación'}
+            </button>
+          )}
+          {canContract && (
+            <button onClick={handleContract} disabled={contracting} style={{ ...S.btn(true), padding: '7px 14px', background: '#065F46' }}>
+              {contracting ? 'Guardando…' : 'Marcar como contratado'}
             </button>
           )}
         </div>

@@ -673,6 +673,7 @@ export default function ProjectScopePage({
             projectUnits={enrichedProjectUnits}
             initialTender={initialTender}
             partners={partners}
+            initialProjectStatus={project.status}
           />
         )}
       </div>
