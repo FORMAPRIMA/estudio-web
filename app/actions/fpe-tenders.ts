@@ -475,13 +475,9 @@ export async function awardBid(data: {
 
     // ── 6. Generate PDF + send via DocuSign ───────────────────────────────────
     try {
-      const { createElement } = await import('react')
-      const { renderToBuffer } = await import('@react-pdf/renderer')
-      const { FpeContractPDF } = await import('@/components/pdfs/FpeContractPDF')
+      const { generateFpeContractPDF } = await import('@/components/pdfs/FpeContractPDF')
 
-      const pdfBuffer = Buffer.from(
-        await renderToBuffer(createElement(FpeContractPDF, { data: contenido }) as any)
-      )
+      const pdfBuffer = await generateFpeContractPDF(contenido)
 
       const { createAndSendEnvelope } = await import('@/lib/docusign/client')
       const webhookUrl = `${SITE_URL}/api/webhooks/docusign`
