@@ -159,148 +159,80 @@ INSERT INTO public.fpe_partners (
 ON CONFLICT DO NOTHING;
 
 
--- ── 2. Asignar capacidades (ILIKE sobre nombres de unidades existentes) ─────────
+-- ── 2. Asignar capacidades — nombres exactos del template seed ───────────────
 --
--- Cada bloque intenta asignar el partner a las unidades cuyo nombre
--- coincide con los patrones de esa disciplina.
--- Si no hay coincidencia, no inserta nada (ON CONFLICT / sin filas).
+-- UEs disponibles (de fpe_template_seed.sql):
+--   Cap 1 · Demolición y Obra Seca:
+--     1.1  Demolición y Vaciado
+--     1.2  Tabiquería y Trasdosados
+--   Cap 2 · Instalaciones:
+--     2.1  Instalación Eléctrica y Domótica
+--     2.2  Fontanería y Saneamiento
+--     2.3  Climatización y Ventilación
+--   Cap 3 · Pavimentos y Revestimientos:
+--     3.1  Pavimentos
+--     3.2  Revestimientos
+--   Cap 4 · Carpintería:
+--     4.1  Carpintería de Obra a Medida
+--     4.2  Puertas Interiores
+--   Cap 5 · Acabados Finales:
+--     5.1  Pintura y Acabados Decorativos
+--     5.2  Sanitarios y Equipamiento de Baño
 -- ─────────────────────────────────────────────────────────────────────────────
 
--- Demolición / Albañilería
+-- Demolición / Albañilería → UEs 1.1 y 1.2
 INSERT INTO public.fpe_partner_capabilities (partner_id, unit_id)
 SELECT p.id, u.id
 FROM public.fpe_partners p
 CROSS JOIN public.fpe_template_units u
 WHERE p.nombre IN ('Derribos y Reformas Pérez', 'Construcciones Álvarez e Hijos')
-  AND (
-       u.nombre ILIKE '%demolic%'
-    OR u.nombre ILIKE '%albañil%'
-    OR u.nombre ILIKE '%tabiquería%'
-    OR u.nombre ILIKE '%tabique%'
-    OR u.nombre ILIKE '%trasdos%'
-    OR u.nombre ILIKE '%pladur%'
-    OR u.nombre ILIKE '%obra%'
-    OR u.nombre ILIKE '%construcción%'
-    OR u.nombre ILIKE '%reforma%'
-  )
+  AND u.nombre IN ('Demolición y Vaciado', 'Tabiquería y Trasdosados')
 ON CONFLICT DO NOTHING;
 
--- Pavimentos / Revestimientos
+-- Pavimentos / Revestimientos → UEs 3.1 y 3.2
 INSERT INTO public.fpe_partner_capabilities (partner_id, unit_id)
 SELECT p.id, u.id
 FROM public.fpe_partners p
 CROSS JOIN public.fpe_template_units u
 WHERE p.nombre IN ('Solados y Revestimientos Alcántara', 'Cerámicas y Pavimentos Torres', 'Pavimentos Premium Madrid')
-  AND (
-       u.nombre ILIKE '%pavimento%'
-    OR u.nombre ILIKE '%revestimiento%'
-    OR u.nombre ILIKE '%solado%'
-    OR u.nombre ILIKE '%alicatado%'
-    OR u.nombre ILIKE '%cerámic%'
-    OR u.nombre ILIKE '%parquet%'
-    OR u.nombre ILIKE '%suelo%'
-    OR u.nombre ILIKE '%tarima%'
-    OR u.nombre ILIKE '%mármol%'
-    OR u.nombre ILIKE '%piedra%'
-    OR u.nombre ILIKE '%microcemento%'
-  )
+  AND u.nombre IN ('Pavimentos', 'Revestimientos')
 ON CONFLICT DO NOTHING;
 
--- Electricidad
+-- Electricidad → UE 2.1
 INSERT INTO public.fpe_partner_capabilities (partner_id, unit_id)
 SELECT p.id, u.id
 FROM public.fpe_partners p
 CROSS JOIN public.fpe_template_units u
 WHERE p.nombre IN ('Electricidad Castellano', 'Instalaciones Eléctricas Ruiz', 'TecnoElectric Madrid')
-  AND (
-       u.nombre ILIKE '%electric%'
-    OR u.nombre ILIKE '%iluminación%'
-    OR u.nombre ILIKE '%instalación%'
-    OR u.nombre ILIKE '%domótic%'
-    OR u.nombre ILIKE '%baja tensión%'
-    OR u.nombre ILIKE '%cuadro%'
-    OR u.nombre ILIKE '%cableado%'
-    OR u.nombre ILIKE '%bt%'
-  )
+  AND u.nombre IN ('Instalación Eléctrica y Domótica')
 ON CONFLICT DO NOTHING;
 
--- Fontanería / Climatización
+-- Fontanería / Climatización → UEs 2.2, 2.3 y 5.2
 INSERT INTO public.fpe_partner_capabilities (partner_id, unit_id)
 SELECT p.id, u.id
 FROM public.fpe_partners p
 CROSS JOIN public.fpe_template_units u
 WHERE p.nombre IN ('Instalaciones Hidráulicas Sánchez', 'ClimaTec Instalaciones', 'Fontanería y Clima Moreno')
-  AND (
-       u.nombre ILIKE '%fontaner%'
-    OR u.nombre ILIKE '%saneamiento%'
-    OR u.nombre ILIKE '%climati%'
-    OR u.nombre ILIKE '%calefacc%'
-    OR u.nombre ILIKE '%hvac%'
-    OR u.nombre ILIKE '%gas%'
-    OR u.nombre ILIKE '%agua%'
-    OR u.nombre ILIKE '%radiante%'
-    OR u.nombre ILIKE '%ventilación%'
-    OR u.nombre ILIKE '%aire%'
-  )
+  AND u.nombre IN ('Fontanería y Saneamiento', 'Climatización y Ventilación', 'Sanitarios y Equipamiento de Baño')
 ON CONFLICT DO NOTHING;
 
--- Carpintería
+-- Carpintería → UEs 4.1 y 4.2
 INSERT INTO public.fpe_partner_capabilities (partner_id, unit_id)
 SELECT p.id, u.id
 FROM public.fpe_partners p
 CROSS JOIN public.fpe_template_units u
 WHERE p.nombre IN ('Carpintería Herrera & Asociados', 'Ebanistería Contemporánea López', 'Carpintería y Metal Jiménez')
-  AND (
-       u.nombre ILIKE '%carpinter%'
-    OR u.nombre ILIKE '%ebanister%'
-    OR u.nombre ILIKE '%mobiliario%'
-    OR u.nombre ILIKE '%armario%'
-    OR u.nombre ILIKE '%madera%'
-    OR u.nombre ILIKE '%cerrajer%'
-    OR u.nombre ILIKE '%metal%'
-    OR u.nombre ILIKE '%puerta%'
-    OR u.nombre ILIKE '%ventana%'
-    OR u.nombre ILIKE '%cocina%'
-    OR u.nombre ILIKE '%vestidor%'
-    OR u.nombre ILIKE '%panelado%'
-    OR u.nombre ILIKE '%escalera%'
-    OR u.nombre ILIKE '%barandilla%'
-  )
+  AND u.nombre IN ('Carpintería de Obra a Medida', 'Puertas Interiores')
 ON CONFLICT DO NOTHING;
 
--- Pintura / Acabados
+-- Pintura / Acabados → UE 5.1
 INSERT INTO public.fpe_partner_capabilities (partner_id, unit_id)
 SELECT p.id, u.id
 FROM public.fpe_partners p
 CROSS JOIN public.fpe_template_units u
 WHERE p.nombre IN ('Pinturas y Acabados Fernández', 'Acabados Interiores Madrid')
-  AND (
-       u.nombre ILIKE '%pintura%'
-    OR u.nombre ILIKE '%acabado%'
-    OR u.nombre ILIKE '%lacat%'
-    OR u.nombre ILIKE '%estuco%'
-    OR u.nombre ILIKE '%microcemento%'
-    OR u.nombre ILIKE '%decorativ%'
-    OR u.nombre ILIKE '%boiserie%'
-  )
+  AND u.nombre IN ('Pintura y Acabados Decorativos')
 ON CONFLICT DO NOTHING;
-
--- ── 3. FALLBACK — Si ningún ILIKE coincidió, asignar TODAS las unidades activas
---
--- Ejecuta este bloque SOLO si los INSERT anteriores no generaron filas
--- (comprueba con: SELECT COUNT(*) FROM fpe_partner_capabilities)
---
--- DESCOMENTA si necesitas que todos los partners aparezcan en todas las UEs:
--- ─────────────────────────────────────────────────────────────────────────────
-/*
-INSERT INTO public.fpe_partner_capabilities (partner_id, unit_id)
-SELECT p.id, u.id
-FROM public.fpe_partners p
-CROSS JOIN public.fpe_template_units u
-WHERE p.email_contacto = 'jlorag@hotmail.com'
-  AND u.activo = true
-ON CONFLICT DO NOTHING;
-*/
 
 COMMIT;
 
