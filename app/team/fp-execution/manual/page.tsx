@@ -175,8 +175,8 @@ export default function ManualPage() {
               ['2', 'Arquitectura del sistema',             'Módulos, roles y estados globales'],
               ['3', 'Módulo Template',                     'Capítulos, Unidades de Ejecución y Partidas'],
               ['4', 'Módulo Partners',                     'Registro, capacidades y datos de contacto'],
-              ['5', 'Módulo Proyectos',                    'Ciclo de vida, scope, documentación'],
-              ['6', 'Licitación',                          'Crear, lanzar, invitar, revocar'],
+              ['5', 'Módulo Proyectos',                    'Ciclo de vida, scope (selección UEs), documentos + mediciones + partners por capítulo'],
+              ['6', 'Envío de invitaciones',                'Paquetes por partner, revisión, envío masivo'],
               ['7', 'Portal externo del Partner',          'Lo que ve el subcontratista'],
               ['8', 'Sistema Q&A',                         'Preguntas y respuestas durante la licitación'],
               ['9', 'Comparativa de ofertas (Bid Comparison)', 'Análisis de bids, exportación CSV'],
@@ -417,8 +417,8 @@ export default function ManualPage() {
             <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 28 }}>
               {[
                 { estado: 'Borrador',      trigger: 'Al crear el proyecto',               desc: 'Proyecto creado, sin scope guardado o scope incompleto.' },
-                { estado: 'Scope listo',   trigger: 'Al guardar el scope',                desc: 'Scope definido con UEs y cantidades. Listo para lanzar licitación.' },
-                { estado: 'En licitación', trigger: 'Al lanzar la licitación',            desc: 'Licitación activa. Se pueden enviar invitaciones a partners.' },
+                { estado: 'Scope listo',   trigger: 'Al guardar el scope',                desc: 'UEs seleccionadas. Se puede continuar a configurar la documentación.' },
+                { estado: 'En licitación', trigger: 'Al enviar invitaciones',             desc: 'Invitaciones enviadas a los execution partners seleccionados.' },
                 { estado: 'Adjudicado',    trigger: 'Al adjudicar una oferta',            desc: 'Un partner ha sido elegido como ganador de la licitación.' },
                 { estado: 'Contratado',    trigger: 'Al marcar "Contratado" manualmente', desc: 'Contrato firmado offline. Proyecto cerrado operativamente.' },
                 { estado: 'Archivado',     trigger: 'Al archivar manualmente',            desc: 'Proyecto completado y retirado de las vistas activas.' },
@@ -438,102 +438,125 @@ export default function ManualPage() {
             <Step n={4}>Opcionalmente, vincular a un <strong>Proyecto FP interno</strong> para trazabilidad cruzada.</Step>
             <Step n={5}>Clic en <strong>Crear</strong>. El proyecto queda en estado Borrador.</Step>
 
-            <SubTitle>5.3 Pestaña Scope — Definir el alcance</SubTitle>
+            <SubTitle>5.3 Pestaña Scope — Selección de unidades</SubTitle>
             <p style={{ fontSize: 13, color: C.mid, lineHeight: 1.75, margin: '0 0 12px' }}>
-              El scope es la selección de Unidades de Ejecución y cantidades que se licitarán. Se configura en la pestaña <strong>Scope</strong> del proyecto.
+              En esta pestaña se define <strong>qué unidades de ejecución forman parte del proyecto</strong>. Nada más. Las cantidades y la asignación de partners se hacen en el paso siguiente (Documentos).
             </p>
             <Step n={1}>Marcar el checkbox de cada <strong>Unidad de Ejecución</strong> que aplica al proyecto.</Step>
-            <Step n={2}>Para cada UE marcada, introducir la <strong>cantidad</strong> de cada partida (ej. 450 m² de forjado).</Step>
-            <Step n={3}>Añadir notas específicas de la UE si es necesario (condicionantes, especificaciones particulares).</Step>
-            <Step n={4}>Clic en <strong>Guardar scope</strong>. El estado del proyecto pasa a "Scope listo".</Step>
+            <Step n={2}>Añadir una nota de UE si es necesario (condicionantes generales, observaciones de alcance).</Step>
+            <Step n={3}>Clic en <strong>Guardar scope</strong>. El proyecto pasa a estado "Scope listo".</Step>
 
-            <Note>Puedes usar los checkboxes de capítulo para marcar o desmarcar todas las UEs de un bloque de golpe. El "readiness score" que aparece en la cabecera del proyecto refleja qué porcentaje del scope está completo (UEs marcadas con cantidades y documentación suficiente).</Note>
+            <Note>Puedes usar los checkboxes de capítulo para marcar o desmarcar todas las UEs de un bloque de golpe. En este paso <strong>no se introducen cantidades ni precios</strong> — eso ocurre en la pestaña Documentos, dentro de cada capítulo.</Note>
 
-            <SubTitle>5.4 Pestaña Documentos — Documentación técnica</SubTitle>
-            <p style={{ fontSize: 13, color: C.mid, lineHeight: 1.75, margin: '0 0 12px' }}>
-              Esta pestaña gestiona todos los archivos que los partners necesitan para preparar su oferta.
+            <SubTitle>5.4 Pestaña Documentos — Configuración por capítulo</SubTitle>
+            <p style={{ fontSize: 13, color: C.mid, lineHeight: 1.75, margin: '0 0 16px' }}>
+              Esta es la pestaña central de preparación de la licitación. El sistema genera automáticamente <strong>una sub-pestaña por cada capítulo</strong> que tenga al menos una UE seleccionada en el scope. Basta con haber marcado una sola UE de un capítulo para que ese capítulo aparezca aquí.
             </p>
-            <Step n={1}>Clic en <strong>Subir documento</strong> y seleccionar el archivo (plano, memoria, especificación).</Step>
-            <Step n={2}>Asignar etiquetas de disciplina (Arquitectura, Estructura, Instalaciones…).</Step>
-            <Step n={3}>Opcionalmente, asociar el documento a una UE concreta (o dejarlo como documento general del proyecto).</Step>
-            <Step n={4}>Los documentos aparecerán en el portal del partner, en la pestaña Documentación.</Step>
-
-            <p style={{ fontSize: 13, color: C.mid, lineHeight: 1.75, margin: '12px 0 0' }}>
-              El sistema calcula automáticamente un <strong>indicador de completitud documental</strong> que contribuye al readiness score del proyecto.
+            <p style={{ fontSize: 13, color: C.mid, lineHeight: 1.75, margin: '0 0 20px' }}>
+              <em>Ejemplo: si se selecciona la UE "Instalación de maquinaria de Aire Acondicionado", aparece automáticamente una pestaña "Aire Acondicionado" con toda la configuración de ese capítulo.</em>
             </p>
+
+            <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 700, color: C.dark }}>Dentro de cada pestaña de capítulo hay tres zonas:</p>
+
+            <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 20 }}>
+              {[
+                {
+                  zona: '① Planimetría del capítulo',
+                  desc: 'Zona de subida de archivos PDF y CAD específicos de ese capítulo (planos, detalles constructivos, especificaciones técnicas). Estos documentos se enviarán a todos los execution partners que estén asignados a cualquier UE dentro de este capítulo.',
+                },
+                {
+                  zona: '② Cards por Unidad de Ejecución',
+                  desc: 'Una card por cada UE seleccionada dentro de ese capítulo. Cada card muestra las partidas precargadas desde plantilla con título, descripción y unidad de medida ya rellenos. Solo hace falta introducir el campo "Cantidad". El campo "Precio unitario" está bloqueado — lo rellena el execution partner en su portal.',
+                },
+                {
+                  zona: '③ Selección de execution partners (por UE)',
+                  desc: 'En la parte inferior de cada card de UE hay un desplegable de selección múltiple de execution partners. La lista está filtrada exclusivamente a los partners con capacidades en esa UE concreta. No aparecerán partners de otras disciplinas. Los partners seleccionados aquí recibirán la invitación a licitar esta UE.',
+                },
+              ].map((r, i) => (
+                <div key={r.zona} style={{ padding: '14px 18px', borderBottom: i < 2 ? `1px solid ${C.border}` : 'none' }}>
+                  <p style={{ margin: '0 0 5px', fontSize: 12, fontWeight: 700, color: C.dark }}>{r.zona}</p>
+                  <p style={{ margin: 0, fontSize: 12, color: C.mid, lineHeight: 1.65 }}>{r.desc}</p>
+                </div>
+              ))}
+            </div>
+
+            <Note>Un mismo execution partner puede estar asignado a varias UEs de distintos capítulos. El sistema agrupará automáticamente todas sus UEs asignadas en un único paquete de invitación. El partner recibirá un solo enlace con acceso a todo su scope.</Note>
           </div>
 
           {/* ══════════════════════════════════════════════════
-              6 · LICITACIÓN
+              6 · ENVÍO DE INVITACIONES
           ══════════════════════════════════════════════════ */}
           <PageBreak />
           <div style={{ padding: '56px 64px' }}>
-            <SectionTitle num="6" title="Licitación" />
+            <SectionTitle num="6" title="Envío de invitaciones" />
 
             <p style={{ fontSize: 13, color: C.mid, lineHeight: 1.75, margin: '0 0 20px' }}>
-              La licitación es el proceso central de FP Execution. Desde la pestaña <strong>Licitación</strong> dentro del proyecto se gestiona todo: crear la convocatoria, invitar partners, hacer seguimiento y cerrar.
+              Una vez configuradas las cantidades y asignados los execution partners por UE en la pestaña Documentos, el sistema genera automáticamente los <strong>paquetes de envío</strong>: un paquete por execution partner, agrupando todas las UEs que le han sido asignadas.
             </p>
 
-            <SubTitle>6.1 Crear la licitación</SubTitle>
-            <Step n={1}>En el proyecto, acceder a la pestaña <strong>Licitación</strong>.</Step>
-            <Step n={2}>Clic en <strong>Crear licitación</strong>.</Step>
-            <Step n={3}>Descripción opcional (ej. "Paquete estructura + cimentación").</Step>
-            <Step n={4}>Establecer la <strong>fecha límite de presentación de ofertas</strong>. Es la fecha hasta la que los partners pueden enviar su bid.</Step>
-            <Step n={5}>Clic en <strong>Crear licitación</strong>. Queda en estado <Badge label="Borrador" bg="#F3F4F6" color="#6B7280" />.</Step>
+            <SubTitle>6.1 Revisión de paquetes de envío</SubTitle>
+            <p style={{ fontSize: 13, color: C.mid, lineHeight: 1.75, margin: '0 0 16px' }}>
+              Antes de enviar, el sistema muestra un <strong>dashboard de revisión</strong> organizado por capítulo. Dentro de cada capítulo aparecen las cards de los execution partners seleccionados en ese bloque.
+            </p>
 
-            <SubTitle>6.2 Lanzar la licitación</SubTitle>
+            <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 20 }}>
+              <div style={{ background: C.dark, padding: '10px 18px' }}>
+                <p style={{ margin: 0, fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)' }}>Contenido de cada card de paquete</p>
+              </div>
+              {[
+                ['Nombre del partner',        'Nombre comercial del execution partner.'],
+                ['Datos de contacto',         'Email y teléfono móvil por donde se comunicará la invitación.'],
+                ['UEs asignadas (resumen)',   'Lista de todas las Unidades de Ejecución incluidas en su paquete, aunque provengan de distintos capítulos.'],
+              ].map(([k, v], i) => (
+                <div key={k} style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 16, padding: '12px 18px', borderBottom: i < 2 ? `1px solid ${C.border}` : 'none', fontSize: 12 }}>
+                  <span style={{ fontWeight: 700, color: C.dark }}>{k}</span>
+                  <span style={{ color: C.mid }}>{v}</span>
+                </div>
+              ))}
+            </div>
+
             <p style={{ fontSize: 13, color: C.mid, lineHeight: 1.75, margin: '0 0 12px' }}>
-              La licitación debe lanzarse explícitamente antes de poder enviar invitaciones.
+              Este paso es exclusivamente de <strong>revisión y verificación</strong>. Aquí el equipo FP puede confirmar que cada partner tiene asignadas las UEs correctas y que los datos de contacto son válidos antes de hacer el envío masivo.
             </p>
-            <Step n={1}>Clic en <strong>Lanzar licitación</strong>.</Step>
-            <Step n={2}>Confirmar la acción en el diálogo.</Step>
-            <Step n={3}>El estado de la licitación pasa a <Badge label="Lanzada" bg="#FEF3C7" color="#D97706" /> y el proyecto a "En licitación".</Step>
-            <Step n={4}>Ya es posible crear y enviar invitaciones.</Step>
 
-            <SubTitle>6.3 Crear invitaciones</SubTitle>
+            <SubTitle>6.2 Enviar todas las invitaciones</SubTitle>
             <p style={{ fontSize: 13, color: C.mid, lineHeight: 1.75, margin: '0 0 12px' }}>
-              Cada partner recibe su propia invitación con un enlace personal e intransferible.
+              Una vez revisados los paquetes, un único botón en la parte inferior del dashboard dispara el envío automático de todos los emails.
             </p>
-            <Step n={1}>Clic en <strong>+ Invitar partner</strong>.</Step>
-            <Step n={2}>Seleccionar el partner de la lista (filtrada por capacidades compatibles con el scope).</Step>
-            <Step n={3}>Seleccionar las <strong>Unidades de Ejecución específicas</strong> que se invitan a ese partner. Puede ser un subconjunto del scope total.</Step>
-            <Step n={4}>Clic en <strong>Crear invitación</strong>. Queda en estado <Badge label="Pendiente" bg="#F3F4F6" color="#6B7280" />.</Step>
+            <Step n={1}>Revisar todos los paquetes de envío en el dashboard.</Step>
+            <Step n={2}>Clic en <strong>Enviar invitaciones</strong> (botón al pie del dashboard de paquetes).</Step>
+            <Step n={3}>El sistema genera un enlace personal único para cada partner y envía un email con acceso al portal externo.</Step>
+            <Step n={4}>El estado de cada invitación pasa a <Badge label="Enviada" bg="#EBF5FF" color="#378ADD" /> y el proyecto a "En licitación".</Step>
 
-            <SubTitle>6.4 Enviar la invitación por email</SubTitle>
-            <Step n={1}>En la fila de la invitación, clic en <strong>Enviar</strong>.</Step>
-            <Step n={2}>El partner recibe un email con enlace personal al portal externo.</Step>
-            <Step n={3}>El estado de la invitación pasa a <Badge label="Enviada" bg="#EBF5FF" color="#378ADD" />.</Step>
+            <Note>El enlace de invitación tiene una validez de <strong>14 días</strong>. Si caduca antes de que el partner presente oferta, es posible reenviar una nueva invitación desde la vista de seguimiento.</Note>
 
-            <Note>El enlace de invitación tiene una validez de <strong>14 días</strong> desde que se envía. Si caduca, el partner ve un mensaje de enlace expirado. Para reactivar, habrá que crear y enviar una nueva invitación.</Note>
-
-            <SubTitle>6.5 Estados de las invitaciones</SubTitle>
+            <SubTitle>6.3 Estados de las invitaciones</SubTitle>
             <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 24 }}>
               {[
-                { s: 'Pendiente',       bg: '#F3F4F6', c: '#6B7280', desc: 'Invitación creada pero no enviada todavía.' },
                 { s: 'Enviada',         bg: '#EBF5FF', c: '#378ADD', desc: 'Email enviado. El partner aún no ha abierto el enlace.' },
                 { s: 'Vista',           bg: '#FEF3C7', c: '#D97706', desc: 'El partner ha accedido al portal al menos una vez.' },
                 { s: 'Oferta recibida', bg: '#ECFDF5', c: '#059669', desc: 'El partner ha enviado su propuesta económica.' },
                 { s: 'Revocada',        bg: '#FEF2F2', c: '#DC2626', desc: 'Cancelada manualmente por el equipo FP. El portal muestra mensaje de acceso revocado.' },
                 { s: 'Expirada',        bg: '#F9FAFB', c: '#9CA3AF', desc: 'El token ha caducado (14 días). El partner ya no puede acceder.' },
               ].map((r, i) => (
-                <div key={r.s} style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: 16, padding: '12px 16px', borderBottom: i < 5 ? `1px solid ${C.border}` : 'none', alignItems: 'center' }}>
+                <div key={r.s} style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: 16, padding: '12px 16px', borderBottom: i < 4 ? `1px solid ${C.border}` : 'none', alignItems: 'center' }}>
                   <Badge label={r.s} bg={r.bg} color={r.c} />
                   <span style={{ fontSize: 12, color: C.mid }}>{r.desc}</span>
                 </div>
               ))}
             </div>
 
-            <SubTitle>6.6 Copiar el enlace</SubTitle>
+            <SubTitle>6.4 Copiar el enlace</SubTitle>
             <p style={{ fontSize: 13, color: C.mid, lineHeight: 1.75, margin: '0 0 12px' }}>
-              Si necesitas enviar el enlace por un canal distinto al email (WhatsApp, Teams, etc.), usa el botón <strong>Copiar enlace</strong> disponible en las invitaciones con estado Enviada, Vista u Oferta recibida.
+              Si necesitas enviar el enlace por un canal adicional (WhatsApp, Teams, etc.), usa el botón <strong>Copiar enlace</strong> disponible en las invitaciones con estado Enviada, Vista u Oferta recibida.
             </p>
 
-            <SubTitle>6.7 Revocar una invitación</SubTitle>
-            <Step n={1}>Clic en <strong>Revocar</strong> en la fila del partner a cancelar.</Step>
+            <SubTitle>6.5 Revocar una invitación</SubTitle>
+            <Step n={1}>En la vista de seguimiento, clic en <strong>Revocar</strong> en la fila del partner.</Step>
             <Step n={2}>Confirmar la acción (es irreversible).</Step>
             <Step n={3}>El portal del partner mostrará inmediatamente un mensaje de acceso revocado. El partner ya no puede enviar oferta.</Step>
 
-            <SubTitle>6.8 Cerrar la licitación</SubTitle>
+            <SubTitle>6.6 Cerrar la licitación</SubTitle>
             <Step n={1}>Una vez recibidas las ofertas (o llegada la fecha límite), clic en <strong>Cerrar licitación</strong>.</Step>
             <Step n={2}>Confirmar. El estado pasa a <Badge label="Cerrada" bg="#ECFDF5" color="#059669" />.</Step>
             <Step n={3}>No se aceptarán más ofertas. Los portales de los partners muestran la licitación como cerrada.</Step>
@@ -761,20 +784,22 @@ export default function ManualPage() {
                 phase: 'FASE 1', title: 'Preparación del proyecto', color: '#6B7280', bg: '#F3F4F6',
                 steps: [
                   'Crear el proyecto: nombre, descripción, dirección, ciudad.',
-                  'Definir el scope en la pestaña Scope: marcar UEs, introducir cantidades de partidas.',
+                  'Pestaña Scope: seleccionar las Unidades de Ejecución que forman parte del proyecto. Solo selección — sin cantidades todavía.',
                   'Guardar scope. El proyecto pasa a estado "Scope listo".',
-                  'Subir documentación técnica en la pestaña Documentos: planos, memorias, especificaciones.',
-                  'Verificar que el readiness score es suficientemente alto antes de continuar.',
+                  'Pestaña Documentos: el sistema genera una sub-pestaña por cada capítulo con UEs seleccionadas.',
+                  'En cada sub-pestaña de capítulo: subir planimetría (PDF + CAD) específica de ese capítulo.',
+                  'En cada card de UE: introducir las cantidades de cada partida (precargadas desde plantilla).',
+                  'En cada card de UE: seleccionar los execution partners habilitados para esa UE (filtrado por capacidades).',
                 ],
               },
               {
-                phase: 'FASE 2', title: 'Lanzamiento de la licitación', color: '#D97706', bg: '#FEF3C7',
+                phase: 'FASE 2', title: 'Revisión y envío de invitaciones', color: '#D97706', bg: '#FEF3C7',
                 steps: [
-                  'En la pestaña Licitación, crear la licitación con descripción y fecha límite.',
-                  'Lanzar la licitación. El proyecto pasa a "En licitación".',
-                  'Crear invitaciones para cada partner: seleccionar partner + UEs asignadas.',
-                  'Enviar las invitaciones por email a todos los partners seleccionados.',
-                  'Verificar que los emails han llegado (estado: Enviada).',
+                  'El sistema agrupa automáticamente los paquetes de envío por execution partner.',
+                  'Revisar el dashboard de paquetes: cards por capítulo y por partner con datos de contacto y UEs asignadas.',
+                  'Confirmar que todos los paquetes son correctos (partners, UEs, datos de contacto).',
+                  'Clic en "Enviar invitaciones". El sistema envía un email personalizado a cada partner con su enlace único.',
+                  'El proyecto pasa a estado "En licitación". Las invitaciones quedan en estado "Enviada".',
                 ],
               },
               {
@@ -783,7 +808,7 @@ export default function ManualPage() {
                   'Los partners acceden al portal, revisan el scope y descargan documentos.',
                   'Los partners formulan preguntas en el Q&A del portal.',
                   'El equipo FP responde las preguntas en la plataforma interna (pestaña Q&A).',
-                  'Hacer seguimiento del estado de las invitaciones: Enviada → Vista → Oferta recibida.',
+                  'Hacer seguimiento del estado de las invitaciones: Enviada → Vista → Oferta recibida (sin estado "Pendiente").',
                   'El sistema envía recordatorios automáticos 3 días y 1 día antes del plazo.',
                   'Los partners envían sus ofertas antes de la fecha límite.',
                 ],
