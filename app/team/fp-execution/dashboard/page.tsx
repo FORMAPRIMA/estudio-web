@@ -50,11 +50,29 @@ export default async function FpExecutionDashboard() {
       {/* Header */}
       <div className="mb-10">
         <p className="text-xs uppercase tracking-widest text-stone-400 mb-1">Módulo</p>
-        <h1 className="text-2xl font-semibold text-stone-800">FP Execution</h1>
-        <p className="mt-2 text-sm text-stone-500 max-w-xl">
-          Plataforma de preconstrucción y licitación. Gestiona el scope técnico, lanza paquetes
-          a partners externos y adjudica obra con trazabilidad completa.
-        </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold text-stone-800">FP Execution</h1>
+            <p className="mt-2 text-sm text-stone-500 max-w-xl">
+              Plataforma de preconstrucción y licitación. Gestiona el scope técnico, lanza paquetes
+              a partners externos y adjudica obra con trazabilidad completa.
+            </p>
+          </div>
+          <Link
+            href="/team/fp-execution/manual"
+            target="_blank"
+            className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-md border border-stone-300 bg-white text-sm font-medium text-stone-600 hover:border-stone-400 hover:text-stone-800 transition-colors"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+            Ver manual
+          </Link>
+        </div>
       </div>
 
       {/* Status banner */}
