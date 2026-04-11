@@ -572,6 +572,8 @@ export default function ProjectScopePage({
             initialTender={initialTender}
             partners={partners}
             initialProjectStatus={project.status}
+            scopedChapters={scopedChapters}
+            unitPartnersMap={initialUnitPartners}
           />
         )}
       </div>

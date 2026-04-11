@@ -142,6 +142,110 @@ function DocRow({ doc, onDeleted }: { doc: FpeDoc; onDeleted: (id: string) => vo
   )
 }
 
+// ── General Upload Zone (no chapter_id, no project_unit_id) ──────────────────
+// Files here are sent to ALL partners in ALL packages.
+
+function GeneralUploadZone({
+  projectId,
+  generalDocs,
+  onUploaded,
+  onDeleted,
+}: {
+  projectId:   string
+  generalDocs: FpeDoc[]
+  onUploaded:  (doc: FpeDoc) => void
+  onDeleted:   (id: string) => void
+}) {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [uploading, setUploading] = useState(false)
+  const [error, setError]         = useState<string | null>(null)
+
+  const upload = async (file: File) => {
+    setUploading(true); setError(null)
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('project_id', projectId)
+    // No chapter_id, no project_unit_id → general doc
+    const res  = await fetch('/api/fpe-documents/upload', { method: 'POST', body: fd })
+    const json = await res.json()
+    setUploading(false)
+    if (!res.ok || json.error) { setError(json.error ?? 'Error subiendo.'); return }
+    onUploaded(json.doc as FpeDoc)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    const f = e.dataTransfer.files[0]
+    if (f) upload(f)
+  }
+
+  return (
+    <div>
+      <div style={{ marginBottom: 12 }}>
+        <p style={{ ...SL, fontSize: 10, color: '#D85A30' }}>
+          Planimetría general · fotografías · renders · videos
+        </p>
+        <p style={{ margin: '2px 0 0', fontSize: 11, color: '#888' }}>
+          Estos archivos se incluyen en <strong>todos los paquetes de envío</strong>, independientemente del capítulo.
+        </p>
+      </div>
+
+      <div
+        onDragOver={e => e.preventDefault()}
+        onDrop={handleDrop}
+        onClick={() => fileRef.current?.click()}
+        style={{
+          border: '1.5px dashed #D85A30', borderRadius: 6, padding: '16px 20px',
+          cursor: uploading ? 'not-allowed' : 'pointer',
+          background: '#FFFBF8', display: 'flex', alignItems: 'center', gap: 10,
+          marginBottom: generalDocs.length > 0 || error ? 10 : 0,
+          opacity: uploading ? 0.7 : 1,
+        }}
+      >
+        <input
+          ref={fileRef}
+          type="file"
+          style={{ display: 'none' }}
+          onChange={e => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = '' }}
+        />
+        <div style={{ flexShrink: 0, width: 32, height: 32, borderRadius: 6, background: '#FDE8DE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D85A30" strokeWidth="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+        </div>
+        <div>
+          <p style={{ margin: 0, fontSize: 12, color: '#555', fontWeight: 500 }}>
+            {uploading ? 'Subiendo…' : 'Arrastra o haz clic — PDF, DWG, DXF, imágenes, vídeos'}
+          </p>
+          <p style={{ margin: '2px 0 0', fontSize: 10, color: '#AAA' }}>Máx. 50 MB por archivo</p>
+        </div>
+      </div>
+
+      {error && (
+        <div style={{ padding: '6px 10px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 5, fontSize: 11, color: '#DC2626', marginBottom: 8 }}>
+          {error}
+        </div>
+      )}
+
+      {generalDocs.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {generalDocs.map(d => (
+            <DocRow key={d.id} doc={d} onDeleted={onDeleted} />
+          ))}
+        </div>
+      )}
+
+      {generalDocs.length === 0 && !uploading && (
+        <p style={{ margin: '12px 0 0', fontSize: 11, color: '#CCC', textAlign: 'center' }}>
+          Todavía no hay archivos generales subidos.
+        </p>
+      )}
+    </div>
+  )
+}
+
 // ── Chapter Upload Zone ───────────────────────────────────────────────────────
 
 function ChapterUploadZone({
@@ -487,7 +591,7 @@ export default function DocumentHub({
   const [docs, setDocs]           = useState<FpeDoc[]>(initialDocs)
   const [score, setScore]         = useState(initialScore)
   const [checks, setChecks]       = useState<ReadinessCheck[]>(initialChecks)
-  const [activeChapterId, setActiveChapterId] = useState(scopedChapters[0]?.id ?? '')
+  const [activeChapterId, setActiveChapterId] = useState<string>('__general__')
 
   const refreshReadiness = useCallback(async () => {
     const res = await getReadinessChecks(projectId)
@@ -518,15 +622,43 @@ export default function DocumentHub({
     )
   }
 
-  const activeChapter = scopedChapters.find(ch => ch.id === activeChapterId) ?? scopedChapters[0]
-  const chapterDocs   = docs.filter(d => d.chapter_id === activeChapter?.id)
+  const isGeneral     = activeChapterId === '__general__'
+  const activeChapter = isGeneral ? null : (scopedChapters.find(ch => ch.id === activeChapterId) ?? scopedChapters[0])
+  const chapterDocs   = isGeneral
+    ? docs.filter(d => d.chapter_id === null && d.project_unit_id === null)
+    : docs.filter(d => d.chapter_id === activeChapter?.id)
+  const generalDocCount = docs.filter(d => d.chapter_id === null && d.project_unit_id === null).length
 
   return (
     <div>
-      {/* Chapter tabs */}
+      {/* Tab bar: Planimetría General + chapter tabs */}
       <div style={{ display: 'flex', marginBottom: 24, borderBottom: '1px solid #E8E6E0', overflowX: 'auto' }}>
+
+        {/* General tab — always first */}
+        <button
+          onClick={() => setActiveChapterId('__general__')}
+          style={{
+            padding: '8px 16px', fontSize: 12, fontWeight: 600, border: 'none',
+            cursor: 'pointer', background: 'none', fontFamily: 'inherit',
+            whiteSpace: 'nowrap', flexShrink: 0,
+            borderBottom: isGeneral ? '2px solid #D85A30' : '2px solid transparent',
+            color: isGeneral ? '#D85A30' : '#888',
+          }}
+        >
+          Planimetría General
+          {generalDocCount > 0 && (
+            <span style={{ marginLeft: 5, fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 10, background: '#FEF3C7', color: '#92400E' }}>
+              {generalDocCount}
+            </span>
+          )}
+        </button>
+
+        {/* Separator */}
+        <div style={{ width: 1, background: '#E8E6E0', margin: '8px 4px', flexShrink: 0 }} />
+
+        {/* Chapter tabs */}
         {scopedChapters.map(ch => {
-          const active = ch.id === activeChapter?.id
+          const active   = !isGeneral && ch.id === activeChapter?.id
           const docCount = docs.filter(d => d.chapter_id === ch.id).length
           return (
             <button
@@ -554,11 +686,22 @@ export default function DocumentHub({
       {/* Two-column: content + readiness */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 240px', gap: 24, alignItems: 'start' }}>
 
-        {/* Left: active chapter content */}
+        {/* Left: active section content */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          {activeChapter && (
+
+          {/* ── Planimetría General ── */}
+          {isGeneral && (
+            <GeneralUploadZone
+              projectId={projectId}
+              generalDocs={chapterDocs}
+              onUploaded={handleDocUploaded}
+              onDeleted={handleDocDeleted}
+            />
+          )}
+
+          {/* ── Chapter tab ── */}
+          {!isGeneral && activeChapter && (
             <>
-              {/* Planimetría upload zone */}
               <ChapterUploadZone
                 projectId={projectId}
                 chapterId={activeChapter.id}
@@ -567,12 +710,10 @@ export default function DocumentHub({
                 onDeleted={handleDocDeleted}
               />
 
-              {/* Divider */}
               {activeChapter.units.length > 0 && (
                 <div style={{ borderTop: '1px solid #E8E6E0' }} />
               )}
 
-              {/* UE Cards */}
               {activeChapter.units.length === 0 ? (
                 <div style={{ padding: '20px', textAlign: 'center', border: '1px dashed #E8E6E0', borderRadius: 8 }}>
                   <p style={{ margin: 0, fontSize: 12, color: '#CCC' }}>

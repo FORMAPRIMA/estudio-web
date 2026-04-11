@@ -84,7 +84,7 @@ export default async function FpeProjectDetailPage({
     // Active partners with unit capabilities (for docs tab partner filtering)
     admin
       .from('fpe_partners')
-      .select('id, nombre, email_contacto, capabilities:fpe_partner_capabilities(unit_id)')
+      .select('id, nombre, email_contacto, telefono, capabilities:fpe_partner_capabilities(unit_id)')
       .eq('activo', true)
       .order('nombre', { ascending: true }),
   ])
@@ -145,7 +145,7 @@ export default async function FpeProjectDetailPage({
     .filter(ch => ch.units.length > 0)
 
   // Build partnersForDocs: partners with their template_unit_id capabilities
-  type PartnerRaw = { id: string; nombre: string; email_contacto: string | null; capabilities: { unit_id: string }[] }
+  type PartnerRaw = { id: string; nombre: string; email_contacto: string | null; telefono: string | null; capabilities: { unit_id: string }[] }
   const partnersForDocs: PartnerForDocs[] = ((partners ?? []) as unknown as PartnerRaw[]).map(p => ({
     id:       p.id,
     nombre:   p.nombre,
@@ -159,11 +159,12 @@ export default async function FpeProjectDetailPage({
     unitPartnersMap[row.project_unit_id].push(row.partner_id)
   }
 
-  // Partners for TenderPanel (without capabilities field)
+  // Partners for TenderPanel (with telefono, without capabilities field)
   const tendersPartners = ((partners ?? []) as unknown as PartnerRaw[]).map(p => ({
     id:             p.id,
     nombre:         p.nombre,
     email_contacto: p.email_contacto,
+    telefono:       p.telefono,
   }))
 
   return (
