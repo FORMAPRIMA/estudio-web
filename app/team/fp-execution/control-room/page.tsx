@@ -51,7 +51,7 @@ export default async function ControlRoomPage() {
     `)
     .order('created_at', { ascending: false })
 
-  const tenders = ((rawTenders ?? []) as unknown as TRow[]).sort((a, b) => {
+  const tenders = ((rawTenders ?? []) as unknown as TRow[]).filter(t => t.project.status !== 'archived').sort((a, b) => {
     const ord = (s: string) => s === 'launched' ? 0 : s === 'draft' ? 1 : 2
     const d = ord(a.status) - ord(b.status)
     if (d !== 0) return d
@@ -61,6 +61,8 @@ export default async function ControlRoomPage() {
   })
 
   // ── Global stats ───────────────────────────────────────────────────────────
+  const allTenders     = (rawTenders ?? []) as unknown as TRow[]
+  const archivedCount  = allTenders.filter(t => t.project.status === 'archived').length
   const activeLaunched = tenders.filter(t => t.status === 'launched').length
   const totalBids      = tenders.reduce((s, t) =>
     s + t.invitations.filter(i => ['bid_submitted', 'awarded'].includes(i.status)).length, 0)
@@ -211,6 +213,14 @@ export default async function ControlRoomPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Archived note */}
+        {archivedCount > 0 && (
+          <p style={{ margin: '16px 0 0', fontSize: 11, color: '#BBB', textAlign: 'right' }}>
+            {archivedCount} proyecto{archivedCount !== 1 ? 's' : ''} archivado{archivedCount !== 1 ? 's' : ''} oculto{archivedCount !== 1 ? 's' : ''} · ver en{' '}
+            <a href="/team/fp-execution/projects" style={{ color: '#AAA', textDecoration: 'underline' }}>Proyectos</a>
+          </p>
+        )}
       </div>
     </div>
   )

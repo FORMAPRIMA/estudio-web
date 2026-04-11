@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { contractProject } from '@/app/actions/fpe-projects'
+import { contractProject, archiveProject } from '@/app/actions/fpe-projects'
 import {
   createTender,
   updateTender,
@@ -487,6 +487,7 @@ export default function TenderPanel({
   const [launching, setLaunching]       = useState(false)
   const [closing, setClosing]           = useState(false)
   const [contracting, setContracting]   = useState(false)
+  const [archiving, setArchiving]       = useState(false)
   const [msg, setMsg]                   = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
 
   const flash = (type: 'ok' | 'err', text: string) => {
@@ -524,6 +525,17 @@ export default function TenderPanel({
     if ('error' in res) { flash('err', res.error); return }
     setProjStatus('contracted')
     flash('ok', 'Proyecto marcado como contratado.')
+    router.refresh()
+  }
+
+  const handleArchive = async () => {
+    if (!confirm('¿Archivar este proyecto?\n\nEl proyecto quedará archivado y no aparecerá en el Control Room.')) return
+    setArchiving(true)
+    const res = await archiveProject(projectId)
+    setArchiving(false)
+    if ('error' in res) { flash('err', res.error); return }
+    setProjStatus('archived')
+    flash('ok', 'Proyecto archivado.')
     router.refresh()
   }
 
@@ -601,6 +613,7 @@ export default function TenderPanel({
   const canClose   = tender.status === 'launched'
   const canInvite  = tender.status === 'launched'
   const canContract = projectStatus === 'awarded'
+  const canArchive  = projectStatus === 'contracted'
 
   return (
     <div>
@@ -648,6 +661,11 @@ export default function TenderPanel({
           {canContract && (
             <button onClick={handleContract} disabled={contracting} style={{ ...S.btn(true), padding: '7px 14px', background: '#065F46' }}>
               {contracting ? 'Guardando…' : 'Marcar como contratado'}
+            </button>
+          )}
+          {canArchive && (
+            <button onClick={handleArchive} disabled={archiving} style={{ ...S.btn(), padding: '7px 14px', color: '#9CA3AF' }}>
+              {archiving ? 'Archivando…' : 'Archivar proyecto'}
             </button>
           )}
         </div>
