@@ -297,7 +297,7 @@ export async function getTenderBids(
         .from('fpe_tender_invitations')
         .select('id, partner:fpe_partners ( nombre, email_contacto )')
         .eq('tender_id', tender_id)
-        .in('status', ['bid_submitted', 'awarded']),
+        .eq('status', 'bid_submitted'),
     ])
 
     const invIds = (invitations ?? []).map(i => i.id)
@@ -390,7 +390,7 @@ export async function awardBid(data: {
 
     // ── 1. Mark bid + project as awarded ─────────────────────────────────────
     const [{ error: e1 }, { error: e2 }] = await Promise.all([
-      admin.from('fpe_bids').update({ status: 'awarded', updated_at: new Date().toISOString() }).eq('id', data.bid_id),
+      admin.from('fpe_bids').update({ status: 'accepted', updated_at: new Date().toISOString() }).eq('id', data.bid_id),
       admin.from('fpe_projects').update({ status: 'awarded' }).eq('id', data.project_id),
     ])
     if (e1) return { error: e1.message }

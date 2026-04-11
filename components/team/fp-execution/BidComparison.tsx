@@ -61,7 +61,7 @@ export default function BidComparison({
       setFlash({ type: 'err', text: res.error })
       return
     }
-    setBids(prev => prev.map(b => b.id === bid.id ? { ...b, status: 'awarded' } : b))
+    setBids(prev => prev.map(b => b.id === bid.id ? { ...b, status: 'accepted' } : b))
     setFlash({ type: 'ok', text: `Proyecto adjudicado a ${bid.partner_nombre}. Contrato enviado vía DocuSign.` })
     router.refresh()
   }
@@ -146,7 +146,7 @@ export default function BidComparison({
 
   const minTotal = Math.min(...bids.map(b => grandTotals[b.id]?.total ?? Infinity).filter(v => v > 0))
   const minDays  = Math.min(...bids.map(b => grandTotalDays[b.id] ?? Infinity).filter(v => v > 0))
-  const alreadyAwarded = bids.some(b => b.status === 'awarded')
+  const alreadyAwarded = bids.some(b => b.status === 'accepted')
 
   const COL_W = 180
 
@@ -209,7 +209,7 @@ export default function BidComparison({
               {bids.map(bid => (
                 <th key={bid.id} style={{ padding: '14px 16px', textAlign: 'right', color: '#fff', fontSize: 12, fontWeight: 600, width: COL_W, borderLeft: '1px solid rgba(255,255,255,0.08)' }}>
                   <div>{bid.partner_nombre}</div>
-                  {bid.status === 'awarded' && (
+                  {bid.status === 'accepted' && (
                     <div style={{ fontSize: 9, color: '#34D399', fontWeight: 700, letterSpacing: '0.08em', marginTop: 3, textTransform: 'uppercase' }}>
                       Adjudicado
                     </div>
@@ -384,7 +384,7 @@ export default function BidComparison({
               <td colSpan={3} style={{ padding: '14px 16px' }} />
               {bids.map(bid => (
                 <td key={bid.id} style={{ padding: '14px 16px', textAlign: 'right', borderLeft: '1px solid rgba(255,255,255,0.05)' }}>
-                  {bid.status === 'awarded' ? (
+                  {bid.status === 'accepted' ? (
                     <span style={{ fontSize: 11, color: '#34D399', fontWeight: 700, letterSpacing: '0.04em' }}>
                       ✓ Adjudicado
                     </span>
