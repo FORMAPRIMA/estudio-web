@@ -68,29 +68,33 @@ export async function deleteDocument(
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function computeAndSaveReadiness(admin: any, project_id: string) {
+  // Fetch project unit IDs first (needed for IN clauses below)
+  const { data: projectUnitsData } = await admin
+    .from('fpe_project_units')
+    .select('id')
+    .eq('project_id', project_id)
+
+  const projectUnitIds: string[] = (projectUnitsData ?? []).map((r: { id: string }) => r.id)
+  const hasScope = projectUnitIds.length > 0
+
   const [
-    { count: unitCount },
     { data: lineItems },
     { count: docCount },
-    { data: units },
-    { data: caps },
+    { data: unitPartnerRows },
   ] = await Promise.all([
-    admin.from('fpe_project_units').select('id', { count: 'exact', head: true }).eq('project_id', project_id),
-    admin.from('fpe_project_line_items').select('project_unit_id, cantidad').in(
-      'project_unit_id',
-      (await admin.from('fpe_project_units').select('id').eq('project_id', project_id)).data?.map((r: { id: string }) => r.id) ?? []
-    ),
+    hasScope
+      ? admin.from('fpe_project_line_items').select('project_unit_id, cantidad').in('project_unit_id', projectUnitIds)
+      : Promise.resolve({ data: [] as { project_unit_id: string; cantidad: number }[] }),
     admin.from('fpe_documents').select('id', { count: 'exact', head: true }).eq('project_id', project_id),
-    admin.from('fpe_project_units').select('id, template_unit_id').eq('project_id', project_id),
-    admin.from('fpe_partner_capabilities').select('unit_id'),
+    hasScope
+      ? admin.from('fpe_project_unit_partners').select('project_unit_id').in('project_unit_id', projectUnitIds)
+      : Promise.resolve({ data: [] as { project_unit_id: string }[] }),
   ])
 
-  const hasScope      = (unitCount ?? 0) > 0
   const allHaveQty    = hasScope && (lineItems ?? []).length > 0 && (lineItems ?? []).every((li: { cantidad: number }) => li.cantidad > 0)
   const hasDocs       = (docCount ?? 0) > 0
-  const unitIds       = (units ?? []).map((u: { template_unit_id: string }) => u.template_unit_id)
-  const capUnitIds    = new Set((caps ?? []).map((c: { unit_id: string }) => c.unit_id))
-  const partnersReady = hasScope && unitIds.every((uid: string) => capUnitIds.has(uid))
+  const coveredUnitIds = new Set((unitPartnerRows ?? []).map((r: { project_unit_id: string }) => r.project_unit_id))
+  const partnersReady = hasScope && projectUnitIds.every(id => coveredUnitIds.has(id))
 
   let score = 0
   if (hasScope)      score += 20

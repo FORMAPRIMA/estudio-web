@@ -93,66 +93,128 @@ export async function deleteProject(id: string): Promise<{ success: true } | { e
 }
 
 // ── Scope ─────────────────────────────────────────────────────────────────────
-// Replaces the entire scope for a project (delete-all + re-insert).
-// Safe for Phase 2 (no tenders yet). Phase 4+ will need a diff-based approach.
+// Merge-based: syncs project_units without touching line_items or partner assignments.
+// Only adds/removes UEs; existing records are preserved to avoid data loss.
 
 export async function saveProjectScope(
   project_id: string,
-  units: {
-    template_unit_id: string
-    notas?: string | null
-    line_items: {
-      template_line_item_id: string
-      cantidad: number
-      notas?: string | null
-    }[]
-  }[]
+  units: { template_unit_id: string; notas?: string | null }[]
+): Promise<{ success: true; unitMap: Record<string, string> } | { error: string }> {
+  try {
+    await requireManagerOrPartner()
+    const admin = createAdminClient()
+
+    // Fetch existing project units
+    const { data: existing } = await admin
+      .from('fpe_project_units')
+      .select('id, template_unit_id')
+      .eq('project_id', project_id)
+
+    const existingMap: Record<string, string> = {}
+    for (const pu of existing ?? []) existingMap[pu.template_unit_id] = pu.id
+
+    const newIds    = new Set(units.map(u => u.template_unit_id))
+    const existIds  = new Set(Object.keys(existingMap))
+
+    // Delete deselected units (CASCADE removes line_items + unit_partners)
+    const toDelete = Array.from(existIds).filter(tid => !newIds.has(tid))
+    if (toDelete.length > 0) {
+      const idsToDelete = toDelete.map(tid => existingMap[tid])
+      const { error: delErr } = await admin
+        .from('fpe_project_units')
+        .delete()
+        .in('id', idsToDelete)
+      if (delErr) return { error: delErr.message }
+      for (const tid of toDelete) delete existingMap[tid]
+    }
+
+    // Insert newly selected units
+    const toInsert = units.filter(u => !existIds.has(u.template_unit_id))
+    for (let i = 0; i < toInsert.length; i++) {
+      const u = toInsert[i]
+      const { data: pu, error: puErr } = await admin
+        .from('fpe_project_units')
+        .insert({ project_id, template_unit_id: u.template_unit_id, notas: u.notas ?? null, orden: i })
+        .select('id')
+        .single()
+      if (puErr) return { error: puErr.message }
+      existingMap[u.template_unit_id] = pu.id
+    }
+
+    // Update notas on already-existing units
+    const toUpdate = units.filter(u => existIds.has(u.template_unit_id))
+    for (const u of toUpdate) {
+      await admin
+        .from('fpe_project_units')
+        .update({ notas: u.notas ?? null })
+        .eq('id', existingMap[u.template_unit_id])
+    }
+
+    await computeAndSaveReadiness(admin, project_id)
+    revalidatePath(LIST_PATH)
+    revalidatePath(`${LIST_PATH}/${project_id}`)
+    return { success: true, unitMap: existingMap }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
+// ── Unit quantities ───────────────────────────────────────────────────────────
+// Replaces all line items for a single project_unit (from the Docs tab).
+
+export async function saveUnitQuantities(
+  project_id: string,
+  project_unit_id: string,
+  line_items: { template_line_item_id: string; cantidad: number; notas?: string | null }[]
 ): Promise<{ success: true } | { error: string }> {
   try {
     await requireManagerOrPartner()
     const admin = createAdminClient()
 
-    // Delete existing scope (CASCADE removes line items)
-    const { error: delErr } = await admin
-      .from('fpe_project_units')
-      .delete()
-      .eq('project_id', project_id)
-    if (delErr) return { error: delErr.message }
+    await admin.from('fpe_project_line_items').delete().eq('project_unit_id', project_unit_id)
 
-    // Insert each unit and its line items
-    for (let i = 0; i < units.length; i++) {
-      const u = units[i]
-      const { data: pu, error: puErr } = await admin
-        .from('fpe_project_units')
-        .insert({
-          project_id,
-          template_unit_id: u.template_unit_id,
-          notas: u.notas ?? null,
-          orden: i,
-        })
-        .select('id')
-        .single()
-      if (puErr) return { error: puErr.message }
-
-      if (u.line_items.length > 0) {
-        const { error: liErr } = await admin
-          .from('fpe_project_line_items')
-          .insert(
-            u.line_items.map((li, j) => ({
-              project_unit_id: pu.id,
-              template_line_item_id: li.template_line_item_id,
-              cantidad: li.cantidad,
-              notas: li.notas ?? null,
-            }))
-          )
-        if (liErr) return { error: liErr.message }
-      }
+    if (line_items.length > 0) {
+      const { error } = await admin.from('fpe_project_line_items').insert(
+        line_items.map(li => ({
+          project_unit_id,
+          template_line_item_id: li.template_line_item_id,
+          cantidad: li.cantidad,
+          notas: li.notas ?? null,
+        }))
+      )
+      if (error) return { error: error.message }
     }
 
-    // Compute full readiness score (includes docs + partners check)
     await computeAndSaveReadiness(admin, project_id)
+    revalidatePath(`${LIST_PATH}/${project_id}`)
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
 
-    revalidatePath(LIST_PATH)
+// ── Unit partners ─────────────────────────────────────────────────────────────
+// Replaces partner assignments for a single project_unit (from the Docs tab).
+
+export async function saveUnitPartners(
+  project_id: string,
+  project_unit_id: string,
+  partner_ids: string[]
+): Promise<{ success: true } | { error: string }> {
+  try {
+    await requireManagerOrPartner()
+    const admin = createAdminClient()
+
+    await admin.from('fpe_project_unit_partners').delete().eq('project_unit_id', project_unit_id)
+
+    if (partner_ids.length > 0) {
+      const { error } = await admin.from('fpe_project_unit_partners').insert(
+        partner_ids.map(partner_id => ({ project_unit_id, partner_id }))
+      )
+      if (error) return { error: error.message }
+    }
+
+    await computeAndSaveReadiness(admin, project_id)
     revalidatePath(`${LIST_PATH}/${project_id}`)
     return { success: true }
   } catch (err) {

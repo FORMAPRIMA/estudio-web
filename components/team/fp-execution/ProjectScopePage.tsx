@@ -3,8 +3,8 @@
 import React, { useState, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import { updateProject, saveProjectScope } from '@/app/actions/fpe-projects'
-import DocumentHub, { FpeDoc, ReadinessCheck } from '@/components/team/fp-execution/DocumentHub'
-import TenderPanel, { type FpeTender, type FpePartnerSummary, type TenderProjectUnit } from '@/components/team/fp-execution/TenderPanel'
+import DocumentHub, { FpeDoc, ReadinessCheck, ScopedChapter, PartnerForDocs } from '@/components/team/fp-execution/DocumentHub'
+import TenderPanel, { type FpeTender, type FpePartnerSummary } from '@/components/team/fp-execution/TenderPanel'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -15,12 +15,6 @@ interface DbProjectUnit {
   template_unit_id: string
   notas: string | null
   orden: number
-  line_items: {
-    id: string
-    template_line_item_id: string
-    cantidad: number
-    notas: string | null
-  }[]
 }
 
 interface Project {
@@ -65,15 +59,9 @@ interface LinkedProyecto { id: string; nombre: string; codigo: string | null }
 
 // ── Scope state types ─────────────────────────────────────────────────────────
 
-interface LineItemScope {
-  cantidad: number
-  notas: string
-}
-
 interface UnitScope {
   included: boolean
   notas: string
-  lineItems: Record<string, LineItemScope> // keyed by template_line_item_id
 }
 
 type ScopeState = Record<string, UnitScope> // keyed by template_unit_id
@@ -123,28 +111,15 @@ function buildInitialScope(
   projectUnits: DbProjectUnit[]
 ): ScopeState {
   const state: ScopeState = {}
-
-  // Index existing project data
   const puByTemplateUnitId: Record<string, DbProjectUnit> = {}
   for (const pu of projectUnits) puByTemplateUnitId[pu.template_unit_id] = pu
 
   for (const ch of chapters) {
     for (const unit of ch.units) {
       const pu = puByTemplateUnitId[unit.id]
-      const lineItems: Record<string, LineItemScope> = {}
-
-      for (const li of unit.line_items) {
-        const existing = pu?.line_items.find(pli => pli.template_line_item_id === li.id)
-        lineItems[li.id] = {
-          cantidad: existing?.cantidad ?? 0,
-          notas:    existing?.notas ?? '',
-        }
-      }
-
       state[unit.id] = {
         included: !!pu,
         notas:    pu?.notas ?? '',
-        lineItems,
       }
     }
   }
@@ -249,18 +224,13 @@ function UnitScopeRow({
   scope,
   onToggle,
   onNotasChange,
-  onCantidadChange,
-  onLineItemNotasChange,
 }: {
   unit: TemplateUnit
   scope: UnitScope
   onToggle: (unitId: string) => void
   onNotasChange: (unitId: string, notas: string) => void
-  onCantidadChange: (unitId: string, liId: string, value: number) => void
-  onLineItemNotasChange: (unitId: string, liId: string, notas: string) => void
 }) {
   const activeItems = unit.line_items.filter(li => li.activo)
-  const filledCount = activeItems.filter(li => (scope.lineItems[li.id]?.cantidad ?? 0) > 0).length
 
   return (
     <div style={{ borderBottom: '1px solid #E8E6E0' }}>
@@ -287,71 +257,21 @@ function UnitScopeRow({
           )}
         </div>
         <span style={{ fontSize: 10, color: '#AAA', whiteSpace: 'nowrap', flexShrink: 0 }}>
-          {activeItems.length > 0 ? `${filledCount}/${activeItems.length} partidas` : 'Sin partidas'}
+          {activeItems.length > 0 ? `${activeItems.length} partida${activeItems.length !== 1 ? 's' : ''}` : 'Sin partidas'}
         </span>
       </div>
 
-      {/* Expanded content when included */}
+      {/* Notes when included */}
       {scope.included && (
-        <div style={{ background: '#F8F7FF', borderTop: '1px solid #E0EAFF', padding: '0 16px 14px 44px' }}>
-
-          {/* Line items table */}
-          {activeItems.length > 0 && (
-            <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 10 }}>
-              <thead>
-                <tr>
-                  <th style={{ padding: '6px 10px 6px 0', fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', textAlign: 'left' }}>Partida</th>
-                  <th style={{ padding: '6px 10px', fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', textAlign: 'right', width: 120 }}>Cantidad</th>
-                  <th style={{ padding: '6px 0 6px 10px', fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', width: 60 }}>Ud.</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[...activeItems].sort((a, b) => a.orden - b.orden).map(li => {
-                  const liScope = scope.lineItems[li.id] ?? { cantidad: 0, notas: '' }
-                  return (
-                    <tr key={li.id}>
-                      <td style={{ padding: '5px 10px 5px 0', fontSize: 12, color: '#333' }}>{li.nombre}</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'right' }}>
-                        <input
-                          type="number"
-                          min={0}
-                          step="0.01"
-                          value={liScope.cantidad || ''}
-                          placeholder="0"
-                          onChange={e => onCantidadChange(unit.id, li.id, parseFloat(e.target.value) || 0)}
-                          style={{
-                            ...S.input,
-                            width: 100,
-                            textAlign: 'right',
-                            fontFamily: 'monospace',
-                            padding: '5px 8px',
-                            fontSize: 12,
-                            background: liScope.cantidad > 0 ? '#fff' : '#FAFAF8',
-                            borderColor: liScope.cantidad > 0 ? '#378ADD' : '#E8E6E0',
-                          }}
-                        />
-                      </td>
-                      <td style={{ padding: '5px 0 5px 10px', fontSize: 11, color: '#888', fontWeight: 600 }}>
-                        {li.unidad_medida}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          )}
-
-          {/* Unit notes */}
-          <div style={{ marginTop: 10 }}>
-            <label style={{ ...S.label, marginBottom: 4 }}>Notas de la unidad</label>
-            <textarea
-              rows={2}
-              value={scope.notas}
-              onChange={e => onNotasChange(unit.id, e.target.value)}
-              placeholder="Especificaciones, condicionantes, observaciones…"
-              style={{ ...S.textarea, fontSize: 11, borderColor: '#DDE8FF' }}
-            />
-          </div>
+        <div style={{ background: '#F8F7FF', borderTop: '1px solid #E0EAFF', padding: '10px 16px 14px 44px' }}>
+          <label style={{ ...S.label, marginBottom: 4 }}>Notas de la unidad</label>
+          <textarea
+            rows={2}
+            value={scope.notas}
+            onChange={e => onNotasChange(unit.id, e.target.value)}
+            placeholder="Especificaciones, condicionantes, observaciones…"
+            style={{ ...S.textarea, fontSize: 11, borderColor: '#DDE8FF' }}
+          />
         </div>
       )}
     </div>
@@ -364,20 +284,24 @@ export default function ProjectScopePage({
   project: initialProject,
   chapters,
   linkedProyectos,
+  scopedChapters,
+  partnersForDocs,
+  initialUnitPartners,
   initialDocs,
   initialChecks,
   initialTender,
   partners,
-  enrichedProjectUnits: enrichedProjectUnitsProp,
 }: {
   project: Project
   chapters: TemplateChapter[]
   linkedProyectos: LinkedProyecto[]
+  scopedChapters: ScopedChapter[]
+  partnersForDocs: PartnerForDocs[]
+  initialUnitPartners: Record<string, string[]>
   initialDocs: FpeDoc[]
   initialChecks: ReadinessCheck[]
   initialTender: FpeTender | null
   partners: FpePartnerSummary[]
-  enrichedProjectUnits: TenderProjectUnit[]
 }) {
   const [project, setProject] = useState<Project>(initialProject)
   const [scope, setScope] = useState<ScopeState>(() =>
@@ -395,12 +319,14 @@ export default function ProjectScopePage({
     return m
   }, [chapters])
 
-  // Enrich project_units with template unit name for DocumentHub + TenderPanel
-  // Use the server-computed prop (already has names), memoize to keep referential stability
+  // Derive enriched project units for TenderPanel from scopedChapters
   const enrichedProjectUnits = useMemo(
-    () => enrichedProjectUnitsProp,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
+    () => scopedChapters.flatMap(ch => ch.units.map(u => ({
+      id:               u.project_unit_id,
+      template_unit_id: u.template_unit_id,
+      nombre:           u.nombre,
+    }))),
+    [scopedChapters]
   )
 
   // Derived counts
@@ -423,57 +349,19 @@ export default function ProjectScopePage({
     }))
   }, [])
 
-  const handleCantidadChange = useCallback((unitId: string, liId: string, cantidad: number) => {
-    setScope(prev => ({
-      ...prev,
-      [unitId]: {
-        ...prev[unitId],
-        lineItems: {
-          ...prev[unitId].lineItems,
-          [liId]: { ...prev[unitId].lineItems[liId], cantidad },
-        },
-      },
-    }))
-  }, [])
-
-  const handleLineItemNotasChange = useCallback((unitId: string, liId: string, notas: string) => {
-    setScope(prev => ({
-      ...prev,
-      [unitId]: {
-        ...prev[unitId],
-        lineItems: {
-          ...prev[unitId].lineItems,
-          [liId]: { ...prev[unitId].lineItems[liId], notas },
-        },
-      },
-    }))
-  }, [])
-
   // ── Save ─────────────────────────────────────────────────────────────────
 
   const handleSave = async () => {
     setSaving(true)
     setSaveMsg(null)
 
-    // Build the payload — only included units, only line items with cantidad > 0
     const unitsPayload = chapters
       .flatMap(ch => ch.units)
       .filter(unit => scope[unit.id]?.included)
-      .map(unit => {
-        const us = scope[unit.id]
-        const lineItems = unit.line_items
-          .filter(li => li.activo && (us.lineItems[li.id]?.cantidad ?? 0) > 0)
-          .map(li => ({
-            template_line_item_id: li.id,
-            cantidad: us.lineItems[li.id].cantidad,
-            notas: us.lineItems[li.id].notas || null,
-          }))
-        return {
-          template_unit_id: unit.id,
-          notas: us.notas || null,
-          line_items: lineItems,
-        }
-      })
+      .map(unit => ({
+        template_unit_id: unit.id,
+        notas: scope[unit.id].notas || null,
+      }))
 
     const res = await saveProjectScope(project.id, unitsPayload)
     setSaving(false)
@@ -481,12 +369,8 @@ export default function ProjectScopePage({
     if ('error' in res) {
       setSaveMsg({ type: 'err', text: res.error })
     } else {
-      // Update local project status/readiness based on what we saved
-      const hasUnits    = unitsPayload.length > 0
-      const allHaveLis  = hasUnits && unitsPayload.every(u => u.line_items.length > 0)
-      const newScore    = !hasUnits ? 0 : allHaveLis ? 60 : 30
-      const newStatus   = (hasUnits ? 'scope_ready' : 'borrador') as ProjectStatus
-      setProject(p => ({ ...p, readiness_score: newScore, status: newStatus }))
+      const hasUnits = unitsPayload.length > 0
+      setProject(p => ({ ...p, status: (hasUnits ? 'scope_ready' : 'borrador') as ProjectStatus }))
       setSaveMsg({ type: 'ok', text: `Scope guardado — ${unitsPayload.length} unidades` })
       setTimeout(() => setSaveMsg(null), 3000)
     }
@@ -640,11 +524,9 @@ export default function ProjectScopePage({
                         <UnitScopeRow
                           key={unit.id}
                           unit={unit}
-                          scope={scope[unit.id] ?? { included: false, notas: '', lineItems: {} }}
+                          scope={scope[unit.id] ?? { included: false, notas: '' }}
                           onToggle={handleToggle}
                           onNotasChange={handleNotasChange}
-                          onCantidadChange={handleCantidadChange}
-                          onLineItemNotasChange={handleLineItemNotasChange}
                         />
                       ))}
                     </div>
@@ -659,7 +541,9 @@ export default function ProjectScopePage({
         {activeTab === 'docs' && (
           <DocumentHub
             projectId={project.id}
-            projectUnits={enrichedProjectUnits}
+            scopedChapters={scopedChapters}
+            partners={partnersForDocs}
+            initialUnitPartners={initialUnitPartners}
             initialDocs={initialDocs}
             initialScore={project.readiness_score}
             initialChecks={initialChecks}

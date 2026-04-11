@@ -23,6 +23,7 @@ export async function POST(req: NextRequest) {
   const file            = form.get('file') as File | null
   const project_id      = form.get('project_id') as string | null
   const project_unit_id = form.get('project_unit_id') as string | null  // may be null → general doc
+  const chapter_id      = form.get('chapter_id') as string | null        // chapter-level doc
   const tagsRaw         = form.get('discipline_tags') as string | null   // JSON array
 
   if (!file || file.size === 0)  return NextResponse.json({ error: 'No se recibió ningún archivo.' }, { status: 400 })
@@ -38,7 +39,9 @@ export async function POST(req: NextRequest) {
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
   const subPath = project_unit_id
     ? `${project_id}/units/${project_unit_id}/${Date.now()}_${safeName}`
-    : `${project_id}/general/${Date.now()}_${safeName}`
+    : chapter_id
+      ? `${project_id}/chapters/${chapter_id}/${Date.now()}_${safeName}`
+      : `${project_id}/general/${Date.now()}_${safeName}`
 
   // ── Upload ────────────────────────────────────────────────────────────────
   const admin = createAdminClient()
@@ -56,6 +59,7 @@ export async function POST(req: NextRequest) {
     .insert({
       project_id,
       project_unit_id: project_unit_id || null,
+      chapter_id: chapter_id || null,
       nombre: file.name,
       storage_path: stored.path,
       mime_type: file.type || null,
@@ -63,7 +67,7 @@ export async function POST(req: NextRequest) {
       discipline_tags,
       uploaded_by: user.id,
     })
-    .select('id, project_id, project_unit_id, nombre, storage_path, mime_type, size_bytes, discipline_tags, uploaded_by, created_at')
+    .select('id, project_id, project_unit_id, chapter_id, nombre, storage_path, mime_type, size_bytes, discipline_tags, uploaded_by, created_at')
     .single()
 
   if (dbErr) {
