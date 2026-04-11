@@ -10,6 +10,7 @@ import {
   sendInvitation,
   revokeInvitation,
 } from '@/app/actions/fpe-tenders'
+import BidComparison from '@/components/team/fp-execution/BidComparison'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -473,6 +474,7 @@ export default function TenderPanel({
   const [tender, setTender]             = useState<FpeTender | null>(initialTender)
   const [showTenderModal, setShowTM]    = useState(false)
   const [showInviteModal, setShowIM]    = useState(false)
+  const [showComparison, setShowComp]   = useState(false)
   const [launching, setLaunching]       = useState(false)
   const [closing, setClosing]           = useState(false)
   const [msg, setMsg]                   = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
@@ -676,6 +678,35 @@ export default function TenderPanel({
           </table>
         )}
       </div>
+
+      {/* ── Bid comparison ──────────────────────────────────────────────── */}
+      {(() => {
+        const submittedCount = tender.invitations.filter(i => ['bid_submitted', 'awarded'].includes(i.status)).length
+        if (submittedCount === 0) return null
+        return (
+          <div style={{ marginTop: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#1A1A1A' }}>
+                  Comparativa de ofertas
+                </h3>
+                <p style={{ margin: '3px 0 0', fontSize: 12, color: '#888' }}>
+                  {submittedCount} oferta{submittedCount !== 1 ? 's' : ''} recibida{submittedCount !== 1 ? 's' : ''}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowComp(v => !v)}
+                style={{ ...S.btn(true), padding: '7px 16px' }}
+              >
+                {showComparison ? 'Ocultar' : 'Ver comparativa'}
+              </button>
+            </div>
+            {showComparison && (
+              <BidComparison tenderId={tender.id} projectId={projectId} />
+            )}
+          </div>
+        )
+      })()}
 
       {/* Modals */}
       {showTenderModal && (

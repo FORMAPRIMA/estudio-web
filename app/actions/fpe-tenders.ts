@@ -5,6 +5,25 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { sendEmail, wrapEmail } from '@/lib/email'
 
+// ── Shared types (used by BidComparison client component) ─────────────────────
+
+export interface ScopeUnitRow {
+  unit_id:   string
+  unit_nombre: string
+  line_items: { id: string; nombre: string; cantidad: number; unidad_medida: string }[]
+}
+
+export interface TenderBidRow {
+  id:             string
+  invitation_id:  string
+  partner_nombre: string
+  partner_email:  string | null
+  submitted_at:   string
+  notas:          string | null
+  status:         string
+  prices:         Record<string, number>  // fpe_project_line_items.id → precio_unitario
+}
+
 const LIST_PATH = '/team/fp-execution/projects'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://internal.formaprima.es'
@@ -243,6 +262,117 @@ export async function revokeInvitation(
       .eq('id', invitation_id)
     if (error) return { error: error.message }
     revalidatePath(`${LIST_PATH}/${project_id}`)
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
+// ── Bid comparison data ───────────────────────────────────────────────────────
+
+export async function getTenderBids(
+  tender_id:  string,
+  project_id: string
+): Promise<{ scope: ScopeUnitRow[]; bids: TenderBidRow[] } | { error: string }> {
+  try {
+    await requireManagerOrPartner()
+    const admin = createAdminClient()
+
+    const [{ data: projectUnits }, { data: invitations }] = await Promise.all([
+      admin
+        .from('fpe_project_units')
+        .select(`
+          id, orden,
+          template_unit:fpe_template_units ( nombre ),
+          line_items:fpe_project_line_items (
+            id, cantidad,
+            template_line_item:fpe_template_line_items ( nombre, unidad_medida )
+          )
+        `)
+        .eq('project_id', project_id)
+        .order('orden', { ascending: true }),
+
+      admin
+        .from('fpe_tender_invitations')
+        .select('id, partner:fpe_partners ( nombre, email_contacto )')
+        .eq('tender_id', tender_id)
+        .in('status', ['bid_submitted', 'awarded']),
+    ])
+
+    const invIds = (invitations ?? []).map(i => i.id)
+
+    const { data: rawBids } = invIds.length > 0
+      ? await admin
+          .from('fpe_bids')
+          .select(`
+            id, invitation_id, notas, status, submitted_at,
+            line_items:fpe_bid_line_items ( project_line_item_id, precio_unitario )
+          `)
+          .in('invitation_id', invIds)
+      : { data: [] as { id: string; invitation_id: string; notas: string | null; status: string; submitted_at: string; line_items: unknown[] }[] }
+
+    // Build scope
+    type RawUnit = {
+      id: string; orden: number
+      template_unit: { nombre: string } | null
+      line_items: { id: string; cantidad: number; template_line_item: { nombre: string; unidad_medida: string } | null }[]
+    }
+    const scope: ScopeUnitRow[] = ((projectUnits ?? []) as unknown as RawUnit[]).map(pu => ({
+      unit_id:     pu.id,
+      unit_nombre: pu.template_unit?.nombre ?? '—',
+      line_items:  pu.line_items.map(li => ({
+        id:            li.id,
+        nombre:        li.template_line_item?.nombre ?? '—',
+        cantidad:      li.cantidad,
+        unidad_medida: li.template_line_item?.unidad_medida ?? '',
+      })),
+    }))
+
+    // Index invitations by id → partner info
+    type RawInv = { id: string; partner: { nombre: string; email_contacto: string | null } | null }
+    const invMap: Record<string, { nombre: string; email_contacto: string | null }> = {}
+    for (const inv of (invitations ?? []) as unknown as RawInv[]) {
+      invMap[inv.id] = inv.partner ?? { nombre: '?', email_contacto: null }
+    }
+
+    // Build bids
+    type RawBid = {
+      id: string; invitation_id: string; notas: string | null; status: string; submitted_at: string
+      line_items: { project_line_item_id: string; precio_unitario: number }[]
+    }
+    const bids: TenderBidRow[] = ((rawBids ?? []) as unknown as RawBid[]).map(bid => {
+      const partner = invMap[bid.invitation_id] ?? { nombre: '?', email_contacto: null }
+      const prices: Record<string, number> = {}
+      for (const li of bid.line_items) prices[li.project_line_item_id] = li.precio_unitario
+      return {
+        id: bid.id, invitation_id: bid.invitation_id,
+        partner_nombre: partner.nombre, partner_email: partner.email_contacto,
+        submitted_at: bid.submitted_at, notas: bid.notas, status: bid.status, prices,
+      }
+    })
+
+    return { scope, bids }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
+// ── Award a bid ───────────────────────────────────────────────────────────────
+
+export async function awardBid(data: {
+  bid_id:     string
+  project_id: string
+}): Promise<{ success: true } | { error: string }> {
+  try {
+    await requireManagerOrPartner()
+    const admin = createAdminClient()
+    const [{ error: e1 }, { error: e2 }] = await Promise.all([
+      admin.from('fpe_bids').update({ status: 'awarded', updated_at: new Date().toISOString() }).eq('id', data.bid_id),
+      admin.from('fpe_projects').update({ status: 'awarded' }).eq('id', data.project_id),
+    ])
+    if (e1) return { error: e1.message }
+    if (e2) return { error: e2.message }
+    revalidatePath(`${LIST_PATH}/${data.project_id}`)
     return { success: true }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
