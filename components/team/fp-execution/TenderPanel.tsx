@@ -11,6 +11,7 @@ import {
   revokeInvitation,
 } from '@/app/actions/fpe-tenders'
 import BidComparison from '@/components/team/fp-execution/BidComparison'
+import QAPanel from '@/components/team/fp-execution/QAPanel'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -475,6 +476,7 @@ export default function TenderPanel({
   const [showTenderModal, setShowTM]    = useState(false)
   const [showInviteModal, setShowIM]    = useState(false)
   const [showComparison, setShowComp]   = useState(false)
+  const [showQA, setShowQA]             = useState(false)
   const [launching, setLaunching]       = useState(false)
   const [closing, setClosing]           = useState(false)
   const [msg, setMsg]                   = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
@@ -707,6 +709,26 @@ export default function TenderPanel({
           </div>
         )
       })()}
+
+      {/* ── Q&A ─────────────────────────────────────────────────────────────── */}
+      {tender.status !== 'draft' && (
+        <div style={{ marginTop: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#1A1A1A' }}>
+              Preguntas y respuestas
+            </h3>
+            <button
+              onClick={() => setShowQA(v => !v)}
+              style={{ ...S.btn(), padding: '7px 14px' }}
+            >
+              {showQA ? 'Ocultar' : 'Ver Q&A'}
+            </button>
+          </div>
+          {showQA && (
+            <QAPanel tenderId={tender.id} projectId={projectId} />
+          )}
+        </div>
+      )}
 
       {/* Modals */}
       {showTenderModal && (

@@ -78,6 +78,16 @@ interface ExistingBid {
   line_items: BidLineItem[]
 }
 
+interface PortalQuestion {
+  id:               string
+  partner_nombre:   string
+  pregunta:         string
+  respuesta:        string | null
+  asked_at:         string
+  answered_at:      string | null
+  answered_by_name: string | null
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatBytes(bytes: number | null): string {
@@ -172,6 +182,7 @@ export default function PortalPage({
   documents,
   existingBid,
   isReadOnly,
+  initialQuestions,
 }: {
   token: string
   partner: Partner
@@ -181,6 +192,7 @@ export default function PortalPage({
   documents: PortalDoc[]
   existingBid: ExistingBid | null
   isReadOnly: boolean
+  initialQuestions: PortalQuestion[]
 }) {
   // ── Bid state ─────────────────────────────────────────────────────────────
   const initPrices = (): Record<string, number> => {
@@ -200,7 +212,11 @@ export default function PortalPage({
   const [submitted, setSubmitted]   = useState(existingBid?.status === 'submitted' || existingBid?.status === 'accepted')
   const [submitError, setSubmitError] = useState<string | null>(null)
 
-  const [activeTab, setActiveTab]   = useState<'scope' | 'docs' | 'bid'>('scope')
+  const [activeTab, setActiveTab]   = useState<'scope' | 'docs' | 'bid' | 'qa'>('scope')
+  const [questions, setQuestions]   = useState<PortalQuestion[]>(initialQuestions)
+  const [newQuestion, setNewQ]      = useState('')
+  const [askingQ, setAskingQ]       = useState(false)
+  const [askError, setAskError]     = useState<string | null>(null)
 
   // ── Computed total ────────────────────────────────────────────────────────
   const total = useMemo(() => {
@@ -278,7 +294,7 @@ export default function PortalPage({
 
           {/* Tabs */}
           <div style={{ display: 'flex', gap: 0 }}>
-            {(['scope', 'docs', 'bid'] as const).map(tab => (
+            {(['scope', 'docs', 'bid', 'qa'] as const).map(tab => (
               <button
                 key={tab}
                 style={{
@@ -288,7 +304,10 @@ export default function PortalPage({
                 }}
                 onClick={() => setActiveTab(tab)}
               >
-                {tab === 'scope' ? 'Scope' : tab === 'docs' ? `Documentación (${documents.length})` : submitted ? '✓ Oferta enviada' : 'Mi oferta'}
+                {tab === 'scope' ? 'Scope'
+                  : tab === 'docs' ? `Documentación (${documents.length})`
+                  : tab === 'bid' ? (submitted ? '✓ Oferta enviada' : 'Mi oferta')
+                  : `Preguntas${questions.length > 0 ? ` (${questions.length})` : ''}`}
               </button>
             ))}
           </div>
@@ -540,6 +559,94 @@ export default function PortalPage({
                   </p>
                 </div>
               </div>
+            )}
+          </div>
+        )}
+        {/* ── Q&A tab ── */}
+        {activeTab === 'qa' && (
+          <div>
+            <p style={S.sectionTitle}>Preguntas y respuestas</p>
+            <p style={{ margin: '0 0 24px', fontSize: 13, color: '#666', lineHeight: 1.6 }}>
+              Las preguntas y respuestas son visibles para todos los partners invitados a esta licitación.
+            </p>
+
+            {/* Existing Q&A */}
+            {questions.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 28 }}>
+                {questions.map(q => (
+                  <div key={q.id} style={{ background: '#fff', border: '1px solid #E8E6E0', borderRadius: 10, overflow: 'hidden' }}>
+                    {/* Question */}
+                    <div style={{ padding: '14px 16px', background: '#F8F7F4' }}>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#555' }}>{q.partner_nombre}</span>
+                        <span style={{ fontSize: 10, color: '#BBB' }}>
+                          {new Date(q.asked_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
+                        </span>
+                      </div>
+                      <p style={{ margin: 0, fontSize: 13, color: '#1A1A1A', lineHeight: 1.5 }}>{q.pregunta}</p>
+                    </div>
+                    {/* Answer */}
+                    {q.respuesta ? (
+                      <div style={{ padding: '12px 16px', borderTop: '1px solid #E8E6E0' }}>
+                        <p style={{ margin: '0 0 4px', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' as const, color: '#AAA' }}>
+                          Respuesta · Forma Prima
+                        </p>
+                        <p style={{ margin: 0, fontSize: 13, color: '#333', lineHeight: 1.5 }}>{q.respuesta}</p>
+                      </div>
+                    ) : (
+                      <div style={{ padding: '10px 16px', background: '#FFFBEB', borderTop: '1px solid #FDE68A' }}>
+                        <span style={{ fontSize: 11, color: '#92400E' }}>Pendiente de respuesta…</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* New question form */}
+            {!isReadOnly && (
+              <div style={{ background: '#fff', border: '1px solid #E8E6E0', borderRadius: 10, padding: '20px 24px' }}>
+                <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: '#1A1A1A' }}>
+                  Enviar una consulta
+                </p>
+                <textarea
+                  rows={3}
+                  value={newQuestion}
+                  onChange={e => setNewQ(e.target.value)}
+                  placeholder="Escribe tu pregunta sobre el proyecto o la licitación…"
+                  style={{ ...S.textarea, marginBottom: 12 }}
+                />
+                {askError && (
+                  <p style={{ margin: '0 0 10px', fontSize: 12, color: '#DC2626' }}>{askError}</p>
+                )}
+                <button
+                  onClick={async () => {
+                    const text = newQuestion.trim()
+                    if (!text) return
+                    setAskingQ(true); setAskError(null)
+                    const res = await fetch('/api/fpe-portal/question', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ token, pregunta: text }),
+                    })
+                    const json = await res.json()
+                    setAskingQ(false)
+                    if (!res.ok || json.error) { setAskError(json.error ?? 'Error enviando la pregunta.'); return }
+                    setQuestions(prev => [...prev, json.question])
+                    setNewQ('')
+                  }}
+                  disabled={!newQuestion.trim() || askingQ}
+                  style={{ ...S.btn(true), opacity: !newQuestion.trim() ? 0.4 : 1 }}
+                >
+                  {askingQ ? 'Enviando…' : 'Enviar consulta'}
+                </button>
+              </div>
+            )}
+
+            {questions.length === 0 && isReadOnly && (
+              <p style={{ fontSize: 13, color: '#AAA', textAlign: 'center', padding: '40px 0' }}>
+                No hay preguntas en esta licitación.
+              </p>
             )}
           </div>
         )}

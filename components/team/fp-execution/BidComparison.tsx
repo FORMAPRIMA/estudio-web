@@ -55,6 +55,48 @@ export default function BidComparison({
     router.refresh()
   }
 
+  // ── CSV export ────────────────────────────────────────────────────────────
+
+  const handleExportCSV = () => {
+    const q = (s: string) => `"${s.replace(/"/g, '""')}"`
+    const rows: string[] = []
+
+    // Header
+    rows.push([
+      q('Partida'), q('Ud.'), q('Cantidad'),
+      ...bids.flatMap(b => [q(`${b.partner_nombre} — P/Ud`), q(`${b.partner_nombre} — Importe`)]),
+    ].join(','))
+
+    for (const unit of scope) {
+      // Unit row
+      rows.push([q(unit.unit_nombre), '', '', ...bids.flatMap(() => ['', ''])].join(','))
+      for (const li of unit.line_items) {
+        rows.push([
+          q(li.nombre), q(li.unidad_medida), String(li.cantidad),
+          ...bids.flatMap(b => {
+            const p = b.prices[li.id]
+            return p !== undefined
+              ? [p.toFixed(2), (p * li.cantidad).toFixed(2)]
+              : ['', '']
+          }),
+        ].join(','))
+      }
+    }
+
+    // Total row
+    rows.push([
+      q('TOTAL GENERAL'), '', '',
+      ...bids.flatMap(b => ['', (grandTotals[b.id]?.total ?? 0).toFixed(2)]),
+    ].join(','))
+
+    const csv  = '\uFEFF' + rows.join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href = url; a.download = 'comparativa-ofertas.csv'; a.click()
+    URL.revokeObjectURL(url)
+  }
+
   // ── Loading / error states ─────────────────────────────────────────────────
 
   if (loading) {
@@ -105,6 +147,18 @@ export default function BidComparison({
 
   return (
     <div>
+      {/* Export button */}
+      {bids.length > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+          <button
+            onClick={handleExportCSV}
+            style={{ padding: '6px 14px', fontSize: 11, borderRadius: 5, border: '1px solid #E8E6E0', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500, background: '#fff', color: '#555' }}
+          >
+            Exportar CSV
+          </button>
+        </div>
+      )}
+
       {/* Flash message */}
       {flashMsg && (
         <div style={{

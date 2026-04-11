@@ -69,7 +69,7 @@ export default async function ExecutionPortalTokenPage({
   // ── Fetch project scope (only invited units) ────────────────────────────────
   const scopeUnitIds: string[] = inv.scope_unit_ids as string[]
 
-  const [{ data: projectUnits }, { data: documents }, { data: existingBid }] = await Promise.all([
+  const [{ data: projectUnits }, { data: documents }, { data: existingBid }, { data: questions }] = await Promise.all([
     // Fetch only the project_units that are in this invitation's scope
     admin
       .from('fpe_project_units')
@@ -110,6 +110,13 @@ export default async function ExecutionPortalTokenPage({
       `)
       .eq('invitation_id', inv.id)
       .maybeSingle(),
+
+    // Q&A for this tender
+    admin
+      .from('fpe_tender_questions')
+      .select('id, partner_nombre, pregunta, respuesta, asked_at, answered_at, answered_by_name')
+      .eq('tender_id', tender.id)
+      .order('asked_at', { ascending: true }),
   ])
 
   const tenderClosed = tender.status === 'closed' || tender.status === 'cancelled'
@@ -126,6 +133,7 @@ export default async function ExecutionPortalTokenPage({
       documents={documents ?? []}
       existingBid={existingBid ?? null}
       isReadOnly={tenderClosed || deadlinePassed || inv.status === 'bid_submitted'}
+      initialQuestions={(questions ?? []) as Parameters<typeof PortalPage>[0]['initialQuestions']}
     />
   )
 }
