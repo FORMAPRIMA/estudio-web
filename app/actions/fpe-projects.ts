@@ -181,23 +181,3 @@ export async function contractProject(
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
   }
 }
-
-export async function archiveProject(
-  project_id: string
-): Promise<{ success: true } | { error: string }> {
-  try {
-    await requireManagerOrPartner()
-    const admin = createAdminClient()
-    const { error } = await admin
-      .from('fpe_projects')
-      .update({ status: 'archived' })
-      .eq('id', project_id)
-    if (error) return { error: error.message }
-    revalidatePath(LIST_PATH)
-    revalidatePath(`${LIST_PATH}/${project_id}`)
-    revalidatePath('/team/fp-execution/control-room')
-    return { success: true }
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
-  }
-}

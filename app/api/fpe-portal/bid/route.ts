@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { sendEmail, wrapEmail } from '@/lib/email'
-
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://internal.formaprima.es'
 
 export async function POST(req: NextRequest) {
   try {
@@ -19,14 +16,7 @@ export async function POST(req: NextRequest) {
     // ── Verify token ──────────────────────────────────────────────────────────
     const { data: inv, error: invErr } = await admin
       .from('fpe_tender_invitations')
-      .select(`
-        id, status, token_expires_at, tender_id,
-        partner:fpe_partners ( nombre ),
-        tender:fpe_tenders (
-          id,
-          project:fpe_projects ( id, nombre )
-        )
-      `)
+      .select('id, status, token_expires_at, tender_id')
       .eq('token', body.token)
       .single()
 
@@ -104,42 +94,6 @@ export async function POST(req: NextRequest) {
       .from('fpe_tender_invitations')
       .update({ status: 'bid_submitted', bid_submitted_at: new Date().toISOString() })
       .eq('id', inv.id)
-
-    // ── Notify FP team (fire-and-forget) ─────────────────────────────────────
-    try {
-      const partner = inv.partner as unknown as { nombre: string }
-      const tender  = inv.tender  as unknown as { id: string; project: { id: string; nombre: string } }
-      const projectUrl = `${SITE_URL}/team/fp-execution/projects/${tender.project.id}`
-      const submittedAt = new Date().toLocaleString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-
-      await sendEmail({
-        to:      'contacto@formaprima.es',
-        subject: `Nueva oferta — ${tender.project.nombre}`,
-        html:    wrapEmail(`
-          <h2 style="font-size:18px;font-weight:600;color:#1A1A1A;margin:0 0 16px;">
-            Nueva oferta recibida
-          </h2>
-          <div style="border-left:3px solid #059669;padding:14px 20px;background:#F0FDF4;margin:0 0 24px;border-radius:0 4px 4px 0;">
-            <p style="margin:0 0 6px;font-size:15px;font-weight:600;color:#1A1A1A;">${partner.nombre}</p>
-            <p style="margin:0;font-size:13px;color:#555;">ha enviado su oferta para <strong>${tender.project.nombre}</strong></p>
-          </div>
-          <p style="font-size:13px;color:#888;margin:0 0 24px;">
-            Recibida el ${submittedAt} · ${body.line_items.length} partida${body.line_items.length !== 1 ? 's' : ''} cotizada${body.line_items.length !== 1 ? 's' : ''}
-          </p>
-          <table cellpadding="0" cellspacing="0" style="margin:0;">
-            <tr>
-              <td style="background:#1A1A1A;border-radius:5px;padding:10px 24px;">
-                <a href="${projectUrl}" style="color:#ffffff;font-size:13px;font-weight:600;text-decoration:none;display:block;">
-                  Ver proyecto y comparar ofertas →
-                </a>
-              </td>
-            </tr>
-          </table>
-        `),
-      })
-    } catch {
-      // Do not block the response if notification fails
-    }
 
     return NextResponse.json({ ok: true, bid_id })
   } catch (err) {
