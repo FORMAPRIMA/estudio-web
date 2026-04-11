@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useState, useMemo } from 'react'
-import { getDocumentSignedUrl } from '@/app/actions/fpe-documents'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -151,16 +150,19 @@ const S = {
 
 // ── Document row ──────────────────────────────────────────────────────────────
 
-function DocRow({ doc }: { doc: PortalDoc }) {
+function DocRow({ doc, token }: { doc: PortalDoc; token: string }) {
   const [downloading, setDownloading] = useState(false)
   const badge = fileLabel(doc.mime_type, doc.nombre)
 
   const handleDownload = async () => {
     setDownloading(true)
-    const res = await getDocumentSignedUrl(doc.storage_path)
+    const res = await fetch(
+      `/api/execution-portal/document?token=${encodeURIComponent(token)}&storage_path=${encodeURIComponent(doc.storage_path)}`
+    )
+    const json = await res.json()
     setDownloading(false)
-    if ('error' in res) { alert(res.error); return }
-    window.open(res.url, '_blank')
+    if (!res.ok || json.error) { alert(json.error ?? 'Error al descargar.'); return }
+    window.open(json.url, '_blank')
   }
 
   return (
@@ -438,7 +440,7 @@ export default function PortalPage({
                   <div>
                     <p style={S.sectionTitle}>Documentación general del proyecto</p>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {generalDocs.map(d => <DocRow key={d.id} doc={d} />)}
+                      {generalDocs.map(d => <DocRow key={d.id} doc={d} token={token} />)}
                     </div>
                   </div>
                 )}
@@ -446,7 +448,7 @@ export default function PortalPage({
                   <div>
                     <p style={S.sectionTitle}>Documentación por unidad</p>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {unitDocs.map(d => <DocRow key={d.id} doc={d} />)}
+                      {unitDocs.map(d => <DocRow key={d.id} doc={d} token={token} />)}
                     </div>
                   </div>
                 )}
