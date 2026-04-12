@@ -213,7 +213,7 @@ function HeroGallery({
 }
 
 // ── Mapbox Static Map ─────────────────────────────────────────────────────────
-// Geocodes with Nominatim (free, no key) → renders Mapbox dark-v11 static image.
+// Geocodes with Mapbox Geocoding API → renders Mapbox dark-v11 static image.
 // Falls back gracefully if no token or geocoding fails.
 
 type GeoState =
@@ -231,13 +231,13 @@ function MapCard({ address }: { address: string }) {
     if (!MAPBOX_TOKEN || !address) return
     setGeo({ status: 'loading' })
     fetch(
-      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`,
-      { headers: { 'Accept-Language': 'es' } }
+      `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address)}.json?limit=1&language=es&access_token=${MAPBOX_TOKEN}`
     )
       .then(r => r.json())
-      .then((data: { lat: string; lon: string }[]) => {
-        if (data[0]) {
-          setGeo({ status: 'ok', lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) })
+      .then((data: { features: { geometry: { coordinates: [number, number] } }[] }) => {
+        const coords = data.features?.[0]?.geometry?.coordinates
+        if (coords) {
+          setGeo({ status: 'ok', lng: coords[0], lat: coords[1] })
         } else {
           setGeo({ status: 'error', reason: 'Dirección no encontrada' })
         }

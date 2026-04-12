@@ -164,13 +164,14 @@ function MapCard({ address, height = 220 }: { address: string; height?: number }
   useEffect(() => {
     if (!MAPBOX_TOKEN || !address) return
     setGeo({ status: 'loading' })
-    fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`, {
-      headers: { 'Accept-Language': 'es' },
-    })
+    fetch(
+      `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address)}.json?limit=1&language=es&access_token=${MAPBOX_TOKEN}`
+    )
       .then(r => r.json())
-      .then((data: { lat: string; lon: string }[]) => {
-        if (data[0]) setGeo({ status: 'ok', lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) })
-        else         setGeo({ status: 'error', reason: 'Dirección no encontrada' })
+      .then((data: { features: { geometry: { coordinates: [number, number] } }[] }) => {
+        const coords = data.features?.[0]?.geometry?.coordinates
+        if (coords) setGeo({ status: 'ok', lng: coords[0], lat: coords[1] })
+        else        setGeo({ status: 'error', reason: 'Dirección no encontrada' })
       })
       .catch(() => setGeo({ status: 'error', reason: 'Error de conexión' }))
   }, [address])
