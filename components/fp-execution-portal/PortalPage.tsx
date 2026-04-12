@@ -37,8 +37,19 @@ interface TemplatePhase {
 interface BidPhaseDuration {
   id: string
   template_phase_id: string
-  project_unit_id: string
   duracion_dias: number
+}
+
+interface PortalChapter {
+  id: string
+  nombre: string
+  isPrincipal: boolean
+  phases: {
+    id: string
+    nombre: string
+    orden: number
+    lead_time_days: number | null
+  }[]
 }
 
 interface TemplateLineItem {
@@ -62,7 +73,6 @@ interface ProjectUnit {
     id: string
     nombre: string
     descripcion: string | null
-    phases: TemplatePhase[]
   } | null
   line_items: ProjectLineItem[]
 }
@@ -662,7 +672,8 @@ export default function PortalPage({
   renderUrls = [],
   tourVirtualUrl = null,
   phaseStartDates = {},
-  isPrincipalForUnitIds = [],
+  isPrincipalForChapterIds = [],
+  portalChapters = [],
 }: {
   token: string
   partner: Partner
@@ -675,8 +686,9 @@ export default function PortalPage({
   initialQuestions: PortalQuestion[]
   renderUrls?: string[]
   tourVirtualUrl?: string | null
-  phaseStartDates?: Record<string, string>   // phaseId → ISO date string
-  isPrincipalForUnitIds?: string[]           // project_unit_ids where this partner proposes phase durations
+  phaseStartDates?: Record<string, string>       // phaseId → ISO date string
+  isPrincipalForChapterIds?: string[]            // chapter IDs where this partner proposes phase durations
+  portalChapters?: PortalChapter[]               // chapters with phases for phase duration input
 }) {
   // ── Tab + scroll ──────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview')
@@ -703,12 +715,10 @@ export default function PortalPage({
 
   const initPhaseDays = (): Record<string, number> => {
     const m: Record<string, number> = {}
-    for (const unit of projectUnits) {
-      for (const phase of unit.template_unit?.phases ?? []) {
-        const key = `${unit.id}_${phase.id}`
-        const existing = existingBid?.phase_durations?.find(
-          pd => pd.project_unit_id === unit.id && pd.template_phase_id === phase.id
-        )
+    for (const chapter of portalChapters) {
+      for (const phase of chapter.phases) {
+        const key = phase.id
+        const existing = existingBid?.phase_durations?.find(pd => pd.template_phase_id === phase.id)
         m[key] = existing?.duracion_dias ?? 0
       }
     }
@@ -764,11 +774,11 @@ export default function PortalPage({
       return
     }
 
-    const phase_durations = projectUnits
-      .filter(u => isPrincipalForUnitIds.includes(u.id))
-      .flatMap(u =>
-        (u.template_unit?.phases ?? [])
-          .map(ph => ({ template_phase_id: ph.id, project_unit_id: u.id, duracion_dias: phaseDays[`${u.id}_${ph.id}`] ?? 0 }))
+    const phase_durations = portalChapters
+      .filter(ch => isPrincipalForChapterIds.includes(ch.id))
+      .flatMap(ch =>
+        ch.phases
+          .map(ph => ({ template_phase_id: ph.id, duracion_dias: phaseDays[ph.id] ?? 0 }))
           .filter(pd => pd.duracion_dias > 0)
       )
 
@@ -915,31 +925,6 @@ export default function PortalPage({
                         </table>
                       )}
 
-                      {/* Phase start dates */}
-                      {(() => {
-                        const phases = unit.template_unit?.phases ?? []
-                        const phasesWithDates = phases
-                          .filter(ph => phaseStartDates[ph.id])
-                          .sort((a, b) => a.orden - b.orden)
-                        if (phasesWithDates.length === 0) return null
-                        return (
-                          <div style={{ borderTop: '1px solid #F0EEE8', padding: '12px 16px', background: '#FAFAF8' }}>
-                            <p style={{ margin: '0 0 8px', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA' }}>
-                              Fechas estimadas de inicio
-                            </p>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                              {phasesWithDates.map(ph => (
-                                <div key={ph.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                                  <span style={{ fontSize: 12, color: '#555' }}>{ph.nombre}</span>
-                                  <span style={{ fontSize: 11, fontWeight: 700, color: '#D85A30', fontFamily: 'monospace', flexShrink: 0 }}>
-                                    {new Date(phaseStartDates[ph.id]).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )
-                      })()}
                     </div>
                   ))}
                 </div>
@@ -1050,50 +1035,54 @@ export default function PortalPage({
                   </p>
                 </div>
                 <p style={sectionLabel}>Detalle de la oferta</p>
-                {projectUnits.map(unit => {
-                  const unitPhaseDurations = (existingBid?.phase_durations ?? []).filter(pd => pd.project_unit_id === unit.id)
+                {projectUnits.map(unit => (
+                  <div key={unit.id} style={{ marginBottom: 20 }}>
+                    <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 600, color: '#555' }}>{unit.template_unit?.nombre}</p>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', borderRadius: 8, overflow: 'hidden', border: '1px solid #E8E6E0' }}>
+                      <thead>
+                        <tr style={{ background: '#F8F7F4' }}>
+                          <th style={{ padding: '7px 12px', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', textAlign: 'left' }}>Partida</th>
+                          <th style={{ padding: '7px 12px', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', textAlign: 'right' }}>Ud.</th>
+                          <th style={{ padding: '7px 12px', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', textAlign: 'right' }}>P/Ud</th>
+                          <th style={{ padding: '7px 12px', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', textAlign: 'right' }}>Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {unit.line_items.map((li, i) => {
+                          const p = prices[li.id] ?? 0
+                          return (
+                            <tr key={li.id} style={{ borderBottom: '1px solid #F0EEE8', background: i % 2 === 0 ? '#fff' : '#FAFAF8' }}>
+                              <td style={{ padding: '9px 12px', fontSize: 12, color: '#333' }}>{li.template_line_item?.nombre}</td>
+                              <td style={{ padding: '9px 12px', fontSize: 12, color: '#888', textAlign: 'right' }}>{li.cantidad} {li.template_line_item?.unidad_medida}</td>
+                              <td style={{ padding: '9px 12px', fontSize: 12, textAlign: 'right', fontFamily: 'monospace' }}>{formatEur(p)}</td>
+                              <td style={{ padding: '9px 12px', fontSize: 12, textAlign: 'right', fontWeight: 600, fontFamily: 'monospace' }}>{formatEur(p * li.cantidad)}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
+                {/* Chapter-level phase durations (read-only submitted view) */}
+                {portalChapters.filter(ch => ch.isPrincipal && ch.phases.length > 0).map(ch => {
+                  const chPhaseDurations = (existingBid?.phase_durations ?? []).filter(pd => ch.phases.some(ph => ph.id === pd.template_phase_id))
+                  if (chPhaseDurations.length === 0) return null
                   return (
-                    <div key={unit.id} style={{ marginBottom: 20 }}>
-                      <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 600, color: '#555' }}>{unit.template_unit?.nombre}</p>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', borderRadius: 8, overflow: 'hidden', border: '1px solid #E8E6E0' }}>
-                        <thead>
-                          <tr style={{ background: '#F8F7F4' }}>
-                            <th style={{ padding: '7px 12px', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', textAlign: 'left' }}>Partida</th>
-                            <th style={{ padding: '7px 12px', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', textAlign: 'right' }}>Ud.</th>
-                            <th style={{ padding: '7px 12px', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', textAlign: 'right' }}>P/Ud</th>
-                            <th style={{ padding: '7px 12px', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', textAlign: 'right' }}>Total</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {unit.line_items.map((li, i) => {
-                            const p = prices[li.id] ?? 0
-                            return (
-                              <tr key={li.id} style={{ borderBottom: '1px solid #F0EEE8', background: i % 2 === 0 ? '#fff' : '#FAFAF8' }}>
-                                <td style={{ padding: '9px 12px', fontSize: 12, color: '#333' }}>{li.template_line_item?.nombre}</td>
-                                <td style={{ padding: '9px 12px', fontSize: 12, color: '#888', textAlign: 'right' }}>{li.cantidad} {li.template_line_item?.unidad_medida}</td>
-                                <td style={{ padding: '9px 12px', fontSize: 12, textAlign: 'right', fontFamily: 'monospace' }}>{formatEur(p)}</td>
-                                <td style={{ padding: '9px 12px', fontSize: 12, textAlign: 'right', fontWeight: 600, fontFamily: 'monospace' }}>{formatEur(p * li.cantidad)}</td>
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                      {unitPhaseDurations.length > 0 && (
-                        <div style={{ marginTop: 8, padding: '10px 14px', background: '#F0F7FF', borderRadius: 6, border: '1px solid #BAD7F2' }}>
-                          <p style={{ margin: '0 0 7px', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#4A90C0' }}>Plazos propuestos</p>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                            {[...(unit.template_unit?.phases ?? [])].sort((a, b) => a.orden - b.orden).map(ph => {
-                              const pd = unitPhaseDurations.find(d => d.template_phase_id === ph.id)
-                              if (!pd) return null
-                              return (
-                                <span key={ph.id} style={{ fontSize: 11, padding: '3px 9px', background: '#fff', borderRadius: 20, color: '#1A1A1A', border: '1px solid #BAD7F2' }}>
-                                  {ph.nombre}: <strong style={{ color: '#0369A1' }}>{pd.duracion_dias}d</strong>
-                                </span>
-                              )
-                            })}
-                          </div>
-                        </div>
-                      )}
+                    <div key={ch.id} style={{ marginTop: 8, padding: '10px 14px', background: '#F0F7FF', borderRadius: 6, border: '1px solid #BAD7F2', marginBottom: 16 }}>
+                      <p style={{ margin: '0 0 7px', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#4A90C0' }}>
+                        Plazos propuestos — {ch.nombre}
+                      </p>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {ch.phases.map(ph => {
+                          const pd = chPhaseDurations.find(d => d.template_phase_id === ph.id)
+                          if (!pd) return null
+                          return (
+                            <span key={ph.id} style={{ fontSize: 11, padding: '3px 9px', background: '#fff', borderRadius: 20, color: '#1A1A1A', border: '1px solid #BAD7F2' }}>
+                              {ph.nombre}: <strong style={{ color: '#0369A1' }}>{pd.duracion_dias}d</strong>
+                            </span>
+                          )
+                        })}
+                      </div>
                     </div>
                   )
                 })}
@@ -1149,30 +1138,37 @@ export default function PortalPage({
                           })}
                         </tbody>
                       </table>
-                      {(unit.template_unit?.phases?.length ?? 0) > 0 && isPrincipalForUnitIds.includes(unit.id) && (
-                        <div style={{ padding: '14px 16px', borderTop: '1px solid #E8E6E0', background: '#F8F7F4' }}>
-                          <p style={{ margin: '0 0 10px', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#888' }}>Plazos de ejecución (días laborales)</p>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                            {[...(unit.template_unit?.phases ?? [])].sort((a, b) => a.orden - b.orden).map(phase => {
-                              const key  = `${unit.id}_${phase.id}`
-                              const days = phaseDays[key] ?? 0
-                              return (
-                                <div key={phase.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                  <span style={{ flex: 1, fontSize: 12, color: '#444' }}>{phase.nombre}</span>
-                                  {phase.lead_time_days != null && <span style={{ fontSize: 10, color: '#BBB', flexShrink: 0 }}>Ref: {phase.lead_time_days}d</span>}
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
-                                    <input type="number" min={1} value={days || ''} placeholder="0" onChange={e => setPhaseDays(prev => ({ ...prev, [key]: parseInt(e.target.value) || 0 }))} style={{ width: 60, padding: '5px 8px', fontSize: 13, border: `1px solid ${days > 0 ? '#378ADD' : '#E8E6E0'}`, borderRadius: 5, fontFamily: 'monospace', color: '#1A1A1A', background: days > 0 ? '#F0F7FF' : '#fff', outline: 'none', textAlign: 'right' }} />
-                                    <span style={{ fontSize: 11, color: '#AAA' }}>días</span>
-                                  </div>
-                                </div>
-                              )
-                            })}
-                          </div>
-                        </div>
-                      )}
                     </div>
                   </div>
                 ))}
+                {/* Chapter-level phase duration inputs */}
+                {portalChapters.filter(ch => ch.isPrincipal && ch.phases.length > 0).map(ch => (
+                  <div key={ch.id} style={{ background: '#F0F7FF', border: '1px solid #BAD7F2', borderRadius: 10, padding: '16px 22px', marginBottom: 16 }}>
+                    <p style={{ margin: '0 0 12px', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#0369A1' }}>
+                      Plazos de ejecución — {ch.nombre} (días laborables)
+                    </p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {ch.phases.map(phase => {
+                        const days = phaseDays[phase.id] ?? 0
+                        return (
+                          <div key={phase.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{ flex: 1, fontSize: 12, color: '#1A1A1A' }}>{phase.nombre}</span>
+                            {phase.lead_time_days != null && <span style={{ fontSize: 10, color: '#9AC0E0', flexShrink: 0 }}>Ref: {phase.lead_time_days}d</span>}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+                              <input
+                                type="number" min={1} value={days || ''} placeholder="0"
+                                onChange={e => setPhaseDays(prev => ({ ...prev, [phase.id]: parseInt(e.target.value) || 0 }))}
+                                style={{ width: 60, padding: '5px 8px', fontSize: 13, border: `1px solid ${days > 0 ? '#378ADD' : '#BFDBFE'}`, borderRadius: 5, fontFamily: 'monospace', color: '#1A1A1A', background: days > 0 ? '#E0F2FE' : '#fff', outline: 'none', textAlign: 'right' }}
+                              />
+                              <span style={{ fontSize: 11, color: '#9AC0E0' }}>días</span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+
                 <div style={{ background: '#fff', border: '1px solid #E8E6E0', borderRadius: 10, padding: '20px 22px', marginTop: 8 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
                     <span style={{ fontSize: 13, color: '#666', fontWeight: 500 }}>Total estimado</span>

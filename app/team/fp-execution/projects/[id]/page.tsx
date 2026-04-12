@@ -5,7 +5,7 @@ import ProjectScopePage from '@/components/team/fp-execution/ProjectScopePage'
 import { computeAndSaveReadiness, ReadinessCheck } from '@/app/actions/fpe-documents'
 import type { FpeTender } from '@/components/team/fp-execution/TenderPanel'
 import type { ScopedChapter, PartnerForDocs } from '@/components/team/fp-execution/DocumentHub'
-import type { ScheduleUnit, ScheduleMilestone } from '@/lib/fp-execution/schedule'
+import type { ScheduleChapter, ScheduleMilestone } from '@/lib/fp-execution/schedule'
 
 export default async function FpeProjectDetailPage({
   params,
@@ -45,7 +45,7 @@ export default async function FpeProjectDetailPage({
     supabase
       .from('fpe_template_chapters')
       .select(`
-        id, nombre, orden,
+        id, nombre, orden, duracion_pct, principal_discipline_id,
         units:fpe_template_units (
           id, nombre, descripcion, orden, activo, principal_discipline_id,
           line_items:fpe_template_line_items (
@@ -108,24 +108,31 @@ export default async function FpeProjectDetailPage({
 
   if (!project) notFound()
 
-  // ── Schedule data: phases + milestone links for scoped template units ────────
-  const scopedTemplateUnitIds = (project.project_units ?? []).map(pu => pu.template_unit_id)
+  // ── Schedule data: chapter-level phases for scoped chapters ─────────────────
+  const scopedTemplateUnitIds   = (project.project_units ?? []).map(pu => pu.template_unit_id)
 
-  const [{ data: schedulePhasesRaw }, { data: schedulePhaseLinks }, { data: scheduleUnitsRaw }] =
-    scopedTemplateUnitIds.length > 0
+  // Find which chapters are scoped (have at least one scoped unit)
+  const scopedChapterIds = Array.from(new Set(
+    (chapters ?? [])
+      .filter(ch => ch.units.some(u => scopedTemplateUnitIds.includes(u.id)))
+      .map(ch => ch.id)
+  ))
+
+  const [{ data: schedulePhasesRaw }, { data: schedulePhaseLinks }, { data: chapterSettings }] =
+    scopedChapterIds.length > 0
       ? await Promise.all([
           supabase
             .from('fpe_template_phases')
-            .select('id, unit_id, nombre, orden, duracion_pct')
-            .in('unit_id', scopedTemplateUnitIds)
+            .select('id, chapter_id, nombre, orden, duracion_pct')
+            .in('chapter_id', scopedChapterIds)
             .order('orden', { ascending: true }),
           supabase
             .from('fpe_template_phase_milestone_links')
             .select('phase_id, milestone_id, link_type'),
-          supabase
-            .from('fpe_template_units')
-            .select('id, nombre, orden, duracion_pct')
-            .in('id', scopedTemplateUnitIds),
+          admin
+            .from('fpe_project_chapter_settings')
+            .select('chapter_id, principal_discipline_id')
+            .eq('project_id', params.id),
         ])
       : [{ data: [] }, { data: [] }, { data: [] }]
 
@@ -140,27 +147,35 @@ export default async function FpeProjectDetailPage({
     }
   }
 
-  // Group phases by unit
-  const phasesByUnit: Record<string, typeof schedulePhasesRaw> = {}
+  // Build project-level chapter principal discipline overrides
+  const chapterSettingsMap: Record<string, string | null> = {}
+  for (const cs of chapterSettings ?? []) chapterSettingsMap[cs.chapter_id] = cs.principal_discipline_id
+
+  // Group phases by chapter_id
+  const phasesByChapter: Record<string, typeof schedulePhasesRaw> = {}
   for (const ph of schedulePhasesRaw ?? []) {
-    phasesByUnit[ph.unit_id] = [...(phasesByUnit[ph.unit_id] ?? []), ph]
+    if (!ph.chapter_id) continue
+    phasesByChapter[ph.chapter_id] = [...(phasesByChapter[ph.chapter_id] ?? []), ph]
   }
 
-  const scheduleUnits: ScheduleUnit[] = (scheduleUnitsRaw ?? []).map(u => ({
-    id: u.id,
-    nombre: u.nombre,
-    orden: u.orden,
-    duracion_pct: u.duracion_pct ?? 0,
-    phases: (phasesByUnit[u.id] ?? []).map(ph => ({
-      id: ph.id,
-      unit_id: ph.unit_id,
-      nombre: ph.nombre,
-      orden: ph.orden,
-      duracion_pct: ph.duracion_pct ?? 0,
-      achieves: schedAchievesMap[ph.id] ?? [],
-      requires: schedRequiresMap[ph.id] ?? [],
-    })),
-  }))
+  // Build ScheduleChapter[] from scoped chapters
+  const scheduleChapters: ScheduleChapter[] = (chapters ?? [])
+    .filter(ch => scopedChapterIds.includes(ch.id))
+    .map(ch => ({
+      id:          ch.id,
+      nombre:      ch.nombre,
+      orden:       ch.orden,
+      duracion_pct: (ch as unknown as { duracion_pct: number | null }).duracion_pct ?? 0,
+      phases: (phasesByChapter[ch.id] ?? []).map(ph => ({
+        id:           ph.id,
+        chapter_id:   ph.chapter_id ?? ch.id,
+        nombre:       ph.nombre,
+        orden:        ph.orden,
+        duracion_pct: ph.duracion_pct ?? 0,
+        achieves:     schedAchievesMap[ph.id] ?? [],
+        requires:     schedRequiresMap[ph.id] ?? [],
+      })),
+    }))
 
   // Generate signed URLs for render images (used by Dashboard hero gallery)
   // Prefer docs tagged 'render'; fall back to any image doc without unit/chapter
@@ -290,10 +305,11 @@ export default async function FpeProjectDetailPage({
       scopedDisciplineIds={scopedDisciplineIds}
       renderUrls={renderUrls}
       tourVirtualUrl={projectExt.tour_virtual_url ?? null}
-      scheduleUnits={scheduleUnits}
+      scheduleChapters={scheduleChapters}
       scheduleMilestones={(milestones ?? []) as ScheduleMilestone[]}
       initialFechaInicio={projectExt.fecha_inicio_obra ?? null}
       initialDuracionSemanas={projectExt.duracion_obra_semanas ?? 0}
+      chapterSettingsMap={chapterSettingsMap}
     />
   )
 }

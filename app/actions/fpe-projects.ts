@@ -265,6 +265,33 @@ export async function saveFpeProjectTourUrl(
   }
 }
 
+// ── Chapter principal discipline ──────────────────────────────────────────────
+// Upserts the principal discipline for a chapter in the context of a project.
+// Used by the Scope tab to record (or override) which discipline is responsible
+// for proposing phase durations for each chapter.
+
+export async function saveChapterPrincipalDiscipline(
+  project_id: string,
+  chapter_id: string,
+  principal_discipline_id: string | null,
+): Promise<{ success: true } | { error: string }> {
+  try {
+    await requireManagerOrPartner()
+    const admin = createAdminClient()
+    const { error } = await admin
+      .from('fpe_project_chapter_settings')
+      .upsert(
+        { project_id, chapter_id, principal_discipline_id, updated_at: new Date().toISOString() },
+        { onConflict: 'project_id,chapter_id' },
+      )
+    if (error) return { error: error.message }
+    revalidatePath(`${LIST_PATH}/${project_id}`)
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
 export async function contractProject(
   project_id: string
 ): Promise<{ success: true } | { error: string }> {

@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
       token:            string
       notas?:           string | null
       line_items:       { project_line_item_id: string; precio_unitario: number; notas?: string | null }[]
-      phase_durations?: { template_phase_id: string; project_unit_id: string; duracion_dias: number }[]
+      phase_durations?: { template_phase_id: string; duracion_dias: number }[]
     }
 
     if (!body.token) return NextResponse.json({ error: 'Token requerido.' }, { status: 400 })
@@ -98,8 +98,8 @@ export async function POST(req: NextRequest) {
         .insert(
           body.phase_durations.map(pd => ({
             bid_id,
+            invitation_id:     inv.id,
             template_phase_id: pd.template_phase_id,
-            project_unit_id:   pd.project_unit_id,
             duracion_dias:     pd.duracion_dias,
           }))
         )

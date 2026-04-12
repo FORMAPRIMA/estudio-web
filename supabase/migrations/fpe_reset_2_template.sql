@@ -113,24 +113,24 @@ SELECT id INTO d_provmec  FROM public.fpe_disciplines WHERE nombre = 'Proveedor 
 -- CAPÍTULOS
 -- ════════════════════════════════════════════════════════════════════════════
 
-INSERT INTO public.fpe_template_chapters (nombre, orden, activo) VALUES ('DEMOLICIONES Y TRABAJOS PREVIOS', 10, true) RETURNING id INTO ch_demo;
-INSERT INTO public.fpe_template_chapters (nombre, orden, activo) VALUES ('REFUERZOS ESTRUCTURALES', 20, true) RETURNING id INTO ch_ref;
-INSERT INTO public.fpe_template_chapters (nombre, orden, activo) VALUES ('ALBAÑILERÍA', 30, true) RETURNING id INTO ch_alba;
-INSERT INTO public.fpe_template_chapters (nombre, orden, activo) VALUES ('CARPINTERÍA METÁLICA Y VIDRIERÍA', 40, true) RETURNING id INTO ch_cmet;
-INSERT INTO public.fpe_template_chapters (nombre, orden, activo) VALUES ('CARPINTERÍA DE MADERA', 50, true) RETURNING id INTO ch_cmadera;
-INSERT INTO public.fpe_template_chapters (nombre, orden, activo) VALUES ('INSTALACIONES - FONTANERÍA Y SANEAMIENTO', 60, true) RETURNING id INTO ch_font;
-INSERT INTO public.fpe_template_chapters (nombre, orden, activo) VALUES ('INSTALACIONES - GAS', 70, true) RETURNING id INTO ch_gas;
-INSERT INTO public.fpe_template_chapters (nombre, orden, activo) VALUES ('INSTALACIONES - CLIMATIZACIÓN', 80, true) RETURNING id INTO ch_clima;
-INSERT INTO public.fpe_template_chapters (nombre, orden, activo) VALUES ('INSTALACIONES - VENTILACIÓN', 90, true) RETURNING id INTO ch_vent;
-INSERT INTO public.fpe_template_chapters (nombre, orden, activo) VALUES ('INSTALACIONES - ELECTRICIDAD', 100, true) RETURNING id INTO ch_elec;
-INSERT INTO public.fpe_template_chapters (nombre, orden, activo) VALUES ('INSTALACIONES - TELECOMUNICACIONES', 110, true) RETURNING id INTO ch_tele;
-INSERT INTO public.fpe_template_chapters (nombre, orden, activo) VALUES ('INSTALACIONES - DOMÓTICA', 120, true) RETURNING id INTO ch_domo;
-INSERT INTO public.fpe_template_chapters (nombre, orden, activo) VALUES ('INSTALACIONES - SONIDO', 130, true) RETURNING id INTO ch_sonido;
-INSERT INTO public.fpe_template_chapters (nombre, orden, activo) VALUES ('PINTURAS Y REVESTIMIENTOS', 140, true) RETURNING id INTO ch_pint;
-INSERT INTO public.fpe_template_chapters (nombre, orden, activo) VALUES ('EQUIPAMIENTO', 150, true) RETURNING id INTO ch_equip;
-INSERT INTO public.fpe_template_chapters (nombre, orden, activo) VALUES ('COCINA', 160, true) RETURNING id INTO ch_coc;
-INSERT INTO public.fpe_template_chapters (nombre, orden, activo) VALUES ('TERRAZA', 170, true) RETURNING id INTO ch_terr;
-INSERT INTO public.fpe_template_chapters (nombre, orden, activo) VALUES ('VARIOS', 180, true) RETURNING id INTO ch_varios;
+INSERT INTO public.fpe_template_chapters (nombre, orden, activo, duracion_pct, principal_discipline_id) VALUES ('DEMOLICIONES Y TRABAJOS PREVIOS', 10, true, 0.08, d_demo) RETURNING id INTO ch_demo;
+INSERT INTO public.fpe_template_chapters (nombre, orden, activo, duracion_pct, principal_discipline_id) VALUES ('REFUERZOS ESTRUCTURALES', 20, true, 0.04, d_alba) RETURNING id INTO ch_ref;
+INSERT INTO public.fpe_template_chapters (nombre, orden, activo, duracion_pct, principal_discipline_id) VALUES ('ALBAÑILERÍA', 30, true, 0.15, d_alba) RETURNING id INTO ch_alba;
+INSERT INTO public.fpe_template_chapters (nombre, orden, activo, duracion_pct, principal_discipline_id) VALUES ('CARPINTERÍA METÁLICA Y VIDRIERÍA', 40, true, 0.05, d_cext) RETURNING id INTO ch_cmet;
+INSERT INTO public.fpe_template_chapters (nombre, orden, activo, duracion_pct, principal_discipline_id) VALUES ('CARPINTERÍA DE MADERA', 50, true, 0.12, d_cmadera) RETURNING id INTO ch_cmadera;
+INSERT INTO public.fpe_template_chapters (nombre, orden, activo, duracion_pct, principal_discipline_id) VALUES ('INSTALACIONES - FONTANERÍA Y SANEAMIENTO', 60, true, 0.06, d_font) RETURNING id INTO ch_font;
+INSERT INTO public.fpe_template_chapters (nombre, orden, activo, duracion_pct, principal_discipline_id) VALUES ('INSTALACIONES - GAS', 70, true, 0.02, d_gas) RETURNING id INTO ch_gas;
+INSERT INTO public.fpe_template_chapters (nombre, orden, activo, duracion_pct, principal_discipline_id) VALUES ('INSTALACIONES - CLIMATIZACIÓN', 80, true, 0.05, d_clima) RETURNING id INTO ch_clima;
+INSERT INTO public.fpe_template_chapters (nombre, orden, activo, duracion_pct, principal_discipline_id) VALUES ('INSTALACIONES - VENTILACIÓN', 90, true, 0.03, d_vent) RETURNING id INTO ch_vent;
+INSERT INTO public.fpe_template_chapters (nombre, orden, activo, duracion_pct, principal_discipline_id) VALUES ('INSTALACIONES - ELECTRICIDAD', 100, true, 0.06, d_elec) RETURNING id INTO ch_elec;
+INSERT INTO public.fpe_template_chapters (nombre, orden, activo, duracion_pct, principal_discipline_id) VALUES ('INSTALACIONES - TELECOMUNICACIONES', 110, true, 0.02, d_elec) RETURNING id INTO ch_tele;
+INSERT INTO public.fpe_template_chapters (nombre, orden, activo, duracion_pct, principal_discipline_id) VALUES ('INSTALACIONES - DOMÓTICA', 120, true, 0.03, d_eqdomo) RETURNING id INTO ch_domo;
+INSERT INTO public.fpe_template_chapters (nombre, orden, activo, duracion_pct, principal_discipline_id) VALUES ('INSTALACIONES - SONIDO', 130, true, 0.02, d_eqsonido) RETURNING id INTO ch_sonido;
+INSERT INTO public.fpe_template_chapters (nombre, orden, activo, duracion_pct, principal_discipline_id) VALUES ('PINTURAS Y REVESTIMIENTOS', 140, true, 0.12, d_pint) RETURNING id INTO ch_pint;
+INSERT INTO public.fpe_template_chapters (nombre, orden, activo, duracion_pct, principal_discipline_id) VALUES ('EQUIPAMIENTO', 150, true, 0.04, d_provgrif) RETURNING id INTO ch_equip;
+INSERT INTO public.fpe_template_chapters (nombre, orden, activo, duracion_pct, principal_discipline_id) VALUES ('COCINA', 160, true, 0.06, d_eqcocina) RETURNING id INTO ch_coc;
+INSERT INTO public.fpe_template_chapters (nombre, orden, activo, duracion_pct, principal_discipline_id) VALUES ('TERRAZA', 170, true, 0.03, d_eqperg) RETURNING id INTO ch_terr;
+INSERT INTO public.fpe_template_chapters (nombre, orden, activo, duracion_pct, principal_discipline_id) VALUES ('VARIOS', 180, true, 0.02, d_alba) RETURNING id INTO ch_varios;
 
 
 -- ════════════════════════════════════════════════════════════════════════════
@@ -547,6 +547,107 @@ INSERT INTO public.fpe_template_units (chapter_id, nombre, orden, activo, princi
 INSERT INTO public.fpe_template_line_items (unit_id, nombre, unidad_medida, orden, activo, discipline_id) VALUES
   (u_varios, 'Partida alzada para imprevistos y trabajos no previstos', 'pa', 10, true, d_alba);
 
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- FASES POR CAPÍTULO
+-- ════════════════════════════════════════════════════════════════════════════
+
+-- Cap 1 — DEMOLICIONES (8%)
+INSERT INTO public.fpe_template_phases (chapter_id, nombre, orden, duracion_pct, lead_time_days) VALUES
+  (ch_demo, 'Preparación y protecciones', 10, 0.20, 0),
+  (ch_demo, 'Demolición y vaciado',       20, 0.80, 0);
+
+-- Cap 2 — REFUERZOS ESTRUCTURALES (4%)
+INSERT INTO public.fpe_template_phases (chapter_id, nombre, orden, duracion_pct, lead_time_days) VALUES
+  (ch_ref, 'Proyecto técnico y permisos', 10, 0.30, 14),
+  (ch_ref, 'Ejecución',                   20, 0.70, 0);
+
+-- Cap 3 — ALBAÑILERÍA (15%)
+INSERT INTO public.fpe_template_phases (chapter_id, nombre, orden, duracion_pct, lead_time_days) VALUES
+  (ch_alba, 'Tabiquería y trasdosados', 10, 0.50, 0),
+  (ch_alba, 'Techos y foseados',        20, 0.30, 0),
+  (ch_alba, 'Soleras y remates',        30, 0.20, 0);
+
+-- Cap 4 — CARPINTERÍA METÁLICA (5%)
+INSERT INTO public.fpe_template_phases (chapter_id, nombre, orden, duracion_pct, lead_time_days) VALUES
+  (ch_cmet, 'Medidas y fabricación', 10, 0.60, 21),
+  (ch_cmet, 'Montaje',               20, 0.40, 0);
+
+-- Cap 5 — CARPINTERÍA DE MADERA (12%)
+INSERT INTO public.fpe_template_phases (chapter_id, nombre, orden, duracion_pct, lead_time_days) VALUES
+  (ch_cmadera, 'Medidas y proyecto',    10, 0.10, 0),
+  (ch_cmadera, 'Fabricación',           20, 0.60, 30),
+  (ch_cmadera, 'Montaje e instalación', 30, 0.30, 0);
+
+-- Cap 6 — FONTANERÍA Y SANEAMIENTO (6%)
+INSERT INTO public.fpe_template_phases (chapter_id, nombre, orden, duracion_pct, lead_time_days) VALUES
+  (ch_font, 'Distribución y saneamiento', 10, 0.70, 0),
+  (ch_font, 'Conexión a aparatos',        20, 0.30, 0);
+
+-- Cap 7 — GAS (2%)
+INSERT INTO public.fpe_template_phases (chapter_id, nombre, orden, duracion_pct, lead_time_days) VALUES
+  (ch_gas, 'Instalación de red',              10, 0.70, 0),
+  (ch_gas, 'Legalización y puesta en marcha', 20, 0.30, 7);
+
+-- Cap 8 — CLIMATIZACIÓN (5%)
+INSERT INTO public.fpe_template_phases (chapter_id, nombre, orden, duracion_pct, lead_time_days) VALUES
+  (ch_clima, 'Instalación de equipos',     10, 0.80, 14),
+  (ch_clima, 'Puesta en marcha y pruebas', 20, 0.20, 0);
+
+-- Cap 9 — VENTILACIÓN (3%)
+INSERT INTO public.fpe_template_phases (chapter_id, nombre, orden, duracion_pct, lead_time_days) VALUES
+  (ch_vent, 'Conductos y bocas', 10, 0.80, 0),
+  (ch_vent, 'Puesta en marcha',  20, 0.20, 0);
+
+-- Cap 10 — ELECTRICIDAD (6%)
+INSERT INTO public.fpe_template_phases (chapter_id, nombre, orden, duracion_pct, lead_time_days) VALUES
+  (ch_elec, 'Canalizaciones y cableado', 10, 0.50, 0),
+  (ch_elec, 'Conexionado y cuadro',      20, 0.40, 0),
+  (ch_elec, 'Pruebas',                   30, 0.10, 0);
+
+-- Cap 11 — TELECOMUNICACIONES (2%)
+INSERT INTO public.fpe_template_phases (chapter_id, nombre, orden, duracion_pct, lead_time_days) VALUES
+  (ch_tele, 'Cableado y cajas',        10, 0.70, 0),
+  (ch_tele, 'Configuración y pruebas', 20, 0.30, 0);
+
+-- Cap 12 — DOMÓTICA (3%)
+INSERT INTO public.fpe_template_phases (chapter_id, nombre, orden, duracion_pct, lead_time_days) VALUES
+  (ch_domo, 'Cableado',             10, 0.30, 0),
+  (ch_domo, 'Central y actuadores', 20, 0.40, 7),
+  (ch_domo, 'Programación',         30, 0.30, 0);
+
+-- Cap 13 — SONIDO (2%)
+INSERT INTO public.fpe_template_phases (chapter_id, nombre, orden, duracion_pct, lead_time_days) VALUES
+  (ch_sonido, 'Cableado y altavoces', 10, 0.50, 0),
+  (ch_sonido, 'Amplificador',         20, 0.20, 7),
+  (ch_sonido, 'Configuración',        30, 0.30, 0);
+
+-- Cap 14 — PINTURAS Y REVESTIMIENTOS (12%)
+INSERT INTO public.fpe_template_phases (chapter_id, nombre, orden, duracion_pct, lead_time_days) VALUES
+  (ch_pint, 'Preparación de superficies', 10, 0.20, 0),
+  (ch_pint, 'Aplicación de acabados',     20, 0.80, 0);
+
+-- Cap 15 — EQUIPAMIENTO (4%)
+INSERT INTO public.fpe_template_phases (chapter_id, nombre, orden, duracion_pct, lead_time_days) VALUES
+  (ch_equip, 'Acopio',                    10, 0.20, 21),
+  (ch_equip, 'Instalación y conexionado', 20, 0.80, 0);
+
+-- Cap 16 — COCINA (6%)
+INSERT INTO public.fpe_template_phases (chapter_id, nombre, orden, duracion_pct, lead_time_days) VALUES
+  (ch_coc, 'Medidas y pedido',      10, 0.10, 0),
+  (ch_coc, 'Fabricación',           20, 0.60, 45),
+  (ch_coc, 'Montaje e instalación', 30, 0.30, 0);
+
+-- Cap 17 — TERRAZA (3%)
+INSERT INTO public.fpe_template_phases (chapter_id, nombre, orden, duracion_pct, lead_time_days) VALUES
+  (ch_terr, 'Fabricación',           10, 0.60, 30),
+  (ch_terr, 'Instalación y acabado', 20, 0.40, 0);
+
+-- Cap 18 — VARIOS (2%)
+INSERT INTO public.fpe_template_phases (chapter_id, nombre, orden, duracion_pct, lead_time_days) VALUES
+  (ch_varios, 'Ejecución', 10, 1.00, 0);
+
+
 END $$;
 
 COMMIT;
@@ -554,10 +655,13 @@ COMMIT;
 -- ── Verificación ──────────────────────────────────────────────────────────────
 SELECT
   ch.nombre AS capitulo,
-  COUNT(DISTINCT u.id) AS ues,
-  COUNT(li.id)         AS partidas
+  ch.duracion_pct,
+  COUNT(DISTINCT u.id)  AS ues,
+  COUNT(DISTINCT li.id) AS partidas,
+  COUNT(DISTINCT ph.id) AS fases
 FROM public.fpe_template_chapters ch
-LEFT JOIN public.fpe_template_units u  ON u.chapter_id = ch.id
+LEFT JOIN public.fpe_template_units u    ON u.chapter_id  = ch.id
 LEFT JOIN public.fpe_template_line_items li ON li.unit_id = u.id
-GROUP BY ch.nombre, ch.orden
+LEFT JOIN public.fpe_template_phases ph  ON ph.chapter_id = ch.id
+GROUP BY ch.nombre, ch.orden, ch.duracion_pct
 ORDER BY ch.orden;

@@ -15,21 +15,21 @@ export default async function FpeTemplatePage() {
     supabase
       .from('fpe_template_chapters')
       .select(`
-        id, nombre, descripcion, orden, activo,
+        id, nombre, descripcion, orden, activo, duracion_pct, principal_discipline_id,
+        phases:fpe_template_phases (
+          id, chapter_id, nombre, descripcion, lead_time_days, duracion_pct, orden
+        ),
         units:fpe_template_units (
-          id, chapter_id, nombre, descripcion, orden, activo, duracion_pct, principal_discipline_id,
+          id, chapter_id, nombre, descripcion, orden, activo, principal_discipline_id,
           line_items:fpe_template_line_items (
             id, unit_id, nombre, descripcion, unidad_medida, orden, activo, discipline_id
-          ),
-          phases:fpe_template_phases (
-            id, unit_id, nombre, descripcion, lead_time_days, duracion_pct, orden
           )
         )
       `)
       .order('orden', { ascending: true })
+      .order('orden', { referencedTable: 'fpe_template_chapters.fpe_template_phases', ascending: true })
       .order('orden', { referencedTable: 'fpe_template_units', ascending: true })
-      .order('orden', { referencedTable: 'fpe_template_units.fpe_template_line_items', ascending: true })
-      .order('orden', { referencedTable: 'fpe_template_units.fpe_template_phases', ascending: true }),
+      .order('orden', { referencedTable: 'fpe_template_units.fpe_template_line_items', ascending: true }),
 
     supabase
       .from('fpe_template_milestones')
@@ -59,16 +59,13 @@ export default async function FpeTemplatePage() {
     }
   }
 
-  // Attach achieves/requires to each phase
+  // Attach achieves/requires to each chapter-level phase
   const chaptersWithLinks = (chapters ?? []).map(ch => ({
     ...ch,
-    units: ch.units.map(u => ({
-      ...u,
-      phases: u.phases.map(ph => ({
-        ...ph,
-        achieves: achievesMap[ph.id] ?? [],
-        requires: requiresMap[ph.id] ?? [],
-      })),
+    phases: ch.phases.map(ph => ({
+      ...ph,
+      achieves: achievesMap[ph.id] ?? [],
+      requires: requiresMap[ph.id] ?? [],
     })),
   }))
 

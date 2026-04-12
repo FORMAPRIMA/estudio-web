@@ -6,7 +6,7 @@ import { updateProject, saveProjectScope, saveProjectSchedule } from '@/app/acti
 import DocumentHub, { FpeDoc, ReadinessCheck, ScopedChapter, PartnerForDocs } from '@/components/team/fp-execution/DocumentHub'
 import TenderPanel, { type FpeTender, type FpePartnerSummary, type FpeDiscipline } from '@/components/team/fp-execution/TenderPanel'
 import ProjectDashboard from '@/components/team/fp-execution/ProjectDashboard'
-import { computeParametricSchedule, formatScheduleDate, type ScheduleUnit, type ScheduleMilestone } from '@/lib/fp-execution/schedule'
+import { computeParametricSchedule, formatScheduleDate, type ScheduleChapter, type ScheduleMilestone } from '@/lib/fp-execution/schedule'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -60,7 +60,7 @@ interface TemplateChapter {
 interface LinkedProyecto { id: string; nombre: string; codigo: string | null }
 
 // re-export for page.tsx
-export type { ScheduleUnit, ScheduleMilestone }
+export type { ScheduleChapter, ScheduleMilestone }
 
 // ── Scope state types ─────────────────────────────────────────────────────────
 
@@ -287,7 +287,7 @@ function UnitScopeRow({
 
 function ScheduleTab({
   projectId,
-  scheduleUnits,
+  scheduleChapters,
   scheduleMilestones,
   initialFechaInicio,
   initialDuracionSemanas,
@@ -296,7 +296,7 @@ function ScheduleTab({
   btnStyle,
 }: {
   projectId: string
-  scheduleUnits: ScheduleUnit[]
+  scheduleChapters: ScheduleChapter[]
   scheduleMilestones: ScheduleMilestone[]
   initialFechaInicio: string | null
   initialDuracionSemanas: number
@@ -312,11 +312,11 @@ function ScheduleTab({
   const schedule = useMemo(() => {
     if (!fechaInicio || !semanas || parseFloat(semanas) <= 0) return null
     return computeParametricSchedule(
-      scheduleUnits,
+      scheduleChapters,
       new Date(fechaInicio),
       parseFloat(semanas),
     )
-  }, [fechaInicio, semanas, scheduleUnits])
+  }, [fechaInicio, semanas, scheduleChapters])
 
   const handleSave = async () => {
     setSaving(true); setSaveMsg(null)
@@ -329,7 +329,7 @@ function ScheduleTab({
     else { setSaveMsg({ ok: true, text: 'Parámetros guardados' }); setTimeout(() => setSaveMsg(null), 3000) }
   }
 
-  const hasScope = scheduleUnits.length > 0
+  const hasScope = scheduleChapters.length > 0
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -364,7 +364,7 @@ function ScheduleTab({
       {!hasScope && (
         <div style={{ background: '#FFF7F0', border: '1px solid #FED7AA', borderRadius: 8, padding: '14px 18px' }}>
           <p style={{ margin: 0, fontSize: 13, color: '#92400E' }}>
-            Define primero el scope del proyecto y configura el <strong>% de duración</strong> en cada unidad de ejecución y sus fases (plantilla → editar unidad/fase).
+            Define primero el scope del proyecto. El cronograma se calcula con los <strong>% de duración</strong> configurados en cada capítulo y sus fases (plantilla → editar capítulo/fase).
           </p>
         </div>
       )}
@@ -386,17 +386,17 @@ function ScheduleTab({
             Las fechas son estimaciones basadas en los porcentajes configurados en la plantilla. Los execution partners ven solo la fecha de inicio de cada fase, no las duraciones.
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {scheduleUnits.map(unit => (
-              <div key={unit.id} style={{ background: '#fff', borderRadius: 8, border: '1px solid #E8E6E0', overflow: 'hidden' }}>
+            {scheduleChapters.map(chapter => (
+              <div key={chapter.id} style={{ background: '#fff', borderRadius: 8, border: '1px solid #E8E6E0', overflow: 'hidden' }}>
                 <div style={{ background: '#1A1A1A', padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>{unit.nombre}</span>
-                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)' }}>{unit.duracion_pct}% del tiempo total</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>{chapter.nombre}</span>
+                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)' }}>{chapter.duracion_pct}% del tiempo total</span>
                 </div>
-                {unit.phases.length === 0 ? (
+                {chapter.phases.length === 0 ? (
                   <p style={{ margin: 0, padding: '12px 16px', fontSize: 11, color: '#CCC' }}>Sin fases definidas en la plantilla.</p>
                 ) : (
                   <div>
-                    {[...unit.phases].sort((a, b) => a.orden - b.orden).map((ph, i) => {
+                    {[...chapter.phases].sort((a, b) => a.orden - b.orden).map((ph, i) => {
                       const entry = schedule[ph.id]
                       const achievesNames = ph.achieves.map(mid => scheduleMilestones.find(m => m.id === mid)?.nombre).filter(Boolean)
                       const requiresNames = ph.requires.map(mid => scheduleMilestones.find(m => m.id === mid)?.nombre).filter(Boolean)
@@ -451,12 +451,13 @@ export default function ProjectScopePage({
   partners,
   renderUrls,
   tourVirtualUrl,
-  scheduleUnits,
+  scheduleChapters,
   scheduleMilestones,
   initialFechaInicio,
   initialDuracionSemanas,
   disciplines,
   scopedDisciplineIds,
+  chapterSettingsMap,
 }: {
   project: Project
   chapters: TemplateChapter[]
@@ -470,12 +471,13 @@ export default function ProjectScopePage({
   partners: FpePartnerSummary[]
   renderUrls: string[]
   tourVirtualUrl: string | null
-  scheduleUnits: ScheduleUnit[]
+  scheduleChapters: ScheduleChapter[]
   scheduleMilestones: ScheduleMilestone[]
   initialFechaInicio: string | null
   initialDuracionSemanas: number
   disciplines: FpeDiscipline[]
   scopedDisciplineIds: string[]
+  chapterSettingsMap: Record<string, string | null>
 }) {
   const [project, setProject] = useState<Project>(initialProject)
   const [scope, setScope] = useState<ScopeState>(() =>
@@ -744,7 +746,7 @@ export default function ProjectScopePage({
         {activeTab === 'schedule' && (
           <ScheduleTab
             projectId={project.id}
-            scheduleUnits={scheduleUnits}
+            scheduleChapters={scheduleChapters}
             scheduleMilestones={scheduleMilestones}
             initialFechaInicio={initialFechaInicio}
             initialDuracionSemanas={initialDuracionSemanas}

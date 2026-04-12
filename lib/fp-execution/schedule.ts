@@ -3,18 +3,18 @@
 // (schedule preview panel). Returns start dates for each phase.
 //
 // Algorithm:
-//   1. Distribute unit durations proportionally within total project days.
-//   2. Distribute phase durations proportionally within their unit's days.
+//   1. Distribute chapter durations proportionally within total project days.
+//   2. Distribute phase durations proportionally within their chapter's days.
 //   3. Apply milestone constraints: if a phase "requires" milestone M,
 //      its start date = max(parametric_start, end of last phase that "achieves" M).
-//   Iterates twice to resolve cross-unit dependencies.
+//   Iterates twice to resolve cross-chapter dependencies.
 
 export interface SchedulePhase {
   id: string
-  unit_id: string
+  chapter_id: string
   nombre: string
   orden: number
-  duracion_pct: number               // % of unit's total time
+  duracion_pct: number               // % of chapter's total time
   achieves: string[]                 // milestone ids this phase achieves
   requires: string[]                 // milestone ids this phase requires
 }
@@ -25,8 +25,8 @@ export interface ScheduleMilestone {
   orden: number
 }
 
-export interface ScheduleUnit {
-  id: string                         // template_unit_id
+export interface ScheduleChapter {
+  id: string                         // template_chapter_id
   nombre: string
   orden: number
   duracion_pct: number               // % of total project time
@@ -42,37 +42,37 @@ export interface PhaseScheduleEntry {
 export type PhaseScheduleMap = Record<string, PhaseScheduleEntry> // keyed by phase.id
 
 export function computeParametricSchedule(
-  units: ScheduleUnit[],
+  chapters: ScheduleChapter[],
   fechaInicio: Date,
   duracionSemanas: number,
 ): PhaseScheduleMap {
   const result: PhaseScheduleMap = {}
-  if (duracionSemanas <= 0 || units.length === 0) return result
+  if (duracionSemanas <= 0 || chapters.length === 0) return result
 
   const totalDays = duracionSemanas * 7
-  const sorted = [...units].sort((a, b) => a.orden - b.orden)
+  const sorted = [...chapters].sort((a, b) => a.orden - b.orden)
 
   // ── Pass 1: parametric dates (ignore milestone constraints) ───────────────
 
-  let unitOffsetDays = 0
+  let chapterOffsetDays = 0
 
-  for (const unit of sorted) {
-    const unitDays = (unit.duracion_pct / 100) * totalDays
-    const unitStart = addDays(fechaInicio, unitOffsetDays)
+  for (const chapter of sorted) {
+    const chapterDays = (chapter.duracion_pct / 100) * totalDays
+    const chapterStart = addDays(fechaInicio, chapterOffsetDays)
 
-    const sortedPhases = [...unit.phases].sort((a, b) => a.orden - b.orden)
+    const sortedPhases = [...chapter.phases].sort((a, b) => a.orden - b.orden)
     let phaseOffsetDays = 0
 
     for (const phase of sortedPhases) {
-      const phaseDays = Math.max(1, (phase.duracion_pct / 100) * unitDays)
-      const start = addDays(unitStart, phaseOffsetDays)
+      const phaseDays = Math.max(1, (phase.duracion_pct / 100) * chapterDays)
+      const start = addDays(chapterStart, phaseOffsetDays)
       const end   = addDays(start, phaseDays)
 
       result[phase.id] = { startDate: start, endDate: end, durationDays: phaseDays }
       phaseOffsetDays += phaseDays
     }
 
-    unitOffsetDays += unitDays
+    chapterOffsetDays += chapterDays
   }
 
   // ── Pass 2: apply milestone constraints ───────────────────────────────────
@@ -80,8 +80,8 @@ export function computeParametricSchedule(
 
   const milestoneEndDate: Record<string, Date> = {}
 
-  for (const unit of sorted) {
-    for (const phase of unit.phases) {
+  for (const chapter of sorted) {
+    for (const phase of chapter.phases) {
       const entry = result[phase.id]
       if (!entry) continue
       for (const mid of phase.achieves) {
@@ -92,8 +92,8 @@ export function computeParametricSchedule(
   }
 
   // Push start dates forward if milestone constraint fires.
-  for (const unit of sorted) {
-    const sortedPhases = [...unit.phases].sort((a, b) => a.orden - b.orden)
+  for (const chapter of sorted) {
+    const sortedPhases = [...chapter.phases].sort((a, b) => a.orden - b.orden)
     let runningEnd: Date | null = null
 
     for (const phase of sortedPhases) {
@@ -107,7 +107,7 @@ export function computeParametricSchedule(
         if (mDate && mDate > minStart) minStart = mDate
       }
 
-      // Constraint 2: within-unit sequential (can't start before previous phase ends)
+      // Constraint 2: within-chapter sequential (can't start before previous phase ends)
       if (runningEnd && runningEnd > minStart) minStart = runningEnd
 
       if (minStart > entry.startDate) {

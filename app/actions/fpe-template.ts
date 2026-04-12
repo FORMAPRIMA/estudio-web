@@ -25,13 +25,21 @@ export async function createChapter(data: {
   nombre: string
   descripcion?: string | null
   orden?: number
+  duracion_pct?: number
+  principal_discipline_id?: string | null
 }): Promise<{ id: string } | { error: string }> {
   try {
     await requireManagerOrPartner()
     const admin = createAdminClient()
     const { data: row, error } = await admin
       .from('fpe_template_chapters')
-      .insert({ nombre: data.nombre, descripcion: data.descripcion ?? null, orden: data.orden ?? 0 })
+      .insert({
+        nombre: data.nombre,
+        descripcion: data.descripcion ?? null,
+        orden: data.orden ?? 0,
+        duracion_pct: data.duracion_pct ?? 0,
+        principal_discipline_id: data.principal_discipline_id ?? null,
+      })
       .select('id')
       .single()
     if (error) return { error: error.message }
@@ -44,7 +52,7 @@ export async function createChapter(data: {
 
 export async function updateChapter(
   id: string,
-  data: { nombre?: string; descripcion?: string | null; orden?: number; activo?: boolean }
+  data: { nombre?: string; descripcion?: string | null; orden?: number; activo?: boolean; duracion_pct?: number; principal_discipline_id?: string | null }
 ): Promise<{ success: true } | { error: string }> {
   try {
     await requireManagerOrPartner()
@@ -81,7 +89,6 @@ export async function createUnit(data: {
   nombre: string
   descripcion?: string | null
   orden?: number
-  duracion_pct?: number
   principal_discipline_id?: string | null
 }): Promise<{ id: string } | { error: string }> {
   try {
@@ -94,7 +101,6 @@ export async function createUnit(data: {
         nombre: data.nombre,
         descripcion: data.descripcion ?? null,
         orden: data.orden ?? 0,
-        duracion_pct: data.duracion_pct ?? 0,
         principal_discipline_id: data.principal_discipline_id ?? null,
       })
       .select('id')
@@ -109,7 +115,7 @@ export async function createUnit(data: {
 
 export async function updateUnit(
   id: string,
-  data: { nombre?: string; descripcion?: string | null; orden?: number; activo?: boolean; duracion_pct?: number; principal_discipline_id?: string | null }
+  data: { nombre?: string; descripcion?: string | null; orden?: number; activo?: boolean; principal_discipline_id?: string | null }
 ): Promise<{ success: true } | { error: string }> {
   try {
     await requireManagerOrPartner()
@@ -207,7 +213,7 @@ export async function deleteLineItem(id: string): Promise<{ success: true } | { 
 // ── Phases ────────────────────────────────────────────────────────────────────
 
 export async function createPhase(data: {
-  unit_id: string
+  chapter_id: string
   nombre: string
   descripcion?: string | null
   lead_time_days?: number
@@ -220,7 +226,7 @@ export async function createPhase(data: {
     const { data: row, error } = await admin
       .from('fpe_template_phases')
       .insert({
-        unit_id: data.unit_id,
+        chapter_id: data.chapter_id,
         nombre: data.nombre,
         descripcion: data.descripcion ?? null,
         lead_time_days: data.lead_time_days ?? 7,

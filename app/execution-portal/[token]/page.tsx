@@ -1,7 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { notFound } from 'next/navigation'
 import PortalPage from '@/components/fp-execution-portal/PortalPage'
-import { computeParametricSchedule } from '@/lib/fp-execution/schedule'
+import { computeParametricSchedule, type ScheduleChapter } from '@/lib/fp-execution/schedule'
 
 export default async function ExecutionPortalTokenPage({
   params,
@@ -78,8 +78,7 @@ export default async function ExecutionPortalTokenPage({
       .select(`
         id, template_unit_id, notas,
         template_unit:fpe_template_units (
-          id, nombre, descripcion, principal_discipline_id,
-          phases:fpe_template_phases ( id, nombre, descripcion, orden, lead_time_days ),
+          id, nombre, descripcion,
           line_items:fpe_template_line_items ( id, nombre, unidad_medida, orden, activo, discipline_id )
         ),
         line_items:fpe_project_line_items (
@@ -111,7 +110,7 @@ export default async function ExecutionPortalTokenPage({
           id, project_line_item_id, precio_unitario, notas
         ),
         phase_durations:fpe_bid_phase_durations (
-          id, template_phase_id, project_unit_id, duracion_dias
+          id, template_phase_id, duracion_dias
         )
       `)
       .eq('invitation_id', inv.id)
@@ -140,8 +139,6 @@ export default async function ExecutionPortalTokenPage({
       id: string
       nombre: string
       descripcion: string | null
-      principal_discipline_id: string | null
-      phases: { id: string; nombre: string; descripcion: string | null; orden: number; lead_time_days: number | null }[]
       line_items: { id: string; nombre: string; unidad_medida: string; orden: number; activo: boolean; discipline_id: string | null }[]
     }
     line_items: {
@@ -169,30 +166,61 @@ export default async function ExecutionPortalTokenPage({
     }
   })
 
-  // Units where this partner is the "principal discipline" partner
-  const isPrincipalForUnitIds: string[] = invDisciplineIds.length > 0
-    ? filteredProjectUnits
-        .filter(pu => {
-          const pdid = pu.template_unit.principal_discipline_id
-          return pdid !== null && invDisciplineIds.includes(pdid)
-        })
-        .map(pu => pu.id)
-    : filteredProjectUnits.map(pu => pu.id) // backward compat: no discipline filter → principal for all
+  // ── Chapter-level schedule + principal discipline ────────────────────────────
+  const scopedTemplateUnitIds  = filteredProjectUnits.map(pu => pu.template_unit_id)
 
-  // ── Parametric schedule for portal ──────────────────────────────────────────
-  // Fetch phases + milestone links for scoped template units only
-  const scopedTemplateUnitIds = filteredProjectUnits.map(pu => pu.template_unit_id)
-
-  const [{ data: portalPhasesRaw }, { data: portalPhaseLinks }, { data: portalScheduleUnitsRaw }, { data: portalMilestones }] =
+  // Fetch the scoped chapters (chapters that contain any scoped unit)
+  const [{ data: portalChaptersRaw }, { data: portalPhasesRaw }, { data: portalPhaseLinks }, { data: portalMilestones }, { data: portalChapterSettings }] =
     scopedTemplateUnitIds.length > 0
       ? await Promise.all([
-          admin.from('fpe_template_phases').select('id, unit_id, nombre, orden, duracion_pct').in('unit_id', scopedTemplateUnitIds).order('orden', { ascending: true }),
+          // Chapters that contain scoped units (with duracion_pct + principal_discipline_id)
+          admin
+            .from('fpe_template_chapters')
+            .select('id, nombre, orden, duracion_pct, principal_discipline_id')
+            .filter('id', 'in', `(${
+              // We need the chapter IDs. Derive them from the invitation's project units.
+              // Re-fetch units to get chapter_id.
+              (await admin.from('fpe_template_units').select('chapter_id').in('id', scopedTemplateUnitIds))
+                .data?.map(u => u.chapter_id).filter(Boolean).join(',') ?? 'null'
+            })`),
+          admin.from('fpe_template_phases').select('id, chapter_id, nombre, orden, lead_time_days, duracion_pct').order('orden', { ascending: true }),
           admin.from('fpe_template_phase_milestone_links').select('phase_id, milestone_id, link_type'),
-          admin.from('fpe_template_units').select('id, nombre, orden, duracion_pct').in('id', scopedTemplateUnitIds),
           admin.from('fpe_template_milestones').select('id, nombre, orden').order('orden', { ascending: true }),
+          // Project-level principal discipline overrides
+          admin.from('fpe_project_chapter_settings')
+            .select('chapter_id, principal_discipline_id')
+            .eq('project_id', tender.project.id),
         ])
-      : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }]
+      : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] }]
 
+  // Build chapter_id set from scoped units
+  const { data: unitChapterRows } = await admin
+    .from('fpe_template_units').select('id, chapter_id').in('id', scopedTemplateUnitIds)
+  const unitToChapterId: Record<string, string> = {}
+  for (const r of unitChapterRows ?? []) if (r.chapter_id) unitToChapterId[r.id] = r.chapter_id
+  const scopedChapterIds = Array.from(new Set(Object.values(unitToChapterId)))
+
+  // Effective principal discipline per chapter
+  // 1. Template default (from chapter.principal_discipline_id)
+  // 2. Project override (from fpe_project_chapter_settings)
+  const projectChapterSettings: Record<string, string | null> = {}
+  for (const cs of portalChapterSettings ?? []) projectChapterSettings[cs.chapter_id] = cs.principal_discipline_id
+
+  const chaptersWithPrincipal = (portalChaptersRaw ?? []).filter(ch => scopedChapterIds.includes(ch.id)).map(ch => ({
+    ...ch,
+    effective_principal: projectChapterSettings[ch.id] !== undefined
+      ? projectChapterSettings[ch.id]
+      : (ch as unknown as { principal_discipline_id: string | null }).principal_discipline_id,
+  }))
+
+  // isPrincipalForChapterIds: chapter IDs where this partner's disciplines include the effective principal
+  const isPrincipalForChapterIds: string[] = invDisciplineIds.length > 0
+    ? chaptersWithPrincipal
+        .filter(ch => ch.effective_principal && invDisciplineIds.includes(ch.effective_principal))
+        .map(ch => ch.id)
+    : chaptersWithPrincipal.map(ch => ch.id) // backward compat: no filter → principal for all
+
+  // Build phase milestone maps
   const portalAchievesMap: Record<string, string[]> = {}
   const portalRequiresMap: Record<string, string[]> = {}
   for (const link of portalPhaseLinks ?? []) {
@@ -200,20 +228,48 @@ export default async function ExecutionPortalTokenPage({
     else portalRequiresMap[link.phase_id] = [...(portalRequiresMap[link.phase_id] ?? []), link.milestone_id]
   }
 
-  const portalPhasesByUnit: Record<string, typeof portalPhasesRaw> = {}
-  for (const ph of portalPhasesRaw ?? []) portalPhasesByUnit[ph.unit_id] = [...(portalPhasesByUnit[ph.unit_id] ?? []), ph]
+  // Group phases by chapter_id (only for scoped chapters)
+  const portalPhasesByChapter: Record<string, typeof portalPhasesRaw> = {}
+  for (const ph of portalPhasesRaw ?? []) {
+    if (!ph.chapter_id || !scopedChapterIds.includes(ph.chapter_id)) continue
+    portalPhasesByChapter[ph.chapter_id] = [...(portalPhasesByChapter[ph.chapter_id] ?? []), ph]
+  }
 
-  const portalScheduleUnits = (portalScheduleUnitsRaw ?? []).map(u => ({
-    id: u.id, nombre: u.nombre, orden: u.orden, duracion_pct: u.duracion_pct ?? 0,
-    phases: (portalPhasesByUnit[u.id] ?? []).map(ph => ({
-      id: ph.id, unit_id: ph.unit_id, nombre: ph.nombre, orden: ph.orden, duracion_pct: ph.duracion_pct ?? 0,
-      achieves: portalAchievesMap[ph.id] ?? [], requires: portalRequiresMap[ph.id] ?? [],
+  // Build ScheduleChapter[] for parametric schedule
+  const portalScheduleChapters: ScheduleChapter[] = chaptersWithPrincipal.map(ch => ({
+    id:           ch.id,
+    nombre:       ch.nombre,
+    orden:        ch.orden,
+    duracion_pct: (ch as unknown as { duracion_pct: number | null }).duracion_pct ?? 0,
+    phases: (portalPhasesByChapter[ch.id] ?? []).map(ph => ({
+      id:           ph.id,
+      chapter_id:   ph.chapter_id ?? ch.id,
+      nombre:       ph.nombre,
+      orden:        ph.orden,
+      duracion_pct: ph.duracion_pct ?? 0,
+      achieves:     portalAchievesMap[ph.id] ?? [],
+      requires:     portalRequiresMap[ph.id] ?? [],
     })),
+  }))
+
+  // Portal chapters to pass down (with phases + lead_time_days for phase duration inputs)
+  const portalChaptersForUI = chaptersWithPrincipal.map(ch => ({
+    id:   ch.id,
+    nombre: ch.nombre,
+    isPrincipal: isPrincipalForChapterIds.includes(ch.id),
+    phases: (portalPhasesByChapter[ch.id] ?? [])
+      .sort((a, b) => a.orden - b.orden)
+      .map(ph => ({
+        id:             ph.id,
+        nombre:         ph.nombre,
+        orden:          ph.orden,
+        lead_time_days: ph.lead_time_days,
+      })),
   }))
 
   const { fecha_inicio_obra, duracion_obra_semanas } = tender.project
   const portalSchedule = fecha_inicio_obra && duracion_obra_semanas && duracion_obra_semanas > 0
-    ? computeParametricSchedule(portalScheduleUnits, new Date(fecha_inicio_obra), duracion_obra_semanas)
+    ? computeParametricSchedule(portalScheduleChapters, new Date(fecha_inicio_obra), duracion_obra_semanas)
     : null
 
   // Map phaseId → ISO start date string (only start date goes to portal, no durations)
@@ -254,7 +310,8 @@ export default async function ExecutionPortalTokenPage({
       renderUrls={renderUrls}
       tourVirtualUrl={tender.project.tour_virtual_url ?? null}
       phaseStartDates={phaseStartDates}
-      isPrincipalForUnitIds={isPrincipalForUnitIds}
+      isPrincipalForChapterIds={isPrincipalForChapterIds}
+      portalChapters={portalChaptersForUI}
     />
   )
 }
