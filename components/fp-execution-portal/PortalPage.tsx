@@ -599,6 +599,27 @@ function VideoFeatured({ doc, token }: { doc: PortalDoc; token: string }) {
   )
 }
 
+// ── Floorfy / Virtual Tour Embed ──────────────────────────────────────────────
+
+function FloorfyEmbed({ url }: { url: string }) {
+  return (
+    <div>
+      <p style={{ margin: '0 0 10px', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA' }}>
+        Recorrido virtual 360°
+      </p>
+      <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid #E8E6E0', background: '#111', position: 'relative', paddingTop: '56.25%' }}>
+        <iframe
+          src={url}
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none', display: 'block' }}
+          allow="xr-spatial-tracking; gyroscope; accelerometer; fullscreen"
+          allowFullScreen
+          title="Recorrido virtual 360°"
+        />
+      </div>
+    </div>
+  )
+}
+
 // ── Generic Doc Row (for non-image, non-pdf, non-video docs) ──────────────────
 
 function DocRow({ doc, token }: { doc: PortalDoc; token: string }) {
@@ -909,23 +930,8 @@ export default function PortalPage({
               </div>
             )}
 
-            {/* Virtual tour */}
-            {tourVirtualUrl && (
-              <div style={{ background: '#EBF5FF', borderRadius: 12, padding: '20px 22px', border: '1px solid #BAD7F2', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-                <div>
-                  <p style={{ margin: '0 0 3px', fontSize: 13, fontWeight: 600, color: '#1A1A1A' }}>Recorrido virtual 360°</p>
-                  <p style={{ margin: 0, fontSize: 11, color: '#4A90C0' }}>Visita virtual del proyecto renderizado</p>
-                </div>
-                <a
-                  href={tourVirtualUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ padding: '10px 20px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: 'none', cursor: 'pointer', background: '#378ADD', color: '#fff', fontFamily: 'inherit', textDecoration: 'none', flexShrink: 0 }}
-                >
-                  Abrir recorrido →
-                </a>
-              </div>
-            )}
+            {/* Virtual tour embed */}
+            {tourVirtualUrl && <FloorfyEmbed url={tourVirtualUrl} />}
           </div>
         )}
 
@@ -936,9 +942,12 @@ export default function PortalPage({
               Hemos preparado toda la documentación del proyecto para que puedas valorarlo en detalle: vídeos del estado actual, fotografías, planos y renders.
               Si necesitas algo adicional o algo no está claro, consúltanos en la sección de Preguntas.
             </TabIntro>
-            {documents.length === 0 && (
+            {documents.length === 0 && !tourVirtualUrl && (
               <p style={{ fontSize: 13, color: '#AAA', textAlign: 'center', padding: '48px 0' }}>No hay documentación disponible por el momento.</p>
             )}
+
+            {/* Virtual tour embed */}
+            {tourVirtualUrl && <FloorfyEmbed url={tourVirtualUrl} />}
 
             {/* Featured video */}
             {videoDocs.length > 0 && (
