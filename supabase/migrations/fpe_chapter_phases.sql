@@ -13,10 +13,13 @@ ALTER TABLE public.fpe_template_chapters
   ADD COLUMN IF NOT EXISTS principal_discipline_id   uuid
     REFERENCES public.fpe_disciplines(id) ON DELETE SET NULL;
 
--- ── 2. Phases: add chapter_id (nullable while we backfill) ────────────────────
+-- ── 2. Phases: add chapter_id; make unit_id nullable (phases are now chapter-level) ──
 ALTER TABLE public.fpe_template_phases
   ADD COLUMN IF NOT EXISTS chapter_id uuid
     REFERENCES public.fpe_template_chapters(id) ON DELETE CASCADE;
+
+ALTER TABLE public.fpe_template_phases
+  ALTER COLUMN unit_id DROP NOT NULL;
 
 -- ── 3. Backfill chapter_id from unit's chapter_id ────────────────────────────
 UPDATE public.fpe_template_phases
