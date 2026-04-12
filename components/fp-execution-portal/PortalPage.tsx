@@ -224,6 +224,42 @@ function MapCard({ address, height = 220 }: { address: string; height?: number }
 
 // ── Hero Section ──────────────────────────────────────────────────────────────
 
+// ── Countdown helpers ─────────────────────────────────────────────────────────
+
+function calcTimeLeft(isoDate: string) {
+  const diff = Math.max(0, new Date(isoDate).getTime() - Date.now())
+  return {
+    days:    Math.floor(diff / (1000 * 60 * 60 * 24)),
+    hours:   Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
+    minutes: Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)),
+    seconds: Math.floor((diff % (1000 * 60)) / 1000),
+    expired: diff === 0,
+  }
+}
+
+function CountdownUnit({ value, label }: { value: number; label: string }) {
+  return (
+    <div style={{ textAlign: 'center' }}>
+      <div style={{
+        width: 54, height: 54, borderRadius: 10,
+        background: 'rgba(255,255,255,0.1)',
+        backdropFilter: 'blur(8px)',
+        border: '1px solid rgba(255,255,255,0.18)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <span style={{ fontSize: 22, fontWeight: 700, color: '#fff', fontFamily: 'monospace', lineHeight: 1, letterSpacing: '-0.02em' }}>
+          {String(value).padStart(2, '0')}
+        </span>
+      </div>
+      <p style={{ margin: '5px 0 0', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)' }}>
+        {label}
+      </p>
+    </div>
+  )
+}
+
+// ── Hero Section ──────────────────────────────────────────────────────────────
+
 function HeroSection({
   renderUrls, partner, project, tender, onGoToTab, tabSectionRef,
 }: {
@@ -235,24 +271,32 @@ function HeroSection({
   tabSectionRef: React.RefObject<HTMLDivElement>
 }) {
   const [active, setActive] = useState(0)
-  const deadlinePassed = new Date(tender.fecha_limite) < new Date()
-  const greetName = partner.contacto_nombre ?? partner.nombre
+  const [timeLeft, setTimeLeft] = useState(() => calcTimeLeft(tender.fecha_limite))
 
+  // Auto-cycle renders
   useEffect(() => {
     if (renderUrls.length <= 1) return
     const t = setInterval(() => setActive(i => (i + 1) % renderUrls.length), 4500)
     return () => clearInterval(t)
   }, [renderUrls.length])
 
+  // Live countdown tick
+  useEffect(() => {
+    const t = setInterval(() => setTimeLeft(calcTimeLeft(tender.fecha_limite)), 1000)
+    return () => clearInterval(t)
+  }, [tender.fecha_limite])
+
   const goTo = (tab: ActiveTab) => {
     onGoToTab(tab)
-    setTimeout(() => {
-      tabSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }, 50)
+    setTimeout(() => tabSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
   }
 
+  const deadlineLabel = new Date(tender.fecha_limite).toLocaleDateString('es-ES', {
+    weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
+  })
+
   return (
-    <div style={{ position: 'relative', height: '100dvh', minHeight: 600, overflow: 'hidden', background: '#111' }}>
+    <div style={{ position: 'relative', height: '100dvh', minHeight: 620, overflow: 'hidden', background: '#111' }}>
       {/* Cycling background images */}
       {renderUrls.map((url, i) => (
         <div key={url} style={{ position: 'absolute', inset: 0, opacity: i === active ? 1 : 0, transition: 'opacity 1.4s ease' }}>
@@ -263,8 +307,8 @@ function HeroSection({
         <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(145deg, #1A1A1A 0%, #252525 60%, #1A1A1A 100%)' }} />
       )}
 
-      {/* Gradient overlays */}
-      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.05) 30%, rgba(0,0,0,0.05) 50%, rgba(0,0,0,0.88) 100%)' }} />
+      {/* Gradient overlay */}
+      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.05) 30%, rgba(0,0,0,0.05) 50%, rgba(0,0,0,0.9) 100%)' }} />
 
       {/* Top brand label */}
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '28px 24px' }}>
@@ -274,52 +318,65 @@ function HeroSection({
       </div>
 
       {/* Bottom content */}
-      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '0 24px 36px' }}>
+      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '0 24px 32px' }}>
+
         {/* Greeting */}
-        <p style={{ margin: '0 0 4px', fontSize: 14, color: 'rgba(255,255,255,0.55)', fontWeight: 400 }}>
+        <p style={{ margin: '0 0 4px', fontSize: 13, color: 'rgba(255,255,255,0.5)', fontWeight: 400 }}>
           Bienvenido a tu portal de licitación
         </p>
-        <h1 style={{ margin: '0 0 0', fontSize: 38, fontWeight: 700, color: '#fff', letterSpacing: '-0.025em', lineHeight: 1.05 }}>
-          Hola, {greetName}
+        <h1 style={{ margin: '0 0 0', fontSize: 36, fontWeight: 700, color: '#fff', letterSpacing: '-0.025em', lineHeight: 1.05 }}>
+          Hola, {partner.nombre}
         </h1>
 
-        {/* Orange accent line */}
-        <div style={{ width: 44, height: 3, background: '#D85A30', borderRadius: 2, margin: '16px 0' }} />
+        {/* Accent line */}
+        <div style={{ width: 44, height: 3, background: '#D85A30', borderRadius: 2, margin: '14px 0' }} />
 
-        {/* Project */}
-        <h2 style={{ margin: '0 0 4px', fontSize: 19, fontWeight: 600, color: '#fff', letterSpacing: '-0.01em', lineHeight: 1.25 }}>
+        {/* Project name + address */}
+        <h2 style={{ margin: '0 0 4px', fontSize: 18, fontWeight: 600, color: '#fff', letterSpacing: '-0.01em', lineHeight: 1.25 }}>
           {project.nombre}
         </h2>
         {(project.direccion || project.ciudad) && (
-          <p style={{ margin: '0 0 6px', fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
+          <p style={{ margin: '0 0 4px', fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>
             {[project.direccion, project.ciudad].filter(Boolean).join(', ')}
           </p>
         )}
         {tender.descripcion && (
-          <p style={{ margin: '0 0 6px', fontSize: 12, color: 'rgba(255,255,255,0.4)', lineHeight: 1.5 }}>
+          <p style={{ margin: '0 0 0', fontSize: 12, color: 'rgba(255,255,255,0.35)', lineHeight: 1.5 }}>
             {tender.descripcion}
           </p>
         )}
 
-        {/* Deadline */}
-        <div style={{ margin: '14px 0 20px' }}>
-          <span style={{
-            fontSize: 11, padding: '5px 14px', borderRadius: 20,
-            background: deadlinePassed ? 'rgba(220,38,38,0.25)' : 'rgba(216,90,48,0.25)',
-            color: deadlinePassed ? '#FCA5A5' : '#FFB891',
-            fontWeight: 600,
-            border: `1px solid ${deadlinePassed ? 'rgba(220,38,38,0.25)' : 'rgba(216,90,48,0.2)'}`,
-          }}>
-            {countdown(tender.fecha_limite)}
-          </span>
+        {/* Countdown */}
+        <div style={{ margin: '18px 0 20px' }}>
+          <p style={{ margin: '0 0 10px', fontSize: 9, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.38)' }}>
+            Fecha límite de oferta
+          </p>
+          {timeLeft.expired ? (
+            <div style={{ display: 'inline-block', padding: '10px 18px', background: 'rgba(220,38,38,0.25)', borderRadius: 10, border: '1px solid rgba(220,38,38,0.3)' }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#FCA5A5' }}>Plazo finalizado</span>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+              <CountdownUnit value={timeLeft.days}    label="días"    />
+              <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 22, fontWeight: 300, paddingTop: 12, lineHeight: 1 }}>:</span>
+              <CountdownUnit value={timeLeft.hours}   label="horas"   />
+              <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 22, fontWeight: 300, paddingTop: 12, lineHeight: 1 }}>:</span>
+              <CountdownUnit value={timeLeft.minutes} label="min"     />
+              <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 22, fontWeight: 300, paddingTop: 12, lineHeight: 1 }}>:</span>
+              <CountdownUnit value={timeLeft.seconds} label="seg"     />
+            </div>
+          )}
+          <p style={{ margin: '8px 0 0', fontSize: 10, color: 'rgba(255,255,255,0.28)', textTransform: 'capitalize' }}>
+            {deadlineLabel}
+          </p>
         </div>
 
         {/* CTAs */}
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 20 }}>
-          <button onClick={() => goTo('docs')} style={{ padding: '12px 22px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: 'none', cursor: 'pointer', background: '#D85A30', color: '#fff', fontFamily: 'inherit' }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 18 }}>
+          <button onClick={() => goTo('docs')} style={{ padding: '11px 22px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: 'none', cursor: 'pointer', background: '#D85A30', color: '#fff', fontFamily: 'inherit' }}>
             Ver documentación
           </button>
-          <button onClick={() => goTo('bid')} style={{ padding: '12px 22px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer', background: 'rgba(255,255,255,0.07)', color: '#fff', fontFamily: 'inherit' }}>
+          <button onClick={() => goTo('bid')} style={{ padding: '11px 22px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer', background: 'rgba(255,255,255,0.07)', color: '#fff', fontFamily: 'inherit' }}>
             Mi oferta
           </button>
         </div>
@@ -333,6 +390,16 @@ function HeroSection({
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// ── Tab intro text ────────────────────────────────────────────────────────────
+
+function TabIntro({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ padding: '14px 18px', background: '#F8F7F4', borderRadius: 10, border: '1px solid #E8E6E0', marginBottom: 24, borderLeft: '3px solid #D85A30' }}>
+      <p style={{ margin: 0, fontSize: 13, color: '#555', lineHeight: 1.65 }}>{children}</p>
     </div>
   )
 }
@@ -754,6 +821,11 @@ export default function PortalPage({
         {/* ───────────────────────── PROYECTO TAB ─────────────────────────── */}
         {activeTab === 'overview' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            <TabIntro>
+              Aquí tienes toda la información sobre la obra y las unidades de ejecución incluidas en tu licitación.
+              Revísalas con calma — son la base sobre la que construirás tu oferta.
+              Si algo no queda claro, puedes hacernos una consulta desde la pestaña de Preguntas.
+            </TabIntro>
 
             {/* Map */}
             {(project.direccion || project.ciudad) && (
@@ -860,6 +932,10 @@ export default function PortalPage({
         {/* ─────────────────────── DOCUMENTACIÓN TAB ──────────────────────── */}
         {activeTab === 'docs' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+            <TabIntro>
+              Hemos preparado toda la documentación del proyecto para que puedas valorarlo en detalle: vídeos del estado actual, fotografías, planos y renders.
+              Si necesitas algo adicional o algo no está claro, consúltanos en la sección de Preguntas.
+            </TabIntro>
             {documents.length === 0 && (
               <p style={{ fontSize: 13, color: '#AAA', textAlign: 'center', padding: '48px 0' }}>No hay documentación disponible por el momento.</p>
             )}
@@ -917,6 +993,11 @@ export default function PortalPage({
         {/* ──────────────────────── MI OFERTA TAB ─────────────────────────── */}
         {activeTab === 'bid' && (
           <div>
+            <TabIntro>
+              Introduce el precio unitario para cada partida — el total se calcula automáticamente.
+              Puedes guardar un borrador y volver a ajustarlo cuando quieras antes de la fecha límite.
+              Solo cuenta la versión que envíes definitivamente, así que tómate el tiempo que necesites.
+            </TabIntro>
             {submitted || isReadOnly ? (
               <div>
                 <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 10, padding: '20px 24px', marginBottom: 24 }}>
@@ -1076,17 +1157,17 @@ export default function PortalPage({
         {/* ────────────────────────── PREGUNTAS TAB ───────────────────────── */}
         {activeTab === 'qa' && (
           <div>
-            <p style={{ margin: '0 0 6px', fontSize: 14, fontWeight: 600, color: '#1A1A1A' }}>Preguntas y respuestas</p>
-            <p style={{ margin: '0 0 24px', fontSize: 13, color: '#666', lineHeight: 1.6 }}>
-              Las preguntas son visibles para todos los partners invitados a esta licitación.
-            </p>
+            <TabIntro>
+              ¿Tienes dudas sobre el alcance, los planos o cualquier aspecto de la licitación? Mándanos tu consulta y nuestro equipo te responderá
+              lo antes posible. Las respuestas son visibles para todos los participantes, así que también puedes revisar si alguien ya ha preguntado algo similar.
+            </TabIntro>
             {questions.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 28 }}>
                 {questions.map(q => (
                   <div key={q.id} style={{ background: '#fff', border: '1px solid #E8E6E0', borderRadius: 10, overflow: 'hidden' }}>
                     <div style={{ padding: '14px 16px', background: '#F8F7F4' }}>
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: '#555' }}>{q.partner_nombre}</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#555' }}>Participante</span>
                         <span style={{ fontSize: 10, color: '#BBB' }}>{new Date(q.asked_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}</span>
                       </div>
                       <p style={{ margin: 0, fontSize: 13, color: '#1A1A1A', lineHeight: 1.5 }}>{q.pregunta}</p>
