@@ -661,6 +661,7 @@ export default function PortalPage({
   initialQuestions,
   renderUrls = [],
   tourVirtualUrl = null,
+  phaseStartDates = {},
 }: {
   token: string
   partner: Partner
@@ -673,6 +674,7 @@ export default function PortalPage({
   initialQuestions: PortalQuestion[]
   renderUrls?: string[]
   tourVirtualUrl?: string | null
+  phaseStartDates?: Record<string, string>   // phaseId → ISO date string
 }) {
   // ── Tab + scroll ──────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview')
@@ -908,6 +910,32 @@ export default function PortalPage({
                           </tbody>
                         </table>
                       )}
+
+                      {/* Phase start dates */}
+                      {(() => {
+                        const phases = unit.template_unit?.phases ?? []
+                        const phasesWithDates = phases
+                          .filter(ph => phaseStartDates[ph.id])
+                          .sort((a, b) => a.orden - b.orden)
+                        if (phasesWithDates.length === 0) return null
+                        return (
+                          <div style={{ borderTop: '1px solid #F0EEE8', padding: '12px 16px', background: '#FAFAF8' }}>
+                            <p style={{ margin: '0 0 8px', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA' }}>
+                              Fechas estimadas de inicio
+                            </p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                              {phasesWithDates.map(ph => (
+                                <div key={ph.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                                  <span style={{ fontSize: 12, color: '#555' }}>{ph.nombre}</span>
+                                  <span style={{ fontSize: 11, fontWeight: 700, color: '#D85A30', fontFamily: 'monospace', flexShrink: 0 }}>
+                                    {new Date(phaseStartDates[ph.id]).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      })()}
                     </div>
                   ))}
                 </div>

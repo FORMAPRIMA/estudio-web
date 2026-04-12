@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { notFound } from 'next/navigation'
 import PortalPage from '@/components/fp-execution-portal/PortalPage'
+import { computeParametricSchedule } from '@/lib/fp-execution/schedule'
 
 export default async function ExecutionPortalTokenPage({
   params,
@@ -19,7 +20,8 @@ export default async function ExecutionPortalTokenPage({
       tender:fpe_tenders (
         id, descripcion, fecha_limite, status,
         project:fpe_projects (
-          id, nombre, descripcion, direccion, ciudad, tour_virtual_url
+          id, nombre, descripcion, direccion, ciudad, tour_virtual_url,
+          fecha_inicio_obra, duracion_obra_semanas
         )
       )
     `)
@@ -41,7 +43,7 @@ export default async function ExecutionPortalTokenPage({
   }
 
   const partner = inv.partner as unknown as { id: string; nombre: string; contacto_nombre: string | null; email_contacto: string | null }
-  const tender  = inv.tender  as unknown as { id: string; descripcion: string | null; fecha_limite: string; status: string; project: { id: string; nombre: string; descripcion: string | null; direccion: string | null; ciudad: string | null; tour_virtual_url: string | null } }
+  const tender  = inv.tender  as unknown as { id: string; descripcion: string | null; fecha_limite: string; status: string; project: { id: string; nombre: string; descripcion: string | null; direccion: string | null; ciudad: string | null; tour_virtual_url: string | null; fecha_inicio_obra: string | null; duracion_obra_semanas: number | null } }
 
   if (expired || revoked) {
     return (
@@ -126,6 +128,51 @@ export default async function ExecutionPortalTokenPage({
   const tenderClosed = tender.status === 'closed' || tender.status === 'cancelled'
   const deadlinePassed = new Date(tender.fecha_limite) < new Date()
 
+  // ── Parametric schedule for portal ──────────────────────────────────────────
+  // Fetch phases + milestone links for scoped template units only
+  const scopedTemplateUnitIds = (projectUnits ?? []).map((pu: { template_unit_id: string }) => pu.template_unit_id)
+
+  const [{ data: portalPhasesRaw }, { data: portalPhaseLinks }, { data: portalScheduleUnitsRaw }, { data: portalMilestones }] =
+    scopedTemplateUnitIds.length > 0
+      ? await Promise.all([
+          admin.from('fpe_template_phases').select('id, unit_id, nombre, orden, duracion_pct').in('unit_id', scopedTemplateUnitIds).order('orden', { ascending: true }),
+          admin.from('fpe_template_phase_milestone_links').select('phase_id, milestone_id, link_type'),
+          admin.from('fpe_template_units').select('id, nombre, orden, duracion_pct').in('id', scopedTemplateUnitIds),
+          admin.from('fpe_template_milestones').select('id, nombre, orden').order('orden', { ascending: true }),
+        ])
+      : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }]
+
+  const portalAchievesMap: Record<string, string[]> = {}
+  const portalRequiresMap: Record<string, string[]> = {}
+  for (const link of portalPhaseLinks ?? []) {
+    if (link.link_type === 'achieves') portalAchievesMap[link.phase_id] = [...(portalAchievesMap[link.phase_id] ?? []), link.milestone_id]
+    else portalRequiresMap[link.phase_id] = [...(portalRequiresMap[link.phase_id] ?? []), link.milestone_id]
+  }
+
+  const portalPhasesByUnit: Record<string, typeof portalPhasesRaw> = {}
+  for (const ph of portalPhasesRaw ?? []) portalPhasesByUnit[ph.unit_id] = [...(portalPhasesByUnit[ph.unit_id] ?? []), ph]
+
+  const portalScheduleUnits = (portalScheduleUnitsRaw ?? []).map(u => ({
+    id: u.id, nombre: u.nombre, orden: u.orden, duracion_pct: u.duracion_pct ?? 0,
+    phases: (portalPhasesByUnit[u.id] ?? []).map(ph => ({
+      id: ph.id, unit_id: ph.unit_id, nombre: ph.nombre, orden: ph.orden, duracion_pct: ph.duracion_pct ?? 0,
+      achieves: portalAchievesMap[ph.id] ?? [], requires: portalRequiresMap[ph.id] ?? [],
+    })),
+  }))
+
+  const { fecha_inicio_obra, duracion_obra_semanas } = tender.project
+  const portalSchedule = fecha_inicio_obra && duracion_obra_semanas && duracion_obra_semanas > 0
+    ? computeParametricSchedule(portalScheduleUnits, new Date(fecha_inicio_obra), duracion_obra_semanas)
+    : null
+
+  // Map phaseId → ISO start date string (only start date goes to portal, no durations)
+  const phaseStartDates: Record<string, string> = {}
+  if (portalSchedule) {
+    for (const [phId, entry] of Object.entries(portalSchedule)) {
+      phaseStartDates[phId] = entry.startDate.toISOString()
+    }
+  }
+
   // Generate signed URLs for image docs (hero renders, max 8, 4-hour TTL)
   const IMAGE_EXTS = ['jpg','jpeg','png','webp','svg','gif']
   const allDocs = documents ?? []
@@ -155,6 +202,7 @@ export default async function ExecutionPortalTokenPage({
       initialQuestions={(questions ?? []) as Parameters<typeof PortalPage>[0]['initialQuestions']}
       renderUrls={renderUrls}
       tourVirtualUrl={tender.project.tour_virtual_url ?? null}
+      phaseStartDates={phaseStartDates}
     />
   )
 }

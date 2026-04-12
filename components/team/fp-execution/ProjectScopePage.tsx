@@ -2,10 +2,11 @@
 
 import React, { useState, useMemo, useCallback } from 'react'
 import Link from 'next/link'
-import { updateProject, saveProjectScope } from '@/app/actions/fpe-projects'
+import { updateProject, saveProjectScope, saveProjectSchedule } from '@/app/actions/fpe-projects'
 import DocumentHub, { FpeDoc, ReadinessCheck, ScopedChapter, PartnerForDocs } from '@/components/team/fp-execution/DocumentHub'
 import TenderPanel, { type FpeTender, type FpePartnerSummary } from '@/components/team/fp-execution/TenderPanel'
 import ProjectDashboard from '@/components/team/fp-execution/ProjectDashboard'
+import { computeParametricSchedule, formatScheduleDate, type ScheduleUnit, type ScheduleMilestone } from '@/lib/fp-execution/schedule'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -57,6 +58,9 @@ interface TemplateChapter {
 }
 
 interface LinkedProyecto { id: string; nombre: string; codigo: string | null }
+
+// re-export for page.tsx
+export type { ScheduleUnit, ScheduleMilestone }
 
 // ── Scope state types ─────────────────────────────────────────────────────────
 
@@ -279,6 +283,159 @@ function UnitScopeRow({
   )
 }
 
+// ── Schedule Tab ──────────────────────────────────────────────────────────────
+
+function ScheduleTab({
+  projectId,
+  scheduleUnits,
+  scheduleMilestones,
+  initialFechaInicio,
+  initialDuracionSemanas,
+  labelStyle,
+  inputStyle,
+  btnStyle,
+}: {
+  projectId: string
+  scheduleUnits: ScheduleUnit[]
+  scheduleMilestones: ScheduleMilestone[]
+  initialFechaInicio: string | null
+  initialDuracionSemanas: number
+  labelStyle: React.CSSProperties
+  inputStyle: React.CSSProperties
+  btnStyle: (primary?: boolean) => React.CSSProperties
+}) {
+  const [fechaInicio, setFechaInicio] = useState(initialFechaInicio ?? '')
+  const [semanas, setSemanas] = useState(String(initialDuracionSemanas || ''))
+  const [saving, setSaving] = useState(false)
+  const [saveMsg, setSaveMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  const schedule = useMemo(() => {
+    if (!fechaInicio || !semanas || parseFloat(semanas) <= 0) return null
+    return computeParametricSchedule(
+      scheduleUnits,
+      new Date(fechaInicio),
+      parseFloat(semanas),
+    )
+  }, [fechaInicio, semanas, scheduleUnits])
+
+  const handleSave = async () => {
+    setSaving(true); setSaveMsg(null)
+    const res = await saveProjectSchedule(projectId, {
+      fecha_inicio_obra: fechaInicio || null,
+      duracion_obra_semanas: parseFloat(semanas) || 0,
+    })
+    setSaving(false)
+    if ('error' in res) setSaveMsg({ ok: false, text: res.error })
+    else { setSaveMsg({ ok: true, text: 'Parámetros guardados' }); setTimeout(() => setSaveMsg(null), 3000) }
+  }
+
+  const hasScope = scheduleUnits.length > 0
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+
+      {/* Inputs */}
+      <div style={{ background: '#fff', borderRadius: 10, border: '1px solid #E8E6E0', padding: '20px 24px' }}>
+        <p style={{ margin: '0 0 16px', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA' }}>
+          Parámetros del cronograma
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: '220px 200px', gap: 16, flexWrap: 'wrap' }}>
+          <div>
+            <label style={labelStyle}>Fecha de inicio de obra</label>
+            <input type="date" value={fechaInicio} onChange={e => setFechaInicio(e.target.value)} style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Duración estimada total</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input type="number" min={1} step={0.5} value={semanas} onChange={e => setSemanas(e.target.value)} placeholder="0" style={inputStyle} />
+              <span style={{ fontSize: 12, color: '#888', flexShrink: 0 }}>semanas</span>
+            </div>
+          </div>
+        </div>
+        <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button onClick={handleSave} disabled={saving} style={{ ...btnStyle(true), padding: '8px 18px', fontSize: 13 }}>
+            {saving ? 'Guardando…' : 'Guardar parámetros'}
+          </button>
+          {saveMsg && <span style={{ fontSize: 12, color: saveMsg.ok ? '#059669' : '#DC2626', fontWeight: 500 }}>{saveMsg.text}</span>}
+        </div>
+      </div>
+
+      {/* No scope warning */}
+      {!hasScope && (
+        <div style={{ background: '#FFF7F0', border: '1px solid #FED7AA', borderRadius: 8, padding: '14px 18px' }}>
+          <p style={{ margin: 0, fontSize: 13, color: '#92400E' }}>
+            Define primero el scope del proyecto y configura el <strong>% de duración</strong> en cada unidad de ejecución y sus fases (plantilla → editar unidad/fase).
+          </p>
+        </div>
+      )}
+
+      {/* Schedule preview */}
+      {hasScope && !schedule && (
+        <div style={{ textAlign: 'center', padding: '40px 20px', color: '#BBB', background: '#fff', borderRadius: 10, border: '1px solid #E8E6E0' }}>
+          <p style={{ fontSize: 14, fontWeight: 600, color: '#888', marginBottom: 6 }}>Introduce los parámetros</p>
+          <p style={{ fontSize: 12, margin: 0 }}>Con fecha de inicio y duración estimada, el sistema calculará las fechas de cada fase automáticamente.</p>
+        </div>
+      )}
+
+      {schedule && (
+        <div>
+          <p style={{ margin: '0 0 12px', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA' }}>
+            Preview — cronograma paramétrico
+          </p>
+          <p style={{ margin: '0 0 16px', fontSize: 11, color: '#AAA' }}>
+            Las fechas son estimaciones basadas en los porcentajes configurados en la plantilla. Los execution partners ven solo la fecha de inicio de cada fase, no las duraciones.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {scheduleUnits.map(unit => (
+              <div key={unit.id} style={{ background: '#fff', borderRadius: 8, border: '1px solid #E8E6E0', overflow: 'hidden' }}>
+                <div style={{ background: '#1A1A1A', padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>{unit.nombre}</span>
+                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)' }}>{unit.duracion_pct}% del tiempo total</span>
+                </div>
+                {unit.phases.length === 0 ? (
+                  <p style={{ margin: 0, padding: '12px 16px', fontSize: 11, color: '#CCC' }}>Sin fases definidas en la plantilla.</p>
+                ) : (
+                  <div>
+                    {[...unit.phases].sort((a, b) => a.orden - b.orden).map((ph, i) => {
+                      const entry = schedule[ph.id]
+                      const achievesNames = ph.achieves.map(mid => scheduleMilestones.find(m => m.id === mid)?.nombre).filter(Boolean)
+                      const requiresNames = ph.requires.map(mid => scheduleMilestones.find(m => m.id === mid)?.nombre).filter(Boolean)
+                      return (
+                        <div key={ph.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 16px', borderBottom: '1px solid #F0EEE8', background: i % 2 === 0 ? '#fff' : '#FAFAF8' }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <span style={{ fontSize: 12, color: '#333' }}>{ph.nombre}</span>
+                            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 3 }}>
+                              {achievesNames.map((n, j) => <span key={j} style={{ fontSize: 9, padding: '1px 5px', borderRadius: 8, background: '#D1FAE5', color: '#065F46', fontWeight: 600 }}>{n}</span>)}
+                              {requiresNames.map((n, j) => <span key={j} style={{ fontSize: 9, padding: '1px 5px', borderRadius: 8, background: '#FEE2E2', color: '#991B1B', fontWeight: 600 }}>req: {n}</span>)}
+                            </div>
+                          </div>
+                          <span style={{ fontSize: 10, color: '#CCC', flexShrink: 0 }}>{ph.duracion_pct}%</span>
+                          {entry ? (
+                            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                              <span style={{ fontSize: 11, fontWeight: 700, color: '#D85A30', fontFamily: 'monospace' }}>
+                                {formatScheduleDate(entry.startDate)}
+                              </span>
+                              <span style={{ display: 'block', fontSize: 9, color: '#BBB' }}>
+                                → {formatScheduleDate(entry.endDate)}
+                              </span>
+                            </div>
+                          ) : (
+                            <span style={{ fontSize: 10, color: '#CCC' }}>—</span>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function ProjectScopePage({
@@ -294,6 +451,10 @@ export default function ProjectScopePage({
   partners,
   renderUrls,
   tourVirtualUrl,
+  scheduleUnits,
+  scheduleMilestones,
+  initialFechaInicio,
+  initialDuracionSemanas,
 }: {
   project: Project
   chapters: TemplateChapter[]
@@ -307,6 +468,10 @@ export default function ProjectScopePage({
   partners: FpePartnerSummary[]
   renderUrls: string[]
   tourVirtualUrl: string | null
+  scheduleUnits: ScheduleUnit[]
+  scheduleMilestones: ScheduleMilestone[]
+  initialFechaInicio: string | null
+  initialDuracionSemanas: number
 }) {
   const [project, setProject] = useState<Project>(initialProject)
   const [scope, setScope] = useState<ScopeState>(() =>
@@ -315,7 +480,7 @@ export default function ProjectScopePage({
   const [saving, setSaving] = useState(false)
   const [saveMsg, setSaveMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
   const [editingProject, setEditingProject] = useState(false)
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'scope' | 'docs' | 'tender'>('dashboard')
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'scope' | 'docs' | 'tender' | 'schedule'>('dashboard')
 
   // Build a unit name lookup from template chapters
   const unitNameMap = useMemo(() => {
@@ -465,6 +630,7 @@ export default function ProjectScopePage({
             <button style={tabStyle(activeTab === 'dashboard')} onClick={() => setActiveTab('dashboard')}>Dashboard</button>
             <button style={tabStyle(activeTab === 'scope')} onClick={() => setActiveTab('scope')}>Scope</button>
             <button style={tabStyle(activeTab === 'docs')} onClick={() => setActiveTab('docs')}>Documentos</button>
+            <button style={tabStyle(activeTab === 'schedule')} onClick={() => setActiveTab('schedule')}>Cronograma</button>
             <button style={tabStyle(activeTab === 'tender')} onClick={() => setActiveTab('tender')}>Licitación</button>
           </div>
         </div>
@@ -568,6 +734,20 @@ export default function ProjectScopePage({
               </div>
             )}
           </div>
+        )}
+
+        {/* ── Schedule tab ── */}
+        {activeTab === 'schedule' && (
+          <ScheduleTab
+            projectId={project.id}
+            scheduleUnits={scheduleUnits}
+            scheduleMilestones={scheduleMilestones}
+            initialFechaInicio={initialFechaInicio}
+            initialDuracionSemanas={initialDuracionSemanas}
+            labelStyle={S.label}
+            inputStyle={S.input}
+            btnStyle={S.btn}
+          />
         )}
 
         {/* ── Docs tab ── */}

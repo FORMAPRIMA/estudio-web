@@ -5,6 +5,7 @@ import ProjectScopePage from '@/components/team/fp-execution/ProjectScopePage'
 import { computeAndSaveReadiness, ReadinessCheck } from '@/app/actions/fpe-documents'
 import type { FpeTender } from '@/components/team/fp-execution/TenderPanel'
 import type { ScopedChapter, PartnerForDocs } from '@/components/team/fp-execution/DocumentHub'
+import type { ScheduleUnit, ScheduleMilestone } from '@/lib/fp-execution/schedule'
 
 export default async function FpeProjectDetailPage({
   params,
@@ -21,13 +22,14 @@ export default async function FpeProjectDetailPage({
     { data: docs },
     { data: tender },
     { data: partners },
+    { data: milestones },
   ] = await Promise.all([
     supabase
       .from('fpe_projects')
       .select(`
         id, nombre, descripcion, direccion, ciudad,
         linked_proyecto_id, status, readiness_score, created_at,
-        tour_virtual_url,
+        tour_virtual_url, fecha_inicio_obra, duracion_obra_semanas,
         project_units:fpe_project_units (
           id, template_unit_id, notas, orden,
           line_items:fpe_project_line_items (
@@ -88,9 +90,69 @@ export default async function FpeProjectDetailPage({
       .select('id, nombre, email_contacto, telefono, capabilities:fpe_partner_capabilities(unit_id)')
       .eq('activo', true)
       .order('nombre', { ascending: true }),
+
+    // Milestones for schedule
+    supabase
+      .from('fpe_template_milestones')
+      .select('id, nombre, orden')
+      .order('orden', { ascending: true }),
   ])
 
   if (!project) notFound()
+
+  // ── Schedule data: phases + milestone links for scoped template units ────────
+  const scopedTemplateUnitIds = (project.project_units ?? []).map(pu => pu.template_unit_id)
+
+  const [{ data: schedulePhasesRaw }, { data: schedulePhaseLinks }, { data: scheduleUnitsRaw }] =
+    scopedTemplateUnitIds.length > 0
+      ? await Promise.all([
+          supabase
+            .from('fpe_template_phases')
+            .select('id, unit_id, nombre, orden, duracion_pct')
+            .in('unit_id', scopedTemplateUnitIds)
+            .order('orden', { ascending: true }),
+          supabase
+            .from('fpe_template_phase_milestone_links')
+            .select('phase_id, milestone_id, link_type'),
+          supabase
+            .from('fpe_template_units')
+            .select('id, nombre, orden, duracion_pct')
+            .in('id', scopedTemplateUnitIds),
+        ])
+      : [{ data: [] }, { data: [] }, { data: [] }]
+
+  // Build achieves/requires maps
+  const schedAchievesMap: Record<string, string[]> = {}
+  const schedRequiresMap: Record<string, string[]> = {}
+  for (const link of schedulePhaseLinks ?? []) {
+    if (link.link_type === 'achieves') {
+      schedAchievesMap[link.phase_id] = [...(schedAchievesMap[link.phase_id] ?? []), link.milestone_id]
+    } else {
+      schedRequiresMap[link.phase_id] = [...(schedRequiresMap[link.phase_id] ?? []), link.milestone_id]
+    }
+  }
+
+  // Group phases by unit
+  const phasesByUnit: Record<string, typeof schedulePhasesRaw> = {}
+  for (const ph of schedulePhasesRaw ?? []) {
+    phasesByUnit[ph.unit_id] = [...(phasesByUnit[ph.unit_id] ?? []), ph]
+  }
+
+  const scheduleUnits: ScheduleUnit[] = (scheduleUnitsRaw ?? []).map(u => ({
+    id: u.id,
+    nombre: u.nombre,
+    orden: u.orden,
+    duracion_pct: u.duracion_pct ?? 0,
+    phases: (phasesByUnit[u.id] ?? []).map(ph => ({
+      id: ph.id,
+      unit_id: ph.unit_id,
+      nombre: ph.nombre,
+      orden: ph.orden,
+      duracion_pct: ph.duracion_pct ?? 0,
+      achieves: schedAchievesMap[ph.id] ?? [],
+      requires: schedRequiresMap[ph.id] ?? [],
+    })),
+  }))
 
   // Generate signed URLs for render images (used by Dashboard hero gallery)
   // Prefer docs tagged 'render'; fall back to any image doc without unit/chapter
@@ -184,6 +246,13 @@ export default async function FpeProjectDetailPage({
     telefono:       p.telefono,
   }))
 
+  type ProjectExtended = typeof project & {
+    tour_virtual_url: string | null
+    fecha_inicio_obra: string | null
+    duracion_obra_semanas: number | null
+  }
+  const projectExt = project as unknown as ProjectExtended
+
   return (
     <ProjectScopePage
       project={{ ...project, readiness_score: readiness.score }}
@@ -197,7 +266,11 @@ export default async function FpeProjectDetailPage({
       initialTender={(tender ?? null) as unknown as FpeTender | null}
       partners={tendersPartners}
       renderUrls={renderUrls}
-      tourVirtualUrl={(project as unknown as { tour_virtual_url: string | null }).tour_virtual_url ?? null}
+      tourVirtualUrl={projectExt.tour_virtual_url ?? null}
+      scheduleUnits={scheduleUnits}
+      scheduleMilestones={(milestones ?? []) as ScheduleMilestone[]}
+      initialFechaInicio={projectExt.fecha_inicio_obra ?? null}
+      initialDuracionSemanas={projectExt.duracion_obra_semanas ?? 0}
     />
   )
 }

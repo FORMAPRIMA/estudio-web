@@ -224,6 +224,28 @@ export async function saveUnitPartners(
 
 // ── Contract a project ────────────────────────────────────────────────────────
 
+export async function saveProjectSchedule(
+  projectId: string,
+  data: { fecha_inicio_obra: string | null; duracion_obra_semanas: number }
+): Promise<{ success: true } | { error: string }> {
+  try {
+    await requireManagerOrPartner()
+    const admin = createAdminClient()
+    const { error } = await admin
+      .from('fpe_projects')
+      .update({
+        fecha_inicio_obra: data.fecha_inicio_obra || null,
+        duracion_obra_semanas: data.duracion_obra_semanas,
+      })
+      .eq('id', projectId)
+    if (error) return { error: error.message }
+    revalidatePath(`${LIST_PATH}/${projectId}`)
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
 export async function saveFpeProjectTourUrl(
   projectId: string,
   url: string | null,
