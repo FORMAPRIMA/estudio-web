@@ -14,7 +14,7 @@ export default async function ExecutionPortalTokenPage({
   const { data: inv } = await admin
     .from('fpe_tender_invitations')
     .select(`
-      id, token, token_expires_at, scope_unit_ids, status,
+      id, token, token_expires_at, scope_unit_ids, discipline_ids, status,
       sent_at, viewed_at, bid_submitted_at,
       partner:fpe_partners ( id, nombre, contacto_nombre, email_contacto ),
       tender:fpe_tenders (
@@ -78,13 +78,13 @@ export default async function ExecutionPortalTokenPage({
       .select(`
         id, template_unit_id, notas,
         template_unit:fpe_template_units (
-          id, nombre, descripcion,
+          id, nombre, descripcion, principal_discipline_id,
           phases:fpe_template_phases ( id, nombre, descripcion, orden, lead_time_days ),
-          line_items:fpe_template_line_items ( id, nombre, unidad_medida, orden, activo )
+          line_items:fpe_template_line_items ( id, nombre, unidad_medida, orden, activo, discipline_id )
         ),
         line_items:fpe_project_line_items (
           id, cantidad, notas,
-          template_line_item:fpe_template_line_items ( id, nombre, unidad_medida )
+          template_line_item:fpe_template_line_items ( id, nombre, unidad_medida, discipline_id )
         )
       `)
       .in('id', scopeUnitIds.length > 0 ? scopeUnitIds : ['00000000-0000-0000-0000-000000000000'])
@@ -128,9 +128,60 @@ export default async function ExecutionPortalTokenPage({
   const tenderClosed = tender.status === 'closed' || tender.status === 'cancelled'
   const deadlinePassed = new Date(tender.fecha_limite) < new Date()
 
+  // ── Discipline filtering ─────────────────────────────────────────────────────
+  // discipline_ids on the invitation: if non-empty, filter line items to those disciplines only
+  const invDisciplineIds: string[] = (inv.discipline_ids as string[] | null) ?? []
+
+  type RawPU = {
+    id: string
+    template_unit_id: string
+    notas: string | null
+    template_unit: {
+      id: string
+      nombre: string
+      descripcion: string | null
+      principal_discipline_id: string | null
+      phases: { id: string; nombre: string; descripcion: string | null; orden: number; lead_time_days: number | null }[]
+      line_items: { id: string; nombre: string; unidad_medida: string; orden: number; activo: boolean; discipline_id: string | null }[]
+    }
+    line_items: {
+      id: string
+      cantidad: number | null
+      notas: string | null
+      template_line_item: { id: string; nombre: string; unidad_medida: string; discipline_id: string | null }
+    }[]
+  }
+
+  const filteredProjectUnits: RawPU[] = ((projectUnits ?? []) as unknown as RawPU[]).map(pu => {
+    if (invDisciplineIds.length === 0) return pu
+    return {
+      ...pu,
+      template_unit: {
+        ...pu.template_unit,
+        line_items: pu.template_unit.line_items.filter(li =>
+          li.discipline_id === null || invDisciplineIds.includes(li.discipline_id)
+        ),
+      },
+      line_items: pu.line_items.filter(pli =>
+        pli.template_line_item.discipline_id === null ||
+        invDisciplineIds.includes(pli.template_line_item.discipline_id)
+      ),
+    }
+  })
+
+  // Units where this partner is the "principal discipline" partner
+  const isPrincipalForUnitIds: string[] = invDisciplineIds.length > 0
+    ? filteredProjectUnits
+        .filter(pu => {
+          const pdid = pu.template_unit.principal_discipline_id
+          return pdid !== null && invDisciplineIds.includes(pdid)
+        })
+        .map(pu => pu.id)
+    : filteredProjectUnits.map(pu => pu.id) // backward compat: no discipline filter → principal for all
+
   // ── Parametric schedule for portal ──────────────────────────────────────────
   // Fetch phases + milestone links for scoped template units only
-  const scopedTemplateUnitIds = (projectUnits ?? []).map((pu: { template_unit_id: string }) => pu.template_unit_id)
+  const scopedTemplateUnitIds = filteredProjectUnits.map(pu => pu.template_unit_id)
 
   const [{ data: portalPhasesRaw }, { data: portalPhaseLinks }, { data: portalScheduleUnitsRaw }, { data: portalMilestones }] =
     scopedTemplateUnitIds.length > 0
@@ -195,7 +246,7 @@ export default async function ExecutionPortalTokenPage({
       project={tender.project}
       tender={{ id: tender.id, descripcion: tender.descripcion, fecha_limite: tender.fecha_limite, status: tender.status }}
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      projectUnits={(projectUnits ?? []) as any}
+      projectUnits={filteredProjectUnits as any}
       documents={allDocs}
       existingBid={existingBid ?? null}
       isReadOnly={tenderClosed || deadlinePassed || inv.status === 'bid_submitted'}
@@ -203,6 +254,7 @@ export default async function ExecutionPortalTokenPage({
       renderUrls={renderUrls}
       tourVirtualUrl={tender.project.tour_virtual_url ?? null}
       phaseStartDates={phaseStartDates}
+      isPrincipalForUnitIds={isPrincipalForUnitIds}
     />
   )
 }

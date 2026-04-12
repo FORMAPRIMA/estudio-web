@@ -8,9 +8,19 @@ import {
   createPhase, updatePhase, deletePhase,
   createMilestone, updateMilestone, deleteMilestone,
   setPhaseMilestoneLinks,
+  createDiscipline, updateDiscipline, deleteDiscipline,
 } from '@/app/actions/fpe-template'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+
+interface Discipline {
+  id: string
+  nombre: string
+  descripcion: string | null
+  color: string
+  orden: number
+  activo: boolean
+}
 
 interface Milestone {
   id: string
@@ -27,6 +37,7 @@ interface LineItem {
   unidad_medida: string
   orden: number
   activo: boolean
+  discipline_id: string | null
 }
 
 interface Phase {
@@ -49,6 +60,7 @@ interface Unit {
   orden: number
   activo: boolean
   duracion_pct: number
+  principal_discipline_id: string | null
   line_items: LineItem[]
   phases: Phase[]
 }
@@ -180,11 +192,13 @@ function ChapterModal({
 function UnitModal({
   chapterId,
   initial,
+  disciplines,
   onClose,
   onSaved,
 }: {
   chapterId: string
   initial: Unit | null
+  disciplines: Discipline[]
   onClose: () => void
   onSaved: (u: Unit) => void
 }) {
@@ -192,6 +206,7 @@ function UnitModal({
   const [descripcion, setDescripcion] = useState(initial?.descripcion ?? '')
   const [orden, setOrden] = useState(String(initial?.orden ?? 0))
   const [duracionPct, setDuracionPct] = useState(String(initial?.duracion_pct ?? 0))
+  const [principalDiscId, setPrincipalDiscId] = useState<string>(initial?.principal_discipline_id ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -200,6 +215,7 @@ function UnitModal({
     if (!nombre.trim()) { setError('El nombre es obligatorio.'); return }
     setSaving(true); setError(null)
     const pct = parseFloat(duracionPct) || 0
+    const pdid = principalDiscId || null
 
     if (initial) {
       const res = await updateUnit(initial.id, {
@@ -207,17 +223,20 @@ function UnitModal({
         descripcion: descripcion.trim() || null,
         orden: parseInt(orden) || 0,
         duracion_pct: pct,
+        principal_discipline_id: pdid,
       })
       setSaving(false)
       if ('error' in res) { setError(res.error); return }
-      onSaved({ ...initial, nombre: nombre.trim(), descripcion: descripcion.trim() || null, orden: parseInt(orden) || 0, duracion_pct: pct })
+      onSaved({ ...initial, nombre: nombre.trim(), descripcion: descripcion.trim() || null, orden: parseInt(orden) || 0, duracion_pct: pct, principal_discipline_id: pdid })
     } else {
-      const res = await createUnit({ chapter_id: chapterId, nombre: nombre.trim(), descripcion: descripcion.trim() || null, orden: parseInt(orden) || 0, duracion_pct: pct })
+      const res = await createUnit({ chapter_id: chapterId, nombre: nombre.trim(), descripcion: descripcion.trim() || null, orden: parseInt(orden) || 0, duracion_pct: pct, principal_discipline_id: pdid })
       setSaving(false)
       if ('error' in res) { setError(res.error); return }
-      onSaved({ id: res.id, chapter_id: chapterId, nombre: nombre.trim(), descripcion: descripcion.trim() || null, orden: parseInt(orden) || 0, activo: true, duracion_pct: pct, line_items: [], phases: [] })
+      onSaved({ id: res.id, chapter_id: chapterId, nombre: nombre.trim(), descripcion: descripcion.trim() || null, orden: parseInt(orden) || 0, activo: true, duracion_pct: pct, principal_discipline_id: pdid, line_items: [], phases: [] })
     }
   }
+
+  const activeDisciplines = disciplines.filter(d => d.activo)
 
   return (
     <div style={overlay} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
@@ -236,7 +255,7 @@ function UnitModal({
               <label style={S.label}>Descripción</label>
               <textarea rows={2} value={descripcion} onChange={e => setDescripcion(e.target.value)} placeholder="Descripción opcional…" style={S.textarea} />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 90px', gap: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px', gap: 14 }}>
               <div>
                 <label style={S.label}>% del tiempo de obra</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -250,6 +269,19 @@ function UnitModal({
                 <input type="number" value={orden} onChange={e => setOrden(e.target.value)} style={S.input} />
               </div>
             </div>
+
+            {/* Principal discipline */}
+            <div>
+              <label style={S.label}>Disciplina principal</label>
+              <select value={principalDiscId} onChange={e => setPrincipalDiscId(e.target.value)} style={S.select}>
+                <option value="">— Sin asignar —</option>
+                {activeDisciplines.sort((a, b) => a.orden - b.orden).map(d => (
+                  <option key={d.id} value={d.id}>{d.nombre}</option>
+                ))}
+              </select>
+              <p style={{ margin: '3px 0 0', fontSize: 10, color: '#BBB' }}>El partner de esta disciplina propone la duración de las fases</p>
+            </div>
+
             {error && <ErrorBanner msg={error} />}
           </div>
           <div style={{ padding: '14px 24px', borderTop: '1px solid #E8E6E0', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
@@ -267,11 +299,13 @@ function UnitModal({
 function LineItemModal({
   unitId,
   initial,
+  disciplines,
   onClose,
   onSaved,
 }: {
   unitId: string
   initial: LineItem | null
+  disciplines: Discipline[]
   onClose: () => void
   onSaved: (item: LineItem) => void
 }) {
@@ -279,6 +313,7 @@ function LineItemModal({
   const [descripcion, setDescripcion] = useState(initial?.descripcion ?? '')
   const [unidad, setUnidad] = useState(initial?.unidad_medida ?? 'ud')
   const [orden, setOrden] = useState(String(initial?.orden ?? 0))
+  const [disciplineId, setDisciplineId] = useState<string>(initial?.discipline_id ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -286,6 +321,7 @@ function LineItemModal({
     e.preventDefault()
     if (!nombre.trim()) { setError('El nombre es obligatorio.'); return }
     setSaving(true); setError(null)
+    const did = disciplineId || null
 
     if (initial) {
       const res = await updateLineItem(initial.id, {
@@ -293,17 +329,20 @@ function LineItemModal({
         descripcion: descripcion.trim() || null,
         unidad_medida: unidad,
         orden: parseInt(orden) || 0,
+        discipline_id: did,
       })
       setSaving(false)
       if ('error' in res) { setError(res.error); return }
-      onSaved({ ...initial, nombre: nombre.trim(), descripcion: descripcion.trim() || null, unidad_medida: unidad, orden: parseInt(orden) || 0 })
+      onSaved({ ...initial, nombre: nombre.trim(), descripcion: descripcion.trim() || null, unidad_medida: unidad, orden: parseInt(orden) || 0, discipline_id: did })
     } else {
-      const res = await createLineItem({ unit_id: unitId, nombre: nombre.trim(), descripcion: descripcion.trim() || null, unidad_medida: unidad, orden: parseInt(orden) || 0 })
+      const res = await createLineItem({ unit_id: unitId, nombre: nombre.trim(), descripcion: descripcion.trim() || null, unidad_medida: unidad, orden: parseInt(orden) || 0, discipline_id: did })
       setSaving(false)
       if ('error' in res) { setError(res.error); return }
-      onSaved({ id: res.id, unit_id: unitId, nombre: nombre.trim(), descripcion: descripcion.trim() || null, unidad_medida: unidad, orden: parseInt(orden) || 0, activo: true })
+      onSaved({ id: res.id, unit_id: unitId, nombre: nombre.trim(), descripcion: descripcion.trim() || null, unidad_medida: unidad, orden: parseInt(orden) || 0, activo: true, discipline_id: did })
     }
   }
+
+  const activeDisciplines = disciplines.filter(d => d.activo)
 
   return (
     <div style={overlay} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
@@ -322,17 +361,26 @@ function LineItemModal({
               <label style={S.label}>Descripción</label>
               <textarea rows={2} value={descripcion} onChange={e => setDescripcion(e.target.value)} placeholder="Descripción opcional…" style={S.textarea} />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '160px 100px', gap: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px', gap: 14 }}>
+              <div>
+                <label style={S.label}>Disciplina</label>
+                <select value={disciplineId} onChange={e => setDisciplineId(e.target.value)} style={S.select}>
+                  <option value="">— Sin asignar —</option>
+                  {activeDisciplines.sort((a, b) => a.orden - b.orden).map(d => (
+                    <option key={d.id} value={d.id}>{d.nombre}</option>
+                  ))}
+                </select>
+              </div>
               <div>
                 <label style={S.label}>Unidad de medida</label>
                 <select value={unidad} onChange={e => setUnidad(e.target.value)} style={S.select}>
                   {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
                 </select>
               </div>
-              <div>
-                <label style={S.label}>Orden</label>
-                <input type="number" value={orden} onChange={e => setOrden(e.target.value)} style={S.input} />
-              </div>
+            </div>
+            <div style={{ width: 90 }}>
+              <label style={S.label}>Orden</label>
+              <input type="number" value={orden} onChange={e => setOrden(e.target.value)} style={S.input} />
             </div>
             {error && <ErrorBanner msg={error} />}
           </div>
@@ -529,10 +577,12 @@ function ConfirmDelete({ label, onConfirm, onCancel }: { label: string; onConfir
 function UnitDetail({
   unit,
   milestones,
+  disciplines,
   onUnitChanged,
 }: {
   unit: Unit
   milestones: Milestone[]
+  disciplines: Discipline[]
   onUnitChanged: (updated: Unit) => void
 }) {
   const [tab, setTab] = useState<'partidas' | 'fases'>('partidas')
@@ -540,6 +590,9 @@ function UnitDetail({
   // Line item state
   const [lineItemModal, setLineItemModal] = useState<{ mode: 'create' } | { mode: 'edit'; item: LineItem } | null>(null)
   const [deletingItem, setDeletingItem] = useState<LineItem | null>(null)
+
+  const discMap: Record<string, Discipline> = {}
+  for (const d of disciplines) discMap[d.id] = d
 
   // Phase state
   const [phaseModal, setPhaseModal] = useState<{ mode: 'create' } | { mode: 'edit'; phase: Phase } | null>(null)
@@ -618,25 +671,37 @@ function UnitDetail({
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: '#1A1A1A' }}>
-                  {['Nombre', 'Descripción', 'Unidad', ''].map(h => (
+                  {['Nombre', 'Disciplina', 'Unidad', ''].map(h => (
                     <th key={h} style={{ padding: '7px 12px', fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {[...unit.line_items].sort((a, b) => a.orden - b.orden).map((item, i) => (
-                  <tr key={item.id} style={{ background: i % 2 === 0 ? '#fff' : '#FAFAF8' }}>
-                    <td style={{ padding: '9px 12px', fontSize: 12, color: '#1A1A1A', borderBottom: '1px solid #F0EEE8' }}>{item.nombre}</td>
-                    <td style={{ padding: '9px 12px', fontSize: 12, color: '#888', borderBottom: '1px solid #F0EEE8', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.descripcion ?? '—'}</td>
-                    <td style={{ padding: '9px 12px', fontSize: 11, color: '#555', borderBottom: '1px solid #F0EEE8', whiteSpace: 'nowrap' }}>
-                      <span style={{ background: '#F0EEE8', borderRadius: 3, padding: '2px 6px', fontWeight: 600, fontFamily: 'monospace' }}>{item.unidad_medida}</span>
-                    </td>
-                    <td style={{ padding: '9px 12px', borderBottom: '1px solid #F0EEE8', whiteSpace: 'nowrap', textAlign: 'right' }}>
-                      <button onClick={() => setLineItemModal({ mode: 'edit', item })} style={{ ...S.btnSm(), marginRight: 4 }}>Editar</button>
-                      <button onClick={() => setDeletingItem(item)} style={{ ...S.btnSm('#DC2626'), color: '#fff' }}>×</button>
-                    </td>
-                  </tr>
-                ))}
+                {[...unit.line_items].sort((a, b) => a.orden - b.orden).map((item, i) => {
+                  const disc = item.discipline_id ? discMap[item.discipline_id] : null
+                  return (
+                    <tr key={item.id} style={{ background: i % 2 === 0 ? '#fff' : '#FAFAF8' }}>
+                      <td style={{ padding: '9px 12px', fontSize: 12, color: '#1A1A1A', borderBottom: '1px solid #F0EEE8' }}>
+                        {item.nombre}
+                        <span style={{ marginLeft: 6, fontSize: 9, fontFamily: 'monospace', background: '#F0EEE8', borderRadius: 3, padding: '1px 5px', color: '#888' }}>{item.unidad_medida}</span>
+                      </td>
+                      <td style={{ padding: '9px 12px', fontSize: 11, borderBottom: '1px solid #F0EEE8', whiteSpace: 'nowrap' }}>
+                        {disc ? (
+                          <span style={{ background: disc.color + '22', color: disc.color, borderRadius: 3, padding: '2px 7px', fontWeight: 600, fontSize: 10 }}>{disc.nombre}</span>
+                        ) : (
+                          <span style={{ color: '#CCC', fontSize: 10 }}>—</span>
+                        )}
+                      </td>
+                      <td style={{ padding: '9px 12px', fontSize: 11, color: '#555', borderBottom: '1px solid #F0EEE8', whiteSpace: 'nowrap' }}>
+                        <span style={{ background: '#F0EEE8', borderRadius: 3, padding: '2px 6px', fontWeight: 600, fontFamily: 'monospace' }}>{item.unidad_medida}</span>
+                      </td>
+                      <td style={{ padding: '9px 12px', borderBottom: '1px solid #F0EEE8', whiteSpace: 'nowrap', textAlign: 'right' }}>
+                        <button onClick={() => setLineItemModal({ mode: 'edit', item })} style={{ ...S.btnSm(), marginRight: 4 }}>Editar</button>
+                        <button onClick={() => setDeletingItem(item)} style={{ ...S.btnSm('#DC2626'), color: '#fff' }}>×</button>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           )}
@@ -694,6 +759,7 @@ function UnitDetail({
         <LineItemModal
           unitId={unit.id}
           initial={lineItemModal.mode === 'edit' ? lineItemModal.item : null}
+          disciplines={disciplines}
           onClose={() => setLineItemModal(null)}
           onSaved={handleItemSaved}
         />
@@ -730,11 +796,13 @@ function UnitDetail({
 function UnitRow({
   unit,
   milestones,
+  disciplines,
   onUnitChanged,
   onUnitDeleted,
 }: {
   unit: Unit
   milestones: Milestone[]
+  disciplines: Discipline[]
   onUnitChanged: (updated: Unit) => void
   onUnitDeleted: (id: string) => void
 }) {
@@ -773,7 +841,7 @@ function UnitRow({
       {/* Expanded detail */}
       {expanded && (
         <div style={{ background: '#fff' }}>
-          <UnitDetail unit={unit} milestones={milestones} onUnitChanged={onUnitChanged} />
+          <UnitDetail unit={unit} milestones={milestones} disciplines={disciplines} onUnitChanged={onUnitChanged} />
         </div>
       )}
 
@@ -781,6 +849,7 @@ function UnitRow({
         <UnitModal
           chapterId={unit.chapter_id}
           initial={unit}
+          disciplines={disciplines}
           onClose={() => setEditing(false)}
           onSaved={updated => { onUnitChanged(updated); setEditing(false) }}
         />
@@ -801,11 +870,13 @@ function UnitRow({
 function ChapterRow({
   chapter,
   milestones,
+  disciplines,
   onChapterChanged,
   onChapterDeleted,
 }: {
   chapter: Chapter
   milestones: Milestone[]
+  disciplines: Discipline[]
   onChapterChanged: (updated: Chapter) => void
   onChapterDeleted: (id: string) => void
 }) {
@@ -873,6 +944,7 @@ function ChapterRow({
                 key={unit.id}
                 unit={unit}
                 milestones={milestones}
+                disciplines={disciplines}
                 onUnitChanged={handleUnitChanged}
                 onUnitDeleted={handleUnitDeleted}
               />
@@ -900,11 +972,183 @@ function ChapterRow({
         <UnitModal
           chapterId={chapter.id}
           initial={null}
+          disciplines={disciplines}
           onClose={() => setAddingUnit(false)}
           onSaved={unit => {
             onChapterChanged({ ...chapter, units: [...chapter.units, unit] })
             setAddingUnit(false)
           }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ── Discipline Modal ──────────────────────────────────────────────────────────
+
+const DISC_COLORS = ['#378ADD', '#059669', '#D97706', '#D85A30', '#7C3AED', '#DB2777', '#374151', '#0369A1', '#92400E', '#B45309']
+
+function DisciplineModal({
+  initial,
+  onClose,
+  onSaved,
+}: {
+  initial: Discipline | null
+  onClose: () => void
+  onSaved: (d: Discipline) => void
+}) {
+  const [nombre, setNombre] = useState(initial?.nombre ?? '')
+  const [descripcion, setDescripcion] = useState(initial?.descripcion ?? '')
+  const [color, setColor] = useState(initial?.color ?? '#378ADD')
+  const [orden, setOrden] = useState(String(initial?.orden ?? 0))
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!nombre.trim()) { setError('El nombre es obligatorio.'); return }
+    setSaving(true); setError(null)
+
+    if (initial) {
+      const res = await updateDiscipline(initial.id, { nombre: nombre.trim(), descripcion: descripcion.trim() || null, color, orden: parseInt(orden) || 0 })
+      setSaving(false)
+      if ('error' in res) { setError(res.error); return }
+      onSaved({ ...initial, nombre: nombre.trim(), descripcion: descripcion.trim() || null, color, orden: parseInt(orden) || 0 })
+    } else {
+      const res = await createDiscipline({ nombre: nombre.trim(), descripcion: descripcion.trim() || null, color, orden: parseInt(orden) || 0 })
+      setSaving(false)
+      if ('error' in res) { setError(res.error); return }
+      onSaved({ id: res.id, nombre: nombre.trim(), descripcion: descripcion.trim() || null, color, orden: parseInt(orden) || 0, activo: true })
+    }
+  }
+
+  return (
+    <div style={overlay} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div style={{ ...modalCard, maxWidth: 420 }}>
+        <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #E8E6E0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#1A1A1A' }}>{initial ? 'Editar disciplina' : 'Nueva disciplina'}</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: '#CCC', lineHeight: 1 }}>×</button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div>
+              <label style={S.label}>Nombre *</label>
+              <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Ej: Instalaciones eléctricas" style={S.input} autoFocus />
+            </div>
+            <div>
+              <label style={S.label}>Descripción</label>
+              <textarea rows={2} value={descripcion} onChange={e => setDescripcion(e.target.value)} placeholder="Qué abarca esta disciplina…" style={S.textarea} />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px', gap: 14 }}>
+              <div>
+                <label style={S.label}>Color</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+                  {DISC_COLORS.map(c => (
+                    <button
+                      key={c} type="button"
+                      onClick={() => setColor(c)}
+                      style={{ width: 24, height: 24, borderRadius: '50%', background: c, border: color === c ? '3px solid #1A1A1A' : '2px solid transparent', cursor: 'pointer', flexShrink: 0 }}
+                    />
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label style={S.label}>Orden</label>
+                <input type="number" value={orden} onChange={e => setOrden(e.target.value)} style={S.input} />
+              </div>
+            </div>
+            {error && <ErrorBanner msg={error} />}
+          </div>
+          <div style={{ padding: '14px 24px', borderTop: '1px solid #E8E6E0', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button type="button" onClick={onClose} style={S.btn()}>Cancelar</button>
+            <button type="submit" disabled={saving} style={S.btn(true)}>{saving ? 'Guardando…' : 'Guardar'}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ── Disciplines Section ───────────────────────────────────────────────────────
+
+function DisciplinesSection({
+  disciplines,
+  onChange,
+}: {
+  disciplines: Discipline[]
+  onChange: (updated: Discipline[]) => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const [modal, setModal] = useState<{ mode: 'create' } | { mode: 'edit'; d: Discipline } | null>(null)
+  const [deleting, setDeleting] = useState<Discipline | null>(null)
+
+  const handleDelete = async (d: Discipline) => {
+    const res = await deleteDiscipline(d.id)
+    if ('error' in res) { alert(res.error); return }
+    onChange(disciplines.filter(x => x.id !== d.id))
+    setDeleting(null)
+  }
+
+  const sorted = [...disciplines].sort((a, b) => a.orden - b.orden)
+
+  return (
+    <div style={{ marginBottom: 16, borderRadius: 8, border: '2px solid #378ADD', overflow: 'hidden', background: '#fff' }}>
+      <div
+        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: '#EBF5FF', cursor: 'pointer' }}
+        onClick={() => setExpanded(e => !e)}
+      >
+        <span style={{ fontSize: 12, color: '#378ADD', width: 14, flexShrink: 0 }}>{expanded ? '▼' : '▶'}</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: '#1A5CA8', flex: 1, letterSpacing: '0.02em' }}>Disciplinas de ejecución</span>
+        <span style={{ fontSize: 10, color: '#1A5CA8', opacity: 0.7 }}>{disciplines.length} disciplinas configuradas</span>
+        <button
+          onClick={e => { e.stopPropagation(); setModal({ mode: 'create' }) }}
+          style={{ padding: '4px 10px', fontSize: 11, borderRadius: 4, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, background: '#378ADD', color: '#fff' }}
+        >+ Disciplina</button>
+      </div>
+
+      {expanded && (
+        <div style={{ padding: '12px 16px' }}>
+          {sorted.length === 0 ? (
+            <p style={{ margin: 0, fontSize: 12, color: '#BBB', textAlign: 'center', padding: '16px 0' }}>
+              Sin disciplinas configuradas.{' '}
+              <button style={{ background: 'none', border: 'none', color: '#378ADD', cursor: 'pointer', fontSize: 12, padding: 0 }} onClick={() => setModal({ mode: 'create' })}>Añadir la primera.</button>
+            </p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {sorted.map((d, i) => (
+                <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 6, background: i % 2 === 0 ? '#FAFAF8' : '#fff', border: '1px solid #F0EEE8' }}>
+                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: d.color, flexShrink: 0 }} />
+                  <span style={{ fontSize: 10, fontWeight: 700, color: '#AAA', width: 24, flexShrink: 0, fontFamily: 'monospace' }}>{String(d.orden).padStart(2, '0')}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: '#1A1A1A' }}>{d.nombre}</span>
+                    {d.descripcion && <span style={{ fontSize: 11, color: '#AAA', marginLeft: 8 }}>{d.descripcion}</span>}
+                  </div>
+                  {!d.activo && <span style={{ fontSize: 9, fontWeight: 700, color: '#9CA3AF', letterSpacing: '0.08em' }}>INACTIVA</span>}
+                  <button onClick={() => setModal({ mode: 'edit', d })} style={{ ...S.btnSm(), fontSize: 11 }}>Editar</button>
+                  <button onClick={() => setDeleting(d)} style={{ ...S.btnSm('#DC2626'), color: '#fff', fontSize: 11 }}>×</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {modal && (
+        <DisciplineModal
+          initial={modal.mode === 'edit' ? modal.d : null}
+          onClose={() => setModal(null)}
+          onSaved={saved => {
+            const exists = disciplines.find(x => x.id === saved.id)
+            onChange(exists ? disciplines.map(x => x.id === saved.id ? saved : x) : [...disciplines, saved])
+            setModal(null)
+          }}
+        />
+      )}
+      {deleting && (
+        <ConfirmDelete
+          label={deleting.nombre}
+          onConfirm={() => handleDelete(deleting)}
+          onCancel={() => setDeleting(null)}
         />
       )}
     </div>
@@ -1071,12 +1315,15 @@ function MilestonesSection({
 export default function TemplatePage({
   initialChapters,
   initialMilestones,
+  initialDisciplines,
 }: {
   initialChapters: Chapter[]
   initialMilestones: Milestone[]
+  initialDisciplines: Discipline[]
 }) {
   const [chapters, setChapters] = useState<Chapter[]>(initialChapters)
   const [milestones, setMilestones] = useState<Milestone[]>(initialMilestones)
+  const [disciplines, setDisciplines] = useState<Discipline[]>(initialDisciplines)
   const [addingChapter, setAddingChapter] = useState(false)
 
   const totalUnits = chapters.reduce((a, c) => a + c.units.length, 0)
@@ -1091,7 +1338,7 @@ export default function TemplatePage({
           <p style={{ margin: 0, fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', marginBottom: 4 }}>FP Execution</p>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#1A1A1A', letterSpacing: '-0.01em' }}>Template</h1>
           <p style={{ margin: '6px 0 0', fontSize: 13, color: '#888' }}>
-            {chapters.length} capítulos · {totalUnits} unidades · {totalItems} partidas · {milestones.length} hitos
+            {chapters.length} capítulos · {totalUnits} unidades · {totalItems} partidas · {milestones.length} hitos · {disciplines.length} disciplinas
           </p>
         </div>
         <button
@@ -1099,6 +1346,9 @@ export default function TemplatePage({
           style={{ ...S.btn(true), padding: '9px 18px', fontSize: 13 }}
         >+ Capítulo</button>
       </div>
+
+      {/* Disciplines section */}
+      <DisciplinesSection disciplines={disciplines} onChange={setDisciplines} />
 
       {/* Milestones section */}
       <MilestonesSection milestones={milestones} onChange={setMilestones} />
@@ -1119,6 +1369,7 @@ export default function TemplatePage({
             key={chapter.id}
             chapter={chapter}
             milestones={milestones}
+            disciplines={disciplines}
             onChapterChanged={updated => setChapters(prev => prev.map(c => c.id === updated.id ? updated : c))}
             onChapterDeleted={id => setChapters(prev => prev.filter(c => c.id !== id))}
           />

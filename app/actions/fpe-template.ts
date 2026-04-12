@@ -82,6 +82,7 @@ export async function createUnit(data: {
   descripcion?: string | null
   orden?: number
   duracion_pct?: number
+  principal_discipline_id?: string | null
 }): Promise<{ id: string } | { error: string }> {
   try {
     await requireManagerOrPartner()
@@ -94,6 +95,7 @@ export async function createUnit(data: {
         descripcion: data.descripcion ?? null,
         orden: data.orden ?? 0,
         duracion_pct: data.duracion_pct ?? 0,
+        principal_discipline_id: data.principal_discipline_id ?? null,
       })
       .select('id')
       .single()
@@ -107,7 +109,7 @@ export async function createUnit(data: {
 
 export async function updateUnit(
   id: string,
-  data: { nombre?: string; descripcion?: string | null; orden?: number; activo?: boolean; duracion_pct?: number }
+  data: { nombre?: string; descripcion?: string | null; orden?: number; activo?: boolean; duracion_pct?: number; principal_discipline_id?: string | null }
 ): Promise<{ success: true } | { error: string }> {
   try {
     await requireManagerOrPartner()
@@ -145,6 +147,7 @@ export async function createLineItem(data: {
   descripcion?: string | null
   unidad_medida?: string
   orden?: number
+  discipline_id?: string | null
 }): Promise<{ id: string } | { error: string }> {
   try {
     await requireManagerOrPartner()
@@ -157,6 +160,7 @@ export async function createLineItem(data: {
         descripcion: data.descripcion ?? null,
         unidad_medida: data.unidad_medida ?? 'ud',
         orden: data.orden ?? 0,
+        discipline_id: data.discipline_id ?? null,
       })
       .select('id')
       .single()
@@ -170,7 +174,7 @@ export async function createLineItem(data: {
 
 export async function updateLineItem(
   id: string,
-  data: { nombre?: string; descripcion?: string | null; unidad_medida?: string; orden?: number; activo?: boolean }
+  data: { nombre?: string; descripcion?: string | null; unidad_medida?: string; orden?: number; activo?: boolean; discipline_id?: string | null }
 ): Promise<{ success: true } | { error: string }> {
   try {
     await requireManagerOrPartner()
@@ -312,6 +316,62 @@ export async function deleteMilestone(id: string): Promise<{ success: true } | {
     await requireManagerOrPartner()
     const admin = createAdminClient()
     const { error } = await admin.from('fpe_template_milestones').delete().eq('id', id)
+    if (error) return { error: error.message }
+    revalidatePath(PATH)
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
+// ── Disciplines ───────────────────────────────────────────────────────────────
+
+export async function createDiscipline(data: {
+  nombre: string
+  descripcion?: string | null
+  color?: string
+  orden?: number
+}): Promise<{ id: string } | { error: string }> {
+  try {
+    await requireManagerOrPartner()
+    const admin = createAdminClient()
+    const { data: row, error } = await admin
+      .from('fpe_disciplines')
+      .insert({ nombre: data.nombre, descripcion: data.descripcion ?? null, color: data.color ?? '#378ADD', orden: data.orden ?? 0 })
+      .select('id')
+      .single()
+    if (error) return { error: error.message }
+    revalidatePath(PATH)
+    return { id: row.id }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
+export async function updateDiscipline(
+  id: string,
+  data: { nombre?: string; descripcion?: string | null; color?: string; orden?: number; activo?: boolean }
+): Promise<{ success: true } | { error: string }> {
+  try {
+    await requireManagerOrPartner()
+    const admin = createAdminClient()
+    const { error } = await admin
+      .from('fpe_disciplines')
+      .update({ ...data, updated_at: new Date().toISOString() })
+      .eq('id', id)
+    if (error) return { error: error.message }
+    revalidatePath(PATH)
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
+export async function deleteDiscipline(id: string): Promise<{ success: true } | { error: string }> {
+  try {
+    await requireManagerOrPartner()
+    const admin = createAdminClient()
+    const { error } = await admin.from('fpe_disciplines').delete().eq('id', id)
     if (error) return { error: error.message }
     revalidatePath(PATH)
     return { success: true }

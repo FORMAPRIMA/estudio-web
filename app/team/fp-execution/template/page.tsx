@@ -10,15 +10,16 @@ export default async function FpeTemplatePage() {
     { data: chapters },
     { data: milestones },
     { data: phaseLinks },
+    { data: disciplines },
   ] = await Promise.all([
     supabase
       .from('fpe_template_chapters')
       .select(`
         id, nombre, descripcion, orden, activo,
         units:fpe_template_units (
-          id, chapter_id, nombre, descripcion, orden, activo, duracion_pct,
+          id, chapter_id, nombre, descripcion, orden, activo, duracion_pct, principal_discipline_id,
           line_items:fpe_template_line_items (
-            id, unit_id, nombre, descripcion, unidad_medida, orden, activo
+            id, unit_id, nombre, descripcion, unidad_medida, orden, activo, discipline_id
           ),
           phases:fpe_template_phases (
             id, unit_id, nombre, descripcion, lead_time_days, duracion_pct, orden
@@ -39,6 +40,12 @@ export default async function FpeTemplatePage() {
     admin
       .from('fpe_template_phase_milestone_links')
       .select('phase_id, milestone_id, link_type'),
+
+    // Disciplines
+    supabase
+      .from('fpe_disciplines')
+      .select('id, nombre, descripcion, color, orden, activo')
+      .order('orden', { ascending: true }),
   ])
 
   // Build per-phase link maps
@@ -69,6 +76,7 @@ export default async function FpeTemplatePage() {
     <TemplatePage
       initialChapters={chaptersWithLinks as Parameters<typeof TemplatePage>[0]['initialChapters']}
       initialMilestones={milestones ?? []}
+      initialDisciplines={(disciplines ?? []) as Parameters<typeof TemplatePage>[0]['initialDisciplines']}
     />
   )
 }

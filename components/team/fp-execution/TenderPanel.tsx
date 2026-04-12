@@ -8,7 +8,7 @@ import {
   createInvitation,
   sendInvitation,
   revokeInvitation,
-  createAndSendAllInvitations,
+  createAndSendDisciplineInvitations,
 } from '@/app/actions/fpe-tenders'
 import BidComparison from '@/components/team/fp-execution/BidComparison'
 import QAPanel from '@/components/team/fp-execution/QAPanel'
@@ -19,11 +19,19 @@ import type { ScopedChapter } from '@/components/team/fp-execution/DocumentHub'
 export type TenderStatus     = 'draft' | 'launched' | 'closed' | 'cancelled'
 export type InvitationStatus = 'pending' | 'sent' | 'viewed' | 'bid_submitted' | 'revoked' | 'expired'
 
+export interface FpeDiscipline {
+  id: string
+  nombre: string
+  color: string
+  orden: number
+}
+
 export interface FpeInvitation {
   id: string
   token: string
   status: InvitationStatus
   scope_unit_ids: string[]
+  discipline_ids: string[]
   token_expires_at: string
   sent_at: string | null
   viewed_at: string | null
@@ -113,25 +121,17 @@ function fmtDate(iso: string) {
 
 // ── Package card (one per partner in the review view) ─────────────────────────
 
-interface PackageChapter {
-  chapter_nombre: string
-  unit_nombres:   string[]
-}
-
 interface PackageDef {
-  partner_id:     string
-  partner_nombre: string
-  email:          string | null
-  telefono:       string | null
-  chapters:       PackageChapter[]
+  partner_id:      string
+  partner_nombre:  string
+  email:           string | null
+  telefono:        string | null
+  discipline_names: { nombre: string; color: string }[]
 }
 
 function PackageCard({ pkg }: { pkg: PackageDef }) {
-  const totalUnits = pkg.chapters.reduce((s, c) => s + c.unit_nombres.length, 0)
-
   return (
     <div style={{ borderRadius: 10, border: '1px solid #E8E6E0', overflow: 'hidden', background: '#fff' }}>
-      {/* Header */}
       <div style={{ background: '#1A1A1A', padding: '14px 20px' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
           <div>
@@ -144,26 +144,15 @@ function PackageCard({ pkg }: { pkg: PackageDef }) {
             )}
           </div>
           <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 10, background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)', flexShrink: 0, marginTop: 2 }}>
-            {totalUnits} UE{totalUnits !== 1 ? 's' : ''}
+            {pkg.discipline_names.length} disciplina{pkg.discipline_names.length !== 1 ? 's' : ''}
           </span>
         </div>
       </div>
-
-      {/* Body: UEs grouped by chapter */}
-      <div style={{ padding: '12px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {pkg.chapters.map(ch => (
-          <div key={ch.chapter_nombre}>
-            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', marginBottom: 4 }}>
-              {ch.chapter_nombre}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {ch.unit_nombres.map(u => (
-                <div key={u} style={{ fontSize: 12, color: '#333', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ color: '#D85A30', fontSize: 10 }}>›</span>
-                  {u}
-                </div>
-              ))}
-            </div>
+      <div style={{ padding: '12px 20px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {pkg.discipline_names.map(d => (
+          <div key={d.nombre} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: d.color, flexShrink: 0 }} />
+            <span style={{ fontSize: 12, color: '#333' }}>{d.nombre}</span>
           </div>
         ))}
       </div>
@@ -176,7 +165,8 @@ function PackageCard({ pkg }: { pkg: PackageDef }) {
 function InviteModal({
   tenderId,
   projectId,
-  projectUnits,
+  projectUnitIds,
+  disciplines,
   partners,
   existingPartnerIds,
   onClose,
@@ -184,33 +174,33 @@ function InviteModal({
 }: {
   tenderId:            string
   projectId:           string
-  projectUnits:        TenderProjectUnit[]
+  projectUnitIds:      string[]   // all project unit IDs (for scope_unit_ids)
+  disciplines:         FpeDiscipline[]
   partners:            FpePartnerSummary[]
   existingPartnerIds:  string[]
   onClose:             () => void
   onInvited:           (inv: FpeInvitation) => void
 }) {
-  const [partnerId, setPartnerId]     = useState('')
-  const [selectedIds, setSelectedIds] = useState<string[]>(projectUnits.map(u => u.id))
-  const [expiryDays, setExpiryDays]   = useState(21)
-  const [saving, setSaving]           = useState(false)
-  const [sending, setSending]         = useState(false)
-  const [error, setError]             = useState<string | null>(null)
+  const [partnerId, setPartnerId]       = useState('')
+  const [selectedDiscIds, setSelDiscIds] = useState<string[]>(disciplines.map(d => d.id))
+  const [expiryDays, setExpiryDays]     = useState(21)
+  const [saving, setSaving]             = useState(false)
+  const [sending, setSending]           = useState(false)
+  const [error, setError]               = useState<string | null>(null)
 
   const available = partners.filter(p => !existingPartnerIds.includes(p.id))
-  const toggleUnit = (id: string) =>
-    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  const toggleDisc = (id: string) =>
+    setSelDiscIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!partnerId)            { setError('Selecciona un partner.'); return }
-    if (selectedIds.length === 0) { setError('Selecciona al menos una unidad.'); return }
+    if (!partnerId)                 { setError('Selecciona un partner.'); return }
+    if (selectedDiscIds.length === 0) { setError('Selecciona al menos una disciplina.'); return }
     setSaving(true); setError(null)
 
-    const res = await createInvitation({ tender_id: tenderId, partner_id: partnerId, scope_project_unit_ids: selectedIds, token_expires_days: expiryDays })
+    const res = await createInvitation({ tender_id: tenderId, partner_id: partnerId, scope_project_unit_ids: projectUnitIds, discipline_ids: selectedDiscIds, token_expires_days: expiryDays })
     if ('error' in res) { setSaving(false); setError(res.error); return }
 
-    // Immediately send the email
     setSending(true)
     await sendInvitation(res.id, projectId)
     setSending(false); setSaving(false)
@@ -219,7 +209,8 @@ function InviteModal({
     const expires = new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000).toISOString()
     onInvited({
       id: res.id, token: res.token, status: 'sent',
-      scope_unit_ids: selectedIds, token_expires_at: expires,
+      scope_unit_ids: projectUnitIds, discipline_ids: selectedDiscIds,
+      token_expires_at: expires,
       sent_at: new Date().toISOString(), viewed_at: null, bid_submitted_at: null,
       partner: { id: partnerId, nombre: partner.nombre, email_contacto: partner.email_contacto },
     })
@@ -250,17 +241,18 @@ function InviteModal({
             </div>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                <label style={{ ...S.label, marginBottom: 0 }}>Unidades *</label>
+                <label style={{ ...S.label, marginBottom: 0 }}>Disciplinas *</label>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <button type="button" onClick={() => setSelectedIds(projectUnits.map(u => u.id))} style={{ ...S.btn(), padding: '3px 8px', fontSize: 10 }}>Todas</button>
-                  <button type="button" onClick={() => setSelectedIds([])} style={{ ...S.btn(), padding: '3px 8px', fontSize: 10 }}>Ninguna</button>
+                  <button type="button" onClick={() => setSelDiscIds(disciplines.map(d => d.id))} style={{ ...S.btn(), padding: '3px 8px', fontSize: 10 }}>Todas</button>
+                  <button type="button" onClick={() => setSelDiscIds([])} style={{ ...S.btn(), padding: '3px 8px', fontSize: 10 }}>Ninguna</button>
                 </div>
               </div>
-              <div style={{ border: '1px solid #E8E6E0', borderRadius: 6, maxHeight: 200, overflowY: 'auto' }}>
-                {projectUnits.map((unit, i) => (
-                  <label key={unit.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', cursor: 'pointer', fontSize: 12, color: '#1A1A1A', borderBottom: i < projectUnits.length - 1 ? '1px solid #F0EEE8' : 'none', background: selectedIds.includes(unit.id) ? '#F0F7FF' : '#fff' }}>
-                    <input type="checkbox" checked={selectedIds.includes(unit.id)} onChange={() => toggleUnit(unit.id)} style={{ accentColor: '#378ADD' }} />
-                    {unit.nombre ?? unit.id.slice(0, 8)}
+              <div style={{ border: '1px solid #E8E6E0', borderRadius: 6, maxHeight: 220, overflowY: 'auto' }}>
+                {[...disciplines].sort((a, b) => a.orden - b.orden).map((disc, i) => (
+                  <label key={disc.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', cursor: 'pointer', fontSize: 12, color: '#1A1A1A', borderBottom: i < disciplines.length - 1 ? '1px solid #F0EEE8' : 'none', background: selectedDiscIds.includes(disc.id) ? '#F0F7FF' : '#fff' }}>
+                    <input type="checkbox" checked={selectedDiscIds.includes(disc.id)} onChange={() => toggleDisc(disc.id)} style={{ accentColor: disc.color }} />
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: disc.color, flexShrink: 0 }} />
+                    {disc.nombre}
                   </label>
                 ))}
               </div>
@@ -289,13 +281,13 @@ function InvitationRow({
   invitation,
   projectId,
   tenderStatus,
-  projectUnits,
+  disciplines,
   onStatusChange,
 }: {
   invitation:    FpeInvitation
   projectId:     string
   tenderStatus:  TenderStatus
-  projectUnits:  TenderProjectUnit[]
+  disciplines:   FpeDiscipline[]
   onStatusChange:(invId: string, newStatus: InvitationStatus) => void
 }) {
   const [loading, setLoading] = useState<'revoke' | null>(null)
@@ -304,8 +296,11 @@ function InvitationRow({
   const inv = invitation
   const s   = INV_STATUS_MAP[inv.status]
 
-  const unitNames = inv.scope_unit_ids
-    .map(id => projectUnits.find(u => u.id === id)?.nombre)
+  const discMap: Record<string, FpeDiscipline> = {}
+  for (const d of disciplines) discMap[d.id] = d
+
+  const discNames = (inv.discipline_ids ?? [])
+    .map(id => discMap[id]?.nombre)
     .filter(Boolean) as string[]
 
   const portalUrl = typeof window !== 'undefined'
@@ -339,9 +334,9 @@ function InvitationRow({
       </td>
       <td style={{ padding: '12px 16px', verticalAlign: 'top', maxWidth: 220 }}>
         <div style={{ fontSize: 11, color: '#555', lineHeight: 1.5 }}>
-          {unitNames.length > 0
-            ? unitNames.slice(0, 3).join(', ') + (unitNames.length > 3 ? ` +${unitNames.length - 3}` : '')
-            : `${inv.scope_unit_ids.length} ud.`}
+          {discNames.length > 0
+            ? discNames.slice(0, 2).join(', ') + (discNames.length > 2 ? ` +${discNames.length - 2}` : '')
+            : <span style={{ color: '#BBB' }}>{inv.scope_unit_ids.length} unid.</span>}
         </div>
       </td>
       <td style={{ padding: '12px 16px', verticalAlign: 'top' }}>
@@ -384,85 +379,84 @@ export default function TenderPanel({
   initialTender,
   partners,
   initialProjectStatus,
-  scopedChapters,
-  unitPartnersMap,
+  disciplines,
+  scopedDisciplineIds,
 }: {
   projectId:            string
   projectUnits:         TenderProjectUnit[]
   initialTender:        FpeTender | null
   partners:             FpePartnerSummary[]
   initialProjectStatus: string
-  scopedChapters:       ScopedChapter[]
-  unitPartnersMap:      Record<string, string[]>  // project_unit_id → partner_ids[]
+  disciplines:          FpeDiscipline[]
+  scopedDisciplineIds:  string[]     // discipline IDs that appear in this project's line items
 }) {
   const router = useRouter()
 
-  const [tender, setTender]           = useState<FpeTender | null>(initialTender)
-  const [projectStatus, setProjStatus] = useState(initialProjectStatus)
-  const [showInviteModal, setShowIM]  = useState(false)
-  const [showComparison, setShowComp] = useState(false)
-  const [showQA, setShowQA]           = useState(false)
-  const [closing, setClosing]         = useState(false)
-  const [contracting, setContracting] = useState(false)
-  const [sending, setSending]         = useState(false)
-  const [fechaLimite, setFechaLimite] = useState('')
-  const [msg, setMsg]                 = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
+  const [tender, setTender]               = useState<FpeTender | null>(initialTender)
+  const [projectStatus, setProjStatus]     = useState(initialProjectStatus)
+  const [showInviteModal, setShowIM]       = useState(false)
+  const [showComparison, setShowComp]      = useState(false)
+  const [showQA, setShowQA]               = useState(false)
+  const [closing, setClosing]             = useState(false)
+  const [contracting, setContracting]     = useState(false)
+  const [sending, setSending]             = useState(false)
+  const [fechaLimite, setFechaLimite]     = useState('')
+  const [msg, setMsg]                     = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
+  // discipline_id → partner_id
+  const [discPartnerMap, setDiscPartnerMap] = useState<Record<string, string>>({})
 
   const flash = (type: 'ok' | 'err', text: string) => {
     setMsg({ type, text })
     setTimeout(() => setMsg(null), 4000)
   }
 
-  // ── Compute packages from unit-partner assignments ────────────────────────
+  // Disciplines in this project's scope, sorted
+  const scopedDiscs = useMemo(() =>
+    [...disciplines]
+      .filter(d => scopedDisciplineIds.includes(d.id))
+      .sort((a, b) => a.orden - b.orden),
+    [disciplines, scopedDisciplineIds]
+  )
+
+  // ── Compute packages from discipline-partner assignments ──────────────────
 
   const packages: PackageDef[] = useMemo(() => {
     const partnerMap = new Map(partners.map(p => [p.id, p]))
     const pkgMap: Map<string, PackageDef> = new Map()
 
-    for (const chapter of scopedChapters) {
-      for (const unit of chapter.units) {
-        const partnerIds = unitPartnersMap[unit.project_unit_id] ?? []
-        for (const pid of partnerIds) {
-          if (!pkgMap.has(pid)) {
-            const p = partnerMap.get(pid)
-            if (!p) continue
-            pkgMap.set(pid, { partner_id: pid, partner_nombre: p.nombre, email: p.email_contacto, telefono: p.telefono, chapters: [] })
-          }
-          const pkg = pkgMap.get(pid)!
-          let chEntry = pkg.chapters.find(c => c.chapter_nombre === chapter.nombre)
-          if (!chEntry) {
-            chEntry = { chapter_nombre: chapter.nombre, unit_nombres: [] }
-            pkg.chapters.push(chEntry)
-          }
-          if (!chEntry.unit_nombres.includes(unit.nombre)) {
-            chEntry.unit_nombres.push(unit.nombre)
-          }
-        }
+    for (const [discId, pid] of Object.entries(discPartnerMap)) {
+      if (!pid) continue
+      const disc = disciplines.find(d => d.id === discId)
+      if (!disc) continue
+      if (!pkgMap.has(pid)) {
+        const p = partnerMap.get(pid)
+        if (!p) continue
+        pkgMap.set(pid, { partner_id: pid, partner_nombre: p.nombre, email: p.email_contacto, telefono: p.telefono, discipline_names: [] })
+      }
+      const pkg = pkgMap.get(pid)!
+      if (!pkg.discipline_names.find(d => d.nombre === disc.nombre)) {
+        pkg.discipline_names.push({ nombre: disc.nombre, color: disc.color })
       }
     }
 
     return Array.from(pkgMap.values()).sort((a, b) => a.partner_nombre.localeCompare(b.partner_nombre, 'es'))
-  }, [scopedChapters, unitPartnersMap, partners])
+  }, [discPartnerMap, disciplines, partners])
 
   // ── Handlers ─────────────────────────────────────────────────────────────
 
   const handleSendAll = async () => {
     if (!fechaLimite) { flash('err', 'Introduce la fecha límite de ofertas.'); return }
+    if (packages.length === 0) { flash('err', 'Asigna al menos un partner a una disciplina.'); return }
     if (!confirm(`¿Enviar ${packages.length} invitaciones de licitación? Se enviará un correo a cada execution partner.`)) return
 
     setSending(true)
-    const map: Record<string, string[]> = {}
-    for (const [unitId, pids] of Object.entries(unitPartnersMap)) {
-      map[unitId] = pids
-    }
-    const res = await createAndSendAllInvitations(projectId, fechaLimite, map)
+    const res = await createAndSendDisciplineInvitations(projectId, fechaLimite, discPartnerMap)
     setSending(false)
 
     if ('error' in res) { flash('err', res.error); return }
 
     flash('ok', `${res.sent} de ${res.total} invitaciones enviadas.`)
     setProjStatus('tender_launched')
-    // Reload to fetch fresh tender + invitation data
     router.refresh()
   }
 
@@ -519,7 +513,7 @@ export default function TenderPanel({
         <div style={{ marginBottom: 24 }}>
           <h2 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 600, color: '#1A1A1A' }}>Lanzar licitación</h2>
           <p style={{ margin: 0, fontSize: 12, color: '#888' }}>
-            Revisa los paquetes de envío y establece la fecha límite de ofertas antes de enviar.
+            Asigna un execution partner a cada disciplina del proyecto y establece la fecha límite de ofertas.
           </p>
         </div>
 
@@ -529,29 +523,59 @@ export default function TenderPanel({
           </div>
         )}
 
-        {packages.length === 0 ? (
+        {/* Discipline → partner assignment table */}
+        {scopedDiscs.length === 0 ? (
           <div style={{ background: '#fff', borderRadius: 10, border: '1px solid #E8E6E0', padding: '48px 24px', textAlign: 'center' }}>
-            <p style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 600, color: '#888' }}>Sin paquetes de envío</p>
+            <p style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 600, color: '#888' }}>Sin disciplinas en el scope</p>
             <p style={{ margin: '0 0 20px', fontSize: 12, color: '#BBB' }}>
-              Asigna execution partners a las unidades de ejecución en la pestaña Documentos antes de lanzar la licitación.
+              Asigna disciplinas a las partidas del template para poder organizar la licitación por disciplina.
             </p>
           </div>
         ) : (
           <>
-            {/* Package cards */}
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: '#1A1A1A' }}>
-                  {packages.length} paquete{packages.length !== 1 ? 's' : ''} de licitación
-                </span>
-                <span style={{ fontSize: 11, color: '#AAA' }}>— un correo por partner</span>
+            {/* Assignment table */}
+            <div style={{ background: '#fff', borderRadius: 10, border: '1px solid #E8E6E0', overflow: 'hidden', marginBottom: 20 }}>
+              <div style={{ padding: '14px 20px', borderBottom: '1px solid #E8E6E0' }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#1A1A1A' }}>Asignación por disciplina</span>
+                <span style={{ marginLeft: 8, fontSize: 12, color: '#AAA' }}>— un correo por partner</span>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
-                {packages.map(pkg => (
-                  <PackageCard key={pkg.partner_id} pkg={pkg} />
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {scopedDiscs.map((disc, i) => (
+                  <div key={disc.id} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 20px', borderBottom: i < scopedDiscs.length - 1 ? '1px solid #F0EEE8' : 'none', background: i % 2 === 0 ? '#fff' : '#FAFAF8' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 220 }}>
+                      <div style={{ width: 10, height: 10, borderRadius: '50%', background: disc.color, flexShrink: 0 }} />
+                      <span style={{ fontSize: 12, fontWeight: 600, color: '#1A1A1A' }}>{disc.nombre}</span>
+                    </div>
+                    <select
+                      value={discPartnerMap[disc.id] ?? ''}
+                      onChange={e => setDiscPartnerMap(prev => ({ ...prev, [disc.id]: e.target.value }))}
+                      style={{ ...S.input, flex: 1, maxWidth: 320 }}
+                    >
+                      <option value="">— Sin asignar —</option>
+                      {partners.map(p => (
+                        <option key={p.id} value={p.id}>{p.nombre}{p.email_contacto ? ` — ${p.email_contacto}` : ''}</option>
+                      ))}
+                    </select>
+                  </div>
                 ))}
               </div>
             </div>
+
+            {/* Package cards preview */}
+            {packages.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: '#1A1A1A' }}>
+                    {packages.length} paquete{packages.length !== 1 ? 's' : ''} de licitación
+                  </span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
+                  {packages.map(pkg => (
+                    <PackageCard key={pkg.partner_id} pkg={pkg} />
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Send controls */}
             <div style={{ background: '#fff', borderRadius: 10, border: '1px solid #E8E6E0', padding: '20px 24px', display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
@@ -567,11 +591,11 @@ export default function TenderPanel({
               </div>
               <button
                 onClick={handleSendAll}
-                disabled={sending || !fechaLimite}
+                disabled={sending || !fechaLimite || packages.length === 0}
                 style={{
                   ...S.btn(true),
                   padding: '9px 24px', fontSize: 13, flexShrink: 0,
-                  opacity: !fechaLimite ? 0.5 : 1,
+                  opacity: (!fechaLimite || packages.length === 0) ? 0.5 : 1,
                   background: '#D85A30',
                 }}
               >
@@ -660,7 +684,7 @@ export default function TenderPanel({
                   invitation={inv}
                   projectId={projectId}
                   tenderStatus={tender.status}
-                  projectUnits={projectUnits}
+                  disciplines={disciplines}
                   onStatusChange={handleInvitationStatus}
                 />
               ))}
@@ -704,7 +728,8 @@ export default function TenderPanel({
       {showInviteModal && tender && (
         <InviteModal
           tenderId={tender.id} projectId={projectId}
-          projectUnits={projectUnits} partners={partners}
+          projectUnitIds={projectUnits.map(u => u.id)}
+          disciplines={disciplines} partners={partners}
           existingPartnerIds={existingPartnerIds}
           onClose={() => setShowIM(false)}
           onInvited={inv => {

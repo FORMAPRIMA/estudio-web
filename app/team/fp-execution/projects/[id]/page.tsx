@@ -23,6 +23,7 @@ export default async function FpeProjectDetailPage({
     { data: tender },
     { data: partners },
     { data: milestones },
+    { data: disciplines },
   ] = await Promise.all([
     supabase
       .from('fpe_projects')
@@ -46,9 +47,9 @@ export default async function FpeProjectDetailPage({
       .select(`
         id, nombre, orden,
         units:fpe_template_units (
-          id, nombre, descripcion, orden, activo,
+          id, nombre, descripcion, orden, activo, principal_discipline_id,
           line_items:fpe_template_line_items (
-            id, nombre, descripcion, unidad_medida, orden, activo
+            id, nombre, descripcion, unidad_medida, orden, activo, discipline_id
           )
         )
       `)
@@ -74,7 +75,7 @@ export default async function FpeProjectDetailPage({
       .select(`
         id, descripcion, fecha_limite, status, launched_at, closed_at, created_at,
         invitations:fpe_tender_invitations (
-          id, token, status, scope_unit_ids, token_expires_at,
+          id, token, status, scope_unit_ids, discipline_ids, token_expires_at,
           sent_at, viewed_at, bid_submitted_at,
           partner:fpe_partners ( id, nombre, email_contacto )
         )
@@ -84,10 +85,10 @@ export default async function FpeProjectDetailPage({
       .limit(1)
       .maybeSingle(),
 
-    // Active partners with unit capabilities (for docs tab partner filtering)
+    // Active partners with discipline capabilities
     admin
       .from('fpe_partners')
-      .select('id, nombre, email_contacto, telefono, capabilities:fpe_partner_capabilities(unit_id)')
+      .select('id, nombre, email_contacto, telefono, partner_disciplines:fpe_partner_disciplines(discipline_id)')
       .eq('activo', true)
       .order('nombre', { ascending: true }),
 
@@ -95,6 +96,13 @@ export default async function FpeProjectDetailPage({
     supabase
       .from('fpe_template_milestones')
       .select('id, nombre, orden')
+      .order('orden', { ascending: true }),
+
+    // Disciplines master list
+    supabase
+      .from('fpe_disciplines')
+      .select('id, nombre, color, orden')
+      .eq('activo', true)
       .order('orden', { ascending: true }),
   ])
 
@@ -223,12 +231,12 @@ export default async function FpeProjectDetailPage({
     }))
     .filter(ch => ch.units.length > 0)
 
-  // Build partnersForDocs: partners with their template_unit_id capabilities
-  type PartnerRaw = { id: string; nombre: string; email_contacto: string | null; telefono: string | null; capabilities: { unit_id: string }[] }
+  // Build partnersForDocs: partners with their discipline_ids (replaces unit capabilities)
+  type PartnerRaw = { id: string; nombre: string; email_contacto: string | null; telefono: string | null; partner_disciplines: { discipline_id: string }[] }
   const partnersForDocs: PartnerForDocs[] = ((partners ?? []) as unknown as PartnerRaw[]).map(p => ({
     id:       p.id,
     nombre:   p.nombre,
-    unit_ids: (p.capabilities ?? []).map(c => c.unit_id),
+    unit_ids: (p.partner_disciplines ?? []).map(c => c.discipline_id),
   }))
 
   // Build unitPartnersMap: project_unit_id → partner_ids[]
@@ -237,6 +245,19 @@ export default async function FpeProjectDetailPage({
     if (!unitPartnersMap[row.project_unit_id]) unitPartnersMap[row.project_unit_id] = []
     unitPartnersMap[row.project_unit_id].push(row.partner_id)
   }
+
+  // Compute scopedDisciplineIds: disciplines appearing on any line item in the project scope
+  const scopedTemplateLineItemDisciplines = new Set<string>()
+  for (const ch of (chapters ?? [])) {
+    for (const u of ch.units) {
+      if (!puByTemplateUnitId[u.id]) continue
+      for (const li of u.line_items) {
+        const disc = (li as unknown as { discipline_id: string | null }).discipline_id
+        if (disc) scopedTemplateLineItemDisciplines.add(disc)
+      }
+    }
+  }
+  const scopedDisciplineIds = Array.from(scopedTemplateLineItemDisciplines)
 
   // Partners for TenderPanel (with telefono, without capabilities field)
   const tendersPartners = ((partners ?? []) as unknown as PartnerRaw[]).map(p => ({
@@ -265,6 +286,8 @@ export default async function FpeProjectDetailPage({
       initialChecks={checks}
       initialTender={(tender ?? null) as unknown as FpeTender | null}
       partners={tendersPartners}
+      disciplines={(disciplines ?? []) as { id: string; nombre: string; color: string; orden: number }[]}
+      scopedDisciplineIds={scopedDisciplineIds}
       renderUrls={renderUrls}
       tourVirtualUrl={projectExt.tour_virtual_url ?? null}
       scheduleUnits={scheduleUnits}

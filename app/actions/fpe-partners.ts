@@ -101,6 +101,36 @@ export async function deletePartner(id: string): Promise<{ success: true } | { e
   }
 }
 
+// ── Disciplines ───────────────────────────────────────────────────────────────
+// Replaces the full discipline set for a partner (delete-all + re-insert)
+
+export async function setPartnerDisciplines(
+  partner_id: string,
+  discipline_ids: string[]
+): Promise<{ success: true } | { error: string }> {
+  try {
+    await requireManagerOrPartner()
+    const admin = createAdminClient()
+
+    const { error: delErr } = await admin
+      .from('fpe_partner_disciplines')
+      .delete()
+      .eq('partner_id', partner_id)
+    if (delErr) return { error: delErr.message }
+
+    if (discipline_ids.length > 0) {
+      const rows = discipline_ids.map(discipline_id => ({ partner_id, discipline_id }))
+      const { error: insErr } = await admin.from('fpe_partner_disciplines').insert(rows)
+      if (insErr) return { error: insErr.message }
+    }
+
+    revalidatePath(PATH)
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
 // ── Capabilities ──────────────────────────────────────────────────────────────
 // Replaces the full capabilities set for a partner (delete-all + re-insert)
 

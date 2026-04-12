@@ -264,21 +264,31 @@ function DocZone({
   onDeleted: (id: string) => void
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
-  const [uploading, setUploading] = useState(false)
-  const [error, setError]         = useState<string | null>(null)
+  const [uploading, setUploading]   = useState(false)
+  const [progress, setProgress]     = useState<{ done: number; total: number } | null>(null)
+  const [error, setError]           = useState<string | null>(null)
   const accent = ZONE_ACCENT[tag] ?? ZONE_ACCENT.render
 
-  const upload = async (file: File) => {
-    setUploading(true); setError(null)
-    try {
-      const doc = await directUpload(file, projectId, { disciplineTag: tag })
-      onUploaded(doc)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error subiendo.')
-    } finally {
-      setUploading(false)
+  const uploadMany = async (files: File[]) => {
+    if (!files.length) return
+    setUploading(true); setError(null); setProgress({ done: 0, total: files.length })
+    const failed: string[] = []
+    for (let i = 0; i < files.length; i++) {
+      setProgress({ done: i, total: files.length })
+      try {
+        const doc = await directUpload(files[i], projectId, { disciplineTag: tag })
+        onUploaded(doc)
+      } catch {
+        failed.push(files[i].name)
+      }
     }
+    setUploading(false); setProgress(null)
+    if (failed.length) setError(`Error subiendo: ${failed.join(', ')}`)
   }
+
+  const uploadLabel = progress
+    ? `Subiendo ${progress.done + 1} de ${progress.total}…`
+    : 'Subiendo…'
 
   return (
     <div style={{ border: `1px solid ${accent.border}`, borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
@@ -306,7 +316,7 @@ function DocZone({
       <div style={{ padding: '8px 12px' }}>
         <div
           onDragOver={e => e.preventDefault()}
-          onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) upload(f) }}
+          onDrop={e => { e.preventDefault(); uploadMany(Array.from(e.dataTransfer.files)) }}
           onClick={() => !uploading && fileRef.current?.click()}
           style={{
             border: `1.5px dashed ${accent.border}`, borderRadius: 6, padding: '9px 14px',
@@ -314,15 +324,17 @@ function DocZone({
             display: 'flex', alignItems: 'center', gap: 8, background: accent.bg,
           }}
         >
-          <input ref={fileRef} type="file" accept={accept} style={{ display: 'none' }}
-            onChange={e => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = '' }} />
+          <input
+            ref={fileRef} type="file" accept={accept} multiple style={{ display: 'none' }}
+            onChange={e => { uploadMany(Array.from(e.target.files ?? [])); e.target.value = '' }}
+          />
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={accent.icon} strokeWidth="2.5" style={{ flexShrink: 0 }}>
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
             <polyline points="17 8 12 3 7 8"/>
             <line x1="12" y1="3" x2="12" y2="15"/>
           </svg>
           <p style={{ margin: 0, fontSize: 11, color: '#666', fontWeight: 500 }}>
-            {uploading ? 'Subiendo…' : 'Arrastra o haz clic para subir'}
+            {uploading ? uploadLabel : 'Arrastra o haz clic — múltiples archivos permitidos'}
           </p>
         </div>
         {error && (
@@ -472,25 +484,29 @@ function ChapterUploadZone({
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
+  const [progress, setProgress]   = useState<{ done: number; total: number } | null>(null)
   const [error, setError]         = useState<string | null>(null)
 
-  const upload = async (file: File) => {
-    setUploading(true); setError(null)
-    try {
-      const doc = await directUpload(file, projectId, { chapterId })
-      onUploaded(doc)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error subiendo.')
-    } finally {
-      setUploading(false)
+  const uploadMany = async (files: File[]) => {
+    if (!files.length) return
+    setUploading(true); setError(null); setProgress({ done: 0, total: files.length })
+    const failed: string[] = []
+    for (let i = 0; i < files.length; i++) {
+      setProgress({ done: i, total: files.length })
+      try {
+        const doc = await directUpload(files[i], projectId, { chapterId })
+        onUploaded(doc)
+      } catch {
+        failed.push(files[i].name)
+      }
     }
+    setUploading(false); setProgress(null)
+    if (failed.length) setError(`Error subiendo: ${failed.join(', ')}`)
   }
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    const f = e.dataTransfer.files[0]
-    if (f) upload(f)
-  }
+  const uploadLabel = progress
+    ? `Subiendo ${progress.done + 1} de ${progress.total}…`
+    : 'Subiendo…'
 
   return (
     <div>
@@ -498,8 +514,8 @@ function ChapterUploadZone({
 
       <div
         onDragOver={e => e.preventDefault()}
-        onDrop={handleDrop}
-        onClick={() => fileRef.current?.click()}
+        onDrop={e => { e.preventDefault(); uploadMany(Array.from(e.dataTransfer.files)) }}
+        onClick={() => !uploading && fileRef.current?.click()}
         style={{
           border: '1.5px dashed #D1D5DB', borderRadius: 6, padding: '14px 16px',
           cursor: uploading ? 'not-allowed' : 'pointer',
@@ -511,8 +527,9 @@ function ChapterUploadZone({
         <input
           ref={fileRef}
           type="file"
+          multiple
           style={{ display: 'none' }}
-          onChange={e => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = '' }}
+          onChange={e => { uploadMany(Array.from(e.target.files ?? [])); e.target.value = '' }}
         />
         <div style={{ flexShrink: 0, width: 28, height: 28, borderRadius: 5, background: '#E8E6E0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="2">
@@ -523,10 +540,10 @@ function ChapterUploadZone({
         </div>
         <div>
           <p style={{ margin: 0, fontSize: 12, color: '#555', fontWeight: 500 }}>
-            {uploading ? 'Subiendo…' : 'Arrastra o haz clic para subir'}
+            {uploading ? uploadLabel : 'Arrastra o haz clic — múltiples archivos permitidos'}
           </p>
           <p style={{ margin: '2px 0 0', fontSize: 10, color: '#AAA' }}>
-            Planos, renders, normativa · Máx. 50 MB
+            Planos, renders, normativa · Máx. 50 MB por archivo
           </p>
         </div>
       </div>

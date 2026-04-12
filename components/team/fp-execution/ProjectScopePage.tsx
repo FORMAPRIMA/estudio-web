@@ -4,7 +4,7 @@ import React, { useState, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import { updateProject, saveProjectScope, saveProjectSchedule } from '@/app/actions/fpe-projects'
 import DocumentHub, { FpeDoc, ReadinessCheck, ScopedChapter, PartnerForDocs } from '@/components/team/fp-execution/DocumentHub'
-import TenderPanel, { type FpeTender, type FpePartnerSummary } from '@/components/team/fp-execution/TenderPanel'
+import TenderPanel, { type FpeTender, type FpePartnerSummary, type FpeDiscipline } from '@/components/team/fp-execution/TenderPanel'
 import ProjectDashboard from '@/components/team/fp-execution/ProjectDashboard'
 import { computeParametricSchedule, formatScheduleDate, type ScheduleUnit, type ScheduleMilestone } from '@/lib/fp-execution/schedule'
 
@@ -455,6 +455,8 @@ export default function ProjectScopePage({
   scheduleMilestones,
   initialFechaInicio,
   initialDuracionSemanas,
+  disciplines,
+  scopedDisciplineIds,
 }: {
   project: Project
   chapters: TemplateChapter[]
@@ -472,6 +474,8 @@ export default function ProjectScopePage({
   scheduleMilestones: ScheduleMilestone[]
   initialFechaInicio: string | null
   initialDuracionSemanas: number
+  disciplines: FpeDiscipline[]
+  scopedDisciplineIds: string[]
 }) {
   const [project, setProject] = useState<Project>(initialProject)
   const [scope, setScope] = useState<ScopeState>(() =>
@@ -772,8 +776,8 @@ export default function ProjectScopePage({
             initialTender={initialTender}
             partners={partners}
             initialProjectStatus={project.status}
-            scopedChapters={scopedChapters}
-            unitPartnersMap={initialUnitPartners}
+            disciplines={disciplines}
+            scopedDisciplineIds={scopedDisciplineIds}
           />
         )}
       </div>

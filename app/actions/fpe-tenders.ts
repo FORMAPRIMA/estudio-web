@@ -132,6 +132,7 @@ export async function createInvitation(data: {
   tender_id:              string
   partner_id:             string
   scope_project_unit_ids: string[]  // fpe_project_units.id array
+  discipline_ids?:        string[]  // which disciplines this partner covers
   token_expires_days?:    number    // default 14
 }): Promise<{ id: string; token: string } | { error: string }> {
   try {
@@ -147,6 +148,7 @@ export async function createInvitation(data: {
         tender_id:        data.tender_id,
         partner_id:       data.partner_id,
         scope_unit_ids:   data.scope_project_unit_ids,
+        discipline_ids:   data.discipline_ids ?? [],
         token_expires_at: expires,
         status:           'pending',
       })
@@ -372,6 +374,186 @@ export async function getTenderBids(
     })
 
     return { scope, bids }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
+// ── Discipline-based bulk invite ──────────────────────────────────────────────
+// Creates one invitation per partner based on discipline assignments.
+// Each invitation carries discipline_ids (what this partner covers) and
+// scope_unit_ids = all project unit IDs (portal filters by discipline).
+
+export async function createAndSendDisciplineInvitations(
+  project_id:            string,
+  fecha_limite:          string,
+  discipline_partner_map: Record<string, string>,  // discipline_id → partner_id
+  token_expires_days = 21,
+): Promise<{ success: true; tender_id: string; sent: number; total: number } | { error: string }> {
+  try {
+    await requireManagerOrPartner()
+    const admin = createAdminClient()
+
+    // 1. Build reverse map: partner_id → discipline_ids[]
+    const partnerDisciplines: Record<string, string[]> = {}
+    for (const [discId, pid] of Object.entries(discipline_partner_map)) {
+      if (!pid) continue
+      if (!partnerDisciplines[pid]) partnerDisciplines[pid] = []
+      partnerDisciplines[pid].push(discId)
+    }
+    const uniquePartners = Object.keys(partnerDisciplines)
+    if (uniquePartners.length === 0) return { error: 'No hay execution partners asignados a ninguna disciplina.' }
+
+    // 2. Find or create tender (same logic as createAndSendAllInvitations)
+    const { data: existingTender } = await admin
+      .from('fpe_tenders')
+      .select('id, status')
+      .eq('project_id', project_id)
+      .not('status', 'in', '("cancelled")')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    let tenderId: string
+
+    if (existingTender && existingTender.status === 'launched') {
+      tenderId = existingTender.id
+    } else if (existingTender && existingTender.status === 'draft') {
+      await admin.from('fpe_tenders').update({
+        fecha_limite,
+        status:      'launched',
+        launched_at: new Date().toISOString(),
+        updated_at:  new Date().toISOString(),
+      }).eq('id', existingTender.id)
+      tenderId = existingTender.id
+    } else {
+      const { data: newTender, error: tErr } = await admin
+        .from('fpe_tenders')
+        .insert({ project_id, fecha_limite, status: 'launched', launched_at: new Date().toISOString() })
+        .select('id')
+        .single()
+      if (tErr || !newTender) return { error: tErr?.message ?? 'Error creando licitación.' }
+      tenderId = newTender.id
+    }
+
+    // 3. Fetch all project unit IDs (scope_unit_ids = all units of the project)
+    const { data: projectUnits } = await admin
+      .from('fpe_project_units')
+      .select('id')
+      .eq('project_id', project_id)
+
+    const allUnitIds = (projectUnits ?? []).map(u => u.id)
+
+    // 4. Skip already-invited partners for this tender
+    const { data: existingInvs } = await admin
+      .from('fpe_tender_invitations')
+      .select('partner_id')
+      .eq('tender_id', tenderId)
+      .not('status', 'in', '("revoked","expired")')
+
+    const alreadyInvited = new Set((existingInvs ?? []).map(i => i.partner_id))
+
+    // 5. Fetch project info for email
+    const { data: project } = await admin
+      .from('fpe_projects')
+      .select('id, nombre, ciudad, descripcion')
+      .eq('id', project_id)
+      .single()
+
+    if (!project) return { error: 'Proyecto no encontrado.' }
+
+    const deadline = new Date(fecha_limite).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })
+    const expires  = new Date(Date.now() + token_expires_days * 24 * 60 * 60 * 1000).toISOString()
+
+    // 6. Create + send one invitation per partner
+    let sent = 0
+
+    for (const partnerId of uniquePartners) {
+      if (alreadyInvited.has(partnerId)) continue
+
+      const disciplineIds = partnerDisciplines[partnerId]
+
+      const { data: inv, error: invErr } = await admin
+        .from('fpe_tender_invitations')
+        .insert({
+          tender_id:        tenderId,
+          partner_id:       partnerId,
+          scope_unit_ids:   allUnitIds,
+          discipline_ids:   disciplineIds,
+          token_expires_at: expires,
+          status:           'pending',
+        })
+        .select('id, token, token_expires_at')
+        .single()
+
+      if (invErr || !inv) continue
+
+      const { data: partner } = await admin
+        .from('fpe_partners')
+        .select('nombre, email_notificaciones, email_contacto')
+        .eq('id', partnerId)
+        .single()
+
+      if (!partner) continue
+
+      const email = partner.email_notificaciones ?? partner.email_contacto
+      if (!email) continue
+
+      const portalUrl = `${SITE_URL}/execution-portal/${inv.token}`
+
+      const body = `
+        <h2 style="font-size:20px;font-weight:300;color:#1A1A1A;margin:0 0 12px;">
+          Invitación a licitación
+        </h2>
+        <p style="font-size:13px;color:#555;margin:0 0 20px;line-height:1.7;">
+          Estimado/a <strong>${partner.nombre}</strong>,<br/><br/>
+          FORMA PRIMA le invita a presentar oferta para el proyecto:
+        </p>
+        <div style="border-left:3px solid #D85A30;padding:14px 20px;background:#F8F7F4;margin:0 0 24px;border-radius:0 4px 4px 0;">
+          <p style="margin:0 0 4px;font-size:16px;font-weight:600;color:#1A1A1A;">${project.nombre}</p>
+          ${project.ciudad ? `<p style="margin:0 0 4px;font-size:13px;color:#888;">${project.ciudad}</p>` : ''}
+        </div>
+        <p style="font-size:13px;color:#555;margin:0 0 8px;line-height:1.7;">
+          <strong>Fecha límite de oferta:</strong> ${deadline}
+        </p>
+        <p style="font-size:13px;color:#555;margin:0 0 28px;line-height:1.7;">
+          A través del siguiente enlace puede consultar el scope del proyecto, descargar la documentación disponible y enviar su oferta económica.
+        </p>
+        <table cellpadding="0" cellspacing="0" style="margin:0 0 28px;">
+          <tr>
+            <td style="background:#1A1A1A;border-radius:5px;padding:12px 28px;">
+              <a href="${portalUrl}" style="color:#ffffff;font-size:13px;font-weight:600;text-decoration:none;display:block;">
+                Acceder al portal de licitación →
+              </a>
+            </td>
+          </tr>
+        </table>
+        <p style="font-size:11px;color:#AAAAAA;margin:0;line-height:1.6;">
+          Este enlace es personal e intransferible y caduca el ${new Date(inv.token_expires_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}.
+          Si tiene alguna pregunta, puede contactarnos en
+          <a href="mailto:contacto@formaprima.es" style="color:#D85A30;">contacto@formaprima.es</a>
+        </p>
+      `
+
+      const emailRes = await sendEmail({
+        to:      email,
+        subject: `Invitación a licitación — ${project.nombre}`,
+        html:    wrapEmail(body),
+      })
+
+      const newStatus = emailRes.error ? 'pending' : 'sent'
+      await admin
+        .from('fpe_tender_invitations')
+        .update({ status: newStatus, ...(newStatus === 'sent' ? { sent_at: new Date().toISOString() } : {}) })
+        .eq('id', inv.id)
+
+      if (!emailRes.error) sent++
+    }
+
+    await admin.from('fpe_projects').update({ status: 'tender_launched' }).eq('id', project_id)
+
+    revalidatePath(`${LIST_PATH}/${project_id}`)
+    return { success: true, tender_id: tenderId, sent, total: uniquePartners.length }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
   }

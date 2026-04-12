@@ -1,12 +1,19 @@
 -- ══════════════════════════════════════════════════════════════════════════════
--- FPE Partners — Datos de prueba
--- 16 execution partners de distintas disciplinas (varios por disciplina)
+-- FPE Partners — Seed v2 (discipline-based)
+-- 19 execution partners distribuidos en las 9 disciplinas del sistema.
 -- Todos comparten email jlorag@hotmail.com y tel +34 697880068
 --
 -- INSTRUCCIONES: ejecutar en Supabase Dashboard → SQL Editor
 -- ══════════════════════════════════════════════════════════════════════════════
 
 BEGIN;
+
+-- ── 0. Limpiar datos anteriores ───────────────────────────────────────────────
+-- La FK de fpe_partner_disciplines y fpe_partner_capabilities tiene ON DELETE CASCADE,
+-- así que borrar los partners limpia todo en cascada.
+
+DELETE FROM public.fpe_partners WHERE email_contacto = 'jlorag@hotmail.com';
+
 
 -- ── 1. Insertar partners ───────────────────────────────────────────────────────
 
@@ -16,233 +23,295 @@ INSERT INTO public.fpe_partners (
   telefono, ciudad, notas, activo
 ) VALUES
 
-  -- ── Demolición / Albañilería ─────────────────────────────────────────────
+  -- ── Demolición y gestión de residuos ────────────────────────────────────────
   (
-    'Derribos y Reformas Pérez',
-    'Derribos y Reformas Pérez SL', 'B12345678',
-    'Manuel Pérez Gómez', 'jlorag@hotmail.com', 'jlorag@hotmail.com',
+    'Derribos Vega',
+    'Derribos y Gestión de Residuos Vega SL', 'B11100001',
+    'Óscar Vega Lorente', 'jlorag@hotmail.com', 'jlorag@hotmail.com',
     '+34 697880068', 'Madrid',
-    'Especialistas en demolición selectiva, tabiquería de ladrillo y bloque, trasdosados y techos de pladur. 15 años de experiencia en obra de interiorismo de alta gama.',
+    'Especialistas en demolición selectiva, vaciado de interiores y gestión de residuos (REPs). Maquinaria propia. Tramitación de licencias de derribo incluida.',
     true
   ),
   (
-    'Construcciones Álvarez e Hijos',
-    'Construcciones Álvarez e Hijos SL', 'B23456789',
-    'Carlos Álvarez Martín', 'jlorag@hotmail.com', 'jlorag@hotmail.com',
+    'Ramos Derribos y Saneamientos',
+    'Ramos Derribos y Saneamientos SL', 'B11100002',
+    'Eduardo Ramos Pizarro', 'jlorag@hotmail.com', 'jlorag@hotmail.com',
     '+34 697880068', 'Madrid',
-    'Empresa familiar de reformas integrales. Especialidad en tabiquería de yeso, trasdosados, falsos techos y obra húmeda en general.',
-    true
-  ),
-
-  -- ── Pavimentos / Revestimientos ──────────────────────────────────────────
-  (
-    'Solados y Revestimientos Alcántara',
-    'Solados y Revestimientos Alcántara SL', 'B34567890',
-    'Roberto Alcántara Ruiz', 'jlorag@hotmail.com', 'jlorag@hotmail.com',
-    '+34 697880068', 'Madrid',
-    'Especialistas en microcemento, porcelánico de gran formato, parquet y suelos técnicos. Proyectos de interiorismo de lujo y hoteles boutique.',
-    true
-  ),
-  (
-    'Cerámicas y Pavimentos Torres',
-    'Cerámicas y Pavimentos Torres SL', 'B45678901',
-    'Francisco Torres López', 'jlorag@hotmail.com', 'jlorag@hotmail.com',
-    '+34 697880068', 'Madrid',
-    'Colocación de pavimentos y revestimientos cerámicos, naturales y técnicos. Certificación ISO 9001. Distribuidor oficial de Porcelanosa y Mapei.',
-    true
-  ),
-  (
-    'Pavimentos Premium Madrid',
-    'Pavimentos Premium Madrid SL', 'B56789012',
-    'Javier Moreno Sanz', 'jlorag@hotmail.com', 'jlorag@hotmail.com',
-    '+34 697880068', 'Madrid',
-    'Especialistas en piedra natural, mármol travertino y superficies de lujo. Colocación manual y con robot. Referencias en proyectos de hasta 2.000 m².',
+    'Demolición de tabiquería, levantado de solados y saneado de paramentos. Gestión punto limpio y documentación acreditativa de residuos. 12 años de experiencia en reformas de lujo.',
     true
   ),
 
-  -- ── Electricidad ─────────────────────────────────────────────────────────
+  -- ── Estructura y obra gruesa ─────────────────────────────────────────────────
+  (
+    'Albañilería Gil & Hijos',
+    'Albañilería Gil e Hijos SL', 'B11100003',
+    'Tomás Gil Rodríguez', 'jlorag@hotmail.com', 'jlorag@hotmail.com',
+    '+34 697880068', 'Madrid',
+    'Tabiquería de ladrillo, bloque de hormigón y yeso laminado. Trasdosados, techos continuos y pladur técnico. Empresa familiar con 20 años en obra de interiorismo premium.',
+    true
+  ),
+  (
+    'Construcciones Morales',
+    'Construcciones Morales e Hijos SL', 'B11100004',
+    'Ramón Morales Bravo', 'jlorag@hotmail.com', 'jlorag@hotmail.com',
+    '+34 697880068', 'Madrid',
+    'Refuerzos estructurales, vigas metálicas, losas y obra gruesa en general. Certificados para intervenciones en edificios protegidos. Coordinación con dirección de obra.',
+    true
+  ),
+
+  -- ── Instalaciones eléctricas ─────────────────────────────────────────────────
   (
     'Electricidad Castellano',
-    'Electricidad Castellano SL', 'B67890123',
+    'Electricidad y Domótica Castellano SL', 'B11100005',
     'Andrés Castellano Díaz', 'jlorag@hotmail.com', 'jlorag@hotmail.com',
     '+34 697880068', 'Madrid',
-    'Instalaciones eléctricas BT, cuadros de mando, domótica KNX y sistemas audiovisuales integrados. Empresa instaladora autorizada categoría especialista.',
+    'Instalaciones eléctricas BT, cuadros de mando, domótica KNX y sistemas de iluminación integrada. Empresa instaladora autorizada categoría especialista.',
     true
   ),
   (
-    'Instalaciones Eléctricas Ruiz',
-    'Instalaciones Eléctricas Ruiz e Hijos SL', 'B78901234',
-    'Miguel Ruiz Fernández', 'jlorag@hotmail.com', 'jlorag@hotmail.com',
-    '+34 697880068', 'Madrid',
-    'Electricidad residencial y terciaria. Integración de iluminación técnica y decorativa (Erco, iGuzzini, Flos). 20 años de experiencia en Madrid.',
-    true
-  ),
-  (
-    'TecnoElectric Madrid',
-    'TecnoElectric Madrid SL', 'B89012345',
+    'TecnoElec Madrid',
+    'TecnoElec Instalaciones Madrid SL', 'B11100006',
     'Sergio Núñez Blanco', 'jlorag@hotmail.com', 'jlorag@hotmail.com',
     '+34 697880068', 'Madrid',
-    'Electricidad e instalaciones especiales: audio/vídeo distribuido, automatización residencial (Control4, Lutron), CCTV y seguridad perimetral.',
+    'Electricidad, telecomunicaciones y automatización residencial: Control4, Lutron, CCTV y seguridad perimetral. 15 años especializados en vivienda de alta gama.',
+    true
+  ),
+  (
+    'Iluminación e Integraciones Ruiz',
+    'Iluminación e Integraciones Ruiz SL', 'B11100007',
+    'Miguel Ruiz Fernández', 'jlorag@hotmail.com', 'jlorag@hotmail.com',
+    '+34 697880068', 'Madrid',
+    'Electricidad con especialización en iluminación técnica y decorativa (Erco, iGuzzini, Flos). Diseño de esquemas de iluminación en coordinación con el interiorista.',
     true
   ),
 
-  -- ── Fontanería / Climatización ────────────────────────────────────────────
+  -- ── Fontanería y saneamiento ─────────────────────────────────────────────────
   (
-    'Instalaciones Hidráulicas Sánchez',
-    'Instalaciones Hidráulicas Sánchez SL', 'B90123456',
-    'Pedro Sánchez Vega', 'jlorag@hotmail.com', 'jlorag@hotmail.com',
+    'Fontanería Serna',
+    'Fontanería y Saneamiento Serna SL', 'B11100008',
+    'Pedro Serna Vega', 'jlorag@hotmail.com', 'jlorag@hotmail.com',
     '+34 697880068', 'Madrid',
-    'Fontanería, saneamiento y gas natural. Especialistas en suelos radiantes, calefacción centralizada y instalaciones de lujo en vivienda.',
+    'Fontanería, saneamiento y gas natural. Suelos radiantes, calefacción centralizada y preparaciones de grifería de diseño. Empresa inscrita en el Registro de Instaladores de Gas.',
     true
   ),
   (
-    'ClimaTec Instalaciones',
-    'ClimaTec Instalaciones SL', 'B01234567',
+    'ClimaTec Soluciones HVAC',
+    'ClimaTec Soluciones HVAC SL', 'B11100009',
     'Luis Herrero García', 'jlorag@hotmail.com', 'jlorag@hotmail.com',
     '+34 697880068', 'Madrid',
-    'Climatización VRV/VRF (Mitsubishi Electric, Daikin), ventilación mecánica controlada y recuperación de calor. Empresa certificada F-Gas categoría I.',
-    true
-  ),
-  (
-    'Fontanería y Clima Moreno',
-    'Fontanería y Clima Moreno SL', 'B11223344',
-    'Raúl Moreno Castro', 'jlorag@hotmail.com', 'jlorag@hotmail.com',
-    '+34 697880068', 'Madrid',
-    'Empresa integral de fontanería y climatización. Especialidad en viviendas de alta gama, hoteles boutique y oficinas premium.',
+    'Climatización VRV/VRF (Mitsubishi Electric, Daikin), ventilación mecánica controlada, recuperación de calor y fancoils ocultos. Empresa certificada F-Gas categoría I.',
     true
   ),
 
-  -- ── Carpintería ──────────────────────────────────────────────────────────
+  -- ── Revestimientos y alicatados ──────────────────────────────────────────────
+  (
+    'Pavimentos Selectos Alcántara',
+    'Pavimentos Selectos Alcántara SL', 'B11100010',
+    'Roberto Alcántara Ruiz', 'jlorag@hotmail.com', 'jlorag@hotmail.com',
+    '+34 697880068', 'Madrid',
+    'Colocación de porcelánico de gran formato, piedra natural, parquet y suelos técnicos. Especialistas en proyectos de interiorismo de lujo. Distribuidor oficial de Porcelanosa y Mapei.',
+    true
+  ),
+  (
+    'Cerámicas y Mármoles Romero',
+    'Cerámicas y Mármoles Romero SL', 'B11100011',
+    'Francisco Romero López', 'jlorag@hotmail.com', 'jlorag@hotmail.com',
+    '+34 697880068', 'Madrid',
+    'Alicatados, revestimientos cerámicos y mármol travertino. Especialistas en colocación de piezas de gran formato, esquinas de vidrio y juntas de mínima expresión.',
+    true
+  ),
+  (
+    'Microcementos Torres',
+    'Microcementos y Superficies Torres SL', 'B11100012',
+    'Javier Torres Sanz', 'jlorag@hotmail.com', 'jlorag@hotmail.com',
+    '+34 697880068', 'Madrid',
+    'Microcemento, terrazo a la veneciana, resinas epoxi y recubrimientos continuos. Aplicación en suelos, paredes y muebles. Referencias en hoteles boutique y viviendas de lujo.',
+    true
+  ),
+
+  -- ── Carpintería de madera ────────────────────────────────────────────────────
   (
     'Carpintería Herrera & Asociados',
-    'Carpintería Herrera & Asociados SL', 'B22334455',
+    'Carpintería Herrera & Asociados SL', 'B11100013',
     'Antonio Herrera Ríos', 'jlorag@hotmail.com', 'jlorag@hotmail.com',
-    '+34 697880068', 'Madrid',
-    'Carpintería a medida: armarios encastrados, vestidores, cocinas, panelados y carpintería de obra. Fábrica propia en Getafe. Plazo medio 3 semanas.',
+    '+34 697880068', 'Getafe',
+    'Carpintería a medida: armarios encastrados, vestidores, cocinas, panelados y carpintería de obra. Fábrica propia en Getafe. Lacados en polvo, chapados y RAL.',
     true
   ),
   (
-    'Ebanistería Contemporánea López',
-    'Ebanistería Contemporánea López SL', 'B33445566',
+    'Ebanistería López',
+    'Ebanistería Contemporánea López SL', 'B11100014',
     'Diego López Serrano', 'jlorag@hotmail.com', 'jlorag@hotmail.com',
     '+34 697880068', 'Madrid',
-    'Mobiliario de alta gama a medida. Lacados en polvo, chapados en madera natural y pintados en colores RAL. Especializados en proyectos de interiorismo de lujo.',
-    true
-  ),
-  (
-    'Carpintería y Metal Jiménez',
-    'Carpintería y Metal Jiménez SL', 'B44556677',
-    'Iván Jiménez Pons', 'jlorag@hotmail.com', 'jlorag@hotmail.com',
-    '+34 697880068', 'Madrid',
-    'Carpintería de madera y metálica. Puertas pivotantes, escaleras, barandillas de acero y vidrio. Diseño propio o siguiendo planos de arquitectura.',
+    'Mobiliario de alta gama a medida: lacados en polvo, chapa de madera natural y pintados en colores especiales. Especializados en proyectos de interiorismo con memoria descriptiva detallada.',
     true
   ),
 
-  -- ── Pintura / Acabados ────────────────────────────────────────────────────
+  -- ── Carpintería metálica y vidrio ────────────────────────────────────────────
   (
-    'Pinturas y Acabados Fernández',
-    'Pinturas y Acabados Fernández SL', 'B55667788',
-    'Tomás Fernández Cruz', 'jlorag@hotmail.com', 'jlorag@hotmail.com',
+    'Metalistería Jiménez',
+    'Carpintería y Metalistería Jiménez SL', 'B11100015',
+    'Iván Jiménez Pons', 'jlorag@hotmail.com', 'jlorag@hotmail.com',
     '+34 697880068', 'Madrid',
-    'Pintura decorativa, esmaltes al agua, barnices y papel pintado. Acabados especiales: estuco veneciano, cal aérea, microcemento y pintura de tiza.',
+    'Puertas pivotantes de acero, escaleras, barandillas de vidrio laminado y perfiles de aluminio a medida. Diseño propio o siguiendo planos de arquitectura.',
     true
   ),
   (
-    'Acabados Interiores Madrid',
-    'Acabados Interiores Madrid SL', 'B66778899',
-    'Alberto García Prieto', 'jlorag@hotmail.com', 'jlorag@hotmail.com',
+    'Vidrios y Acristalamientos Mora',
+    'Vidrios y Acristalamientos Mora SL', 'B11100016',
+    'Raúl Mora Castro', 'jlorag@hotmail.com', 'jlorag@hotmail.com',
     '+34 697880068', 'Madrid',
-    'Especialistas en acabados de lujo: boiserie lacada, techos de lamas, pintura mineral, guardavivos y cornisas. Trabajamos con arquitectos de interiores premium.',
+    'Mamparas de ducha a medida, tabiques de vidrio estructural, ventanas de aluminio RPT y claraboyas. Proveedor de Saint-Gobain y AGC. Obra en activo en edificios singulares.',
+    true
+  ),
+
+  -- ── Pintura y remates ────────────────────────────────────────────────────────
+  (
+    'Pinturas Fernández',
+    'Pinturas y Acabados Fernández SL', 'B11100017',
+    'Tomás Fernández Cruz', 'jlorag@hotmail.com', 'jlorag@hotmail.com',
+    '+34 697880068', 'Madrid',
+    'Pintura plástica y esmalte al agua, barnices al disolvente, papel pintado y acabados especiales: estuco veneciano, cal aérea, microcemento y pintura de tiza.',
+    true
+  ),
+  (
+    'Acabados Prieto',
+    'Acabados Interiores Prieto SL', 'B11100018',
+    'Alberto Prieto García', 'jlorag@hotmail.com', 'jlorag@hotmail.com',
+    '+34 697880068', 'Madrid',
+    'Especialistas en acabados de lujo: boiserie lacada, techos de lamas, pintura mineral, guardavivos a inglete y cornisas. Trabajan exclusivamente con estudios de interiorismo premium.',
+    true
+  ),
+
+  -- ── Equipamiento y mobiliario ────────────────────────────────────────────────
+  (
+    'Cocinas de Autor Madrid',
+    'Cocinas de Autor Madrid SL', 'B11100019',
+    'Elena Soto Molina', 'jlorag@hotmail.com', 'jlorag@hotmail.com',
+    '+34 697880068', 'Madrid',
+    'Suministro e instalación de cocinas a medida con mobiliario de alta gama (Bulthaup, Siematic, Leicht). Coordinación con plomero y electricista. Electrodomésticos Miele y Gaggenau.',
     true
   )
 
 ON CONFLICT DO NOTHING;
 
 
--- ── 2. Asignar capacidades — nombres exactos del template seed ───────────────
---
--- UEs disponibles (de fpe_template_seed.sql):
---   Cap 1 · Demolición y Obra Seca:
---     1.1  Demolición y Vaciado
---     1.2  Tabiquería y Trasdosados
---   Cap 2 · Instalaciones:
---     2.1  Instalación Eléctrica y Domótica
---     2.2  Fontanería y Saneamiento
---     2.3  Climatización y Ventilación
---   Cap 3 · Pavimentos y Revestimientos:
---     3.1  Pavimentos
---     3.2  Revestimientos
---   Cap 4 · Carpintería:
---     4.1  Carpintería de Obra a Medida
---     4.2  Puertas Interiores
---   Cap 5 · Acabados Finales:
---     5.1  Pintura y Acabados Decorativos
---     5.2  Sanitarios y Equipamiento de Baño
--- ─────────────────────────────────────────────────────────────────────────────
+-- ── 2. Asignar disciplinas ────────────────────────────────────────────────────
+-- Utiliza fpe_partner_disciplines (reemplaza fpe_partner_capabilities).
+-- Referencia por nombre de disciplina para ser robusto ante cambios de UUID.
 
--- Demolición / Albañilería → UEs 1.1 y 1.2
-INSERT INTO public.fpe_partner_capabilities (partner_id, unit_id)
-SELECT p.id, u.id
+-- Demolición y gestión de residuos
+INSERT INTO public.fpe_partner_disciplines (partner_id, discipline_id)
+SELECT p.id, d.id
 FROM public.fpe_partners p
-CROSS JOIN public.fpe_template_units u
-WHERE p.nombre IN ('Derribos y Reformas Pérez', 'Construcciones Álvarez e Hijos')
-  AND u.nombre IN ('Demolición y Vaciado', 'Tabiquería y Trasdosados')
+CROSS JOIN public.fpe_disciplines d
+WHERE p.nombre IN ('Derribos Vega', 'Ramos Derribos y Saneamientos')
+  AND d.nombre = 'Demolición y gestión de residuos'
 ON CONFLICT DO NOTHING;
 
--- Pavimentos / Revestimientos → UEs 3.1 y 3.2
-INSERT INTO public.fpe_partner_capabilities (partner_id, unit_id)
-SELECT p.id, u.id
+-- Estructura y obra gruesa
+INSERT INTO public.fpe_partner_disciplines (partner_id, discipline_id)
+SELECT p.id, d.id
 FROM public.fpe_partners p
-CROSS JOIN public.fpe_template_units u
-WHERE p.nombre IN ('Solados y Revestimientos Alcántara', 'Cerámicas y Pavimentos Torres', 'Pavimentos Premium Madrid')
-  AND u.nombre IN ('Pavimentos', 'Revestimientos')
+CROSS JOIN public.fpe_disciplines d
+WHERE p.nombre IN ('Albañilería Gil & Hijos', 'Construcciones Morales')
+  AND d.nombre = 'Estructura y obra gruesa'
 ON CONFLICT DO NOTHING;
 
--- Electricidad → UE 2.1
-INSERT INTO public.fpe_partner_capabilities (partner_id, unit_id)
-SELECT p.id, u.id
+-- Instalaciones eléctricas
+INSERT INTO public.fpe_partner_disciplines (partner_id, discipline_id)
+SELECT p.id, d.id
 FROM public.fpe_partners p
-CROSS JOIN public.fpe_template_units u
-WHERE p.nombre IN ('Electricidad Castellano', 'Instalaciones Eléctricas Ruiz', 'TecnoElectric Madrid')
-  AND u.nombre IN ('Instalación Eléctrica y Domótica')
+CROSS JOIN public.fpe_disciplines d
+WHERE p.nombre IN ('Electricidad Castellano', 'TecnoElec Madrid', 'Iluminación e Integraciones Ruiz')
+  AND d.nombre = 'Instalaciones eléctricas'
 ON CONFLICT DO NOTHING;
 
--- Fontanería / Climatización → UEs 2.2, 2.3 y 5.2
-INSERT INTO public.fpe_partner_capabilities (partner_id, unit_id)
-SELECT p.id, u.id
+-- Fontanería y saneamiento
+INSERT INTO public.fpe_partner_disciplines (partner_id, discipline_id)
+SELECT p.id, d.id
 FROM public.fpe_partners p
-CROSS JOIN public.fpe_template_units u
-WHERE p.nombre IN ('Instalaciones Hidráulicas Sánchez', 'ClimaTec Instalaciones', 'Fontanería y Clima Moreno')
-  AND u.nombre IN ('Fontanería y Saneamiento', 'Climatización y Ventilación', 'Sanitarios y Equipamiento de Baño')
+CROSS JOIN public.fpe_disciplines d
+WHERE p.nombre IN ('Fontanería Serna', 'ClimaTec Soluciones HVAC')
+  AND d.nombre = 'Fontanería y saneamiento'
 ON CONFLICT DO NOTHING;
 
--- Carpintería → UEs 4.1 y 4.2
-INSERT INTO public.fpe_partner_capabilities (partner_id, unit_id)
-SELECT p.id, u.id
+-- Revestimientos y alicatados
+INSERT INTO public.fpe_partner_disciplines (partner_id, discipline_id)
+SELECT p.id, d.id
 FROM public.fpe_partners p
-CROSS JOIN public.fpe_template_units u
-WHERE p.nombre IN ('Carpintería Herrera & Asociados', 'Ebanistería Contemporánea López', 'Carpintería y Metal Jiménez')
-  AND u.nombre IN ('Carpintería de Obra a Medida', 'Puertas Interiores')
+CROSS JOIN public.fpe_disciplines d
+WHERE p.nombre IN ('Pavimentos Selectos Alcántara', 'Cerámicas y Mármoles Romero', 'Microcementos Torres')
+  AND d.nombre = 'Revestimientos y alicatados'
 ON CONFLICT DO NOTHING;
 
--- Pintura / Acabados → UE 5.1
-INSERT INTO public.fpe_partner_capabilities (partner_id, unit_id)
-SELECT p.id, u.id
+-- Carpintería de madera
+INSERT INTO public.fpe_partner_disciplines (partner_id, discipline_id)
+SELECT p.id, d.id
 FROM public.fpe_partners p
-CROSS JOIN public.fpe_template_units u
-WHERE p.nombre IN ('Pinturas y Acabados Fernández', 'Acabados Interiores Madrid')
-  AND u.nombre IN ('Pintura y Acabados Decorativos')
+CROSS JOIN public.fpe_disciplines d
+WHERE p.nombre IN ('Carpintería Herrera & Asociados', 'Ebanistería López')
+  AND d.nombre = 'Carpintería de madera'
+ON CONFLICT DO NOTHING;
+
+-- Carpintería metálica y vidrio
+INSERT INTO public.fpe_partner_disciplines (partner_id, discipline_id)
+SELECT p.id, d.id
+FROM public.fpe_partners p
+CROSS JOIN public.fpe_disciplines d
+WHERE p.nombre IN ('Metalistería Jiménez', 'Vidrios y Acristalamientos Mora')
+  AND d.nombre = 'Carpintería metálica y vidrio'
+ON CONFLICT DO NOTHING;
+
+-- Pintura y remates
+INSERT INTO public.fpe_partner_disciplines (partner_id, discipline_id)
+SELECT p.id, d.id
+FROM public.fpe_partners p
+CROSS JOIN public.fpe_disciplines d
+WHERE p.nombre IN ('Pinturas Fernández', 'Acabados Prieto')
+  AND d.nombre = 'Pintura y remates'
+ON CONFLICT DO NOTHING;
+
+-- Equipamiento y mobiliario
+INSERT INTO public.fpe_partner_disciplines (partner_id, discipline_id)
+SELECT p.id, d.id
+FROM public.fpe_partners p
+CROSS JOIN public.fpe_disciplines d
+WHERE p.nombre = 'Cocinas de Autor Madrid'
+  AND d.nombre = 'Equipamiento y mobiliario'
+ON CONFLICT DO NOTHING;
+
+-- Partners con disciplinas múltiples:
+-- ClimaTec cubre también climatización (metemos Fontanería+Climatización es la misma disciplina)
+-- Construcciones Morales también puede hacer demolición
+INSERT INTO public.fpe_partner_disciplines (partner_id, discipline_id)
+SELECT p.id, d.id
+FROM public.fpe_partners p
+CROSS JOIN public.fpe_disciplines d
+WHERE p.nombre = 'Construcciones Morales'
+  AND d.nombre = 'Demolición y gestión de residuos'
+ON CONFLICT DO NOTHING;
+
+-- Ebanistería López también hace equipamiento (mobiliario)
+INSERT INTO public.fpe_partner_disciplines (partner_id, discipline_id)
+SELECT p.id, d.id
+FROM public.fpe_partners p
+CROSS JOIN public.fpe_disciplines d
+WHERE p.nombre = 'Ebanistería López'
+  AND d.nombre = 'Equipamiento y mobiliario'
 ON CONFLICT DO NOTHING;
 
 COMMIT;
 
+
 -- ── Verificación ──────────────────────────────────────────────────────────────
 SELECT
-  p.nombre                           AS partner,
-  p.ciudad                           AS ciudad,
-  COUNT(pc.unit_id)                  AS capacidades
+  p.nombre                         AS partner,
+  p.ciudad                         AS ciudad,
+  string_agg(d.nombre, ', ' ORDER BY d.orden) AS disciplinas
 FROM public.fpe_partners p
-LEFT JOIN public.fpe_partner_capabilities pc ON pc.partner_id = p.id
+LEFT JOIN public.fpe_partner_disciplines pd ON pd.partner_id = p.id
+LEFT JOIN public.fpe_disciplines d          ON d.id = pd.discipline_id
 WHERE p.email_contacto = 'jlorag@hotmail.com'
 GROUP BY p.nombre, p.ciudad
 ORDER BY p.nombre;

@@ -662,6 +662,7 @@ export default function PortalPage({
   renderUrls = [],
   tourVirtualUrl = null,
   phaseStartDates = {},
+  isPrincipalForUnitIds = [],
 }: {
   token: string
   partner: Partner
@@ -675,6 +676,7 @@ export default function PortalPage({
   renderUrls?: string[]
   tourVirtualUrl?: string | null
   phaseStartDates?: Record<string, string>   // phaseId → ISO date string
+  isPrincipalForUnitIds?: string[]           // project_unit_ids where this partner proposes phase durations
 }) {
   // ── Tab + scroll ──────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview')
@@ -762,11 +764,13 @@ export default function PortalPage({
       return
     }
 
-    const phase_durations = projectUnits.flatMap(u =>
-      (u.template_unit?.phases ?? [])
-        .map(ph => ({ template_phase_id: ph.id, project_unit_id: u.id, duracion_dias: phaseDays[`${u.id}_${ph.id}`] ?? 0 }))
-        .filter(pd => pd.duracion_dias > 0)
-    )
+    const phase_durations = projectUnits
+      .filter(u => isPrincipalForUnitIds.includes(u.id))
+      .flatMap(u =>
+        (u.template_unit?.phases ?? [])
+          .map(ph => ({ template_phase_id: ph.id, project_unit_id: u.id, duracion_dias: phaseDays[`${u.id}_${ph.id}`] ?? 0 }))
+          .filter(pd => pd.duracion_dias > 0)
+      )
 
     const res  = await fetch('/api/fpe-portal/bid', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, notas: bidNotas || null, line_items, phase_durations }) })
     const json = await res.json()
@@ -1145,7 +1149,7 @@ export default function PortalPage({
                           })}
                         </tbody>
                       </table>
-                      {(unit.template_unit?.phases?.length ?? 0) > 0 && (
+                      {(unit.template_unit?.phases?.length ?? 0) > 0 && isPrincipalForUnitIds.includes(unit.id) && (
                         <div style={{ padding: '14px 16px', borderTop: '1px solid #E8E6E0', background: '#F8F7F4' }}>
                           <p style={{ margin: '0 0 10px', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#888' }}>Plazos de ejecución (días laborales)</p>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>

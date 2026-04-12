@@ -1,11 +1,17 @@
 'use client'
 
 import React, { useState, useMemo } from 'react'
-import { createPartner, updatePartner, deletePartner, setPartnerCapabilities } from '@/app/actions/fpe-partners'
+import { createPartner, updatePartner, deletePartner, setPartnerDisciplines } from '@/app/actions/fpe-partners'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface Capability { unit_id: string }
+interface Discipline {
+  id: string
+  nombre: string
+  descripcion: string | null
+  color: string
+  orden: number
+}
 
 interface Partner {
   id: string
@@ -24,12 +30,8 @@ interface Partner {
   iban: string | null
   notas: string | null
   activo: boolean
-  capabilities: Capability[]
+  discipline_ids: string[]  // from fpe_partner_disciplines
 }
-
-interface Unit { id: string; nombre: string; orden: number; activo: boolean }
-
-interface Chapter { id: string; nombre: string; orden: number; units: Unit[] }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
@@ -66,16 +68,16 @@ const overlay: React.CSSProperties = {
 
 // ── Partner Modal ─────────────────────────────────────────────────────────────
 
-type FormData = Omit<Partner, 'id' | 'activo' | 'capabilities'>
+type FormData = Omit<Partner, 'id' | 'activo' | 'discipline_ids'>
 
 function PartnerModal({
   initial,
-  chapters,
+  disciplines,
   onClose,
   onSaved,
 }: {
   initial: Partner | null
-  chapters: Chapter[]
+  disciplines: Discipline[]
   onClose: () => void
   onSaved: (p: Partner) => void
 }) {
@@ -92,21 +94,21 @@ function PartnerModal({
       : empty
   )
 
-  const [selectedUnitIds, setSelectedUnitIds] = useState<Set<string>>(
-    new Set(initial?.capabilities.map(c => c.unit_id) ?? [])
+  const [selectedDiscIds, setSelectedDiscIds] = useState<Set<string>>(
+    new Set(initial?.discipline_ids ?? [])
   )
 
-  const [tab, setTab] = useState<'datos' | 'capacidades'>('datos')
+  const [tab, setTab] = useState<'datos' | 'disciplinas'>('datos')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const set = (k: keyof FormData, v: string) => setForm(f => ({ ...f, [k]: v || null }))
 
-  const toggleUnit = (unitId: string) => {
-    setSelectedUnitIds(prev => {
+  const toggleDisc = (id: string) => {
+    setSelectedDiscIds(prev => {
       const next = new Set(prev)
-      if (next.has(unitId)) next.delete(unitId)
-      else next.add(unitId)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
       return next
     })
   }
@@ -116,27 +118,26 @@ function PartnerModal({
     if (!form.nombre.trim()) { setError('El nombre es obligatorio.'); return }
     setSaving(true); setError(null)
 
-    const unitIds = Array.from(selectedUnitIds)
+    const discIds = Array.from(selectedDiscIds)
 
     if (initial) {
-      const [updateRes, capRes] = await Promise.all([
+      const [updateRes, discRes] = await Promise.all([
         updatePartner(initial.id, form),
-        setPartnerCapabilities(initial.id, unitIds),
+        setPartnerDisciplines(initial.id, discIds),
       ])
       setSaving(false)
       if ('error' in updateRes) { setError(updateRes.error); return }
-      if ('error' in capRes) { setError(capRes.error); return }
-      onSaved({ ...initial, ...form, capabilities: unitIds.map(unit_id => ({ unit_id })) })
+      if ('error' in discRes) { setError(discRes.error); return }
+      onSaved({ ...initial, ...form, discipline_ids: discIds })
     } else {
       const res = await createPartner(form)
       setSaving(false)
       if ('error' in res) { setError(res.error); return }
-      // Set capabilities for new partner
-      if (unitIds.length > 0) {
-        const capRes = await setPartnerCapabilities(res.id, unitIds)
-        if ('error' in capRes) { setError(capRes.error); return }
+      if (discIds.length > 0) {
+        const discRes = await setPartnerDisciplines(res.id, discIds)
+        if ('error' in discRes) { setError(discRes.error); return }
       }
-      onSaved({ id: res.id, ...form, activo: true, capabilities: unitIds.map(unit_id => ({ unit_id })) })
+      onSaved({ id: res.id, ...form, activo: true, discipline_ids: discIds })
     }
   }
 
@@ -146,8 +147,8 @@ function PartnerModal({
     color: active ? '#1A1A1A' : '#AAA', fontFamily: 'inherit',
   })
 
-  const allUnits = chapters.flatMap(c => c.units)
-  const capCount = selectedUnitIds.size
+  const discCount = selectedDiscIds.size
+  const sortedDiscs = [...disciplines].sort((a, b) => a.orden - b.orden)
 
   return (
     <div style={overlay} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
@@ -163,8 +164,8 @@ function PartnerModal({
           </div>
           <div style={{ display: 'flex', gap: 0 }}>
             <button style={tabStyle(tab === 'datos')} onClick={() => setTab('datos')}>Datos</button>
-            <button style={tabStyle(tab === 'capacidades')} onClick={() => setTab('capacidades')}>
-              Capacidades {capCount > 0 && <span style={{ marginLeft: 4, background: '#1A1A1A', color: '#fff', borderRadius: 10, padding: '1px 6px', fontSize: 10 }}>{capCount}</span>}
+            <button style={tabStyle(tab === 'disciplinas')} onClick={() => setTab('disciplinas')}>
+              Disciplinas {discCount > 0 && <span style={{ marginLeft: 4, background: '#378ADD', color: '#fff', borderRadius: 10, padding: '1px 6px', fontSize: 10 }}>{discCount}</span>}
             </button>
           </div>
         </div>
@@ -176,19 +177,14 @@ function PartnerModal({
             {/* ── Datos tab ── */}
             {tab === 'datos' && (
               <>
-                {/* Nombre */}
                 <div>
                   <label style={S.label}>Nombre / Empresa *</label>
                   <input value={form.nombre} onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))} placeholder="Nombre del partner…" style={S.input} autoFocus />
                 </div>
-
-                {/* Contacto */}
                 <div>
                   <label style={S.label}>Persona de contacto</label>
                   <input value={form.contacto_nombre ?? ''} onChange={e => set('contacto_nombre', e.target.value)} placeholder="Nombre del contacto…" style={S.input} />
                 </div>
-
-                {/* Emails */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                   <div>
                     <label style={S.label}>Email contacto</label>
@@ -203,14 +199,10 @@ function PartnerModal({
                   <label style={S.label}>Email facturación</label>
                   <input type="email" value={form.email_facturacion ?? ''} onChange={e => set('email_facturacion', e.target.value)} placeholder="facturas@empresa.com" style={S.input} />
                 </div>
-
-                {/* Teléfono */}
                 <div>
                   <label style={S.label}>Teléfono</label>
                   <input type="tel" value={form.telefono ?? ''} onChange={e => set('telefono', e.target.value)} placeholder="+34 600 000 000" style={S.input} />
                 </div>
-
-                {/* Dirección */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px 100px', gap: 14 }}>
                   <div>
                     <label style={S.label}>Dirección</label>
@@ -225,8 +217,6 @@ function PartnerModal({
                     <input value={form.codigo_postal ?? ''} onChange={e => set('codigo_postal', e.target.value)} placeholder="28001" style={S.input} />
                   </div>
                 </div>
-
-                {/* Facturación */}
                 <div style={{ borderTop: '1px solid #E8E6E0', paddingTop: 14, marginTop: 4 }}>
                   <p style={{ ...S.label, fontSize: 10, color: '#888', marginBottom: 14 }}>Datos de facturación</p>
                   <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: 14, marginBottom: 14 }}>
@@ -244,8 +234,6 @@ function PartnerModal({
                     <input value={form.iban ?? ''} onChange={e => set('iban', e.target.value)} placeholder="ES00 0000 0000 0000 0000 0000" style={{ ...S.input, fontFamily: 'monospace', letterSpacing: '0.04em' }} />
                   </div>
                 </div>
-
-                {/* Notas */}
                 <div>
                   <label style={S.label}>Notas</label>
                   <textarea rows={3} value={form.notas ?? ''} onChange={e => set('notas', e.target.value)} placeholder="Notas adicionales…" style={S.textarea} />
@@ -253,58 +241,39 @@ function PartnerModal({
               </>
             )}
 
-            {/* ── Capacidades tab ── */}
-            {tab === 'capacidades' && (
+            {/* ── Disciplinas tab ── */}
+            {tab === 'disciplinas' && (
               <div>
                 <p style={{ margin: '0 0 16px', fontSize: 12, color: '#666' }}>
-                  Selecciona las unidades de ejecución que este partner puede ejecutar. Esto define en qué licitaciones puede ser invitado.
+                  Selecciona las disciplinas que este partner puede ejecutar. Esto determina en qué licitaciones puede ser invitado y qué partidas le corresponden.
                 </p>
 
-                {allUnits.length === 0 ? (
+                {sortedDiscs.length === 0 ? (
                   <p style={{ fontSize: 12, color: '#BBB', textAlign: 'center', padding: '24px 0' }}>
-                    No hay unidades en el template. Crea primero el template.
+                    No hay disciplinas configuradas. Define primero las disciplinas en el Template.
                   </p>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    {/* Select all / none */}
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button
-                        type="button"
-                        style={S.btnSm()}
-                        onClick={() => setSelectedUnitIds(new Set(allUnits.map(u => u.id)))}
-                      >Seleccionar todo</button>
-                      <button
-                        type="button"
-                        style={S.btnSm()}
-                        onClick={() => setSelectedUnitIds(new Set())}
-                      >Limpiar</button>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                      <button type="button" style={S.btnSm()} onClick={() => setSelectedDiscIds(new Set(sortedDiscs.map(d => d.id)))}>Seleccionar todo</button>
+                      <button type="button" style={S.btnSm()} onClick={() => setSelectedDiscIds(new Set())}>Limpiar</button>
                     </div>
-
-                    {chapters.map(chapter => (
-                      <div key={chapter.id}>
-                        <p style={{ margin: '0 0 8px', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#888' }}>
-                          {chapter.nombre}
-                        </p>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                          {chapter.units.map(unit => (
-                            <label
-                              key={unit.id}
-                              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 6, border: `1px solid ${selectedUnitIds.has(unit.id) ? '#378ADD' : '#E8E6E0'}`, background: selectedUnitIds.has(unit.id) ? '#EBF5FF' : '#fff', cursor: 'pointer', transition: 'all 0.1s' }}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={selectedUnitIds.has(unit.id)}
-                                onChange={() => toggleUnit(unit.id)}
-                                style={{ width: 14, height: 14, accentColor: '#378ADD', flexShrink: 0 }}
-                              />
-                              <span style={{ fontSize: 12, color: selectedUnitIds.has(unit.id) ? '#1A5CA8' : '#333', fontWeight: selectedUnitIds.has(unit.id) ? 600 : 400 }}>
-                                {unit.nombre}
-                              </span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
+                    {sortedDiscs.map(disc => {
+                      const on = selectedDiscIds.has(disc.id)
+                      return (
+                        <label
+                          key={disc.id}
+                          style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 8, border: `1px solid ${on ? disc.color : '#E8E6E0'}`, background: on ? disc.color + '11' : '#fff', cursor: 'pointer', transition: 'all 0.1s' }}
+                        >
+                          <input type="checkbox" checked={on} onChange={() => toggleDisc(disc.id)} style={{ width: 14, height: 14, accentColor: disc.color, flexShrink: 0 }} />
+                          <div style={{ width: 10, height: 10, borderRadius: '50%', background: disc.color, flexShrink: 0 }} />
+                          <div style={{ flex: 1 }}>
+                            <span style={{ fontSize: 12, fontWeight: on ? 600 : 400, color: on ? '#1A1A1A' : '#333' }}>{disc.nombre}</span>
+                            {disc.descripcion && <span style={{ fontSize: 11, color: '#AAA', marginLeft: 8 }}>{disc.descripcion}</span>}
+                          </div>
+                        </label>
+                      )
+                    })}
                   </div>
                 )}
               </div>
@@ -317,7 +286,6 @@ function PartnerModal({
             )}
           </div>
 
-          {/* Footer */}
           <div style={{ padding: '14px 24px', borderTop: '1px solid #E8E6E0', display: 'flex', gap: 8, justifyContent: 'flex-end', flexShrink: 0 }}>
             <button type="button" onClick={onClose} style={S.btn()}>Cancelar</button>
             <button type="submit" disabled={saving} style={S.btn(true)}>{saving ? 'Guardando…' : 'Guardar'}</button>
@@ -351,10 +319,10 @@ function ConfirmDelete({ label, onConfirm, onCancel }: { label: string; onConfir
 
 export default function PartnersPage({
   initialPartners,
-  chapters,
+  disciplines,
 }: {
   initialPartners: Partner[]
-  chapters: Chapter[]
+  disciplines: Discipline[]
 }) {
   const [partners, setPartners] = useState<Partner[]>(initialPartners)
   const [search, setSearch] = useState('')
@@ -385,9 +353,9 @@ export default function PartnersPage({
     setDeleting(null)
   }
 
-  // Build a unit name lookup
-  const unitNames: Record<string, string> = {}
-  for (const ch of chapters) for (const u of ch.units) unitNames[u.id] = u.nombre
+  // Build discipline lookup map
+  const discMap: Record<string, Discipline> = {}
+  for (const d of disciplines) discMap[d.id] = d
 
   return (
     <div style={{ fontFamily: "'Inter', system-ui, sans-serif", padding: '28px 32px', maxWidth: 1100, margin: '0 auto' }}>
@@ -437,7 +405,7 @@ export default function PartnersPage({
                 <th style={TH}>Contacto</th>
                 <th style={TH}>Email</th>
                 <th style={TH}>Ciudad</th>
-                <th style={TH}>Capacidades</th>
+                <th style={TH}>Disciplinas</th>
                 <th style={TH}>Estado</th>
                 <th style={TH} />
               </tr>
@@ -461,17 +429,20 @@ export default function PartnersPage({
                   <td style={TD}>{partner.email_contacto ?? <span style={{ color: '#CCC' }}>—</span>}</td>
                   <td style={TD}>{partner.ciudad ?? <span style={{ color: '#CCC' }}>—</span>}</td>
                   <td style={TD}>
-                    {partner.capabilities.length === 0 ? (
+                    {partner.discipline_ids.length === 0 ? (
                       <span style={{ color: '#CCC', fontSize: 11 }}>Sin asignar</span>
                     ) : (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                        {partner.capabilities.slice(0, 3).map(c => (
-                          <span key={c.unit_id} style={{ fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 3, background: '#EBF5FF', color: '#378ADD' }}>
-                            {unitNames[c.unit_id] ?? c.unit_id.slice(0, 8)}
-                          </span>
-                        ))}
-                        {partner.capabilities.length > 3 && (
-                          <span style={{ fontSize: 10, color: '#AAA' }}>+{partner.capabilities.length - 3}</span>
+                        {partner.discipline_ids.slice(0, 2).map(did => {
+                          const d = discMap[did]
+                          return d ? (
+                            <span key={did} style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 3, background: d.color + '22', color: d.color }}>
+                              {d.nombre}
+                            </span>
+                          ) : null
+                        })}
+                        {partner.discipline_ids.length > 2 && (
+                          <span style={{ fontSize: 10, color: '#AAA' }}>+{partner.discipline_ids.length - 2}</span>
                         )}
                       </div>
                     )}
@@ -506,7 +477,7 @@ export default function PartnersPage({
       {modal && (
         <PartnerModal
           initial={modal.mode === 'edit' ? modal.partner : null}
-          chapters={chapters}
+          disciplines={disciplines}
           onClose={() => setModal(null)}
           onSaved={handleSaved}
         />
