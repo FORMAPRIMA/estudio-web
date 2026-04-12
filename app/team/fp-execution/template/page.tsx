@@ -27,7 +27,7 @@ export default async function FpeTemplatePage() {
         )
       `)
       .order('orden', { ascending: true })
-      .order('orden', { referencedTable: 'fpe_template_chapters.fpe_template_phases', ascending: true })
+      .order('orden', { referencedTable: 'fpe_template_phases', ascending: true })
       .order('orden', { referencedTable: 'fpe_template_units', ascending: true })
       .order('orden', { referencedTable: 'fpe_template_units.fpe_template_line_items', ascending: true }),
 
