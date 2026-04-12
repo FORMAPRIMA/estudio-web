@@ -126,6 +126,21 @@ export default async function ExecutionPortalTokenPage({
   const tenderClosed = tender.status === 'closed' || tender.status === 'cancelled'
   const deadlinePassed = new Date(tender.fecha_limite) < new Date()
 
+  // Generate signed URLs for image docs (hero renders, max 8, 4-hour TTL)
+  const IMAGE_EXTS = ['jpg','jpeg','png','webp','svg','gif']
+  const allDocs = documents ?? []
+  const imageDocs = allDocs.filter(d =>
+    d.mime_type?.startsWith('image/') ||
+    IMAGE_EXTS.some(ext => d.nombre.toLowerCase().endsWith(`.${ext}`))
+  ).slice(0, 8)
+
+  const renderUrls = (await Promise.all(
+    imageDocs.map(async d => {
+      const { data } = await admin.storage.from('fpe-documents').createSignedUrl(d.storage_path, 4 * 60 * 60)
+      return data?.signedUrl ?? null
+    })
+  )).filter((u): u is string => !!u)
+
   return (
     <PortalPage
       token={params.token}
@@ -134,10 +149,11 @@ export default async function ExecutionPortalTokenPage({
       tender={{ id: tender.id, descripcion: tender.descripcion, fecha_limite: tender.fecha_limite, status: tender.status }}
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       projectUnits={(projectUnits ?? []) as any}
-      documents={documents ?? []}
+      documents={allDocs}
       existingBid={existingBid ?? null}
       isReadOnly={tenderClosed || deadlinePassed || inv.status === 'bid_submitted'}
       initialQuestions={(questions ?? []) as Parameters<typeof PortalPage>[0]['initialQuestions']}
+      renderUrls={renderUrls}
     />
   )
 }
