@@ -118,6 +118,8 @@ function formatEur(n: number): string {
 
 function fileLabel(mime: string | null, nombre: string): { label: string; bg: string; color: string } {
   const ext = nombre.split('.').pop()?.toLowerCase() ?? ''
+  if (mime?.startsWith('video/') || ['mp4','webm','mov','avi','wmv','mkv'].includes(ext))
+    return { label: 'VID', bg: '#F3E8FF', color: '#6D28D9' }
   if (mime?.startsWith('image/') || ['jpg','jpeg','png','webp','svg'].includes(ext))
     return { label: 'IMG', bg: '#FEF3C7', color: '#92400E' }
   if (ext === 'pdf' || mime === 'application/pdf')
@@ -125,6 +127,11 @@ function fileLabel(mime: string | null, nombre: string): { label: string; bg: st
   if (['dwg','dxf','rvt','ifc'].includes(ext))
     return { label: ext.toUpperCase(), bg: '#EDE9FE', color: '#5B21B6' }
   return { label: ext.toUpperCase() || 'FILE', bg: '#F3F4F6', color: '#374151' }
+}
+
+function isVideo(mime: string | null, nombre: string): boolean {
+  const ext = nombre.split('.').pop()?.toLowerCase() ?? ''
+  return !!(mime?.startsWith('video/') || ['mp4','webm','mov','avi','wmv','mkv'].includes(ext))
 }
 
 function countdown(isoDate: string): string {
@@ -152,40 +159,78 @@ const S = {
 
 function DocRow({ doc, token }: { doc: PortalDoc; token: string }) {
   const [downloading, setDownloading] = useState(false)
+  const [showPlayer, setShowPlayer]   = useState(false)
+  const [videoUrl, setVideoUrl]       = useState<string | null>(null)
+  const [loadingUrl, setLoadingUrl]   = useState(false)
   const badge = fileLabel(doc.mime_type, doc.nombre)
+  const video = isVideo(doc.mime_type, doc.nombre)
+
+  const getSignedUrl = async (): Promise<string | null> => {
+    const res  = await fetch(`/api/execution-portal/document?token=${encodeURIComponent(token)}&storage_path=${encodeURIComponent(doc.storage_path)}`)
+    const json = await res.json()
+    if (!res.ok || json.error) { alert(json.error ?? 'Error al cargar.'); return null }
+    return json.url as string
+  }
 
   const handleDownload = async () => {
     setDownloading(true)
-    const res = await fetch(
-      `/api/execution-portal/document?token=${encodeURIComponent(token)}&storage_path=${encodeURIComponent(doc.storage_path)}`
-    )
-    const json = await res.json()
+    const url = await getSignedUrl()
     setDownloading(false)
-    if (!res.ok || json.error) { alert(json.error ?? 'Error al descargar.'); return }
-    window.open(json.url, '_blank')
+    if (url) window.open(url, '_blank')
+  }
+
+  const handleTogglePlayer = async () => {
+    if (showPlayer) { setShowPlayer(false); return }
+    if (videoUrl)   { setShowPlayer(true);  return }
+    setLoadingUrl(true)
+    const url = await getSignedUrl()
+    setLoadingUrl(false)
+    if (!url) return
+    setVideoUrl(url)
+    setShowPlayer(true)
   }
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 6, border: '1px solid #E8E6E0', background: '#fff' }}>
-      <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 800, letterSpacing: '0.06em', padding: '3px 7px', borderRadius: 4, background: badge.bg, color: badge.color }}>
-        {badge.label}
-      </span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ margin: 0, fontSize: 13, color: '#1A1A1A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.nombre}</p>
-        {doc.discipline_tags.length > 0 && (
-          <div style={{ display: 'flex', gap: 4, marginTop: 3 }}>
-            {doc.discipline_tags.map(t => (
-              <span key={t} style={{ fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: '#F3F4F6', color: '#6B7280' }}>{t}</span>
-            ))}
-          </div>
-        )}
+    <div style={{ borderRadius: 6, border: '1px solid #E8E6E0', background: '#fff', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px' }}>
+        <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 800, letterSpacing: '0.06em', padding: '3px 7px', borderRadius: 4, background: badge.bg, color: badge.color }}>
+          {badge.label}
+        </span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ margin: 0, fontSize: 13, color: '#1A1A1A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.nombre}</p>
+          {doc.discipline_tags.length > 0 && (
+            <div style={{ display: 'flex', gap: 4, marginTop: 3 }}>
+              {doc.discipline_tags.map(t => (
+                <span key={t} style={{ fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: '#F3F4F6', color: '#6B7280' }}>{t}</span>
+              ))}
+            </div>
+          )}
+        </div>
+        <span style={{ fontSize: 11, color: '#AAA', flexShrink: 0 }}>{formatBytes(doc.size_bytes)}</span>
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+          {video ? (
+            <button
+              onClick={handleTogglePlayer}
+              disabled={loadingUrl}
+              style={{ padding: '6px 14px', fontSize: 12, borderRadius: 4, border: 'none', cursor: 'pointer', background: '#6D28D9', color: '#fff', fontFamily: 'inherit', fontWeight: 500 }}
+            >{loadingUrl ? '…' : showPlayer ? '▼ Cerrar' : '▶ Reproducir'}</button>
+          ) : null}
+          <button
+            onClick={handleDownload}
+            disabled={downloading}
+            style={{ padding: '6px 14px', fontSize: 12, borderRadius: 4, border: 'none', cursor: 'pointer', background: '#1A1A1A', color: '#fff', fontFamily: 'inherit', fontWeight: 500 }}
+          >{downloading ? '…' : 'Descargar'}</button>
+        </div>
       </div>
-      <span style={{ fontSize: 11, color: '#AAA', flexShrink: 0 }}>{formatBytes(doc.size_bytes)}</span>
-      <button
-        onClick={handleDownload}
-        disabled={downloading}
-        style={{ flexShrink: 0, padding: '6px 14px', fontSize: 12, borderRadius: 4, border: 'none', cursor: 'pointer', background: '#1A1A1A', color: '#fff', fontFamily: 'inherit', fontWeight: 500 }}
-      >{downloading ? '…' : 'Descargar'}</button>
+      {showPlayer && videoUrl && (
+        <div style={{ padding: '0 14px 14px' }}>
+          <video
+            src={videoUrl}
+            controls
+            style={{ width: '100%', borderRadius: 4, maxHeight: 480, background: '#000', display: 'block' }}
+          />
+        </div>
+      )}
     </div>
   )
 }

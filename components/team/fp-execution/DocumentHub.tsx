@@ -66,6 +66,8 @@ function formatBytes(bytes: number | null): string {
 
 function fileTypeBadge(mime: string | null, nombre: string): { label: string; bg: string; color: string } {
   const ext = nombre.split('.').pop()?.toLowerCase() ?? ''
+  if (mime?.startsWith('video/') || ['mp4','webm','mov','avi','wmv','mkv'].includes(ext))
+    return { label: 'VID', bg: '#F3E8FF', color: '#6D28D9' }
   if (mime?.startsWith('image/') || ['jpg','jpeg','png','gif','webp','svg'].includes(ext))
     return { label: 'IMG', bg: '#FEF3C7', color: '#92400E' }
   if (mime === 'application/pdf' || ext === 'pdf')
@@ -77,6 +79,11 @@ function fileTypeBadge(mime: string | null, nombre: string): { label: string; bg
   if (['docx','doc'].includes(ext))
     return { label: 'DOC', bg: '#DBEAFE', color: '#1E40AF' }
   return { label: ext.toUpperCase() || 'FILE', bg: '#F3F4F6', color: '#374151' }
+}
+
+function isVideo(mime: string | null, nombre: string): boolean {
+  const ext = nombre.split('.').pop()?.toLowerCase() ?? ''
+  return !!(mime?.startsWith('video/') || ['mp4','webm','mov','avi','wmv','mkv'].includes(ext))
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
@@ -98,16 +105,31 @@ function btn(primary?: boolean, danger?: boolean): React.CSSProperties {
 // ── Doc Row ───────────────────────────────────────────────────────────────────
 
 function DocRow({ doc, onDeleted }: { doc: FpeDoc; onDeleted: (id: string) => void }) {
-  const [deleting, setDeleting]     = useState(false)
+  const [deleting, setDeleting]       = useState(false)
   const [downloading, setDownloading] = useState(false)
-  const badge = fileTypeBadge(doc.mime_type, doc.nombre)
+  const [showPlayer, setShowPlayer]   = useState(false)
+  const [videoUrl, setVideoUrl]       = useState<string | null>(null)
+  const [loadingUrl, setLoadingUrl]   = useState(false)
+  const badge   = fileTypeBadge(doc.mime_type, doc.nombre)
+  const video   = isVideo(doc.mime_type, doc.nombre)
 
-  const handleDownload = async () => {
+  const handleOpen = async () => {
     setDownloading(true)
     const res = await getDocumentSignedUrl(doc.storage_path)
     setDownloading(false)
     if ('error' in res) { alert(res.error); return }
     window.open(res.url, '_blank')
+  }
+
+  const handleTogglePlayer = async () => {
+    if (showPlayer) { setShowPlayer(false); return }
+    if (videoUrl) { setShowPlayer(true); return }
+    setLoadingUrl(true)
+    const res = await getDocumentSignedUrl(doc.storage_path)
+    setLoadingUrl(false)
+    if ('error' in res) { alert(res.error); return }
+    setVideoUrl(res.url)
+    setShowPlayer(true)
   }
 
   const handleDelete = async () => {
@@ -120,24 +142,41 @@ function DocRow({ doc, onDeleted }: { doc: FpeDoc; onDeleted: (id: string) => vo
   }
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 6, border: '1px solid #E8E6E0', background: '#fff' }}>
-      <div style={{ flexShrink: 0, padding: '2px 6px', borderRadius: 3, background: badge.bg, color: badge.color, fontSize: 9, fontWeight: 800, letterSpacing: '0.06em' }}>
-        {badge.label}
+    <div style={{ borderRadius: 6, border: '1px solid #E8E6E0', background: '#fff', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px' }}>
+        <div style={{ flexShrink: 0, padding: '2px 6px', borderRadius: 3, background: badge.bg, color: badge.color, fontSize: 9, fontWeight: 800, letterSpacing: '0.06em' }}>
+          {badge.label}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ margin: 0, fontSize: 12, fontWeight: 500, color: '#1A1A1A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {doc.nombre}
+          </p>
+          <p style={{ margin: '2px 0 0', fontSize: 10, color: '#AAA' }}>{formatBytes(doc.size_bytes)}</p>
+        </div>
+        <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
+          {video ? (
+            <button onClick={handleTogglePlayer} disabled={loadingUrl} style={btn()}>
+              {loadingUrl ? '…' : showPlayer ? '▼ Cerrar' : '▶ Reproducir'}
+            </button>
+          ) : (
+            <button onClick={handleOpen} disabled={downloading} style={btn()}>
+              {downloading ? '…' : 'Ver'}
+            </button>
+          )}
+          <button onClick={handleDelete} disabled={deleting} style={btn(false, true)}>
+            {deleting ? '…' : '×'}
+          </button>
+        </div>
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ margin: 0, fontSize: 12, fontWeight: 500, color: '#1A1A1A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {doc.nombre}
-        </p>
-        <p style={{ margin: '2px 0 0', fontSize: 10, color: '#AAA' }}>{formatBytes(doc.size_bytes)}</p>
-      </div>
-      <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
-        <button onClick={handleDownload} disabled={downloading} style={btn()}>
-          {downloading ? '…' : 'Ver'}
-        </button>
-        <button onClick={handleDelete} disabled={deleting} style={btn(false, true)}>
-          {deleting ? '…' : '×'}
-        </button>
-      </div>
+      {showPlayer && videoUrl && (
+        <div style={{ padding: '0 12px 12px' }}>
+          <video
+            src={videoUrl}
+            controls
+            style={{ width: '100%', borderRadius: 4, maxHeight: 400, background: '#000', display: 'block' }}
+          />
+        </div>
+      )}
     </div>
   )
 }
