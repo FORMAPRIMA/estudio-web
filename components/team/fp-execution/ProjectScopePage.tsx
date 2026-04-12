@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { updateProject, saveProjectScope } from '@/app/actions/fpe-projects'
 import DocumentHub, { FpeDoc, ReadinessCheck, ScopedChapter, PartnerForDocs } from '@/components/team/fp-execution/DocumentHub'
 import TenderPanel, { type FpeTender, type FpePartnerSummary } from '@/components/team/fp-execution/TenderPanel'
+import ProjectDashboard from '@/components/team/fp-execution/ProjectDashboard'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -291,6 +292,7 @@ export default function ProjectScopePage({
   initialChecks,
   initialTender,
   partners,
+  renderUrls,
 }: {
   project: Project
   chapters: TemplateChapter[]
@@ -302,6 +304,7 @@ export default function ProjectScopePage({
   initialChecks: ReadinessCheck[]
   initialTender: FpeTender | null
   partners: FpePartnerSummary[]
+  renderUrls: string[]
 }) {
   const [project, setProject] = useState<Project>(initialProject)
   const [scope, setScope] = useState<ScopeState>(() =>
@@ -310,7 +313,7 @@ export default function ProjectScopePage({
   const [saving, setSaving] = useState(false)
   const [saveMsg, setSaveMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
   const [editingProject, setEditingProject] = useState(false)
-  const [activeTab, setActiveTab] = useState<'scope' | 'docs' | 'tender'>('scope')
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'scope' | 'docs' | 'tender'>('dashboard')
 
   // Build a unit name lookup from template chapters
   const unitNameMap = useMemo(() => {
@@ -457,17 +460,31 @@ export default function ProjectScopePage({
 
           {/* Tabs */}
           <div style={{ display: 'flex', gap: 0, marginTop: 16, borderBottom: '1px solid #E8E6E0', marginBottom: -1 }}>
+            <button style={tabStyle(activeTab === 'dashboard')} onClick={() => setActiveTab('dashboard')}>Dashboard</button>
             <button style={tabStyle(activeTab === 'scope')} onClick={() => setActiveTab('scope')}>Scope</button>
             <button style={tabStyle(activeTab === 'docs')} onClick={() => setActiveTab('docs')}>Documentos</button>
-            <button style={tabStyle(activeTab === 'tender')} onClick={() => setActiveTab('tender')}>
-              Licitación
-            </button>
+            <button style={tabStyle(activeTab === 'tender')} onClick={() => setActiveTab('tender')}>Licitación</button>
           </div>
         </div>
       </div>
 
       {/* Tab content */}
       <div style={{ maxWidth: 960, margin: '0 auto', padding: '28px 32px' }}>
+
+        {/* ── Dashboard tab ── */}
+        {activeTab === 'dashboard' && (
+          <ProjectDashboard
+            project={project}
+            renderUrls={renderUrls}
+            initialChecks={initialChecks}
+            initialTender={initialTender}
+            initialDocs={initialDocs}
+            scopedChapters={scopedChapters}
+            linkedProyectoNombre={
+              linkedProyectos.find(p => p.id === project.linked_proyecto_id)?.nombre ?? null
+            }
+          />
+        )}
 
         {/* ── Scope tab ── */}
         {activeTab === 'scope' && (

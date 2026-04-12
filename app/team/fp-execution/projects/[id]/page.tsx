@@ -91,6 +91,20 @@ export default async function FpeProjectDetailPage({
 
   if (!project) notFound()
 
+  // Generate signed URLs for image docs (used by Dashboard hero gallery)
+  const IMAGE_EXTS = ['jpg','jpeg','png','webp','svg','gif']
+  const imageDocs = (docs ?? []).filter(d =>
+    d.mime_type?.startsWith('image/') ||
+    IMAGE_EXTS.some(ext => d.nombre.toLowerCase().endsWith(`.${ext}`))
+  ).slice(0, 8) // max 8 renders in hero
+
+  const renderUrls = (await Promise.all(
+    imageDocs.map(async d => {
+      const { data } = await admin.storage.from('fpe-documents').createSignedUrl(d.storage_path, 4 * 60 * 60)
+      return data?.signedUrl ?? null
+    })
+  )).filter((u): u is string => !!u)
+
   // Fetch unit_partners now that we have project unit IDs
   const projectUnitIds = (project.project_units ?? []).map(pu => pu.id)
   const { data: unitPartnersRaw } = projectUnitIds.length > 0
@@ -179,6 +193,7 @@ export default async function FpeProjectDetailPage({
       initialChecks={checks}
       initialTender={(tender ?? null) as unknown as FpeTender | null}
       partners={tendersPartners}
+      renderUrls={renderUrls}
     />
   )
 }
