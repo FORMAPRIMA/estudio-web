@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import type { FpeDoc, ScopedChapter, ReadinessCheck } from './DocumentHub'
 import type { FpeTender, FpeInvitation } from './TenderPanel'
 
@@ -212,6 +212,147 @@ function HeroGallery({
   )
 }
 
+// ── Mapbox Static Map ─────────────────────────────────────────────────────────
+// Geocodes with Nominatim (free, no key) → renders Mapbox dark-v11 static image.
+// Falls back gracefully if no token or geocoding fails.
+
+type GeoState =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'ok';    lat: number; lng: number }
+  | { status: 'error'; reason: string }
+
+const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
+
+function MapCard({ address }: { address: string }) {
+  const [geo, setGeo] = useState<GeoState>({ status: 'idle' })
+
+  useEffect(() => {
+    if (!MAPBOX_TOKEN || !address) return
+    setGeo({ status: 'loading' })
+    fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`,
+      { headers: { 'Accept-Language': 'es' } }
+    )
+      .then(r => r.json())
+      .then((data: { lat: string; lon: string }[]) => {
+        if (data[0]) {
+          setGeo({ status: 'ok', lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) })
+        } else {
+          setGeo({ status: 'error', reason: 'Dirección no encontrada' })
+        }
+      })
+      .catch(() => setGeo({ status: 'error', reason: 'Error de conexión' }))
+  }, [address])
+
+  const googleUrl = `https://www.google.com/maps/search/${encodeURIComponent(address)}`
+
+  // ── No Mapbox token → setup placeholder ──────────────────────────────────
+  if (!MAPBOX_TOKEN) {
+    return (
+      <div style={{
+        height: '100%', minHeight: 280, display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24,
+        background: '#1A1A1A', borderRadius: 12, textAlign: 'center',
+      }}>
+        <div style={{ fontSize: 36, opacity: 0.4 }}>🗺</div>
+        <p style={{ margin: 0, fontSize: 13, color: 'rgba(255,255,255,0.5)', fontWeight: 500 }}>
+          Mapa no configurado
+        </p>
+        <p style={{ margin: 0, fontSize: 11, color: 'rgba(255,255,255,0.25)', lineHeight: 1.6 }}>
+          Añade <code style={{ background: 'rgba(255,255,255,0.08)', padding: '1px 5px', borderRadius: 3 }}>NEXT_PUBLIC_MAPBOX_TOKEN</code>
+          {' '}a las variables de entorno de Vercel para activar el mapa.
+        </p>
+        {address && (
+          <a
+            href={googleUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              marginTop: 4, padding: '7px 16px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+              background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)',
+              textDecoration: 'none', border: '1px solid rgba(255,255,255,0.1)',
+            }}
+          >
+            Ver en Google Maps →
+          </a>
+        )}
+      </div>
+    )
+  }
+
+  // ── Loading ───────────────────────────────────────────────────────────────
+  if (geo.status === 'idle' || geo.status === 'loading') {
+    return (
+      <div style={{
+        height: '100%', minHeight: 280, display: 'flex', alignItems: 'center',
+        justifyContent: 'center', background: '#1A1A1A', borderRadius: 12,
+      }}>
+        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', letterSpacing: '0.08em' }}>
+          {geo.status === 'loading' ? 'Localizando…' : ''}
+        </div>
+      </div>
+    )
+  }
+
+  // ── Geocoding error ───────────────────────────────────────────────────────
+  if (geo.status === 'error') {
+    return (
+      <div style={{
+        height: '100%', minHeight: 280, display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', gap: 10,
+        background: '#1A1A1A', borderRadius: 12,
+      }}>
+        <p style={{ margin: 0, fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>{geo.reason}</p>
+        <a href={googleUrl} target="_blank" rel="noopener noreferrer"
+          style={{ fontSize: 11, color: '#D85A30', textDecoration: 'none' }}>
+          Ver en Google Maps →
+        </a>
+      </div>
+    )
+  }
+
+  // ── Mapbox dark static image ──────────────────────────────────────────────
+  const { lat, lng } = geo
+  // marker: large pin in app orange (#D85A30 without #)
+  const marker = `pin-l+D85A30(${lng},${lat})`
+  // Static image URL — @2x for retina, 700×420 displayed full-width
+  const mapSrc = `https://api.mapbox.com/styles/v1/mapbox/dark-v11/static/${marker}/${lng},${lat},14.5,0/700x420@2x?access_token=${MAPBOX_TOKEN}`
+
+  return (
+    <div style={{ position: 'relative', height: '100%', minHeight: 280, borderRadius: 12, overflow: 'hidden', background: '#1A1A1A' }}>
+      <img
+        src={mapSrc}
+        alt={`Mapa — ${address}`}
+        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+        loading="lazy"
+      />
+      {/* Bottom gradient + "Ver en mapa" link */}
+      <div style={{
+        position: 'absolute', bottom: 0, left: 0, right: 0,
+        background: 'linear-gradient(to top, rgba(0,0,0,0.65) 0%, transparent 100%)',
+        padding: '20px 16px 12px',
+        display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between',
+      }}>
+        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: 500 }}>
+          {address}
+        </span>
+        <a
+          href={googleUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.6)',
+            textDecoration: 'none', letterSpacing: '0.06em', flexShrink: 0, marginLeft: 8,
+          }}
+        >
+          ABRIR MAPA ↗
+        </a>
+      </div>
+    </div>
+  )
+}
+
 // ── Info + Map row ────────────────────────────────────────────────────────────
 
 function InfoAndMap({
@@ -221,9 +362,8 @@ function InfoAndMap({
   linkedProyectoNombre: string | null
   totalDocs: number
 }) {
-  const mapQuery = [project.direccion, project.ciudad, 'España'].filter(Boolean).join(', ')
   const hasLocation = !!(project.direccion || project.ciudad)
-
+  const fullAddress = [project.direccion, project.ciudad, 'España'].filter(Boolean).join(', ')
   const created = new Date(project.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })
 
   return (
@@ -233,43 +373,30 @@ function InfoAndMap({
         <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA' }}>
           Información del proyecto
         </div>
-
         {project.descripcion && (
           <p style={{ margin: 0, fontSize: 13, color: '#555', lineHeight: 1.6 }}>{project.descripcion}</p>
         )}
-
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {project.direccion && (
-            <Row icon="📍" label="Dirección" value={project.direccion} />
-          )}
-          {project.ciudad && (
-            <Row icon="🏙" label="Ciudad" value={project.ciudad} />
-          )}
-          {linkedProyectoNombre && (
-            <Row icon="🔗" label="Proyecto FP" value={linkedProyectoNombre} />
-          )}
-          <Row icon="📅" label="Creado" value={created} />
+          {project.direccion && <Row icon="📍" label="Dirección" value={project.direccion} />}
+          {project.ciudad    && <Row icon="🏙" label="Ciudad"    value={project.ciudad} />}
+          {linkedProyectoNombre && <Row icon="🔗" label="Proyecto FP" value={linkedProyectoNombre} />}
+          <Row icon="📅" label="Creado"     value={created} />
           <Row icon="📄" label="Documentos" value={`${totalDocs} archivo${totalDocs !== 1 ? 's' : ''}`} />
         </div>
       </div>
 
       {/* Map card */}
-      <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #E8E6E0', overflow: 'hidden', minHeight: 280 }}>
+      <div style={{ borderRadius: 12, overflow: 'hidden', minHeight: 280, border: '1px solid #E8E6E0' }}>
         {hasLocation ? (
-          <iframe
-            title="Localización"
-            src={`https://maps.google.com/maps?q=${encodeURIComponent(mapQuery)}&output=embed&hl=es&z=16`}
-            width="100%"
-            height="100%"
-            style={{ border: 0, display: 'block', minHeight: 280 }}
-            loading="lazy"
-            referrerPolicy="no-referrer-when-downgrade"
-          />
+          <MapCard address={fullAddress} />
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 280, gap: 8 }}>
-            <span style={{ fontSize: 32 }}>🗺</span>
-            <p style={{ margin: 0, fontSize: 12, color: '#BBB' }}>Sin dirección asignada</p>
-            <p style={{ margin: 0, fontSize: 11, color: '#CCC' }}>Edita el proyecto para añadir una ubicación</p>
+          <div style={{
+            height: '100%', minHeight: 280, display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center', gap: 8,
+            background: '#1A1A1A', borderRadius: 12,
+          }}>
+            <span style={{ fontSize: 32, opacity: 0.3 }}>📍</span>
+            <p style={{ margin: 0, fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>Sin dirección asignada</p>
           </div>
         )}
       </div>
