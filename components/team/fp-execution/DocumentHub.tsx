@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useCallback } from 'react'
 import { deleteDocument, getDocumentSignedUrl, getReadinessChecks } from '@/app/actions/fpe-documents'
-import { saveUnitQuantities, saveUnitPartners } from '@/app/actions/fpe-projects'
+import { saveUnitQuantities, saveUnitPartners, saveFpeProjectTourUrl } from '@/app/actions/fpe-projects'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -189,7 +189,7 @@ function DocRow({ doc, onDeleted }: { doc: FpeDoc; onDeleted: (id: string) => vo
 async function directUpload(
   file: File,
   projectId: string,
-  opts: { chapterId?: string; projectUnitId?: string } = {},
+  opts: { chapterId?: string; projectUnitId?: string; disciplineTag?: string } = {},
 ): Promise<FpeDoc> {
   // Step 1: get signed URL
   const urlRes = await fetch('/api/fpe-documents/upload-url', {
@@ -226,6 +226,7 @@ async function directUpload(
       size_bytes:      file.size,
       chapter_id:      opts.chapterId      ?? null,
       project_unit_id: opts.projectUnitId  ?? null,
+      discipline_tags: opts.disciplineTag ? [opts.disciplineTag] : [],
     }),
   })
   const regData = await regRes.json()
@@ -233,28 +234,44 @@ async function directUpload(
   return regData.doc as FpeDoc
 }
 
-// ── General Upload Zone (no chapter_id, no project_unit_id) ──────────────────
-// Files here are sent to ALL partners in ALL packages.
+// ── Single typed upload zone ──────────────────────────────────────────────────
 
-function GeneralUploadZone({
+const ZONE_ACCENT: Record<string, { border: string; bg: string; icon: string; badge: string; badgeText: string }> = {
+  video_estado: { border: '#C4B5FD', bg: '#FAF5FF', icon: '#7C3AED', badge: '#EDE9FE', badgeText: '#5B21B6' },
+  foto_estado:  { border: '#FCD34D', bg: '#FFFBEB', icon: '#D97706', badge: '#FEF3C7', badgeText: '#92400E' },
+  plano_pdf:    { border: '#FCA5A5', bg: '#FFF5F5', icon: '#DC2626', badge: '#FEE2E2', badgeText: '#991B1B' },
+  plano_cad:    { border: '#A5B4FC', bg: '#F5F3FF', icon: '#4F46E5', badge: '#E0E7FF', badgeText: '#3730A3' },
+  render:       { border: '#FDBA74', bg: '#FFFBF8', icon: '#D85A30', badge: '#FEF0E7', badgeText: '#C2410C' },
+}
+
+function DocZone({
+  label,
+  hint,
+  accept,
+  tag,
   projectId,
-  generalDocs,
+  docs,
   onUploaded,
   onDeleted,
 }: {
-  projectId:   string
-  generalDocs: FpeDoc[]
-  onUploaded:  (doc: FpeDoc) => void
-  onDeleted:   (id: string) => void
+  label: string
+  hint: string
+  accept: string
+  tag: string
+  projectId: string
+  docs: FpeDoc[]
+  onUploaded: (doc: FpeDoc) => void
+  onDeleted: (id: string) => void
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [error, setError]         = useState<string | null>(null)
+  const accent = ZONE_ACCENT[tag] ?? ZONE_ACCENT.render
 
   const upload = async (file: File) => {
     setUploading(true); setError(null)
     try {
-      const doc = await directUpload(file, projectId)
+      const doc = await directUpload(file, projectId, { disciplineTag: tag })
       onUploaded(doc)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error subiendo.')
@@ -263,74 +280,176 @@ function GeneralUploadZone({
     }
   }
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    const f = e.dataTransfer.files[0]
-    if (f) upload(f)
-  }
-
   return (
-    <div>
-      <div style={{ marginBottom: 12 }}>
-        <p style={{ ...SL, fontSize: 10, color: '#D85A30' }}>
-          Planimetría general · fotografías · renders · videos
-        </p>
-        <p style={{ margin: '2px 0 0', fontSize: 11, color: '#888' }}>
-          Estos archivos se incluyen en <strong>todos los paquetes de envío</strong>, independientemente del capítulo.
-        </p>
+    <div style={{ border: `1px solid ${accent.border}`, borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+      {/* Header */}
+      <div style={{ padding: '10px 14px', background: accent.bg, borderBottom: `1px solid ${accent.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <div style={{ minWidth: 0 }}>
+          <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: '#1A1A1A' }}>{label}</p>
+          <p style={{ margin: '2px 0 0', fontSize: 10, color: '#888' }}>{hint}</p>
+        </div>
+        {docs.length > 0 && (
+          <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 800, padding: '2px 7px', borderRadius: 10, background: accent.badge, color: accent.badgeText, letterSpacing: '0.04em' }}>
+            {docs.length}
+          </span>
+        )}
       </div>
 
-      <div
-        onDragOver={e => e.preventDefault()}
-        onDrop={handleDrop}
-        onClick={() => fileRef.current?.click()}
-        style={{
-          border: '1.5px dashed #D85A30', borderRadius: 6, padding: '16px 20px',
-          cursor: uploading ? 'not-allowed' : 'pointer',
-          background: '#FFFBF8', display: 'flex', alignItems: 'center', gap: 10,
-          marginBottom: generalDocs.length > 0 || error ? 10 : 0,
-          opacity: uploading ? 0.7 : 1,
-        }}
-      >
-        <input
-          ref={fileRef}
-          type="file"
-          style={{ display: 'none' }}
-          onChange={e => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = '' }}
-        />
-        <div style={{ flexShrink: 0, width: 32, height: 32, borderRadius: 6, background: '#FDE8DE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D85A30" strokeWidth="2">
+      {/* Existing docs */}
+      {docs.length > 0 && (
+        <div style={{ padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 4, borderBottom: `1px solid ${accent.border}` }}>
+          {docs.map(d => <DocRow key={d.id} doc={d} onDeleted={onDeleted} />)}
+        </div>
+      )}
+
+      {/* Drop zone */}
+      <div style={{ padding: '8px 12px' }}>
+        <div
+          onDragOver={e => e.preventDefault()}
+          onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) upload(f) }}
+          onClick={() => !uploading && fileRef.current?.click()}
+          style={{
+            border: `1.5px dashed ${accent.border}`, borderRadius: 6, padding: '9px 14px',
+            cursor: uploading ? 'not-allowed' : 'pointer', opacity: uploading ? 0.6 : 1,
+            display: 'flex', alignItems: 'center', gap: 8, background: accent.bg,
+          }}
+        >
+          <input ref={fileRef} type="file" accept={accept} style={{ display: 'none' }}
+            onChange={e => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = '' }} />
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={accent.icon} strokeWidth="2.5" style={{ flexShrink: 0 }}>
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
             <polyline points="17 8 12 3 7 8"/>
             <line x1="12" y1="3" x2="12" y2="15"/>
           </svg>
-        </div>
-        <div>
-          <p style={{ margin: 0, fontSize: 12, color: '#555', fontWeight: 500 }}>
-            {uploading ? 'Subiendo…' : 'Arrastra o haz clic — PDF, DWG, DXF, imágenes, vídeos'}
+          <p style={{ margin: 0, fontSize: 11, color: '#666', fontWeight: 500 }}>
+            {uploading ? 'Subiendo…' : 'Arrastra o haz clic para subir'}
           </p>
-          <p style={{ margin: '2px 0 0', fontSize: 10, color: '#AAA' }}>Máx. 50 MB por archivo</p>
+        </div>
+        {error && (
+          <p style={{ margin: '6px 0 0', fontSize: 11, color: '#DC2626', padding: '4px 8px', background: '#FEF2F2', borderRadius: 4 }}>{error}</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Floorfy URL field ─────────────────────────────────────────────────────────
+
+function FloorfyField({ projectId, initialUrl }: { projectId: string; initialUrl: string | null }) {
+  const [url, setUrl]     = useState(initialUrl ?? '')
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg]     = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
+
+  const save = async () => {
+    setSaving(true); setMsg(null)
+    const res = await saveFpeProjectTourUrl(projectId, url.trim() || null)
+    setSaving(false)
+    if ('error' in res) { setMsg({ type: 'err', text: res.error }); return }
+    setMsg({ type: 'ok', text: 'Guardado' })
+    setTimeout(() => setMsg(null), 2500)
+  }
+
+  return (
+    <div style={{ border: '1px solid #BAD7F2', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+      <div style={{ padding: '10px 14px', background: '#F0F7FF', borderBottom: '1px solid #BAD7F2' }}>
+        <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: '#1A1A1A' }}>Recorrido virtual 360°</p>
+        <p style={{ margin: '2px 0 0', fontSize: 10, color: '#888' }}>URL de Floorfy u otro proveedor — se mostrará como enlace en el portal del partner</p>
+      </div>
+      <div style={{ padding: '12px 14px' }}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            type="url"
+            value={url}
+            onChange={e => setUrl(e.target.value)}
+            placeholder="https://my.floorfy.com/tour/..."
+            style={{ flex: 1, padding: '7px 10px', fontSize: 12, border: `1px solid ${url ? '#378ADD' : '#E8E6E0'}`, borderRadius: 5, fontFamily: 'inherit', color: '#1A1A1A', background: url ? '#F0F7FF' : '#fff', outline: 'none' }}
+          />
+          <button
+            onClick={save}
+            disabled={saving}
+            style={btn(true)}
+          >
+            {saving ? '…' : 'Guardar'}
+          </button>
+        </div>
+        {msg && (
+          <p style={{ margin: '5px 0 0', fontSize: 11, fontWeight: 600, color: msg.type === 'ok' ? '#059669' : '#DC2626' }}>
+            {msg.type === 'ok' ? '✓' : '✗'} {msg.text}
+          </p>
+        )}
+        {url && (
+          <a href={url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', marginTop: 6, fontSize: 10, color: '#378ADD', textDecoration: 'none' }}>
+            Abrir recorrido →
+          </a>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── General Doc Section (Planimetría General tab) ─────────────────────────────
+// Five typed upload zones + Floorfy URL field.
+// Files with no tag (uploaded before this redesign) appear in a separate catch-all.
+
+function GeneralDocSection({
+  projectId,
+  generalDocs,
+  onUploaded,
+  onDeleted,
+  tourVirtualUrl,
+}: {
+  projectId:      string
+  generalDocs:    FpeDoc[]
+  onUploaded:     (doc: FpeDoc) => void
+  onDeleted:      (id: string) => void
+  tourVirtualUrl: string | null
+}) {
+  const byTag = (tag: string) => generalDocs.filter(d => (d.discipline_tags ?? []).includes(tag))
+  const unclassified = generalDocs.filter(d => !d.discipline_tags?.length)
+
+  const ZONES: { label: string; hint: string; accept: string; tag: string }[] = [
+    { label: 'Vídeo de estado actual',     hint: 'MP4, MOV, WEBM — estado real de la propiedad',                  accept: 'video/*',                        tag: 'video_estado' },
+    { label: 'Fotografías de estado actual', hint: 'JPG, PNG, WEBP — fotografías del estado actual',              accept: 'image/*',                        tag: 'foto_estado'  },
+    { label: 'Planimetría en PDF',         hint: 'Planos en formato PDF',                                          accept: '.pdf,application/pdf',           tag: 'plano_pdf'    },
+    { label: 'Planimetría en CAD',         hint: 'DWG, DXF, RVT, IFC — archivos técnicos de diseño',              accept: '.dwg,.dxf,.rvt,.ifc',            tag: 'plano_cad'    },
+    { label: 'Renders del proyecto',       hint: 'JPG, PNG — imágenes que aparecen en el header del dashboard y portal', accept: 'image/*',                 tag: 'render'       },
+  ]
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div>
+        <p style={{ ...SL, fontSize: 10, color: '#D85A30', margin: '0 0 4px' }}>Planimetría general del proyecto</p>
+        <p style={{ margin: '0 0 16px', fontSize: 11, color: '#888' }}>
+          Estos archivos se incluyen en <strong>todos los paquetes de licitación</strong>.
+        </p>
+      </div>
+
+      {/* 2-column grid for the 5 zones */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12 }}>
+        {ZONES.map(z => (
+          <DocZone
+            key={z.tag}
+            {...z}
+            projectId={projectId}
+            docs={byTag(z.tag)}
+            onUploaded={onUploaded}
+            onDeleted={onDeleted}
+          />
+        ))}
+        {/* Floorfy URL — full width on its own row */}
+        <div style={{ gridColumn: '1 / -1' }}>
+          <FloorfyField projectId={projectId} initialUrl={tourVirtualUrl} />
         </div>
       </div>
 
-      {error && (
-        <div style={{ padding: '6px 10px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 5, fontSize: 11, color: '#DC2626', marginBottom: 8 }}>
-          {error}
+      {/* Archivos sin clasificar (legacy uploads) */}
+      {unclassified.length > 0 && (
+        <div>
+          <p style={{ ...SL, margin: '4px 0 8px' }}>Archivos sin clasificar</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {unclassified.map(d => <DocRow key={d.id} doc={d} onDeleted={onDeleted} />)}
+          </div>
         </div>
-      )}
-
-      {generalDocs.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {generalDocs.map(d => (
-            <DocRow key={d.id} doc={d} onDeleted={onDeleted} />
-          ))}
-        </div>
-      )}
-
-      {generalDocs.length === 0 && !uploading && (
-        <p style={{ margin: '12px 0 0', fontSize: 11, color: '#CCC', textAlign: 'center' }}>
-          Todavía no hay archivos generales subidos.
-        </p>
       )}
     </div>
   )
@@ -668,6 +787,7 @@ export default function DocumentHub({
   initialDocs,
   initialScore,
   initialChecks,
+  tourVirtualUrl = null,
 }: {
   projectId: string
   scopedChapters: ScopedChapter[]
@@ -676,6 +796,7 @@ export default function DocumentHub({
   initialDocs: FpeDoc[]
   initialScore: number
   initialChecks: ReadinessCheck[]
+  tourVirtualUrl?: string | null
 }) {
   const [docs, setDocs]           = useState<FpeDoc[]>(initialDocs)
   const [score, setScore]         = useState(initialScore)
@@ -780,11 +901,12 @@ export default function DocumentHub({
 
           {/* ── Planimetría General ── */}
           {isGeneral && (
-            <GeneralUploadZone
+            <GeneralDocSection
               projectId={projectId}
               generalDocs={chapterDocs}
               onUploaded={handleDocUploaded}
               onDeleted={handleDocDeleted}
+              tourVirtualUrl={tourVirtualUrl}
             />
           )}
 

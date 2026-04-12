@@ -572,6 +572,7 @@ export default function PortalPage({
   isReadOnly,
   initialQuestions,
   renderUrls = [],
+  tourVirtualUrl = null,
 }: {
   token: string
   partner: Partner
@@ -583,6 +584,7 @@ export default function PortalPage({
   isReadOnly: boolean
   initialQuestions: PortalQuestion[]
   renderUrls?: string[]
+  tourVirtualUrl?: string | null
 }) {
   // ── Tab + scroll ──────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview')
@@ -832,6 +834,24 @@ export default function PortalPage({
                 >
                   Ver documentación
                 </button>
+              </div>
+            )}
+
+            {/* Virtual tour */}
+            {tourVirtualUrl && (
+              <div style={{ background: '#EBF5FF', borderRadius: 12, padding: '20px 22px', border: '1px solid #BAD7F2', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+                <div>
+                  <p style={{ margin: '0 0 3px', fontSize: 13, fontWeight: 600, color: '#1A1A1A' }}>Recorrido virtual 360°</p>
+                  <p style={{ margin: 0, fontSize: 11, color: '#4A90C0' }}>Visita virtual del proyecto renderizado</p>
+                </div>
+                <a
+                  href={tourVirtualUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ padding: '10px 20px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: 'none', cursor: 'pointer', background: '#378ADD', color: '#fff', fontFamily: 'inherit', textDecoration: 'none', flexShrink: 0 }}
+                >
+                  Abrir recorrido →
+                </a>
               </div>
             )}
           </div>

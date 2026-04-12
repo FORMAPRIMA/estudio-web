@@ -293,6 +293,7 @@ export default function ProjectScopePage({
   initialTender,
   partners,
   renderUrls,
+  tourVirtualUrl,
 }: {
   project: Project
   chapters: TemplateChapter[]
@@ -305,6 +306,7 @@ export default function ProjectScopePage({
   initialTender: FpeTender | null
   partners: FpePartnerSummary[]
   renderUrls: string[]
+  tourVirtualUrl: string | null
 }) {
   const [project, setProject] = useState<Project>(initialProject)
   const [scope, setScope] = useState<ScopeState>(() =>
@@ -578,6 +580,7 @@ export default function ProjectScopePage({
             initialDocs={initialDocs}
             initialScore={project.readiness_score}
             initialChecks={initialChecks}
+            tourVirtualUrl={tourVirtualUrl}
           />
         )}
 

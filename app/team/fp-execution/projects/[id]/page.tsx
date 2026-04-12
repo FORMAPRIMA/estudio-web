@@ -27,6 +27,7 @@ export default async function FpeProjectDetailPage({
       .select(`
         id, nombre, descripcion, direccion, ciudad,
         linked_proyecto_id, status, readiness_score, created_at,
+        tour_virtual_url,
         project_units:fpe_project_units (
           id, template_unit_id, notas, orden,
           line_items:fpe_project_line_items (
@@ -91,12 +92,14 @@ export default async function FpeProjectDetailPage({
 
   if (!project) notFound()
 
-  // Generate signed URLs for image docs (used by Dashboard hero gallery)
+  // Generate signed URLs for render images (used by Dashboard hero gallery)
+  // Prefer docs tagged 'render'; fall back to any image doc without unit/chapter
   const IMAGE_EXTS = ['jpg','jpeg','png','webp','svg','gif']
-  const imageDocs = (docs ?? []).filter(d =>
-    d.mime_type?.startsWith('image/') ||
-    IMAGE_EXTS.some(ext => d.nombre.toLowerCase().endsWith(`.${ext}`))
-  ).slice(0, 8) // max 8 renders in hero
+  const isImgDoc = (d: { mime_type: string | null; nombre: string }) =>
+    d.mime_type?.startsWith('image/') || IMAGE_EXTS.some(ext => d.nombre.toLowerCase().endsWith(`.${ext}`))
+  const allImageDocs = (docs ?? []).filter(isImgDoc)
+  const taggedRenders = allImageDocs.filter(d => (d.discipline_tags as string[] ?? []).includes('render'))
+  const imageDocs = (taggedRenders.length > 0 ? taggedRenders : allImageDocs).slice(0, 8)
 
   const renderUrls = (await Promise.all(
     imageDocs.map(async d => {
@@ -194,6 +197,7 @@ export default async function FpeProjectDetailPage({
       initialTender={(tender ?? null) as unknown as FpeTender | null}
       partners={tendersPartners}
       renderUrls={renderUrls}
+      tourVirtualUrl={(project as unknown as { tour_virtual_url: string | null }).tour_virtual_url ?? null}
     />
   )
 }

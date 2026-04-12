@@ -19,7 +19,7 @@ export default async function ExecutionPortalTokenPage({
       tender:fpe_tenders (
         id, descripcion, fecha_limite, status,
         project:fpe_projects (
-          id, nombre, descripcion, direccion, ciudad
+          id, nombre, descripcion, direccion, ciudad, tour_virtual_url
         )
       )
     `)
@@ -41,7 +41,7 @@ export default async function ExecutionPortalTokenPage({
   }
 
   const partner = inv.partner as unknown as { id: string; nombre: string; contacto_nombre: string | null; email_contacto: string | null }
-  const tender  = inv.tender  as unknown as { id: string; descripcion: string | null; fecha_limite: string; status: string; project: { id: string; nombre: string; descripcion: string | null; direccion: string | null; ciudad: string | null } }
+  const tender  = inv.tender  as unknown as { id: string; descripcion: string | null; fecha_limite: string; status: string; project: { id: string; nombre: string; descripcion: string | null; direccion: string | null; ciudad: string | null; tour_virtual_url: string | null } }
 
   if (expired || revoked) {
     return (
@@ -154,6 +154,7 @@ export default async function ExecutionPortalTokenPage({
       isReadOnly={tenderClosed || deadlinePassed || inv.status === 'bid_submitted'}
       initialQuestions={(questions ?? []) as Parameters<typeof PortalPage>[0]['initialQuestions']}
       renderUrls={renderUrls}
+      tourVirtualUrl={tender.project.tour_virtual_url ?? null}
     />
   )
 }

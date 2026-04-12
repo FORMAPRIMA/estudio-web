@@ -224,6 +224,25 @@ export async function saveUnitPartners(
 
 // ── Contract a project ────────────────────────────────────────────────────────
 
+export async function saveFpeProjectTourUrl(
+  projectId: string,
+  url: string | null,
+): Promise<{ success: true } | { error: string }> {
+  try {
+    await requireManagerOrPartner()
+    const admin = createAdminClient()
+    const { error } = await admin
+      .from('fpe_projects')
+      .update({ tour_virtual_url: url || null })
+      .eq('id', projectId)
+    if (error) return { error: error.message }
+    revalidatePath(`${LIST_PATH}/${projectId}`)
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
 export async function contractProject(
   project_id: string
 ): Promise<{ success: true } | { error: string }> {
