@@ -8,6 +8,7 @@ import {
   addVisita, updateVisita, deleteVisita,
   addPartida, updatePartida, deletePartida,
   upsertContratos,
+  addPagoConstructora, updatePagoConstructora, deletePagoConstructora,
 } from '@/app/actions/clientes'
 import RegistrarVisitaModal from '@/components/team/clientes/RegistrarVisitaModal'
 
@@ -52,6 +53,11 @@ interface Contratos {
 interface Factura {
   id: string; seccion: string; concepto: string; monto: number
   status: string; fecha_pago_acordada: string | null; numero_factura: string | null
+}
+
+interface PagoConstructora {
+  id: string; concepto: string; importe_estimado: number | null
+  fecha_estimada: string; orden: number; notas: string | null
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -1487,11 +1493,214 @@ function FacturacionTab({ facturas }: { facturas: Factura[] }) {
   )
 }
 
+// ── CONSTRUCTORA TAB ──────────────────────────────────────────────────────────
+
+const EMPTY_PAGO = { concepto: '', importe_estimado: '', fecha_estimada: '', notas: '' }
+
+function ConstructoraTab({ proyectoId, initialPagos }: { proyectoId: string; initialPagos: PagoConstructora[] }) {
+  const [pagos, setPagos]         = useState<PagoConstructora[]>(initialPagos)
+  const [showAdd, setShowAdd]     = useState(false)
+  const [form, setForm]           = useState(EMPTY_PAGO)
+  const [editId, setEditId]       = useState<string | null>(null)
+  const [editForm, setEditForm]   = useState(EMPTY_PAGO)
+  const [isPending, startTransition] = useTransition()
+  const [err, setErr]             = useState<string | null>(null)
+
+  const totalConstructora = pagos.reduce((s, p) => s + (p.importe_estimado ?? 0), 0)
+
+  function handleAdd() {
+    if (!form.concepto.trim() || !form.fecha_estimada) return
+    const importe = form.importe_estimado ? parseFloat(form.importe_estimado) : null
+    const optimistic: PagoConstructora = {
+      id: 'tmp-' + Date.now(),
+      concepto: form.concepto.trim(),
+      importe_estimado: importe,
+      fecha_estimada: form.fecha_estimada,
+      orden: pagos.length,
+      notas: form.notas || null,
+    }
+    setPagos(prev => [...prev, optimistic].sort((a, b) => a.fecha_estimada.localeCompare(b.fecha_estimada)))
+    setForm(EMPTY_PAGO)
+    setShowAdd(false)
+    startTransition(async () => {
+      const res = await addPagoConstructora({
+        proyecto_id: proyectoId,
+        concepto: optimistic.concepto,
+        importe_estimado: optimistic.importe_estimado,
+        fecha_estimada: optimistic.fecha_estimada,
+        notas: optimistic.notas,
+        orden: optimistic.orden,
+      })
+      if ('error' in res) { setErr(res.error); setPagos(prev => prev.filter(p => p.id !== optimistic.id)) }
+      else setPagos(prev => prev.map(p => p.id === optimistic.id ? { ...p, id: res.id } : p))
+    })
+  }
+
+  function startEdit(p: PagoConstructora) {
+    setEditId(p.id)
+    setEditForm({ concepto: p.concepto, importe_estimado: p.importe_estimado?.toString() ?? '', fecha_estimada: p.fecha_estimada, notas: p.notas ?? '' })
+  }
+
+  function handleSaveEdit() {
+    if (!editId || !editForm.concepto.trim() || !editForm.fecha_estimada) return
+    const importe = editForm.importe_estimado ? parseFloat(editForm.importe_estimado) : null
+    setPagos(prev => prev.map(p => p.id === editId
+      ? { ...p, concepto: editForm.concepto.trim(), importe_estimado: importe, fecha_estimada: editForm.fecha_estimada, notas: editForm.notas || null }
+      : p
+    ).sort((a, b) => a.fecha_estimada.localeCompare(b.fecha_estimada)))
+    const id = editId
+    setEditId(null)
+    startTransition(async () => {
+      const res = await updatePagoConstructora(id, proyectoId, {
+        concepto: editForm.concepto.trim(),
+        importe_estimado: importe,
+        fecha_estimada: editForm.fecha_estimada,
+        notas: editForm.notas || null,
+      })
+      if ('error' in res) setErr(res.error)
+    })
+  }
+
+  function handleDelete(id: string) {
+    setPagos(prev => prev.filter(p => p.id !== id))
+    startTransition(async () => {
+      const res = await deletePagoConstructora(id, proyectoId)
+      if ('error' in res) setErr(res.error)
+    })
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {err && <div style={{ background: '#FEF2F2', color: '#E53E3E', borderRadius: 6, padding: '10px 14px', fontSize: 12 }}>{err}</div>}
+
+      {/* Summary */}
+      <div style={{ ...S.card, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24 }}>
+        <div>
+          <p style={{ ...S.label, marginBottom: 4 }}>Total constructora</p>
+          <p style={{ fontSize: 22, fontWeight: 300, color: '#1D4ED8', margin: 0, letterSpacing: '-0.01em' }}>{fmtMoney(totalConstructora)}</p>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <p style={{ ...S.label, marginBottom: 4 }}>Hitos</p>
+          <p style={{ fontSize: 22, fontWeight: 300, color: '#1A1A1A', margin: 0 }}>{pagos.length}</p>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div style={S.card}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <p style={S.sectionTitle}>Programa de pagos</p>
+          <button
+            style={{ ...S.btnPrimary, opacity: isPending ? 0.6 : 1 }}
+            onClick={() => { setShowAdd(true); setEditId(null) }}
+          >
+            + Añadir hito
+          </button>
+        </div>
+
+        {/* Add form */}
+        {showAdd && (
+          <div style={{ background: '#F8F7F4', borderRadius: 8, padding: '16px', marginBottom: 16, display: 'grid', gridTemplateColumns: '1fr 120px 140px', gap: 10, alignItems: 'end' }}>
+            <div>
+              <label style={S.label}>Concepto</label>
+              <input style={S.input} placeholder="Ej: Certificación 1" value={form.concepto} onChange={e => setForm(f => ({ ...f, concepto: e.target.value }))} />
+            </div>
+            <div>
+              <label style={S.label}>Importe (€)</label>
+              <input style={S.input} type="number" placeholder="0.00" value={form.importe_estimado} onChange={e => setForm(f => ({ ...f, importe_estimado: e.target.value }))} />
+            </div>
+            <div>
+              <label style={S.label}>Fecha estimada</label>
+              <input style={S.input} type="date" value={form.fecha_estimada} onChange={e => setForm(f => ({ ...f, fecha_estimada: e.target.value }))} />
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={S.label}>Notas (opcional)</label>
+              <input style={S.input} placeholder="Notas..." value={form.notas} onChange={e => setForm(f => ({ ...f, notas: e.target.value }))} />
+            </div>
+            <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button style={S.btnGhost} onClick={() => setShowAdd(false)}>Cancelar</button>
+              <button style={S.btnPrimary} onClick={handleAdd} disabled={!form.concepto.trim() || !form.fecha_estimada}>Guardar</button>
+            </div>
+          </div>
+        )}
+
+        {pagos.length === 0 && !showAdd ? (
+          <p style={{ textAlign: 'center', color: '#CCC', fontSize: 13, padding: '32px 0' }}>Sin hitos de pago. Añade el primero.</p>
+        ) : (
+          <div className="fp-table-wrap">
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                {['Concepto', 'Importe estimado', 'Fecha estimada', 'Notas', ''].map((h, i) => (
+                  <th key={i} style={{ textAlign: 'left', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', padding: '0 12px 10px 0', borderBottom: '1px solid #E8E6E0' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {pagos.map(p => editId === p.id ? (
+                <tr key={p.id}>
+                  <td style={{ padding: '8px 12px 8px 0', borderBottom: '1px solid #F0EEE8' }}>
+                    <input style={{ ...S.input, minWidth: 160 }} value={editForm.concepto} onChange={e => setEditForm(f => ({ ...f, concepto: e.target.value }))} />
+                  </td>
+                  <td style={{ padding: '8px 12px 8px 0', borderBottom: '1px solid #F0EEE8' }}>
+                    <input style={{ ...S.input, width: 110 }} type="number" value={editForm.importe_estimado} onChange={e => setEditForm(f => ({ ...f, importe_estimado: e.target.value }))} />
+                  </td>
+                  <td style={{ padding: '8px 12px 8px 0', borderBottom: '1px solid #F0EEE8' }}>
+                    <input style={{ ...S.input, width: 130 }} type="date" value={editForm.fecha_estimada} onChange={e => setEditForm(f => ({ ...f, fecha_estimada: e.target.value }))} />
+                  </td>
+                  <td style={{ padding: '8px 12px 8px 0', borderBottom: '1px solid #F0EEE8' }}>
+                    <input style={{ ...S.input, minWidth: 120 }} value={editForm.notas} onChange={e => setEditForm(f => ({ ...f, notas: e.target.value }))} />
+                  </td>
+                  <td style={{ padding: '8px 0', borderBottom: '1px solid #F0EEE8', whiteSpace: 'nowrap' }}>
+                    <button style={{ ...S.btnPrimary, padding: '5px 10px', marginRight: 6 }} onClick={handleSaveEdit}>OK</button>
+                    <button style={{ ...S.btnGhost, padding: '4px 8px' }} onClick={() => setEditId(null)}>✕</button>
+                  </td>
+                </tr>
+              ) : (
+                <tr key={p.id}>
+                  <td style={{ padding: '10px 12px 10px 0', fontSize: 12, color: '#1A1A1A', borderBottom: '1px solid #F0EEE8' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#1D4ED8', flexShrink: 0 }} />
+                      {p.concepto}
+                    </div>
+                  </td>
+                  <td style={{ padding: '10px 12px 10px 0', fontSize: 12, fontWeight: 600, color: '#1D4ED8', borderBottom: '1px solid #F0EEE8', whiteSpace: 'nowrap' }}>
+                    {p.importe_estimado !== null ? fmtMoney(p.importe_estimado) : '—'}
+                  </td>
+                  <td style={{ padding: '10px 12px 10px 0', fontSize: 12, color: '#1A1A1A', borderBottom: '1px solid #F0EEE8', whiteSpace: 'nowrap' }}>
+                    {fmtShort(p.fecha_estimada)}
+                  </td>
+                  <td style={{ padding: '10px 12px 10px 0', fontSize: 11, color: '#888', borderBottom: '1px solid #F0EEE8', maxWidth: 180 }}>
+                    {p.notas ?? '—'}
+                  </td>
+                  <td style={{ padding: '10px 0', borderBottom: '1px solid #F0EEE8', whiteSpace: 'nowrap' }}>
+                    <button style={{ ...S.btnGhost, padding: '4px 10px', marginRight: 4 }} onClick={() => startEdit(p)}>Editar</button>
+                    <button
+                      style={{ padding: '4px 8px', background: 'none', color: '#E53E3E', border: '1px solid #FECACA', borderRadius: 5, cursor: 'pointer', fontSize: 11 }}
+                      onClick={() => handleDelete(p.id)}
+                    >✕</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          </div>
+        )}
+
+        {totalConstructora > 0 && (
+          <div style={{ marginTop: 12, textAlign: 'right', fontSize: 12, fontWeight: 600, color: '#1D4ED8' }}>
+            Total: {fmtMoney(totalConstructora)}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── MAIN ──────────────────────────────────────────────────────────────────────
 
 export default function PlataformaInternaDetalle({
   proyecto, userRol, titulares,
-  portal, renders, visitas, partidas, contratos, facturas,
+  portal, renders, visitas, partidas, contratos, facturas, pagosConstructora,
 }: {
   proyecto: ProyectoInfo
   userRol: string
@@ -1502,6 +1711,7 @@ export default function PlataformaInternaDetalle({
   partidas: Partida[]
   contratos: Contratos | null
   facturas: Factura[]
+  pagosConstructora: PagoConstructora[]
 }) {
   const router = useRouter()
   const isPrivileged = ['fp_partner', 'fp_manager'].includes(userRol)
@@ -1510,8 +1720,9 @@ export default function PlataformaInternaDetalle({
   const allTabs = [
     { id: 'portal', label: 'Portal' },
     ...(isPrivileged ? [
-      { id: 'contratos', label: 'Contratos' },
-      { id: 'facturacion', label: 'Facturación' },
+      { id: 'contratos',    label: 'Contratos' },
+      { id: 'facturacion',  label: 'Facturación' },
+      { id: 'constructora', label: 'Constructora' },
     ] : []),
   ]
   const [tab, setTab] = useState('portal')
@@ -1560,9 +1771,10 @@ export default function PlataformaInternaDetalle({
 
       {/* Content */}
       <div className="pid-content" style={{ padding: '32px 40px', maxWidth: 1000 }}>
-        {tab === 'portal' && <PortalTab proyecto={proyecto} portal={portal} titulares={titulares} isPrivileged={isPrivileged} renders={renders} visitas={visitas} partidas={partidas} />}
-        {tab === 'contratos' && isPrivileged && <ContratosTab proyectoId={proyecto.id} initialContratos={contratos} />}
-        {tab === 'facturacion' && isPrivileged && <FacturacionTab facturas={facturas} />}
+        {tab === 'portal'       && <PortalTab       proyecto={proyecto} portal={portal} titulares={titulares} isPrivileged={isPrivileged} renders={renders} visitas={visitas} partidas={partidas} />}
+        {tab === 'contratos'    && isPrivileged && <ContratosTab    proyectoId={proyecto.id} initialContratos={contratos} />}
+        {tab === 'facturacion'  && isPrivileged && <FacturacionTab  facturas={facturas} />}
+        {tab === 'constructora' && isPrivileged && <ConstructoraTab proyectoId={proyecto.id} initialPagos={pagosConstructora} />}
       </div>
     </div>
   )

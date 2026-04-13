@@ -47,6 +47,7 @@ export default async function Page({ params }: { params: { id: string } }) {
     { data: partidasData },
     { data: contratosData },
     { data: facturasData },
+    { data: pagosConstructoraData },
   ] = await Promise.all([
     admin.from('proyecto_portal').select('*').eq('proyecto_id', params.id).maybeSingle(),
     admin.from('proyecto_renders').select('*').eq('proyecto_id', params.id).order('orden').order('created_at'),
@@ -63,6 +64,13 @@ export default async function Page({ params }: { params: { id: string } }) {
           .not('seccion', 'in', `(${SECCIONES_PRIVADAS.map(s => `"${s}"`).join(',')})`)
           .order('seccion')
           .order('created_at')
+      : Promise.resolve({ data: [] }),
+    isPrivileged
+      ? admin
+          .from('proyecto_pagos_constructora')
+          .select('id, concepto, importe_estimado, fecha_estimada, orden, notas')
+          .eq('proyecto_id', params.id)
+          .order('fecha_estimada', { ascending: true })
       : Promise.resolve({ data: [] }),
   ])
 
@@ -97,6 +105,7 @@ export default async function Page({ params }: { params: { id: string } }) {
       partidas={partidasData ?? []}
       contratos={contratosData ?? null}
       facturas={facturasData ?? []}
+      pagosConstructora={pagosConstructoraData ?? []}
     />
   )
 }

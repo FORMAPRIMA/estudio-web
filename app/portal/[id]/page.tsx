@@ -66,6 +66,7 @@ export default async function PortalPage({ params }: { params: { id: string } })
     { data: partidas },
     { data: contratos },
     { data: facturas },
+    { data: pagosConstructora },
   ] = await Promise.all([
     admin
       .from('proyectos')
@@ -113,6 +114,11 @@ export default async function PortalPage({ params }: { params: { id: string } })
       .not('seccion', 'in', `(${SECCIONES_PRIVADAS.map(s => `"${s}"`).join(',')})`)
       .order('seccion')
       .order('created_at'),
+    admin
+      .from('proyecto_pagos_constructora')
+      .select('id, concepto, importe_estimado, fecha_estimada')
+      .eq('proyecto_id', id)
+      .order('fecha_estimada', { ascending: true }),
   ])
 
   if (!proyecto) notFound()
@@ -151,6 +157,7 @@ export default async function PortalPage({ params }: { params: { id: string } })
       partidas={partidas ?? []}
       contratos={contratos ?? null}
       facturas={filteredFacturas}
+      pagosConstructora={pagosConstructora ?? []}
       hideDocumentos={viewerRol === 'fp_team'}
     />
   )

@@ -17,6 +17,7 @@ interface Visita       { id: string; fecha: string; titulo: string | null; asist
 interface Partida      { id: string; nombre: string; fecha_inicio: string | null; fecha_fin: string | null; color: string; orden: number; completado: boolean }
 interface Contratos    { contrato_arquitectura_url: string | null; contrato_obra_url: string | null; pdf_presupuesto_url: string | null }
 interface Factura      { id: string; seccion: string; concepto: string; monto: number; status: string; fecha_pago_acordada: string | null; numero_factura: string | null }
+interface PagoConstructora { id: string; concepto: string; importe_estimado: number | null; fecha_estimada: string }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -447,7 +448,8 @@ function TabGaleria({ renders }: { renders: Render[] }) {
 
 // ── Tab: OBRA ─────────────────────────────────────────────────────────────────
 
-type GanttTooltipInfo = { fase: string; subfase: string | null; duracion: string; x: number; y: number }
+type GanttTooltipInfo   = { fase: string; subfase: string | null; duracion: string; x: number; y: number }
+type PaymentTooltipInfo = { tipo: 'honorarios' | 'constructora'; concepto: string; importe: number | null; fecha: string; x: number; y: number }
 
 function duracionSemanas(fi: string | null, ff: string | null): string {
   if (!fi || !ff) return '—'
@@ -473,6 +475,40 @@ function GanttTooltip({ info }: { info: GanttTooltipInfo | null }) {
   )
 }
 
+const PAGO_COLORS = { honorarios: '#D85A30', constructora: '#1D4ED8' } as const
+const PAGO_LABELS = { honorarios: 'Honorarios arquitectura', constructora: 'Pago constructora' } as const
+
+function fmtEUR(n: number) {
+  return n.toLocaleString('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
+}
+
+function PaymentTooltip({ info }: { info: PaymentTooltipInfo | null }) {
+  if (!info) return null
+  const color = PAGO_COLORS[info.tipo]
+  return (
+    <div style={{
+      position: 'fixed', left: info.x, top: info.y - 12,
+      transform: 'translateX(-50%) translateY(-100%)',
+      background: '#1A1A1A', color: '#fff', borderRadius: 8,
+      padding: '10px 13px', fontSize: 11, pointerEvents: 'none',
+      zIndex: 9999, whiteSpace: 'nowrap', boxShadow: '0 4px 18px rgba(0,0,0,0.32)',
+      minWidth: 160,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+        <div style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} />
+        <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: color }}>{PAGO_LABELS[info.tipo]}</span>
+      </div>
+      <div style={{ fontWeight: 600, marginBottom: 3, fontSize: 12 }}>{info.concepto}</div>
+      {info.importe !== null && (
+        <div style={{ color: '#D1FAE5', fontWeight: 700, marginBottom: 3 }}>{fmtEUR(info.importe)}</div>
+      )}
+      <div style={{ color: '#999', fontSize: 10 }}>
+        {new Date(info.fecha + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}
+      </div>
+    </div>
+  )
+}
+
 function groupPartidasForGantt(partidas: Partida[]): { label: string; color: string; items: Partida[] }[] {
   const result: { label: string; color: string; items: Partida[] }[] = []
   const indexMap = new Map<string, number>()
@@ -493,8 +529,13 @@ function groupPartidasForGantt(partidas: Partida[]): { label: string; color: str
   return result
 }
 
-function GanttReadOnly({ partidas }: { partidas: Partida[] }) {
-  const [tooltip, setTooltip] = useState<GanttTooltipInfo | null>(null)
+function GanttReadOnly({ partidas, honorarios, pagosConstructora }: {
+  partidas: Partida[]
+  honorarios: { concepto: string; importe: number | null; fecha: string }[]
+  pagosConstructora: { concepto: string; importe: number | null; fecha: string }[]
+}) {
+  const [tooltip,        setTooltip]        = useState<GanttTooltipInfo | null>(null)
+  const [paymentTooltip, setPaymentTooltip] = useState<PaymentTooltipInfo | null>(null)
   const dates = partidas.flatMap(p => [p.fecha_inicio, p.fecha_fin].filter(Boolean) as string[])
   const groups = groupPartidasForGantt(partidas)
 
@@ -557,6 +598,70 @@ function GanttReadOnly({ partidas }: { partidas: Partida[] }) {
             </div>
           )}
         </div>
+        {/* Payment milestone dots row */}
+        {(honorarios.length > 0 || pagosConstructora.length > 0) && (() => {
+          const allPayments = [
+            ...honorarios.map(h => ({ ...h, tipo: 'honorarios' as const })),
+            ...pagosConstructora.map(p => ({ ...p, tipo: 'constructora' as const })),
+          ].filter(p => {
+            const pct = (new Date(p.fecha + 'T00:00:00').getTime() - start.getTime()) / totalMs * 100
+            return pct >= -2 && pct <= 102
+          })
+          if (allPayments.length === 0) return null
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', height: 28, marginBottom: 10 }}>
+              {/* Legend */}
+              <div style={{ width: 200, flexShrink: 0, paddingRight: 18, display: 'flex', alignItems: 'center', gap: 10 }}>
+                {honorarios.length > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: PAGO_COLORS.honorarios }} />
+                    <span style={{ fontSize: 9, color: '#AAA', fontWeight: 600, letterSpacing: '0.04em' }}>Honorarios</span>
+                  </div>
+                )}
+                {pagosConstructora.length > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: PAGO_COLORS.constructora }} />
+                    <span style={{ fontSize: 9, color: '#AAA', fontWeight: 600, letterSpacing: '0.04em' }}>Constructora</span>
+                  </div>
+                )}
+              </div>
+              {/* Dots timeline */}
+              <div style={{ flex: 1, height: '100%', position: 'relative' }}>
+                {/* Subtle baseline */}
+                <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: 1, background: '#F0EEE8' }} />
+                {allPayments.map((p, i) => {
+                  const left = Math.min(98, Math.max(0, (new Date(p.fecha + 'T00:00:00').getTime() - start.getTime()) / totalMs * 100))
+                  const color = PAGO_COLORS[p.tipo]
+                  return (
+                    <div
+                      key={i}
+                      style={{
+                        position: 'absolute',
+                        left: `${left}%`,
+                        top: '50%',
+                        transform: 'translate(-50%, -50%)',
+                        width: 11, height: 11,
+                        borderRadius: '50%',
+                        background: color,
+                        border: '2px solid #fff',
+                        boxShadow: `0 1px 4px rgba(0,0,0,0.18), 0 0 0 1.5px ${color}55`,
+                        cursor: 'default',
+                        zIndex: 3,
+                      }}
+                      onMouseEnter={e => {
+                        const rect = e.currentTarget.getBoundingClientRect()
+                        setPaymentTooltip({ tipo: p.tipo, concepto: p.concepto, importe: p.importe, fecha: p.fecha, x: rect.left + rect.width / 2, y: rect.top })
+                      }}
+                      onMouseLeave={() => setPaymentTooltip(null)}
+                    />
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* Phase rows */}
         {groups.map((g, gi) => {
           const allDone = g.items.every(p => p.completado)
           return (
@@ -596,12 +701,18 @@ function GanttReadOnly({ partidas }: { partidas: Partida[] }) {
     {/* Mobile card list */}
     {cardList}
 
-    <GanttTooltip info={tooltip} />
+    <GanttTooltip   info={tooltip} />
+    <PaymentTooltip info={paymentTooltip} />
     </>
   )
 }
 
-function TabObra({ visitas, partidas }: { visitas: Visita[]; partidas: Partida[] }) {
+function TabObra({ visitas, partidas, honorarios, pagosConstructora }: {
+  visitas: Visita[]
+  partidas: Partida[]
+  honorarios: { concepto: string; importe: number | null; fecha: string }[]
+  pagosConstructora: { concepto: string; importe: number | null; fecha: string }[]
+}) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
   return (
@@ -610,7 +721,25 @@ function TabObra({ visitas, partidas }: { visitas: Visita[]; partidas: Partida[]
       {partidas.length > 0 && (
         <section>
           <STitle>Cronograma de obra</STitle>
-          <GanttReadOnly partidas={partidas} />
+          <GanttReadOnly partidas={partidas} honorarios={honorarios} pagosConstructora={pagosConstructora} />
+          {/* Mobile: payment milestones list */}
+          {(honorarios.length > 0 || pagosConstructora.length > 0) && (
+            <div className="cp-gantt-mobile" style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {[
+                ...honorarios.map(h => ({ ...h, tipo: 'honorarios' as const })),
+                ...pagosConstructora.map(p => ({ ...p, tipo: 'constructora' as const })),
+              ].sort((a, b) => a.fecha.localeCompare(b.fecha)).map((p, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#fff', borderRadius: 8, border: '1px solid #E8E6E0' }}>
+                  <div style={{ width: 9, height: 9, borderRadius: '50%', background: PAGO_COLORS[p.tipo], flexShrink: 0, boxShadow: `0 0 0 2px ${PAGO_COLORS[p.tipo]}33` }} />
+                  <span style={{ fontSize: 12, color: '#1A1A1A', flex: 1 }}>{p.concepto}</span>
+                  {p.importe !== null && <span style={{ fontSize: 11, fontWeight: 600, color: '#1A1A1A', whiteSpace: 'nowrap' }}>{fmtEUR(p.importe)}</span>}
+                  <span style={{ fontSize: 10, color: '#AAA', whiteSpace: 'nowrap' }}>
+                    {new Date(p.fecha + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
       )}
 
@@ -796,18 +925,30 @@ const TABS = [
 
 export default function ClientPortal({
   proyecto, renders, portal, actualizaciones, visitas, partidas, contratos, facturas,
+  pagosConstructora = [],
   hideDocumentos = false,
 }: {
-  proyecto:        ProyectoInfo
-  renders:         Render[]
-  portal:          PortalData | null
-  actualizaciones: Actualizacion[]
-  visitas:         Visita[]
-  partidas:        Partida[]
-  contratos:       Contratos | null
-  facturas:        Factura[]
-  hideDocumentos?: boolean
+  proyecto:           ProyectoInfo
+  renders:            Render[]
+  portal:             PortalData | null
+  actualizaciones:    Actualizacion[]
+  visitas:            Visita[]
+  partidas:           Partida[]
+  contratos:          Contratos | null
+  facturas:           Factura[]
+  pagosConstructora?: PagoConstructora[]
+  hideDocumentos?:    boolean
 }) {
+  // Prepare payment dots data
+  const honorariosDots = facturas
+    .filter(f => f.fecha_pago_acordada)
+    .map(f => ({ concepto: f.concepto, importe: f.monto, fecha: f.fecha_pago_acordada! }))
+
+  const constructoraDots = pagosConstructora.map(p => ({
+    concepto: p.concepto,
+    importe:  p.importe_estimado,
+    fecha:    p.fecha_estimada,
+  }))
   const [tab, setTab] = useState('inicio')
   const router = useRouter()
 
@@ -864,7 +1005,7 @@ export default function ClientPortal({
         {tab === 'inicio'     && <TabInicio            proyecto={proyecto} renders={renders} portal={portal} />}
         {tab === 'documentos' && <TabDocumentosYPagos  portal={portal} contratos={contratos} facturas={facturas} />}
         {tab === 'galeria'    && <TabGaleria            renders={renders} />}
-        {tab === 'obra'       && <TabObra              visitas={visitas} partidas={partidas} />}
+        {tab === 'obra'       && <TabObra              visitas={visitas} partidas={partidas} honorarios={honorariosDots} pagosConstructora={constructoraDots} />}
         {tab === 'novedades'  && <TabVisitasObra        visitas={visitas} />}
       </div>
 

@@ -393,6 +393,84 @@ export async function upsertContratos(
   }
 }
 
+// ── Pagos constructora ────────────────────────────────────────────────────────
+
+export async function addPagoConstructora(data: {
+  proyecto_id: string
+  concepto: string
+  importe_estimado?: number | null
+  fecha_estimada: string
+  orden?: number
+  notas?: string | null
+}): Promise<{ id: string } | { error: string }> {
+  try {
+    await requireManagerOrPartner()
+    const admin = createAdminClient()
+    const { data: row, error } = await admin
+      .from('proyecto_pagos_constructora')
+      .insert({
+        proyecto_id:      data.proyecto_id,
+        concepto:         data.concepto,
+        importe_estimado: data.importe_estimado ?? null,
+        fecha_estimada:   data.fecha_estimada,
+        orden:            data.orden ?? 0,
+        notas:            data.notas ?? null,
+      })
+      .select('id')
+      .single()
+    if (error) return { error: error.message }
+    revalidatePath(`${PATH_INTERNA}/${data.proyecto_id}`)
+    return { id: row.id }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
+export async function updatePagoConstructora(
+  id: string,
+  proyectoId: string,
+  data: Partial<{
+    concepto: string
+    importe_estimado: number | null
+    fecha_estimada: string
+    orden: number
+    notas: string | null
+  }>
+): Promise<{ success: true } | { error: string }> {
+  try {
+    await requireManagerOrPartner()
+    const admin = createAdminClient()
+    const { error } = await admin
+      .from('proyecto_pagos_constructora')
+      .update({ ...data, updated_at: new Date().toISOString() })
+      .eq('id', id)
+    if (error) return { error: error.message }
+    revalidatePath(`${PATH_INTERNA}/${proyectoId}`)
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
+export async function deletePagoConstructora(
+  id: string,
+  proyectoId: string
+): Promise<{ success: true } | { error: string }> {
+  try {
+    await requireManagerOrPartner()
+    const admin = createAdminClient()
+    const { error } = await admin
+      .from('proyecto_pagos_constructora')
+      .delete()
+      .eq('id', id)
+    if (error) return { error: error.message }
+    revalidatePath(`${PATH_INTERNA}/${proyectoId}`)
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
 // ── Constructor del proyecto ──────────────────────────────────────────────────
 
 export async function setConstructorProyecto(
