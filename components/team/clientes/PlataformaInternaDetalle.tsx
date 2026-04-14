@@ -57,7 +57,7 @@ interface Factura {
 
 interface PagoConstructora {
   id: string; concepto: string; importe_estimado: number | null
-  fecha_estimada: string; orden: number; notas: string | null
+  fecha_estimada: string; status: string; orden: number; notas: string | null
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -1495,7 +1495,13 @@ function FacturacionTab({ facturas }: { facturas: Factura[] }) {
 
 // ── CONSTRUCTORA TAB ──────────────────────────────────────────────────────────
 
-const EMPTY_PAGO = { concepto: '', importe_estimado: '', fecha_estimada: '', notas: '' }
+const PAGO_STATUS: Record<string, { label: string; color: string; bg: string; dot: string }> = {
+  proximo:   { label: 'Pago próximo',   color: '#92400E', bg: '#FEF3C7', dot: '#F59E0B' },
+  pendiente: { label: 'Pago pendiente', color: '#991B1B', bg: '#FEE2E2', dot: '#EF4444' },
+  pagado:    { label: 'Pagado',         color: '#065F46', bg: '#D1FAE5', dot: '#10B981' },
+}
+
+const EMPTY_PAGO = { concepto: '', importe_estimado: '', fecha_estimada: '', status: 'pendiente', notas: '' }
 
 function ConstructoraTab({ proyectoId, initialPagos }: { proyectoId: string; initialPagos: PagoConstructora[] }) {
   const [pagos, setPagos]         = useState<PagoConstructora[]>(initialPagos)
@@ -1516,6 +1522,7 @@ function ConstructoraTab({ proyectoId, initialPagos }: { proyectoId: string; ini
       concepto: form.concepto.trim(),
       importe_estimado: importe,
       fecha_estimada: form.fecha_estimada,
+      status: form.status,
       orden: pagos.length,
       notas: form.notas || null,
     }
@@ -1528,6 +1535,7 @@ function ConstructoraTab({ proyectoId, initialPagos }: { proyectoId: string; ini
         concepto: optimistic.concepto,
         importe_estimado: optimistic.importe_estimado,
         fecha_estimada: optimistic.fecha_estimada,
+        status: optimistic.status,
         notas: optimistic.notas,
         orden: optimistic.orden,
       })
@@ -1538,14 +1546,14 @@ function ConstructoraTab({ proyectoId, initialPagos }: { proyectoId: string; ini
 
   function startEdit(p: PagoConstructora) {
     setEditId(p.id)
-    setEditForm({ concepto: p.concepto, importe_estimado: p.importe_estimado?.toString() ?? '', fecha_estimada: p.fecha_estimada, notas: p.notas ?? '' })
+    setEditForm({ concepto: p.concepto, importe_estimado: p.importe_estimado?.toString() ?? '', fecha_estimada: p.fecha_estimada, status: p.status, notas: p.notas ?? '' })
   }
 
   function handleSaveEdit() {
     if (!editId || !editForm.concepto.trim() || !editForm.fecha_estimada) return
     const importe = editForm.importe_estimado ? parseFloat(editForm.importe_estimado) : null
     setPagos(prev => prev.map(p => p.id === editId
-      ? { ...p, concepto: editForm.concepto.trim(), importe_estimado: importe, fecha_estimada: editForm.fecha_estimada, notas: editForm.notas || null }
+      ? { ...p, concepto: editForm.concepto.trim(), importe_estimado: importe, fecha_estimada: editForm.fecha_estimada, status: editForm.status, notas: editForm.notas || null }
       : p
     ).sort((a, b) => a.fecha_estimada.localeCompare(b.fecha_estimada)))
     const id = editId
@@ -1555,6 +1563,7 @@ function ConstructoraTab({ proyectoId, initialPagos }: { proyectoId: string; ini
         concepto: editForm.concepto.trim(),
         importe_estimado: importe,
         fecha_estimada: editForm.fecha_estimada,
+        status: editForm.status,
         notas: editForm.notas || null,
       })
       if ('error' in res) setErr(res.error)
@@ -1574,12 +1583,20 @@ function ConstructoraTab({ proyectoId, initialPagos }: { proyectoId: string; ini
       {err && <div style={{ background: '#FEF2F2', color: '#E53E3E', borderRadius: 6, padding: '10px 14px', fontSize: 12 }}>{err}</div>}
 
       {/* Summary */}
-      <div style={{ ...S.card, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24 }}>
+      <div style={{ ...S.card, display: 'flex', alignItems: 'center', gap: 28, flexWrap: 'wrap' }}>
         <div>
           <p style={{ ...S.label, marginBottom: 4 }}>Total constructora</p>
           <p style={{ fontSize: 22, fontWeight: 300, color: '#1D4ED8', margin: 0, letterSpacing: '-0.01em' }}>{fmtMoney(totalConstructora)}</p>
         </div>
-        <div style={{ textAlign: 'right' }}>
+        <div style={{ borderLeft: '1px solid #E8E6E0', paddingLeft: 24 }}>
+          <p style={{ ...S.label, marginBottom: 4 }}>Pagado</p>
+          <p style={{ fontSize: 18, fontWeight: 600, color: '#10B981', margin: 0 }}>{fmtMoney(pagos.filter(p => p.status === 'pagado').reduce((s, p) => s + (p.importe_estimado ?? 0), 0))}</p>
+        </div>
+        <div style={{ borderLeft: '1px solid #E8E6E0', paddingLeft: 24 }}>
+          <p style={{ ...S.label, marginBottom: 4 }}>Pendiente</p>
+          <p style={{ fontSize: 18, fontWeight: 600, color: '#EF4444', margin: 0 }}>{fmtMoney(pagos.filter(p => p.status !== 'pagado').reduce((s, p) => s + (p.importe_estimado ?? 0), 0))}</p>
+        </div>
+        <div style={{ borderLeft: '1px solid #E8E6E0', paddingLeft: 24, marginLeft: 'auto' }}>
           <p style={{ ...S.label, marginBottom: 4 }}>Hitos</p>
           <p style={{ fontSize: 22, fontWeight: 300, color: '#1A1A1A', margin: 0 }}>{pagos.length}</p>
         </div>
@@ -1599,7 +1616,7 @@ function ConstructoraTab({ proyectoId, initialPagos }: { proyectoId: string; ini
 
         {/* Add form */}
         {showAdd && (
-          <div style={{ background: '#F8F7F4', borderRadius: 8, padding: '16px', marginBottom: 16, display: 'grid', gridTemplateColumns: '1fr 120px 140px', gap: 10, alignItems: 'end' }}>
+          <div style={{ background: '#F8F7F4', borderRadius: 8, padding: '16px', marginBottom: 16, display: 'grid', gridTemplateColumns: '1fr 120px 140px 160px', gap: 10, alignItems: 'end' }}>
             <div>
               <label style={S.label}>Concepto</label>
               <input style={S.input} placeholder="Ej: Certificación 1" value={form.concepto} onChange={e => setForm(f => ({ ...f, concepto: e.target.value }))} />
@@ -1611,6 +1628,12 @@ function ConstructoraTab({ proyectoId, initialPagos }: { proyectoId: string; ini
             <div>
               <label style={S.label}>Fecha estimada</label>
               <input style={S.input} type="date" value={form.fecha_estimada} onChange={e => setForm(f => ({ ...f, fecha_estimada: e.target.value }))} />
+            </div>
+            <div>
+              <label style={S.label}>Estado</label>
+              <select style={S.input} value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
+                {Object.entries(PAGO_STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+              </select>
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={S.label}>Notas (opcional)</label>
@@ -1630,7 +1653,7 @@ function ConstructoraTab({ proyectoId, initialPagos }: { proyectoId: string; ini
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
-                {['Concepto', 'Importe estimado', 'Fecha estimada', 'Notas', ''].map((h, i) => (
+                {['Concepto', 'Importe estimado', 'Fecha estimada', 'Estado', 'Notas', ''].map((h, i) => (
                   <th key={i} style={{ textAlign: 'left', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', padding: '0 12px 10px 0', borderBottom: '1px solid #E8E6E0' }}>{h}</th>
                 ))}
               </tr>
@@ -1648,6 +1671,11 @@ function ConstructoraTab({ proyectoId, initialPagos }: { proyectoId: string; ini
                     <input style={{ ...S.input, width: 130 }} type="date" value={editForm.fecha_estimada} onChange={e => setEditForm(f => ({ ...f, fecha_estimada: e.target.value }))} />
                   </td>
                   <td style={{ padding: '8px 12px 8px 0', borderBottom: '1px solid #F0EEE8' }}>
+                    <select style={{ ...S.input, width: 150 }} value={editForm.status} onChange={e => setEditForm(f => ({ ...f, status: e.target.value }))}>
+                      {Object.entries(PAGO_STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                    </select>
+                  </td>
+                  <td style={{ padding: '8px 12px 8px 0', borderBottom: '1px solid #F0EEE8' }}>
                     <input style={{ ...S.input, minWidth: 120 }} value={editForm.notas} onChange={e => setEditForm(f => ({ ...f, notas: e.target.value }))} />
                   </td>
                   <td style={{ padding: '8px 0', borderBottom: '1px solid #F0EEE8', whiteSpace: 'nowrap' }}>
@@ -1659,7 +1687,7 @@ function ConstructoraTab({ proyectoId, initialPagos }: { proyectoId: string; ini
                 <tr key={p.id}>
                   <td style={{ padding: '10px 12px 10px 0', fontSize: 12, color: '#1A1A1A', borderBottom: '1px solid #F0EEE8' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#1D4ED8', flexShrink: 0 }} />
+                      <div style={{ width: 7, height: 7, borderRadius: '50%', background: (PAGO_STATUS[p.status] ?? PAGO_STATUS.pendiente).dot, flexShrink: 0 }} />
                       {p.concepto}
                     </div>
                   </td>
@@ -1669,7 +1697,14 @@ function ConstructoraTab({ proyectoId, initialPagos }: { proyectoId: string; ini
                   <td style={{ padding: '10px 12px 10px 0', fontSize: 12, color: '#1A1A1A', borderBottom: '1px solid #F0EEE8', whiteSpace: 'nowrap' }}>
                     {fmtShort(p.fecha_estimada)}
                   </td>
-                  <td style={{ padding: '10px 12px 10px 0', fontSize: 11, color: '#888', borderBottom: '1px solid #F0EEE8', maxWidth: 180 }}>
+                  <td style={{ padding: '10px 12px 10px 0', borderBottom: '1px solid #F0EEE8', whiteSpace: 'nowrap' }}>
+                    {(() => { const s = PAGO_STATUS[p.status] ?? PAGO_STATUS.pendiente; return (
+                      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', padding: '3px 8px', borderRadius: 20, background: s.bg, color: s.color }}>
+                        {s.label}
+                      </span>
+                    )})()}
+                  </td>
+                  <td style={{ padding: '10px 12px 10px 0', fontSize: 11, color: '#888', borderBottom: '1px solid #F0EEE8', maxWidth: 160 }}>
                     {p.notas ?? '—'}
                   </td>
                   <td style={{ padding: '10px 0', borderBottom: '1px solid #F0EEE8', whiteSpace: 'nowrap' }}>

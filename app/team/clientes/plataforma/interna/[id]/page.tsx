@@ -68,7 +68,7 @@ export default async function Page({ params }: { params: { id: string } }) {
     isPrivileged
       ? admin
           .from('proyecto_pagos_constructora')
-          .select('id, concepto, importe_estimado, fecha_estimada, orden, notas')
+          .select('id, concepto, importe_estimado, fecha_estimada, status, orden, notas')
           .eq('proyecto_id', params.id)
           .order('fecha_estimada', { ascending: true })
       : Promise.resolve({ data: [] }),

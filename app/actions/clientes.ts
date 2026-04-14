@@ -400,6 +400,7 @@ export async function addPagoConstructora(data: {
   concepto: string
   importe_estimado?: number | null
   fecha_estimada: string
+  status?: string
   orden?: number
   notas?: string | null
 }): Promise<{ id: string } | { error: string }> {
@@ -413,6 +414,7 @@ export async function addPagoConstructora(data: {
         concepto:         data.concepto,
         importe_estimado: data.importe_estimado ?? null,
         fecha_estimada:   data.fecha_estimada,
+        status:           data.status ?? 'pendiente',
         orden:            data.orden ?? 0,
         notas:            data.notas ?? null,
       })
@@ -433,6 +435,7 @@ export async function updatePagoConstructora(
     concepto: string
     importe_estimado: number | null
     fecha_estimada: string
+    status: string
     orden: number
     notas: string | null
   }>

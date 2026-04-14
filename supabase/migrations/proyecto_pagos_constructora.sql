@@ -11,15 +11,17 @@ CREATE TABLE IF NOT EXISTS public.proyecto_pagos_constructora (
   concepto          text        NOT NULL,
   importe_estimado  numeric(12,2),
   fecha_estimada    date        NOT NULL,
+  status            text        NOT NULL DEFAULT 'pendiente'
+                    CHECK (status IN ('proximo', 'pendiente', 'pagado')),
   orden             int         NOT NULL DEFAULT 0,
   notas             text,
   created_at        timestamptz NOT NULL DEFAULT now(),
   updated_at        timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_pagos_constructora_proyecto ON public.proyecto_pagos_constructora(proyecto_id);
+CREATE INDEX IF NOT EXISTS idx_pagos_constructora_proyecto
+  ON public.proyecto_pagos_constructora(proyecto_id);
 
--- RLS: solo equipo interno puede leer y escribir
 ALTER TABLE public.proyecto_pagos_constructora ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "team_select" ON public.proyecto_pagos_constructora
