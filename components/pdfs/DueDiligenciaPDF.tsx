@@ -45,7 +45,7 @@ const C = {
 
 const s = StyleSheet.create({
   page: {
-    paddingTop: 0,          // header is flush to top edge on page 1
+    paddingTop: 0,
     paddingBottom: 64,
     paddingHorizontal: 0,
     fontFamily: 'Helvetica',
@@ -54,7 +54,6 @@ const s = StyleSheet.create({
     backgroundColor: C.white,
   },
 
-  // Header
   headerBlock: {
     backgroundColor: C.headerBg,
     paddingTop: 22,
@@ -89,7 +88,6 @@ const s = StyleSheet.create({
     opacity: 0.7,
   },
 
-  // Meta bar
   metaBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -102,10 +100,8 @@ const s = StyleSheet.create({
   metaValue:      { fontSize: 9, color: C.ink,  fontFamily: 'Helvetica-Bold' },
   metaValueLight: { fontSize: 9, color: C.soft },
 
-  // Body
   body: { paddingHorizontal: 56 },
 
-  // Summary box
   summaryBox: {
     backgroundColor: C.light,
     padding: 10,
@@ -120,7 +116,6 @@ const s = StyleSheet.create({
   summaryValueBrand:{ fontSize: 12, fontFamily: 'Helvetica-Bold', color: C.brand },
   summarySubValue:  { fontSize: 7.5, color: C.mid, marginTop: 2 },
 
-  // Section title
   sectionTitle: {
     fontSize: 7.5,
     fontFamily: 'Helvetica-Bold',
@@ -134,7 +129,6 @@ const s = StyleSheet.create({
     marginBottom: 10,
   },
 
-  // Subsection title
   subsectionTitle: {
     fontSize: 8,
     fontFamily: 'Helvetica-Bold',
@@ -143,7 +137,6 @@ const s = StyleSheet.create({
     marginBottom: 4,
   },
 
-  // Body text
   bodyText: {
     fontSize: 8.5,
     color: C.soft,
@@ -151,7 +144,6 @@ const s = StyleSheet.create({
     marginBottom: 6,
   },
 
-  // Bullet
   bullet: {
     fontSize: 8,
     color: C.soft,
@@ -160,7 +152,6 @@ const s = StyleSheet.create({
     marginBottom: 2,
   },
 
-  // Honorarios table
   tableRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -168,8 +159,8 @@ const s = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: C.rule,
   },
-  tableLabel: { fontSize: 8.5, color: C.soft },
-  tableValue: { fontSize: 8.5, color: C.soft },
+  tableLabel:     { fontSize: 8.5, color: C.soft },
+  tableValue:     { fontSize: 8.5, color: C.soft },
   tableLabelBold: { fontSize: 8.5, color: C.soft, fontFamily: 'Helvetica-Bold' },
   tableValueBold: { fontSize: 8.5, color: C.ink,  fontFamily: 'Helvetica-Bold' },
   totalRow: {
@@ -183,7 +174,6 @@ const s = StyleSheet.create({
   totalLabel: { fontSize: 10, fontFamily: 'Helvetica-Bold', color: C.hInk },
   totalValue: { fontSize: 10, fontFamily: 'Helvetica-Bold', color: C.brand },
 
-  // Special notes box
   alertBox: {
     paddingHorizontal: 10,
     paddingVertical: 9,
@@ -203,7 +193,6 @@ const s = StyleSheet.create({
   },
   alertText: { fontSize: 8, color: C.soft, lineHeight: 1.55 },
 
-  // Note (italic)
   noteText: {
     fontSize: 7.5,
     color: C.mid,
@@ -213,13 +202,11 @@ const s = StyleSheet.create({
     marginBottom: 6,
   },
 
-  // Signature line
   signatureRow: { flexDirection: 'row', marginTop: 32 },
   signatureCol:  { flex: 1 },
   signatureLine: { borderTopWidth: 1, borderTopColor: C.rule, paddingTop: 8 },
   signatureLabel:{ fontSize: 7.5, color: C.mid },
 
-  // Footer
   footer: {
     position: 'absolute', bottom: 24, left: 56, right: 56,
     flexDirection: 'row', justifyContent: 'space-between',
@@ -251,10 +238,13 @@ export function DueDiligenciaPDF({
   data:         DueDiligenciaPDFData
   textSections: DueDiligenciaTextSections
 }) {
+  const esFijo            = data.modo_honorarios === 'importe_fijo'
   const honorariosVariable = data.superficie * data.tarifa_m2
-  const honorarios         = honorariosVariable + data.fee_base
-  const hito1              = honorarios / 2
-  const hito2              = honorarios / 2
+  const honorarios         = esFijo && data.importe_fijo != null
+    ? data.importe_fijo
+    : honorariosVariable + data.fee_base
+  const hito1 = honorarios / 2
+  const hito2 = honorarios / 2
 
   return (
     <Document
@@ -263,7 +253,6 @@ export function DueDiligenciaPDF({
     >
       <Page size="A4" style={s.page}>
 
-        {/* Spacer: página 2+ recibe margen superior; página 1 queda en 0 */}
         <View
           fixed
           render={({ pageNumber }) => (
@@ -306,27 +295,41 @@ export function DueDiligenciaPDF({
 
         {/* ── Summary box ─────────────────────────────────────────────────── */}
         <View style={s.body}>
-          <View style={s.summaryBox}>
-            <View style={s.summaryItemFirst}>
-              <Text style={s.summaryLabel}>Superficie</Text>
-              <Text style={s.summaryValue}>{data.superficie} m²</Text>
+          {esFijo ? (
+            <View style={s.summaryBox}>
+              <View style={s.summaryItemFirst}>
+                <Text style={s.summaryLabel}>Superficie</Text>
+                <Text style={s.summaryValue}>{data.superficie} m²</Text>
+              </View>
+              <View style={[s.summaryItem, { flex: 2 }]}>
+                <Text style={s.summaryLabel}>Honorarios profesionales</Text>
+                <Text style={s.summaryValueBrand}>{fmtEur(honorarios)}</Text>
+                <Text style={s.summarySubValue}>+ IVA si aplica</Text>
+              </View>
             </View>
-            <View style={s.summaryItem}>
-              <Text style={s.summaryLabel}>Tarifa</Text>
-              <Text style={s.summaryValue}>{fmtEur(data.tarifa_m2)}/m²</Text>
-              <Text style={s.summarySubValue}>{fmtEur(honorariosVariable)}</Text>
+          ) : (
+            <View style={s.summaryBox}>
+              <View style={s.summaryItemFirst}>
+                <Text style={s.summaryLabel}>Superficie</Text>
+                <Text style={s.summaryValue}>{data.superficie} m²</Text>
+              </View>
+              <View style={s.summaryItem}>
+                <Text style={s.summaryLabel}>Tarifa</Text>
+                <Text style={s.summaryValue}>{fmtEur(data.tarifa_m2)}/m²</Text>
+                <Text style={s.summarySubValue}>{fmtEur(honorariosVariable)}</Text>
+              </View>
+              <View style={s.summaryItem}>
+                <Text style={s.summaryLabel}>Fee base</Text>
+                <Text style={s.summaryValue}>{fmtEur(data.fee_base)}</Text>
+                <Text style={s.summarySubValue}>movilización</Text>
+              </View>
+              <View style={s.summaryItem}>
+                <Text style={s.summaryLabel}>Total</Text>
+                <Text style={s.summaryValueBrand}>{fmtEur(honorarios)}</Text>
+                <Text style={s.summarySubValue}>+ IVA si aplica</Text>
+              </View>
             </View>
-            <View style={s.summaryItem}>
-              <Text style={s.summaryLabel}>Fee base</Text>
-              <Text style={s.summaryValue}>{fmtEur(data.fee_base)}</Text>
-              <Text style={s.summarySubValue}>movilización</Text>
-            </View>
-            <View style={s.summaryItem}>
-              <Text style={s.summaryLabel}>Total</Text>
-              <Text style={s.summaryValueBrand}>{fmtEur(honorarios)}</Text>
-              <Text style={s.summarySubValue}>+ IVA si aplica</Text>
-            </View>
-          </View>
+          )}
         </View>
 
         {/* ── Body sections ───────────────────────────────────────────────── */}
@@ -414,29 +417,44 @@ export function DueDiligenciaPDF({
 
           {/* 9. Honorarios */}
           <Text style={s.sectionTitle}>9. Honorarios profesionales</Text>
-          <View style={s.tableRow}>
-            <Text style={s.tableLabel}>Superficie de inspección</Text>
-            <Text style={s.tableValue}>{data.superficie} m²</Text>
-          </View>
-          <View style={s.tableRow}>
-            <Text style={s.tableLabel}>Fee variable — Inspección técnica ({fmtEur(data.tarifa_m2)}/m²)</Text>
-            <Text style={s.tableValue}>{fmtEur(honorariosVariable)}</Text>
-          </View>
-          <View style={s.tableRow}>
-            <Text style={s.tableLabel}>Fee base — Movilización, Coordinación Técnica y Estructuración de Informe</Text>
-            <Text style={s.tableValue}>{fmtEur(data.fee_base)}</Text>
-          </View>
+          {esFijo ? (
+            <>
+              <View style={s.tableRow}>
+                <Text style={s.tableLabel}>Honorarios profesionales (importe fijo)</Text>
+                <Text style={s.tableValue}>{fmtEur(honorarios)}</Text>
+              </View>
+            </>
+          ) : (
+            <>
+              <View style={s.tableRow}>
+                <Text style={s.tableLabel}>Superficie de inspección</Text>
+                <Text style={s.tableValue}>{data.superficie} m²</Text>
+              </View>
+              <View style={s.tableRow}>
+                <Text style={s.tableLabel}>Fee variable — Inspección técnica ({fmtEur(data.tarifa_m2)}/m²)</Text>
+                <Text style={s.tableValue}>{fmtEur(honorariosVariable)}</Text>
+              </View>
+              <View style={s.tableRow}>
+                <Text style={s.tableLabel}>Fee base — Movilización, Coordinación Técnica y Estructuración de Informe</Text>
+                <Text style={s.tableValue}>{fmtEur(data.fee_base)}</Text>
+              </View>
+            </>
+          )}
           <View style={s.totalRow}>
             <Text style={s.totalLabel}>HONORARIOS TOTALES</Text>
             <Text style={s.totalValue}>{fmtEur(honorarios)}</Text>
           </View>
-          <Text style={s.noteText}>
-            * Honorarios netos. IVA no incluido. En caso de ser de aplicación, se añadirá el tipo impositivo vigente (21%).
-          </Text>
+          {t.honorarios_nota ? (
+            <Text style={s.noteText}>{t.honorarios_nota}</Text>
+          ) : null}
 
-          {/* 10. Ajuste de superficie */}
-          <Text style={s.sectionTitle}>10. Ajuste de superficie</Text>
-          <Text style={s.bodyText}>{t.ajuste_p1}</Text>
+          {/* 10. Ajuste de superficie — only when text is provided */}
+          {t.ajuste_p1 ? (
+            <>
+              <Text style={s.sectionTitle}>10. Ajuste de superficie</Text>
+              <Text style={s.bodyText}>{t.ajuste_p1}</Text>
+            </>
+          ) : null}
 
           {/* 11. Condiciones de pago */}
           <Text style={s.sectionTitle}>11. Condiciones de pago</Text>

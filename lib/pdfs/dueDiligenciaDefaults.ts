@@ -12,6 +12,8 @@ export interface DueDiligenciaPDFData {
   fecha:                  string
   ciudad:                 string
   cuestiones_especificas: string | null
+  modo_honorarios:        'por_m2' | 'importe_fijo'
+  importe_fijo:           number | null   // used when modo_honorarios = 'importe_fijo'
 }
 
 // ── Text sections interface ───────────────────────────────────────────────────
@@ -53,7 +55,9 @@ export interface DueDiligenciaTextSections {
   acceso_bullets:         string
   // 8. Plazo
   plazo:                  string
-  // 10. Ajuste de superficie
+  // 9. Honorarios — nota al pie de la tabla
+  honorarios_nota:        string
+  // 10. Ajuste de superficie (vacío = no aparece en el PDF)
   ajuste_p1:              string
   // 11. Condiciones de pago
   pago_intro:             string
@@ -66,6 +70,8 @@ export interface DueDiligenciaTextSections {
 // ── Default sections computed from form data ──────────────────────────────────
 
 export function getDefaultTextSections(data: DueDiligenciaPDFData): DueDiligenciaTextSections {
+  const esFijo = data.modo_honorarios === 'importe_fijo'
+
   return {
     objeto_p1:
       `Por medio del presente documento, FORMA PRIMA presenta su propuesta de servicios profesionales para la realización de una Due Diligence Técnica No Invasiva sobre el activo residencial ubicado en ${data.nombre_proyecto}, ${data.ciudad}, con una superficie estimada de análisis de ${data.superficie} m².`,
@@ -149,8 +155,13 @@ export function getDefaultTextSections(data: DueDiligenciaPDFData): DueDiligenci
     plazo:
       `FORMA PRIMA entregará el informe final en un plazo de 15 días naturales desde la fecha de visita técnica, siempre que se haya recibido previamente la documentación requerida y se haya completado la inspección sin incidencias.`,
 
-    ajuste_p1:
-      `Los honorarios anteriores han sido calculados sobre la superficie estimada de ${data.superficie} m² facilitada a la fecha de emisión de esta propuesta. En caso de que la superficie finalmente accesible e inspeccionable difiera de la inicialmente informada, FORMA PRIMA podrá ajustar proporcionalmente el fee variable de inspección conforme a la tarifa unitaria pactada de ${fmtEur(data.tarifa_m2)}/m². El fee base de movilización, coordinación técnica y estructuración de informe permanecerá fijo en ${fmtEur(data.fee_base)} con independencia de la variación de superficie.`,
+    honorarios_nota:
+      `* Honorarios netos. IVA no incluido. En caso de ser de aplicación, se añadirá el tipo impositivo vigente (21%).`,
+
+    // Section 10 only appears when not empty; omitted in importe_fijo mode by default
+    ajuste_p1: esFijo
+      ? ``
+      : `Los honorarios anteriores han sido calculados sobre la superficie estimada de ${data.superficie} m² facilitada a la fecha de emisión de esta propuesta. En caso de que la superficie finalmente accesible e inspeccionable difiera de la inicialmente informada, FORMA PRIMA podrá ajustar proporcionalmente el fee variable de inspección conforme a la tarifa unitaria pactada de ${fmtEur(data.tarifa_m2)}/m². El fee base de movilización, coordinación técnica y estructuración de informe permanecerá fijo en ${fmtEur(data.fee_base)} con independencia de la variación de superficie.`,
 
     pago_intro:
       `Los honorarios serán abonados conforme al siguiente esquema:`,

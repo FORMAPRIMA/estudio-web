@@ -14,6 +14,8 @@ interface FormState {
   fecha:                  string
   ciudad:                 string
   cuestiones_especificas: string
+  modo_honorarios:        'por_m2' | 'importe_fijo'
+  importe_fijo:           string
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -41,108 +43,89 @@ const sectionTitleStyle: React.CSSProperties = {
   textTransform: 'uppercase' as const, color: '#AAA', margin: '0 0 16px',
 }
 
-// ── Email multi-input component ────────────────────────────────────────────────
+// ── Email multi-input ─────────────────────────────────────────────────────────
 
 function EmailList({
-  label: lbl,
-  required,
-  emails,
-  onChange,
-}: {
-  label:    string
-  required?: boolean
-  emails:   string[]
-  onChange: (emails: string[]) => void
-}) {
-  const update = (i: number, val: string) => {
-    const next = [...emails]; next[i] = val; onChange(next)
-  }
+  label: lbl, required, emails, onChange,
+}: { label: string; required?: boolean; emails: string[]; onChange: (e: string[]) => void }) {
+  const update = (i: number, val: string) => { const n = [...emails]; n[i] = val; onChange(n) }
   const add    = () => onChange([...emails, ''])
   const remove = (i: number) => onChange(emails.filter((_, idx) => idx !== i))
-
   return (
     <div>
       <label style={labelStyle}>{lbl}{required ? ' *' : ''}</label>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {emails.map((email, i) => (
           <div key={i} style={{ display: 'flex', gap: 6 }}>
-            <input
-              type="email"
-              value={email}
-              onChange={e => update(i, e.target.value)}
-              placeholder="email@ejemplo.com"
-              style={{ ...inputStyle, flex: 1 }}
-            />
+            <input type="email" value={email} onChange={e => update(i, e.target.value)}
+              placeholder="email@ejemplo.com" style={{ ...inputStyle, flex: 1 }} />
             {emails.length > (required ? 1 : 0) && (
-              <button
-                type="button"
-                onClick={() => remove(i)}
-                style={{
-                  padding: '0 10px', background: 'none', border: '1px solid #FECACA',
-                  borderRadius: 6, cursor: 'pointer', color: '#DC2626', fontSize: 14, flexShrink: 0,
-                }}
-              >×</button>
+              <button type="button" onClick={() => remove(i)} style={{
+                padding: '0 10px', background: 'none', border: '1px solid #FECACA',
+                borderRadius: 6, cursor: 'pointer', color: '#DC2626', fontSize: 14, flexShrink: 0,
+              }}>×</button>
             )}
           </div>
         ))}
-        <button
-          type="button"
-          onClick={add}
-          style={{
-            alignSelf: 'flex-start', padding: '6px 12px', background: 'none',
-            border: '1px dashed #D0CEC8', borderRadius: 6, cursor: 'pointer',
-            fontSize: 11, color: '#888',
-          }}
-        >+ Añadir destinatario</button>
+        <button type="button" onClick={add} style={{
+          alignSelf: 'flex-start', padding: '6px 12px', background: 'none',
+          border: '1px dashed #D0CEC8', borderRadius: 6, cursor: 'pointer', fontSize: 11, color: '#888',
+        }}>+ Añadir destinatario</button>
       </div>
     </div>
   )
 }
 
-// ── Text editor helpers ────────────────────────────────────────────────────────
+// ── Step 2 text editor helpers ────────────────────────────────────────────────
 
-function TextareaField({
-  label: lbl,
-  value,
-  onChange,
-  rows = 3,
-  hint,
-}: {
-  label:    string
-  value:    string
-  onChange: (v: string) => void
-  rows?:    number
-  hint?:    string
-}) {
+function TF({
+  label: lbl, value, onChange, rows = 3, hint,
+}: { label: string; value: string; onChange: (v: string) => void; rows?: number; hint?: string }) {
   return (
     <div>
       <label style={{ ...labelStyle, marginBottom: hint ? 2 : 5 }}>{lbl}</label>
-      {hint && (
-        <p style={{ fontSize: 9, color: '#BBB', margin: '0 0 5px', fontStyle: 'italic' }}>{hint}</p>
-      )}
-      <textarea
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        rows={rows}
-        style={{ ...inputStyle, resize: 'vertical', lineHeight: '1.5' } as React.CSSProperties}
-      />
+      {hint && <p style={{ fontSize: 9, color: '#BBB', margin: '0 0 5px', fontStyle: 'italic' }}>{hint}</p>}
+      <textarea value={value} onChange={e => onChange(e.target.value)} rows={rows}
+        style={{ ...inputStyle, resize: 'vertical', lineHeight: '1.5' } as React.CSSProperties} />
     </div>
   )
 }
 
-function EditorCard({
-  title,
-  children,
-}: {
-  title:    string
-  children: React.ReactNode
-}) {
+function EditorCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div style={cardStyle}>
       <p style={sectionTitleStyle}>{title}</p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        {children}
-      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>{children}</div>
+    </div>
+  )
+}
+
+// ── Mode toggle ───────────────────────────────────────────────────────────────
+
+function ModeToggle({
+  value, onChange,
+}: { value: 'por_m2' | 'importe_fijo'; onChange: (v: 'por_m2' | 'importe_fijo') => void }) {
+  const btn = (mode: 'por_m2' | 'importe_fijo', label: string) => {
+    const active = value === mode
+    return (
+      <button
+        type="button"
+        onClick={() => onChange(mode)}
+        style={{
+          flex: 1, padding: '9px 12px', fontSize: 12, fontWeight: active ? 700 : 400,
+          border: active ? '1.5px solid #D85A30' : '1px solid #E8E6E0',
+          borderRadius: 6, cursor: 'pointer',
+          background: active ? '#FEF3EE' : '#fff',
+          color: active ? '#D85A30' : '#888',
+          transition: 'all 0.15s',
+        }}
+      >{label}</button>
+    )
+  }
+  return (
+    <div style={{ display: 'flex', gap: 8 }}>
+      {btn('por_m2',       'Por m² + fee base')}
+      {btn('importe_fijo', 'Importe fijo total')}
     </div>
   )
 }
@@ -160,27 +143,36 @@ export default function DueDiligenciaPage() {
     fecha:                  today,
     ciudad:                 'Madrid, España',
     cuestiones_especificas: '',
+    modo_honorarios:        'por_m2',
+    importe_fijo:           '',
   })
 
-  const [emailTo, setEmailTo]   = useState<string[]>([''])
-  const [emailCc, setEmailCc]   = useState<string[]>([])
-  const [sending, setSending]   = useState(false)
-  const [sendMsg, setSendMsg]   = useState<{ ok: boolean; text: string } | null>(null)
-  const [previewing, setPreviewing] = useState(false)
+  const [emailTo, setEmailTo]         = useState<string[]>([''])
+  const [emailCc, setEmailCc]         = useState<string[]>([])
+  const [sending, setSending]         = useState(false)
+  const [sendMsg, setSendMsg]         = useState<{ ok: boolean; text: string } | null>(null)
+  const [previewing, setPreviewing]   = useState(false)
+  const [step, setStep]               = useState<1 | 2>(1)
+  const [textSections, setTextSections] = useState<DueDiligenciaTextSections | null>(null)
 
-  // Step state
-  const [step, setStep]                       = useState<1 | 2>(1)
-  const [textSections, setTextSections]       = useState<DueDiligenciaTextSections | null>(null)
+  const sup      = parseFloat(form.superficie) || 0
+  const tar      = parseFloat(form.tarifa_m2)  || 0
+  const feeBase  = parseFloat(form.fee_base)   || 0
+  const impFijo  = parseFloat(form.importe_fijo) || 0
+  const esFijo   = form.modo_honorarios === 'importe_fijo'
 
-  const sup              = parseFloat(form.superficie) || 0
-  const tar              = parseFloat(form.tarifa_m2)  || 0
-  const feeBase          = parseFloat(form.fee_base)   || 0
-  const honorariosVar    = sup * tar
-  const honorarios       = honorariosVar + feeBase
-  const hito             = honorarios / 2
+  const honorariosVar  = sup * tar
+  const totalHonorarios = esFijo ? impFijo : (honorariosVar + feeBase)
+  const hito           = totalHonorarios / 2
 
-  const set = (key: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-    setForm(prev => ({ ...prev, [key]: e.target.value }))
+  const set = (key: keyof FormState) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+      setForm(prev => ({ ...prev, [key]: e.target.value }))
+
+  const setModo = (modo: 'por_m2' | 'importe_fijo') => {
+    setForm(prev => ({ ...prev, modo_honorarios: modo }))
+    setTextSections(null) // reset so defaults are recomputed from new mode
+  }
 
   const buildPdfData = () => ({
     nombre_proyecto:        form.nombre_proyecto.trim() || 'Sin nombre',
@@ -190,43 +182,36 @@ export default function DueDiligenciaPage() {
     fecha:                  form.fecha || today,
     ciudad:                 form.ciudad.trim() || 'Madrid',
     cuestiones_especificas: form.cuestiones_especificas.trim() || null,
+    modo_honorarios:        form.modo_honorarios,
+    importe_fijo:           esFijo ? impFijo : null,
   })
 
   const buildPayload = () => ({
     ...buildPdfData(),
-    textSections: textSections ?? undefined,
+    ...(textSections ? { textSections } : {}),
   })
 
-  // Step 1 → Step 2: compute default text sections from current form values
   const handleContinue = () => {
     const pdfData = buildPdfData()
     setTextSections(ts => ts ?? getDefaultTextSections(pdfData))
     setStep(2)
   }
 
-  const setTs = <K extends keyof DueDiligenciaTextSections>(key: K) =>
-    (val: string) => setTextSections(prev => prev ? { ...prev, [key]: val } : prev)
+  const setTs = (key: keyof DueDiligenciaTextSections) => (val: string) =>
+    setTextSections(prev => prev ? { ...prev, [key]: val } : prev)
 
   const handlePreview = async () => {
     setPreviewing(true)
     try {
       const res = await fetch('/api/due-diligencia/preview', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(buildPayload()),
       })
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}))
-        alert(j.error ?? 'Error al generar PDF.')
-        return
-      }
+      if (!res.ok) { const j = await res.json().catch(() => ({})); alert(j.error ?? 'Error al generar PDF.'); return }
       const blob = await res.blob()
       window.open(URL.createObjectURL(blob), '_blank')
-    } catch {
-      alert('Error de red al previsualizar.')
-    } finally {
-      setPreviewing(false)
-    }
+    } catch { alert('Error de red al previsualizar.') }
+    finally { setPreviewing(false) }
   }
 
   const handleSend = async () => {
@@ -234,36 +219,27 @@ export default function DueDiligenciaPage() {
     const validCc = emailCc.map(e => e.trim()).filter(Boolean)
     if (validTo.length === 0) { alert('Introduce al menos un destinatario.'); return }
     if (!confirm(`Enviar propuesta a: ${validTo.join(', ')}?`)) return
-
-    setSending(true)
-    setSendMsg(null)
+    setSending(true); setSendMsg(null)
     try {
       const res = await fetch('/api/due-diligencia/enviar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...buildPayload(), email_to: validTo, email_cc: validCc }),
       })
       const j = await res.json()
-      if (j.ok) {
-        setSendMsg({ ok: true, text: `Propuesta enviada correctamente a ${validTo.join(', ')}.` })
-      } else {
-        setSendMsg({ ok: false, text: j.error ?? 'Error al enviar.' })
-      }
-    } catch {
-      setSendMsg({ ok: false, text: 'Error de red.' })
-    } finally {
-      setSending(false)
-    }
+      setSendMsg(j.ok
+        ? { ok: true,  text: `Propuesta enviada correctamente a ${validTo.join(', ')}.` }
+        : { ok: false, text: j.error ?? 'Error al enviar.' })
+    } catch { setSendMsg({ ok: false, text: 'Error de red.' }) }
+    finally { setSending(false) }
   }
 
-  // ── Step 1 ─────────────────────────────────────────────────────────────────
+  // ── Step 1 — Datos ────────────────────────────────────────────────────────
 
   if (step === 1) {
     return (
       <div style={{ maxWidth: 760, margin: '0 auto', padding: '28px 16px', fontFamily: 'inherit' }}>
 
-        {/* Header */}
-        <div style={{ marginBottom: 28 }}>
+        <div style={{ marginBottom: 24 }}>
           <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', margin: '0 0 4px' }}>
             Captación
           </p>
@@ -288,7 +264,7 @@ export default function DueDiligenciaPage() {
 
         <div style={{ display: 'grid', gap: 16 }}>
 
-          {/* ── Datos del activo ───────────────────────────────────────────────── */}
+          {/* Datos del activo */}
           <div style={cardStyle}>
             <p style={sectionTitleStyle}>Datos del activo</p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
@@ -308,27 +284,15 @@ export default function DueDiligenciaPage() {
                 <input style={inputStyle} type="date" value={form.fecha} onChange={set('fecha')} />
               </div>
 
-              <div>
-                <label style={labelStyle}>Superficie a analizar (m²) *</label>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={labelStyle}>Superficie estimada (m²) *</label>
                 <input style={inputStyle} type="number" min="1" value={form.superficie} onChange={set('superficie')} placeholder="531" />
               </div>
 
-              <div>
-                <label style={labelStyle}>Tarifa variable (€/m²)</label>
-                <input style={inputStyle} type="number" min="1" step="0.5" value={form.tarifa_m2} onChange={set('tarifa_m2')} placeholder="8" />
-              </div>
-
               <div style={{ gridColumn: '1 / -1' }}>
-                <label style={labelStyle}>
-                  Fee base — Movilización, Coordinación Técnica y Estructuración de Informe (€)
-                </label>
-                <input style={inputStyle} type="number" min="0" step="100" value={form.fee_base} onChange={set('fee_base')} placeholder="1500" />
-              </div>
-
-              <div style={{ gridColumn: '1 / -1' }}>
-                <label style={labelStyle}>Cuestiones específicas del proyecto <span style={{ fontWeight: 400, textTransform: 'none', fontSize: 9 }}>(opcional — aparece en el PDF como caja destacada)</span></label>
+                <label style={labelStyle}>Cuestiones específicas <span style={{ fontWeight: 400, textTransform: 'none', fontSize: 9 }}>(opcional — aparece en el PDF como caja destacada)</span></label>
                 <textarea
-                  style={{ ...inputStyle, height: 90, resize: 'vertical', lineHeight: '1.5' } as React.CSSProperties}
+                  style={{ ...inputStyle, height: 80, resize: 'vertical', lineHeight: '1.5' } as React.CSSProperties}
                   value={form.cuestiones_especificas}
                   onChange={set('cuestiones_especificas')}
                   placeholder="Ej: El activo se destina a régimen de hold/renta. Se requiere especial atención a instalaciones de climatización y estado de fachadas."
@@ -338,33 +302,77 @@ export default function DueDiligenciaPage() {
             </div>
           </div>
 
-          {/* ── Resumen de honorarios ──────────────────────────────────────────── */}
+          {/* Honorarios */}
+          <div style={cardStyle}>
+            <p style={sectionTitleStyle}>Honorarios profesionales</p>
+
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ ...labelStyle, marginBottom: 8 }}>Método de cálculo</label>
+              <ModeToggle value={form.modo_honorarios} onChange={setModo} />
+            </div>
+
+            {esFijo ? (
+              /* Importe fijo */
+              <div>
+                <label style={labelStyle}>Importe total (€) *</label>
+                <input
+                  style={inputStyle} type="number" min="0" step="100"
+                  value={form.importe_fijo} onChange={set('importe_fijo')}
+                  placeholder="5000"
+                />
+                {impFijo > 0 && (
+                  <p style={{ fontSize: 11, color: '#AAA', marginTop: 8, marginBottom: 0 }}>
+                    Pago en 2 hitos: {fmtEur(hito)} a la aceptación + {fmtEur(hito)} a la entrega del informe. IVA no incluido.
+                  </p>
+                )}
+              </div>
+            ) : (
+              /* Por m² */
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div>
+                  <label style={labelStyle}>Tarifa variable (€/m²)</label>
+                  <input style={inputStyle} type="number" min="1" step="0.5" value={form.tarifa_m2} onChange={set('tarifa_m2')} placeholder="8" />
+                </div>
+                <div>
+                  <label style={labelStyle}>Fee base — Movilización (€)</label>
+                  <input style={inputStyle} type="number" min="0" step="100" value={form.fee_base} onChange={set('fee_base')} placeholder="1500" />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Resumen honorarios */}
           <div style={{ ...cardStyle, background: '#F8F7F4' }}>
-            <p style={sectionTitleStyle}>Resumen de honorarios</p>
+            <p style={sectionTitleStyle}>Resumen</p>
             <div style={{ display: 'flex', gap: 0 }}>
-              <div style={{ flex: 1 }}>
-                <p style={{ fontSize: 10, color: '#AAA', margin: '0 0 3px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Fee variable</p>
-                <p style={{ fontSize: 16, fontWeight: 600, color: '#1A1A1A', margin: 0 }}>{sup > 0 && tar > 0 ? fmtEur(honorariosVar) : '—'}</p>
-                <p style={{ fontSize: 10, color: '#CCC', margin: '2px 0 0' }}>{sup > 0 && tar > 0 ? `${sup} m² × ${fmtEur(tar)}` : ''}</p>
-              </div>
-              <div style={{ flex: 1, borderLeft: '1px solid #E8E6E0', paddingLeft: 20 }}>
-                <p style={{ fontSize: 10, color: '#AAA', margin: '0 0 3px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Fee base</p>
-                <p style={{ fontSize: 16, fontWeight: 600, color: '#1A1A1A', margin: 0 }}>{feeBase > 0 ? fmtEur(feeBase) : '—'}</p>
-                <p style={{ fontSize: 10, color: '#CCC', margin: '2px 0 0' }}>Movilización + coord.</p>
-              </div>
-              <div style={{ flex: 1.3, borderLeft: '1px solid #E8E6E0', paddingLeft: 20 }}>
+              {!esFijo && (
+                <>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: 10, color: '#AAA', margin: '0 0 3px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Fee variable</p>
+                    <p style={{ fontSize: 16, fontWeight: 600, color: '#1A1A1A', margin: 0 }}>{sup > 0 && tar > 0 ? fmtEur(honorariosVar) : '—'}</p>
+                    <p style={{ fontSize: 10, color: '#CCC', margin: '2px 0 0' }}>{sup > 0 && tar > 0 ? `${sup} m² × ${fmtEur(tar)}` : ''}</p>
+                  </div>
+                  <div style={{ flex: 1, borderLeft: '1px solid #E8E6E0', paddingLeft: 20 }}>
+                    <p style={{ fontSize: 10, color: '#AAA', margin: '0 0 3px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Fee base</p>
+                    <p style={{ fontSize: 16, fontWeight: 600, color: '#1A1A1A', margin: 0 }}>{feeBase > 0 ? fmtEur(feeBase) : '—'}</p>
+                    <p style={{ fontSize: 10, color: '#CCC', margin: '2px 0 0' }}>Movilización + coord.</p>
+                  </div>
+                </>
+              )}
+              <div style={{ flex: 1.5, borderLeft: esFijo ? 'none' : '1px solid #E8E6E0', paddingLeft: esFijo ? 0 : 20 }}>
                 <p style={{ fontSize: 10, color: '#AAA', margin: '0 0 3px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Total honorarios</p>
-                <p style={{ fontSize: 22, fontWeight: 700, color: '#D85A30', margin: 0 }}>{honorarios > 0 ? fmtEur(honorarios) : '—'}</p>
+                <p style={{ fontSize: 22, fontWeight: 700, color: '#D85A30', margin: 0 }}>{totalHonorarios > 0 ? fmtEur(totalHonorarios) : '—'}</p>
+                <p style={{ fontSize: 10, color: '#CCC', margin: '2px 0 0' }}>+ IVA si aplica</p>
               </div>
             </div>
-            {honorarios > 0 && (
+            {totalHonorarios > 0 && (
               <p style={{ fontSize: 11, color: '#AAA', marginTop: 10, marginBottom: 0 }}>
-                Pago en 2 hitos: {fmtEur(hito)} a la aceptación + {fmtEur(hito)} a la entrega del informe. IVA no incluido.
+                Pago en 2 hitos: {fmtEur(hito)} a la aceptación + {fmtEur(hito)} a la entrega del informe.
               </p>
             )}
           </div>
 
-          {/* ── Continuar ──────────────────────────────────────────────────────── */}
+          {/* Continuar */}
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <button
               onClick={handleContinue}
@@ -383,14 +391,13 @@ export default function DueDiligenciaPage() {
     )
   }
 
-  // ── Step 2 ─────────────────────────────────────────────────────────────────
+  // ── Step 2 — Editor de texto ──────────────────────────────────────────────
 
   const ts = textSections!
 
   return (
     <div style={{ maxWidth: 820, margin: '0 auto', padding: '28px 16px', fontFamily: 'inherit' }}>
 
-      {/* Header */}
       <div style={{ marginBottom: 20 }}>
         <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', margin: '0 0 4px' }}>
           Captación · Due Diligence Técnica
@@ -399,7 +406,8 @@ export default function DueDiligenciaPage() {
           Editar texto del documento
         </h1>
         <p style={{ fontSize: 12, color: '#888', margin: 0 }}>
-          {form.nombre_proyecto} · {sup} m² · {fmtEur(honorarios)}
+          {form.nombre_proyecto} · {sup} m² · {fmtEur(totalHonorarios)}
+          {esFijo ? ' (importe fijo)' : ` (${fmtEur(tar)}/m² + ${fmtEur(feeBase)})`}
         </p>
       </div>
 
@@ -416,265 +424,91 @@ export default function DueDiligenciaPage() {
 
       <div style={{ display: 'grid', gap: 16 }}>
 
-        {/* 1. Objeto */}
         <EditorCard title="1. Objeto de la propuesta">
-          <TextareaField
-            label="Primer párrafo"
-            value={ts.objeto_p1}
-            onChange={setTs('objeto_p1')}
-            rows={4}
-          />
-          <TextareaField
-            label="Segundo párrafo"
-            value={ts.objeto_p2}
-            onChange={setTs('objeto_p2')}
-            rows={3}
-          />
+          <TF label="Primer párrafo" value={ts.objeto_p1} onChange={setTs('objeto_p1')} rows={4} />
+          <TF label="Segundo párrafo" value={ts.objeto_p2} onChange={setTs('objeto_p2')} rows={3} />
         </EditorCard>
 
-        {/* 2. Alcance */}
         <EditorCard title="2. Alcance de los servicios">
-          <TextareaField
-            label="Introducción"
-            value={ts.alcance_intro}
-            onChange={setTs('alcance_intro')}
-            rows={3}
-          />
-          <TextareaField
-            label="2.1 Revisión estado general — puntos"
-            value={ts.alcance_21_bullets}
-            onChange={setTs('alcance_21_bullets')}
-            rows={4}
-            hint="Una línea por punto"
-          />
-          <TextareaField
-            label="2.2 Instalaciones — introducción"
-            value={ts.alcance_22_intro}
-            onChange={setTs('alcance_22_intro')}
-            rows={2}
-          />
-          <TextareaField
-            label="2.2 Instalaciones — puntos"
-            value={ts.alcance_22_bullets}
-            onChange={setTs('alcance_22_bullets')}
-            rows={5}
-            hint="Una línea por punto"
-          />
-          <TextareaField
-            label="2.2 Instalaciones — nota final"
-            value={ts.alcance_22_footer}
-            onChange={setTs('alcance_22_footer')}
-            rows={2}
-          />
-          <TextareaField
-            label="2.3 Mantenimiento — puntos"
-            value={ts.alcance_23_bullets}
-            onChange={setTs('alcance_23_bullets')}
-            rows={3}
-            hint="Una línea por punto"
-          />
-          <TextareaField
-            label="2.4 CAPEX Forecast — puntos"
-            value={ts.alcance_24_bullets}
-            onChange={setTs('alcance_24_bullets')}
-            rows={3}
-            hint="Una línea por punto"
-          />
+          <TF label="Introducción" value={ts.alcance_intro} onChange={setTs('alcance_intro')} rows={3} />
+          <TF label="2.1 Revisión estado general — puntos" value={ts.alcance_21_bullets} onChange={setTs('alcance_21_bullets')} rows={4} hint="Una línea por punto" />
+          <TF label="2.2 Instalaciones — introducción" value={ts.alcance_22_intro} onChange={setTs('alcance_22_intro')} rows={2} />
+          <TF label="2.2 Instalaciones — puntos" value={ts.alcance_22_bullets} onChange={setTs('alcance_22_bullets')} rows={5} hint="Una línea por punto" />
+          <TF label="2.2 Instalaciones — nota final" value={ts.alcance_22_footer} onChange={setTs('alcance_22_footer')} rows={2} />
+          <TF label="2.3 Mantenimiento — puntos" value={ts.alcance_23_bullets} onChange={setTs('alcance_23_bullets')} rows={3} hint="Una línea por punto" />
+          <TF label="2.4 CAPEX Forecast — puntos" value={ts.alcance_24_bullets} onChange={setTs('alcance_24_bullets')} rows={3} hint="Una línea por punto" />
         </EditorCard>
 
-        {/* 3. Metodología */}
         <EditorCard title="3. Metodología de trabajo">
-          <TextareaField
-            label="Introducción"
-            value={ts.metodologia_intro}
-            onChange={setTs('metodologia_intro')}
-            rows={2}
-          />
-          <TextareaField
-            label="Fase 1 — Revisión Documental Previa"
-            value={ts.metodologia_fase1}
-            onChange={setTs('metodologia_fase1')}
-            rows={2}
-          />
-          <TextareaField
-            label="Fase 2 — Inspección Técnica Presencial"
-            value={ts.metodologia_fase2}
-            onChange={setTs('metodologia_fase2')}
-            rows={2}
-          />
-          <TextareaField
-            label="Fase 3 — Análisis y Consolidación Técnica"
-            value={ts.metodologia_fase3}
-            onChange={setTs('metodologia_fase3')}
-            rows={2}
-          />
-          <TextareaField
-            label="Fase 4 — Emisión de Informe Ejecutivo"
-            value={ts.metodologia_fase4}
-            onChange={setTs('metodologia_fase4')}
-            rows={2}
-          />
+          <TF label="Introducción" value={ts.metodologia_intro} onChange={setTs('metodologia_intro')} rows={2} />
+          <TF label="Fase 1 — Revisión Documental Previa" value={ts.metodologia_fase1} onChange={setTs('metodologia_fase1')} rows={2} />
+          <TF label="Fase 2 — Inspección Técnica Presencial" value={ts.metodologia_fase2} onChange={setTs('metodologia_fase2')} rows={2} />
+          <TF label="Fase 3 — Análisis y Consolidación Técnica" value={ts.metodologia_fase3} onChange={setTs('metodologia_fase3')} rows={2} />
+          <TF label="Fase 4 — Emisión de Informe Ejecutivo" value={ts.metodologia_fase4} onChange={setTs('metodologia_fase4')} rows={2} />
         </EditorCard>
 
-        {/* 4. Entregables */}
         <EditorCard title="4. Entregables">
-          <TextareaField
-            label="Introducción"
-            value={ts.entregables_intro}
-            onChange={setTs('entregables_intro')}
-            rows={2}
-          />
-          <TextareaField
-            label="4.1 Resumen Ejecutivo — puntos"
-            value={ts.entregables_41_bullets}
-            onChange={setTs('entregables_41_bullets')}
-            rows={3}
-            hint="Una línea por punto"
-          />
-          <TextareaField
-            label="4.2 Hallazgos Técnicos — puntos"
-            value={ts.entregables_42_bullets}
-            onChange={setTs('entregables_42_bullets')}
-            rows={3}
-            hint="Una línea por punto"
-          />
-          <TextareaField
-            label="4.3 Estado de Conservación — introducción"
-            value={ts.entregables_43_intro}
-            onChange={setTs('entregables_43_intro')}
-            rows={2}
-          />
-          <TextareaField
-            label="4.3 Estado de Conservación — puntos"
-            value={ts.entregables_43_bullets}
-            onChange={setTs('entregables_43_bullets')}
-            rows={4}
-            hint="Una línea por punto"
-          />
-          <TextareaField
-            label="4.4 CAPEX Forecast — puntos"
-            value={ts.entregables_44_bullets}
-            onChange={setTs('entregables_44_bullets')}
-            rows={2}
-            hint="Una línea por punto"
-          />
-          <TextareaField
-            label="4.5 Limitaciones — puntos"
-            value={ts.entregables_45_bullets}
-            onChange={setTs('entregables_45_bullets')}
-            rows={2}
-            hint="Una línea por punto"
-          />
+          <TF label="Introducción" value={ts.entregables_intro} onChange={setTs('entregables_intro')} rows={2} />
+          <TF label="4.1 Resumen Ejecutivo" value={ts.entregables_41_bullets} onChange={setTs('entregables_41_bullets')} rows={3} hint="Una línea por punto" />
+          <TF label="4.2 Hallazgos Técnicos" value={ts.entregables_42_bullets} onChange={setTs('entregables_42_bullets')} rows={3} hint="Una línea por punto" />
+          <TF label="4.3 Estado de Conservación — introducción" value={ts.entregables_43_intro} onChange={setTs('entregables_43_intro')} rows={2} />
+          <TF label="4.3 Estado de Conservación — puntos" value={ts.entregables_43_bullets} onChange={setTs('entregables_43_bullets')} rows={4} hint="Una línea por punto" />
+          <TF label="4.4 CAPEX Forecast" value={ts.entregables_44_bullets} onChange={setTs('entregables_44_bullets')} rows={2} hint="Una línea por punto" />
+          <TF label="4.5 Limitaciones de Inspección" value={ts.entregables_45_bullets} onChange={setTs('entregables_45_bullets')} rows={2} hint="Una línea por punto" />
         </EditorCard>
 
-        {/* 5. Documentación */}
         <EditorCard title="5. Documentación requerida">
-          <TextareaField
-            label="Texto"
-            value={ts.documentacion_intro}
-            onChange={setTs('documentacion_intro')}
-            rows={2}
-          />
-          <TextareaField
-            label="Puntos"
-            value={ts.documentacion_bullets}
-            onChange={setTs('documentacion_bullets')}
-            rows={5}
-            hint="Una línea por punto"
-          />
+          <TF label="Texto" value={ts.documentacion_intro} onChange={setTs('documentacion_intro')} rows={2} />
+          <TF label="Puntos" value={ts.documentacion_bullets} onChange={setTs('documentacion_bullets')} rows={5} hint="Una línea por punto" />
         </EditorCard>
 
-        {/* 6. Exclusiones */}
         <EditorCard title="6. Exclusiones y limitaciones">
-          <TextareaField
-            label="Texto introductorio"
-            value={ts.exclusiones_intro}
-            onChange={setTs('exclusiones_intro')}
-            rows={3}
-          />
-          <TextareaField
-            label="Puntos"
-            value={ts.exclusiones_bullets}
-            onChange={setTs('exclusiones_bullets')}
-            rows={9}
-            hint="Una línea por punto"
-          />
+          <TF label="Texto introductorio" value={ts.exclusiones_intro} onChange={setTs('exclusiones_intro')} rows={3} />
+          <TF label="Puntos" value={ts.exclusiones_bullets} onChange={setTs('exclusiones_bullets')} rows={9} hint="Una línea por punto" />
         </EditorCard>
 
-        {/* 7. Condiciones de acceso */}
         <EditorCard title="7. Condiciones de acceso">
-          <TextareaField
-            label="Texto"
-            value={ts.acceso_intro}
-            onChange={setTs('acceso_intro')}
-            rows={2}
-          />
-          <TextareaField
-            label="Puntos"
-            value={ts.acceso_bullets}
-            onChange={setTs('acceso_bullets')}
-            rows={3}
-            hint="Una línea por punto"
-          />
+          <TF label="Texto" value={ts.acceso_intro} onChange={setTs('acceso_intro')} rows={2} />
+          <TF label="Puntos" value={ts.acceso_bullets} onChange={setTs('acceso_bullets')} rows={3} hint="Una línea por punto" />
         </EditorCard>
 
-        {/* 8. Plazo */}
         <EditorCard title="8. Plazo de entrega">
-          <TextareaField
-            label="Texto"
-            value={ts.plazo}
-            onChange={setTs('plazo')}
+          <TF label="Texto" value={ts.plazo} onChange={setTs('plazo')} rows={2} />
+        </EditorCard>
+
+        <EditorCard title="9. Honorarios — nota al pie">
+          <TF
+            label="Nota (IVA, condiciones, etc.)"
+            value={ts.honorarios_nota}
+            onChange={setTs('honorarios_nota')}
             rows={2}
+            hint="Aparece en cursiva debajo de la tabla de honorarios. Déjalo vacío para omitirla."
           />
         </EditorCard>
 
-        {/* 10. Ajuste de superficie */}
+        {/* Section 10 only shown in por_m2 mode, or always editable */}
         <EditorCard title="10. Ajuste de superficie">
-          <TextareaField
+          <TF
             label="Texto"
             value={ts.ajuste_p1}
             onChange={setTs('ajuste_p1')}
             rows={4}
+            hint={esFijo ? 'Dejar vacío para omitir esta sección del PDF.' : undefined}
           />
         </EditorCard>
 
-        {/* 11–13. Condiciones, Validez, Aceptación */}
-        <EditorCard title="11–13. Condiciones · Validez · Aceptación">
-          <TextareaField
-            label="11. Condiciones de pago — introducción"
-            value={ts.pago_intro}
-            onChange={setTs('pago_intro')}
-            rows={2}
-          />
-          <TextareaField
-            label="12. Validez de la propuesta"
-            value={ts.validez}
-            onChange={setTs('validez')}
-            rows={2}
-          />
-          <TextareaField
-            label="13. Aceptación"
-            value={ts.aceptacion}
-            onChange={setTs('aceptacion')}
-            rows={2}
-          />
+        <EditorCard title="11 – 13. Condiciones · Validez · Aceptación">
+          <TF label="11. Condiciones de pago — introducción" value={ts.pago_intro} onChange={setTs('pago_intro')} rows={2} />
+          <TF label="12. Validez de la propuesta" value={ts.validez} onChange={setTs('validez')} rows={2} />
+          <TF label="13. Aceptación" value={ts.aceptacion} onChange={setTs('aceptacion')} rows={2} />
         </EditorCard>
 
         {/* Destinatarios */}
         <div style={cardStyle}>
           <p style={sectionTitleStyle}>Destinatarios y envío</p>
           <div style={{ display: 'grid', gap: 16 }}>
-            <EmailList
-              label="Para (destinatarios principales)"
-              required
-              emails={emailTo}
-              onChange={setEmailTo}
-            />
-            <EmailList
-              label="CC (con copia)"
-              emails={emailCc}
-              onChange={setEmailCc}
-            />
+            <EmailList label="Para (destinatarios principales)" required emails={emailTo} onChange={setEmailTo} />
+            <EmailList label="CC (con copia)" emails={emailCc} onChange={setEmailCc} />
           </div>
         </div>
 
@@ -685,8 +519,7 @@ export default function DueDiligenciaPage() {
             onClick={() => setStep(1)}
             style={{
               padding: '11px 16px', background: '#fff', color: '#888',
-              border: '1px solid #E8E6E0', borderRadius: 8, cursor: 'pointer',
-              fontSize: 13,
+              border: '1px solid #E8E6E0', borderRadius: 8, cursor: 'pointer', fontSize: 13,
             }}
           >
             ← Volver a datos
