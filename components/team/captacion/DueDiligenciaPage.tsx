@@ -449,12 +449,14 @@ export default function DueDiligenciaPage() {
 
         <EditorCard title="4. Entregables">
           <TF label="Introducción" value={ts.entregables_intro} onChange={setTs('entregables_intro')} rows={2} />
-          <TF label="4.1 Resumen Ejecutivo" value={ts.entregables_41_bullets} onChange={setTs('entregables_41_bullets')} rows={3} hint="Una línea por punto" />
-          <TF label="4.2 Hallazgos Técnicos" value={ts.entregables_42_bullets} onChange={setTs('entregables_42_bullets')} rows={3} hint="Una línea por punto" />
-          <TF label="4.3 Estado de Conservación — introducción" value={ts.entregables_43_intro} onChange={setTs('entregables_43_intro')} rows={2} />
-          <TF label="4.3 Estado de Conservación — puntos" value={ts.entregables_43_bullets} onChange={setTs('entregables_43_bullets')} rows={4} hint="Una línea por punto" />
-          <TF label="4.4 CAPEX Forecast" value={ts.entregables_44_bullets} onChange={setTs('entregables_44_bullets')} rows={2} hint="Una línea por punto" />
-          <TF label="4.5 Limitaciones de Inspección" value={ts.entregables_45_bullets} onChange={setTs('entregables_45_bullets')} rows={2} hint="Una línea por punto" />
+          <TF label="Puntos del informe" value={ts.entregables_bullets} onChange={setTs('entregables_bullets')} rows={5} hint="Una línea por punto" />
+          <TF
+            label="Nota de cierre"
+            value={ts.entregables_nota}
+            onChange={setTs('entregables_nota')}
+            rows={2}
+            hint="Aparece en cursiva al final de la sección. Déjalo vacío para omitirla."
+          />
         </EditorCard>
 
         <EditorCard title="5. Documentación requerida">

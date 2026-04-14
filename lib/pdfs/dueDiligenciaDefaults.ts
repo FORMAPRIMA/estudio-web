@@ -37,13 +37,9 @@ export interface DueDiligenciaTextSections {
   metodologia_fase3:      string
   metodologia_fase4:      string
   // 4. Entregables
-  entregables_intro:      string
-  entregables_41_bullets: string
-  entregables_42_bullets: string
-  entregables_43_intro:   string
-  entregables_43_bullets: string
-  entregables_44_bullets: string
-  entregables_45_bullets: string
+  entregables_intro:   string
+  entregables_bullets: string   // newline-separated bullet lines
+  entregables_nota:    string   // closing note paragraph (leave empty to omit)
   // 5. Documentación requerida
   documentacion_intro:    string
   documentacion_bullets:  string
@@ -115,24 +111,13 @@ export function getDefaultTextSections(data: DueDiligenciaPDFData): DueDiligenci
       `Redacción y entrega de informe final ejecutivo.`,
 
     entregables_intro:
-      `FORMA PRIMA entregará al Cliente un Informe Ejecutivo de Due Diligence Técnica No Invasiva, que incluirá como mínimo:`,
+      `FORMA PRIMA entregará un Informe Ejecutivo Simplificado, que incluirá:`,
 
-    entregables_41_bullets:
-      `· Conclusiones generales del análisis.\n· Principales riesgos técnicos detectados.\n· Valoración global del estado del activo.`,
+    entregables_bullets:
+      `· Resumen ejecutivo con principales conclusiones y riesgos detectados.\n· Listado de incidencias relevantes (no exhaustivo) con apoyo fotográfico.\n· Valoración general del estado del activo (nivel alto, no por sistemas detallados).\n· Estimación orientativa de CAPEX correctivo (orden de magnitud, sin desglose detallado).\n· Relación de limitaciones de la inspección (zonas no visitadas, etc.).`,
 
-    entregables_42_bullets:
-      `· Descripción de incidencias detectadas por disciplina.\n· Reportaje fotográfico comentado.\n· Clasificación de criticidad / prioridad.`,
-
-    entregables_43_intro: `Valoración cualitativa del estado de:`,
-
-    entregables_43_bullets:
-      `· Envolvente / fachada / cubierta (si accesibles)\n· Elementos comunes\n· Unidades privativas inspeccionadas\n· Instalaciones visibles`,
-
-    entregables_44_bullets:
-      `· Estimación preliminar de inversiones correctivas inmediatas.\n· Estimación preliminar de inversiones preventivas / reposiciones futuras.`,
-
-    entregables_45_bullets:
-      `· Relación expresa de zonas no accesibles / no inspeccionadas.\n· Limitaciones metodológicas aplicables al análisis.`,
+    entregables_nota:
+      `El presente informe tiene carácter ejecutivo y no exhaustivo, orientado a la identificación de riesgos técnicos aparentes y estimaciones preliminares de inversión.`,
 
     documentacion_intro:
       `Para el correcto desarrollo del encargo, el Cliente deberá gestionar la puesta a disposición de la siguiente documentación, en la medida en que exista:`,

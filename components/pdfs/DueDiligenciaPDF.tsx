@@ -379,22 +379,12 @@ export function DueDiligenciaPDF({
           {/* 4. Entregables */}
           <Text style={s.sectionTitle}>4. Entregables</Text>
           <Text style={s.bodyText}>{t.entregables_intro}</Text>
-
-          <Text style={s.subsectionTitle}>4.1 Resumen Ejecutivo</Text>
-          <BulletList text={t.entregables_41_bullets} />
-
-          <Text style={s.subsectionTitle}>4.2 Hallazgos Técnicos</Text>
-          <BulletList text={t.entregables_42_bullets} />
-
-          <Text style={s.subsectionTitle}>4.3 Evaluación de Estado de Conservación</Text>
-          <Text style={s.bodyText}>{t.entregables_43_intro}</Text>
-          <BulletList text={t.entregables_43_bullets} />
-
-          <Text style={s.subsectionTitle}>4.4 CAPEX Forecast</Text>
-          <BulletList text={t.entregables_44_bullets} />
-
-          <Text style={s.subsectionTitle}>4.5 Limitaciones de Inspección</Text>
-          <BulletList text={t.entregables_45_bullets} />
+          <BulletList text={t.entregables_bullets} />
+          {t.entregables_nota ? (
+            <Text style={[s.bodyText, { marginTop: 8, fontFamily: 'Helvetica-Oblique' }]}>
+              {t.entregables_nota}
+            </Text>
+          ) : null}
 
           {/* 5. Documentación */}
           <Text style={s.sectionTitle}>5. Documentación requerida</Text>
