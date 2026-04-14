@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import TimeTracker from '@/components/team/TimeTracker'
 
-const FP_ROLES = ['fp_team', 'fp_manager', 'fp_partner']
+const FP_ROLES = ['fp_team', 'fp_manager', 'fp_partner', 'fp_biz_dev']
 
 export const metadata = { title: 'Time Tracker' }
 
@@ -22,7 +22,7 @@ export default async function TimeTrackerPage() {
   return (
     <TimeTracker
       currentUserId={user.id}
-      currentUserRole={profile.rol as 'fp_team' | 'fp_manager' | 'fp_partner'}
+      currentUserRole={profile.rol as 'fp_team' | 'fp_manager' | 'fp_partner' | 'fp_biz_dev'}
     />
   )
 }
