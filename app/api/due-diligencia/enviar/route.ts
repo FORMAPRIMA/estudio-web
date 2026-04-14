@@ -4,11 +4,14 @@ import { createElement } from 'react'
 import { createClient } from '@/lib/supabase/server'
 import { DueDiligenciaPDF } from '@/components/pdfs/DueDiligenciaPDF'
 import type { DueDiligenciaPDFData } from '@/components/pdfs/DueDiligenciaPDF'
+import { getDefaultTextSections } from '@/lib/pdfs/dueDiligenciaDefaults'
+import type { DueDiligenciaTextSections } from '@/lib/pdfs/dueDiligenciaDefaults'
 import { sendEmail, wrapEmail } from '@/lib/email'
 
 interface EnviarPayload extends DueDiligenciaPDFData {
-  email_to:  string[]
-  email_cc?: string[]
+  email_to:      string[]
+  email_cc?:     string[]
+  textSections?: DueDiligenciaTextSections
 }
 
 export async function POST(req: NextRequest) {
@@ -24,7 +27,8 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json() as EnviarPayload
-    const { email_to, email_cc, ...pdfData } = body
+    const { email_to, email_cc, textSections: rawSections, ...pdfData } = body
+    const textSections = rawSections ?? getDefaultTextSections(pdfData)
 
     if (!email_to || email_to.length === 0) {
       return NextResponse.json({ error: 'Se requiere al menos un destinatario.' }, { status: 400 })
@@ -36,7 +40,7 @@ export async function POST(req: NextRequest) {
 
     // Generate PDF
     const buffer = await renderToBuffer(
-      createElement(DueDiligenciaPDF, { data: pdfData }) as any
+      createElement(DueDiligenciaPDF, { data: pdfData, textSections }) as any
     )
 
     // Build email body

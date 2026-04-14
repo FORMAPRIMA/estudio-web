@@ -5,6 +5,10 @@ import {
   Document, Page, View, Text, Image, StyleSheet,
 } from '@react-pdf/renderer'
 import path from 'path'
+import type { DueDiligenciaPDFData, DueDiligenciaTextSections } from '@/lib/pdfs/dueDiligenciaDefaults'
+
+// Re-export for API routes that import DueDiligenciaPDFData from this file
+export type { DueDiligenciaPDFData }
 
 const LOGO_BLANCO = path.join(process.cwd(), 'public', 'FORMA_PRIMA_BLANCO.png')
 
@@ -225,21 +229,28 @@ const s = StyleSheet.create({
   footerText: { fontSize: 6.5, color: C.meta },
 })
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// ── Bullet list helper ────────────────────────────────────────────────────────
 
-export interface DueDiligenciaPDFData {
-  nombre_proyecto:        string
-  superficie:             number
-  tarifa_m2:              number
-  fee_base:               number   // fee fijo de movilización + coord técnica + estructuración
-  fecha:                  string   // ISO date yyyy-mm-dd
-  ciudad:                 string
-  cuestiones_especificas: string | null
+function BulletList({ text }: { text: string }) {
+  const lines = text.split('\n').filter(l => l.trim())
+  return (
+    <View>
+      {lines.map((line, i) => (
+        <Text key={i} style={s.bullet}>{line.trim()}</Text>
+      ))}
+    </View>
+  )
 }
 
 // ── PDF Component ─────────────────────────────────────────────────────────────
 
-export function DueDiligenciaPDF({ data }: { data: DueDiligenciaPDFData }) {
+export function DueDiligenciaPDF({
+  data,
+  textSections: t,
+}: {
+  data:         DueDiligenciaPDFData
+  textSections: DueDiligenciaTextSections
+}) {
   const honorariosVariable = data.superficie * data.tarifa_m2
   const honorarios         = honorariosVariable + data.fee_base
   const hito1              = honorarios / 2
@@ -323,12 +334,8 @@ export function DueDiligenciaPDF({ data }: { data: DueDiligenciaPDFData }) {
 
           {/* 1. Objeto */}
           <Text style={s.sectionTitle}>1. Objeto de la propuesta</Text>
-          <Text style={s.bodyText}>
-            {`Por medio del presente documento, FORMA PRIMA presenta su propuesta de servicios profesionales para la realización de una Due Diligence Técnica No Invasiva sobre el activo residencial ubicado en ${data.nombre_proyecto}, ${data.ciudad}, con una superficie estimada de análisis de ${data.superficie} m².`}
-          </Text>
-          <Text style={s.bodyText}>
-            El objetivo del encargo es proporcionar al Cliente una evaluación técnica profesional del estado general aparente del inmueble, orientada a apoyar su proceso de adquisición y posterior estrategia de explotación, mediante la identificación de incidencias visibles, riesgos técnicos aparentes, necesidades de mantenimiento y previsión de CAPEX correctivo/preventivo.
-          </Text>
+          <Text style={s.bodyText}>{t.objeto_p1}</Text>
+          <Text style={s.bodyText}>{t.objeto_p2}</Text>
           {data.cuestiones_especificas ? (
             <View style={s.alertBox}>
               <Text style={s.alertTitle}>Cuestiones específicas del proyecto</Text>
@@ -338,116 +345,72 @@ export function DueDiligenciaPDF({ data }: { data: DueDiligenciaPDFData }) {
 
           {/* 2. Alcance */}
           <Text style={s.sectionTitle}>2. Alcance de los servicios</Text>
-          <Text style={s.bodyText}>
-            FORMA PRIMA desarrollará una inspección técnica no invasiva del activo, basada en observación visual y revisión técnica especializada de los elementos accesibles en la fecha de visita. El alcance comprenderá, de manera enunciativa y no limitativa:
-          </Text>
+          <Text style={s.bodyText}>{t.alcance_intro}</Text>
 
           <Text style={s.subsectionTitle}>2.1 Revisión Técnica del Estado General del Activo</Text>
-          <Text style={s.bullet}>· Evaluación visual del estado general de conservación del inmueble.</Text>
-          <Text style={s.bullet}>· Identificación de patologías aparentes y defectos constructivos visibles.</Text>
-          <Text style={s.bullet}>· Revisión del desgaste general de acabados y materiales.</Text>
-          <Text style={s.bullet}>· Valoración del estado de elementos constructivos accesibles.</Text>
+          <BulletList text={t.alcance_21_bullets} />
 
           <Text style={s.subsectionTitle}>2.2 Revisión Técnica de Instalaciones Visibles</Text>
-          <Text style={s.bodyText}>Inspección visual de instalaciones MEP accesibles:</Text>
-          <Text style={s.bullet}>· Electricidad</Text>
-          <Text style={s.bullet}>· Fontanería / saneamiento</Text>
-          <Text style={s.bullet}>· Climatización / ventilación</Text>
-          <Text style={s.bullet}>· ACS / producción térmica</Text>
-          <Text style={s.bullet}>· Sistemas de protección contra incendios visibles (si aplican)</Text>
-          <Text style={[s.bodyText, { marginTop: 5 }]}>
-            Evaluación del estado aparente de cuartos técnicos e instalaciones accesibles.
-          </Text>
+          <Text style={s.bodyText}>{t.alcance_22_intro}</Text>
+          <BulletList text={t.alcance_22_bullets} />
+          <Text style={[s.bodyText, { marginTop: 5 }]}>{t.alcance_22_footer}</Text>
 
           <Text style={s.subsectionTitle}>2.3 Revisión de Mantenimiento / Operabilidad</Text>
-          <Text style={s.bullet}>· Evaluación del estado de mantenimiento general del activo.</Text>
-          <Text style={s.bullet}>· Identificación de necesidades de mantenimiento correctivo y preventivo.</Text>
-          <Text style={s.bullet}>· Identificación de incidencias que puedan afectar a la futura operación del activo.</Text>
+          <BulletList text={t.alcance_23_bullets} />
 
           <Text style={s.subsectionTitle}>2.4 Forecast de Inversión Técnica</Text>
-          <Text style={s.bullet}>· Estimación preliminar de CAPEX correctivo inmediato.</Text>
-          <Text style={s.bullet}>· Estimación preliminar de CAPEX preventivo / de reposición a corto-medio plazo.</Text>
-          <Text style={s.bullet}>· Priorización de intervenciones recomendadas.</Text>
+          <BulletList text={t.alcance_24_bullets} />
 
           {/* 3. Metodología */}
           <Text style={s.sectionTitle}>3. Metodología de trabajo</Text>
-          <Text style={s.bodyText}>La prestación de servicios se desarrollará conforme a la siguiente metodología:</Text>
+          <Text style={s.bodyText}>{t.metodologia_intro}</Text>
           <Text style={s.subsectionTitle}>Fase 1 – Revisión Documental Previa</Text>
-          <Text style={s.bodyText}>Análisis de la documentación técnica y legal facilitada por la propiedad / vendedor.</Text>
+          <Text style={s.bodyText}>{t.metodologia_fase1}</Text>
           <Text style={s.subsectionTitle}>Fase 2 – Inspección Técnica Presencial</Text>
-          <Text style={s.bodyText}>Visita técnica al activo por parte del equipo multidisciplinar de FORMA PRIMA y técnicos especialistas colaboradores.</Text>
+          <Text style={s.bodyText}>{t.metodologia_fase2}</Text>
           <Text style={s.subsectionTitle}>Fase 3 – Análisis y Consolidación Técnica</Text>
-          <Text style={s.bodyText}>Evaluación técnica interna de hallazgos y consolidación de conclusiones.</Text>
+          <Text style={s.bodyText}>{t.metodologia_fase3}</Text>
           <Text style={s.subsectionTitle}>Fase 4 – Emisión de Informe Ejecutivo</Text>
-          <Text style={s.bodyText}>Redacción y entrega de informe final ejecutivo.</Text>
+          <Text style={s.bodyText}>{t.metodologia_fase4}</Text>
 
           {/* 4. Entregables */}
           <Text style={s.sectionTitle}>4. Entregables</Text>
-          <Text style={s.bodyText}>FORMA PRIMA entregará al Cliente un Informe Ejecutivo de Due Diligence Técnica No Invasiva, que incluirá como mínimo:</Text>
+          <Text style={s.bodyText}>{t.entregables_intro}</Text>
 
           <Text style={s.subsectionTitle}>4.1 Resumen Ejecutivo</Text>
-          <Text style={s.bullet}>· Conclusiones generales del análisis.</Text>
-          <Text style={s.bullet}>· Principales riesgos técnicos detectados.</Text>
-          <Text style={s.bullet}>· Valoración global del estado del activo.</Text>
+          <BulletList text={t.entregables_41_bullets} />
 
           <Text style={s.subsectionTitle}>4.2 Hallazgos Técnicos</Text>
-          <Text style={s.bullet}>· Descripción de incidencias detectadas por disciplina.</Text>
-          <Text style={s.bullet}>· Reportaje fotográfico comentado.</Text>
-          <Text style={s.bullet}>· Clasificación de criticidad / prioridad.</Text>
+          <BulletList text={t.entregables_42_bullets} />
 
           <Text style={s.subsectionTitle}>4.3 Evaluación de Estado de Conservación</Text>
-          <Text style={s.bodyText}>Valoración cualitativa del estado de:</Text>
-          <Text style={s.bullet}>· Envolvente / fachada / cubierta (si accesibles)</Text>
-          <Text style={s.bullet}>· Elementos comunes</Text>
-          <Text style={s.bullet}>· Unidades privativas inspeccionadas</Text>
-          <Text style={s.bullet}>· Instalaciones visibles</Text>
+          <Text style={s.bodyText}>{t.entregables_43_intro}</Text>
+          <BulletList text={t.entregables_43_bullets} />
 
           <Text style={s.subsectionTitle}>4.4 CAPEX Forecast</Text>
-          <Text style={s.bullet}>· Estimación preliminar de inversiones correctivas inmediatas.</Text>
-          <Text style={s.bullet}>· Estimación preliminar de inversiones preventivas / reposiciones futuras.</Text>
+          <BulletList text={t.entregables_44_bullets} />
 
           <Text style={s.subsectionTitle}>4.5 Limitaciones de Inspección</Text>
-          <Text style={s.bullet}>· Relación expresa de zonas no accesibles / no inspeccionadas.</Text>
-          <Text style={s.bullet}>· Limitaciones metodológicas aplicables al análisis.</Text>
+          <BulletList text={t.entregables_45_bullets} />
 
           {/* 5. Documentación */}
           <Text style={s.sectionTitle}>5. Documentación requerida</Text>
-          <Text style={s.bodyText}>Para el correcto desarrollo del encargo, el Cliente deberá gestionar la puesta a disposición de la siguiente documentación, en la medida en que exista:</Text>
-          <Text style={s.bullet}>· Proyecto de ejecución / as-built.</Text>
-          <Text style={s.bullet}>· Licencia de obras / licencia de primera ocupación / DR aplicables.</Text>
-          <Text style={s.bullet}>· Libro del edificio.</Text>
-          <Text style={s.bullet}>· Certificados de instalaciones / legalizaciones.</Text>
-          <Text style={s.bullet}>· ITE / IEE / inspecciones reglamentarias (si aplican).</Text>
+          <Text style={s.bodyText}>{t.documentacion_intro}</Text>
+          <BulletList text={t.documentacion_bullets} />
 
           {/* 6. Exclusiones */}
           <Text style={s.sectionTitle}>6. Exclusiones y limitaciones del servicio</Text>
-          <Text style={s.bodyText}>
-            La presente Due Diligence Técnica No Invasiva se limita estrictamente a una inspección visual, no destructiva y no intrusiva de los elementos accesibles del activo en la fecha de visita. En consecuencia, quedan expresamente excluidos:
-          </Text>
-          <Text style={s.bullet}>· Catas, aperturas, desmontajes o inspecciones destructivas.</Text>
-          <Text style={s.bullet}>· Ensayos estructurales o de laboratorio.</Text>
-          <Text style={s.bullet}>· Pruebas de carga y de estanqueidad.</Text>
-          <Text style={s.bullet}>· Inspecciones con medios especiales no previstos.</Text>
-          <Text style={s.bullet}>· Mediciones instrumentales exhaustivas.</Text>
-          <Text style={s.bullet}>· Levantamiento arquitectónico completo.</Text>
-          <Text style={s.bullet}>· Auditorías de cumplimiento normativo exhaustivas.</Text>
-          <Text style={s.bullet}>· Certificaciones de legalidad urbanística / registral.</Text>
-          <Text style={s.bullet}>· Garantía de inexistencia de vicios ocultos.</Text>
+          <Text style={s.bodyText}>{t.exclusiones_intro}</Text>
+          <BulletList text={t.exclusiones_bullets} />
 
           {/* 7. Condiciones de acceso */}
           <Text style={s.sectionTitle}>7. Condiciones de acceso</Text>
-          <Text style={s.bodyText}>
-            La presente propuesta se formula bajo el supuesto de acceso completo al activo y a todas sus áreas relevantes. En caso de no poder acceder a determinadas zonas, instalaciones o dependencias:
-          </Text>
-          <Text style={s.bullet}>· Dichas limitaciones serán expresamente reflejadas en el informe final.</Text>
-          <Text style={s.bullet}>· FORMA PRIMA no asumirá responsabilidad sobre elementos no inspeccionados.</Text>
-          <Text style={s.bullet}>· No podrá garantizarse evaluación técnica sobre áreas inaccesibles.</Text>
+          <Text style={s.bodyText}>{t.acceso_intro}</Text>
+          <BulletList text={t.acceso_bullets} />
 
           {/* 8. Plazo */}
           <Text style={s.sectionTitle}>8. Plazo de entrega</Text>
-          <Text style={s.bodyText}>
-            FORMA PRIMA entregará el informe final en un plazo de 15 días naturales desde la fecha de visita técnica, siempre que se haya recibido previamente la documentación requerida y se haya completado la inspección sin incidencias.
-          </Text>
+          <Text style={s.bodyText}>{t.plazo}</Text>
 
           {/* 9. Honorarios */}
           <Text style={s.sectionTitle}>9. Honorarios profesionales</Text>
@@ -473,13 +436,11 @@ export function DueDiligenciaPDF({ data }: { data: DueDiligenciaPDFData }) {
 
           {/* 10. Ajuste de superficie */}
           <Text style={s.sectionTitle}>10. Ajuste de superficie</Text>
-          <Text style={s.bodyText}>
-            {`Los honorarios anteriores han sido calculados sobre la superficie estimada de ${data.superficie} m² facilitada a la fecha de emisión de esta propuesta. En caso de que la superficie finalmente accesible e inspeccionable difiera de la inicialmente informada, FORMA PRIMA podrá ajustar proporcionalmente el fee variable de inspección conforme a la tarifa unitaria pactada de ${fmtEur(data.tarifa_m2)}/m². El fee base de movilización, coordinación técnica y estructuración de informe permanecerá fijo en ${fmtEur(data.fee_base)} con independencia de la variación de superficie.`}
-          </Text>
+          <Text style={s.bodyText}>{t.ajuste_p1}</Text>
 
           {/* 11. Condiciones de pago */}
           <Text style={s.sectionTitle}>11. Condiciones de pago</Text>
-          <Text style={s.bodyText}>Los honorarios serán abonados conforme al siguiente esquema:</Text>
+          <Text style={s.bodyText}>{t.pago_intro}</Text>
           <View style={[s.tableRow, { marginTop: 4 }]}>
             <Text style={s.tableLabelBold}>Hito 1 — Aceptación y firma de la propuesta</Text>
             <Text style={s.tableValueBold}>{`50%  ·  ${fmtEur(hito1)}`}</Text>
@@ -491,15 +452,11 @@ export function DueDiligenciaPDF({ data }: { data: DueDiligenciaPDFData }) {
 
           {/* 12. Validez */}
           <Text style={s.sectionTitle}>12. Validez de la propuesta</Text>
-          <Text style={s.bodyText}>
-            La presente propuesta tendrá una validez de 15 días naturales desde su fecha de emisión.
-          </Text>
+          <Text style={s.bodyText}>{t.validez}</Text>
 
           {/* 13. Aceptación */}
           <Text style={s.sectionTitle}>13. Aceptación</Text>
-          <Text style={s.bodyText}>
-            La aceptación de la presente propuesta implicará la conformidad del Cliente con el alcance, limitaciones, honorarios y condiciones aquí descritas.
-          </Text>
+          <Text style={s.bodyText}>{t.aceptacion}</Text>
 
           {/* Firma */}
           <View style={s.signatureRow}>
