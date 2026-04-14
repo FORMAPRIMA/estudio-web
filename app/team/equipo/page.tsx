@@ -24,7 +24,7 @@ export default async function Page() {
   const { data: members } = await admin
     .from('profiles')
     .select('id, nombre, apellido, email, rol, avatar_url, telefono, direccion, fecha_nacimiento, fecha_contratacion, notas, blocked')
-    .in('rol', ['fp_team', 'fp_manager', 'fp_partner'])
+    .in('rol', ['fp_team', 'fp_manager', 'fp_partner', 'fp_biz_dev'])
     .order('nombre')
 
   return (

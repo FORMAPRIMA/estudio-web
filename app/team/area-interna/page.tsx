@@ -17,7 +17,7 @@ export default async function Page() {
     .eq('id', session.id)
     .single()
 
-  if (!profile || !['fp_team', 'fp_manager', 'fp_partner'].includes(profile.rol)) {
+  if (!profile || !['fp_team', 'fp_manager', 'fp_partner', 'fp_biz_dev'].includes(profile.rol)) {
     redirect('/team/dashboard')
   }
 
@@ -51,7 +51,7 @@ export default async function Page() {
     isPartner
       ? admin.from('profiles')
           .select('id, nombre, apellido, email, rol, avatar_url, fecha_contratacion, telefono, direccion, fecha_nacimiento, notas, blocked, salario_mensual, seniority')
-          .in('rol', ['fp_team', 'fp_manager', 'fp_partner'])
+          .in('rol', ['fp_team', 'fp_manager', 'fp_partner', 'fp_biz_dev'])
           .order('nombre')
       : Promise.resolve({ data: [] }),
 
@@ -89,7 +89,7 @@ export default async function Page() {
         email:              session.email ?? '',
         nombre:             profile.nombre,
         apellido:           profile.apellido   ?? null,
-        rol:                profile.rol as 'fp_team' | 'fp_manager' | 'fp_partner',
+        rol:                profile.rol as 'fp_team' | 'fp_manager' | 'fp_partner' | 'fp_biz_dev',
         fecha_contratacion: profile.fecha_contratacion ?? null,
         avatar_url:         profile.avatar_url ?? null,
       }}

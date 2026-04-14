@@ -8,7 +8,7 @@ import { deleteTimeEntry } from '@/app/actions/time-tracker'
 
 interface TimeTrackerProps {
   currentUserId: string
-  currentUserRole: 'fp_team' | 'fp_manager' | 'fp_partner'
+  currentUserRole: 'fp_team' | 'fp_manager' | 'fp_partner' | 'fp_biz_dev'
 }
 
 interface TeamMember {
@@ -230,7 +230,7 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
     const { data: membersData } = await supabase
       .from('profiles')
       .select('id, nombre, email, rol, avatar_url')
-      .in('rol', ['fp_team', 'fp_manager', 'fp_partner'])
+      .in('rol', ['fp_team', 'fp_manager', 'fp_partner', 'fp_biz_dev'])
       .order('nombre')
 
     if (membersData) {

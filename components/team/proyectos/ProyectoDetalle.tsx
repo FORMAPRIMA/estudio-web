@@ -1173,7 +1173,7 @@ export default function ProyectoDetalle({ proyecto: initialProyecto, tasks: init
   // Editar info del proyecto, fases, status — solo manager/partner
   const canEditProject = currentUserRole === 'fp_manager' || currentUserRole === 'fp_partner'
   // Agregar, editar y eliminar tasks — todos los roles del equipo
-  const canEdit = currentUserRole === 'fp_team' || currentUserRole === 'fp_manager' || currentUserRole === 'fp_partner'
+  const canEdit = currentUserRole === 'fp_team' || currentUserRole === 'fp_manager' || currentUserRole === 'fp_partner' || currentUserRole === 'fp_biz_dev'
 
   const updateTask = (id: string, data: Partial<Task>) =>
     setTasks(prev => prev.map(t => t.id === id ? { ...t, ...data } : t))

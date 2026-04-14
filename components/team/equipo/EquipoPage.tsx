@@ -18,7 +18,7 @@ export interface TeamMemberFull {
   nombre: string
   apellido: string | null
   email: string
-  rol: 'fp_team' | 'fp_manager' | 'fp_partner'
+  rol: 'fp_team' | 'fp_manager' | 'fp_partner' | 'fp_biz_dev'
   avatar_url: string | null
   telefono: string | null
   direccion: string | null

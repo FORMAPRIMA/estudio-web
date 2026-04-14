@@ -46,7 +46,7 @@ export default async function PlantillaPage() {
     supabase.from('proyectos_internos_secciones').select('id, proyecto_id, nombre, orden').order('orden'),
     supabase.from('proyectos_internos_fases').select('id, seccion_id, nombre, orden').order('orden'),
     supabase.from('ofertas_fp').select('id, nombre, cliente_potencial, activo, orden, visible_para').order('orden'),
-    supabase.from('profiles').select('id, nombre').in('rol', ['fp_team', 'fp_manager', 'fp_partner']).order('nombre'),
+    supabase.from('profiles').select('id, nombre').in('rol', ['fp_team', 'fp_manager', 'fp_partner', 'fp_biz_dev']).order('nombre'),
   ])
 
   const teamMembers: TeamMemberSimple[] = (teamData ?? []).map((m, i) => ({

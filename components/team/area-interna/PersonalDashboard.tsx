@@ -14,7 +14,7 @@ export interface CurrentUser {
   email:              string
   nombre:             string
   apellido:           string | null
-  rol:                'fp_team' | 'fp_manager' | 'fp_partner'
+  rol:                'fp_team' | 'fp_manager' | 'fp_partner' | 'fp_biz_dev'
   fecha_contratacion: string | null
   avatar_url:         string | null
 }
@@ -456,10 +456,10 @@ function FondoSection({
 // ── Mi Cuenta section ─────────────────────────────────────────────────────────
 
 const ROLE_LABELS_PD: Record<string, string> = {
-  fp_team: 'FP Team', fp_manager: 'FP Manager', fp_partner: 'FP Partner',
+  fp_team: 'FP Team', fp_manager: 'FP Manager', fp_partner: 'FP Partner', fp_biz_dev: 'Biz Dev',
 }
 const ROLE_COLORS_PD: Record<string, string> = {
-  fp_team: '#1D9E75', fp_manager: '#378ADD', fp_partner: '#D85A30',
+  fp_team: '#1D9E75', fp_manager: '#378ADD', fp_partner: '#D85A30', fp_biz_dev: '#8B5CF6',
 }
 
 function EyeIcon({ open }: { open: boolean }) {
