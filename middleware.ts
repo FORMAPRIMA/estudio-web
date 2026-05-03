@@ -55,7 +55,7 @@ export async function middleware(request: NextRequest) {
       .single()
 
     const rol = profile?.rol
-    const FP_ROLES = ['fp_team', 'fp_manager', 'fp_partner']
+    const FP_ROLES = ['fp_team', 'fp_manager', 'fp_partner', 'fp_biz_dev']
     const isFpStaff = rol ? FP_ROLES.includes(rol) : false
 
     // No role or unknown role → redirect to login

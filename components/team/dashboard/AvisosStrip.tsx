@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import Link from 'next/link'
 import { addAviso, archivarAviso } from '@/app/actions/avisos'
+import { getAvisoRoute } from '@/lib/avisos/getAvisoRoute'
 
 // Module-level: tracks which aviso IDs have already played their entrance animation
 // this session. Resets on full page reload.
@@ -33,6 +35,9 @@ export interface Aviso {
   hora_activa:     string | null
   fecha_caducidad: string | null
   autor_nombre:    string | null
+  linkeable_type:  string | null
+  linkeable_id:    string | null
+  link_label:      string | null
 }
 
 export interface FacturaPendiente {
@@ -46,6 +51,8 @@ export interface FacturaPendiente {
   total:            number
   fecha_emision:    string
   dias_pendiente:   number
+  iban:             string | null
+  forma_pago:       string | null
 }
 
 interface Props {
@@ -218,6 +225,20 @@ function AvisoCard({ aviso, onArchivar, isNew, animDelay }: {
             hasta {fmtDate(aviso.fecha_caducidad)}
           </span>
         )}
+
+        {(() => {
+          const route = getAvisoRoute(aviso.linkeable_type, aviso.linkeable_id)
+          if (!route) return null
+          return (
+            <Link
+              href={route}
+              className="hidden sm:block text-[8px] tracking-widest uppercase font-medium px-2 py-[3px] border transition-colors hover:opacity-75"
+              style={{ borderColor: cfg.barColor + '55', color: cfg.barColor }}
+            >
+              {aviso.link_label ?? 'Ver →'}
+            </Link>
+          )
+        })()}
       </div>
 
       {/* Archive button */}
@@ -233,6 +254,27 @@ function AvisoCard({ aviso, onArchivar, isNew, animDelay }: {
 }
 
 // ── Follow-up reminder modal ──────────────────────────────────────────────────
+
+function buildEmailPreview(factura: FacturaPendiente): { subject: string; lines: string[]; datosPago?: { formaPago: string; iban: string } } {
+  const recipientName = factura.cliente_contacto || factura.cliente_nombre || 'Cliente'
+  const projectLabel  = factura.proyecto_nombre ? ` para el proyecto ${factura.proyecto_nombre}` : ''
+
+  const subject = `Recordatorio · Factura ${factura.numero_completo}${factura.proyecto_nombre ? ` · ${factura.proyecto_nombre}` : ''}`
+
+  const lines = [
+    `Estimado/a ${recipientName},`,
+    `Nos ponemos en contacto para recordarle amablemente que tenemos pendiente el pago de la factura ${factura.numero_completo}${projectLabel}, emitida el ${fmtDate(factura.fecha_emision)} por un importe de ${fmtEuros(factura.total)}.`,
+    `Entendemos que pueden existir demoras administrativas y esperamos que todo esté en orden por su parte. Si ya ha realizado el pago, por favor ignore este mensaje.`,
+    `Si tiene cualquier duda o necesita que le reenvíemos la factura, no dude en contactarnos. Quedamos a su disposición.`,
+    `Atentamente,\nEl equipo de Forma Prima`,
+  ]
+
+  const datosPago = factura.iban
+    ? { formaPago: factura.forma_pago ?? 'Transferencia bancaria', iban: factura.iban }
+    : undefined
+
+  return { subject, lines, datosPago }
+}
 
 function RecordatorioModal({
   factura,
@@ -251,9 +293,7 @@ function RecordatorioModal({
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/facturas-emitidas/${factura.id}/recordatorio`, {
-        method: 'POST',
-      })
+      const res = await fetch(`/api/facturas-emitidas/${factura.id}/recordatorio`, { method: 'POST' })
       const json = await res.json()
       if (!res.ok) { setError(json.error ?? 'Error al enviar.'); setLoading(false); return }
       onSent()
@@ -264,6 +304,7 @@ function RecordatorioModal({
   }
 
   const recipientName = factura.cliente_contacto || factura.cliente_nombre
+  const preview = buildEmailPreview(factura)
 
   return (
     <div
@@ -272,24 +313,22 @@ function RecordatorioModal({
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
       <div
-        className="bg-white w-full max-w-md mx-4 shadow-2xl"
+        className="bg-white w-full max-w-lg mx-4 shadow-2xl"
+        style={{ maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-ink/[0.08]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-ink/[0.08] shrink-0">
           <p className="text-[10px] tracking-widest uppercase font-medium text-ink/50">
             Recordatorio de pago
           </p>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-ink/30 hover:text-ink/60 transition-colors text-xl leading-none"
-          >
+          <button type="button" onClick={onClose}
+            className="text-ink/30 hover:text-ink/60 transition-colors text-xl leading-none">
             ×
           </button>
         </div>
 
-        <div className="px-6 py-5 space-y-4">
+        <div className="px-6 py-5 space-y-4 overflow-y-auto">
 
           {/* Invoice summary */}
           <div className="bg-ink/[0.02] border border-ink/[0.07] px-4 py-3 space-y-1.5">
@@ -319,22 +358,49 @@ function RecordatorioModal({
             )}
           </div>
 
-          {/* Email preview hint */}
-          <p className="text-[11px] text-ink/40 font-light leading-relaxed">
-            Se enviará un correo cordial recordando el pago de la factura
-            {factura.proyecto_nombre ? ` del proyecto ${factura.proyecto_nombre}` : ''}.
-          </p>
+          {/* Email preview */}
+          <div>
+            <p className="text-[9px] tracking-widest uppercase text-ink/40 mb-2">
+              Vista previa del correo
+            </p>
+            <div className="border border-ink/[0.08] bg-[#FAFAF8]">
+              {/* Subject */}
+              <div className="px-4 py-2.5 border-b border-ink/[0.07] flex items-baseline gap-2">
+                <span className="text-[9px] tracking-widest uppercase text-ink/35 shrink-0">Asunto</span>
+                <span className="text-[11px] text-ink/70 font-light truncate">{preview.subject}</span>
+              </div>
+              {/* Body */}
+              <div className="px-4 py-3 space-y-3">
+                {preview.lines.map((line, i) => (
+                  <p key={i} className="text-[11px] text-ink/60 font-light leading-relaxed whitespace-pre-line">
+                    {line}
+                  </p>
+                ))}
+                {preview.datosPago && (
+                  <div
+                    className="px-3 py-2.5 space-y-0.5"
+                    style={{ background: '#F8F7F4', borderLeft: '2px solid #D85A30' }}
+                  >
+                    <p className="text-[9px] tracking-widest uppercase text-ink/40">Datos de pago</p>
+                    <p className="text-[11px] text-ink/70 font-light">
+                      {preview.datosPago.formaPago}
+                    </p>
+                    <p className="text-[11px] text-ink/70 font-light">
+                      IBAN: {preview.datosPago.iban}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
 
           {error && <p className="text-[11px] text-red-500">{error}</p>}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-ink/[0.08]">
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-[9px] tracking-widest uppercase font-medium text-ink/40 hover:text-ink/70 transition-colors px-3 py-2"
-          >
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-ink/[0.08] shrink-0">
+          <button type="button" onClick={onClose}
+            className="text-[9px] tracking-widest uppercase font-medium text-ink/40 hover:text-ink/70 transition-colors px-3 py-2">
             Cancelar
           </button>
           <button

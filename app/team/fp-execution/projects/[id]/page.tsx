@@ -195,12 +195,21 @@ export default async function FpeProjectDetailPage({
 
   // Fetch unit_partners now that we have project unit IDs
   const projectUnitIds = (project.project_units ?? []).map(pu => pu.id)
-  const { data: unitPartnersRaw } = projectUnitIds.length > 0
-    ? await admin
-        .from('fpe_project_unit_partners')
-        .select('project_unit_id, partner_id')
-        .in('project_unit_id', projectUnitIds)
-    : { data: [] as { project_unit_id: string; partner_id: string }[] }
+  const [{ data: unitPartnersRaw }, { data: memoriaLineItemsRaw }] = await Promise.all([
+    projectUnitIds.length > 0
+      ? admin
+          .from('fpe_project_unit_partners')
+          .select('project_unit_id, partner_id')
+          .in('project_unit_id', projectUnitIds)
+      : Promise.resolve({ data: [] as { project_unit_id: string; partner_id: string }[] }),
+    projectUnitIds.length > 0
+      ? admin
+          .from('fpe_project_line_items')
+          .select('project_unit_id')
+          .in('project_unit_id', projectUnitIds)
+          .eq('source_memoria', true)
+      : Promise.resolve({ data: [] as { project_unit_id: string }[] }),
+  ])
 
   // Compute fresh readiness score
   const readiness = await computeAndSaveReadiness(admin, params.id)
@@ -261,6 +270,12 @@ export default async function FpeProjectDetailPage({
     unitPartnersMap[row.project_unit_id].push(row.partner_id)
   }
 
+  // Build memoriaTemplateUnitIds: template_unit_ids that have items synced from a Memoria
+  const memoriaProjectUnitIds = new Set((memoriaLineItemsRaw ?? []).map(r => r.project_unit_id))
+  const memoriaTemplateUnitIds = Object.entries(puByTemplateUnitId)
+    .filter(([, pu]) => memoriaProjectUnitIds.has(pu.id))
+    .map(([templateUnitId]) => templateUnitId)
+
   // Compute scopedDisciplineIds: disciplines appearing on any line item in the project scope
   const scopedTemplateLineItemDisciplines = new Set<string>()
   for (const ch of (chapters ?? [])) {
@@ -310,6 +325,7 @@ export default async function FpeProjectDetailPage({
       initialFechaInicio={projectExt.fecha_inicio_obra ?? null}
       initialDuracionSemanas={projectExt.duracion_obra_semanas ?? 0}
       chapterSettingsMap={chapterSettingsMap}
+      memoriaUnitIds={memoriaTemplateUnitIds}
     />
   )
 }

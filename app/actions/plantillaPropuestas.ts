@@ -87,7 +87,7 @@ export async function getPlantillaServicios(): Promise<ServicioEntry[]> {
 /**
  * Upsert a single service's plantilla data (base or custom).
  */
-export async function savePlantillaServicio(
+export async function updatePlantillaServicio(
   id: string,
   data: ServicioPlantillaData
 ): Promise<{ success: true } | { error: string }> {
@@ -108,7 +108,7 @@ export async function savePlantillaServicio(
       const { error: insertErr } = await admin
         .from('propuestas_servicios_plantilla')
         .insert({ id, ...data })
-      console.log('[savePlantillaServicio] insert result — err:', insertErr?.message ?? null)
+      console.log('[updatePlantillaServicio] insert result — err:', insertErr?.message ?? null)
       if (insertErr) return { error: insertErr.message }
     }
 
@@ -168,7 +168,7 @@ export async function createServicio(
 /**
  * Upsert only the EN translation columns for a service.
  */
-export async function saveServicioEN(
+export async function updateServicioTraduccion(
   id: string,
   data: {
     label_en:           string | null

@@ -3,7 +3,7 @@
 import { useState, useTransition, useRef, useEffect } from 'react'
 import type { CSSProperties } from 'react'
 import { useRouter } from 'next/navigation'
-import { addFactura, updateFactura, deleteFactura, updateClienteBilling, aplazarFactura, emitirFacturaDesdeContrato } from '@/app/actions/facturacion'
+import { createFactura, updateFactura, deleteFactura, updateClienteBilling, aplazarFactura, emitirFacturaDesdeContrato } from '@/app/actions/facturacion'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -136,7 +136,7 @@ export default function FacturacionProyectoDetalle({
     setAddingSeccion(null)
     const monto = parseFloat(data.monto.replace(',', '.')) || 0
     startTransition(async () => {
-      const res = await addFactura({
+      const res = await createFactura({
         proyecto_id:         proyecto.id,
         seccion,
         concepto:            data.concepto || 'Nueva factura',

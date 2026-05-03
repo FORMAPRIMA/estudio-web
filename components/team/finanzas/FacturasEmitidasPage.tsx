@@ -3,12 +3,15 @@
 import React, { useState, useMemo, useTransition, useRef, useEffect, useCallback, memo } from 'react'
 import {
   updateFacturaEmitidaEstado,
+  updateFacturaEmitida,
   deleteFacturaEmitida,
   updateEstudioConfig,
   getClientesDelProyecto,
+  getPartnerCCEmails,
   type FacturaItem,
   type CreateFacturaInput,
   type ClienteDelProyecto,
+  type PartnerCC,
 } from '@/app/actions/facturasEmitidas'
 import type { ExtraEmail } from '@/app/actions/emitirFactura'
 import { calcTotals } from '@/lib/facturasUtils'
@@ -16,20 +19,35 @@ import { calcTotals } from '@/lib/facturasUtils'
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface FacturaEmitida {
-  id:               string
-  numero_completo:  string
-  fecha_emision:    string
-  cliente_nombre:   string
-  cliente_nif:      string | null
-  proyecto_nombre:  string | null
-  base_imponible:   number
-  cuota_iva:        number
-  tipo_irpf:        number | null
-  cuota_irpf:       number | null
-  total:            number
-  estado:           string
-  es_rectificativa: boolean
-  created_at:       string
+  id:                   string
+  numero_completo:      string
+  serie:                string
+  fecha_emision:        string
+  fecha_operacion:      string | null
+  cliente_id:           string | null
+  cliente_nombre:       string
+  cliente_contacto:     string | null
+  cliente_nif:          string | null
+  cliente_direccion:    string | null
+  proyecto_id:          string | null
+  proyecto_nombre:      string | null
+  items:                FacturaItem[]
+  tipo_iva:             number
+  base_imponible:       number
+  cuota_iva:            number
+  tipo_irpf:            number | null
+  cuota_irpf:           number | null
+  total:                number
+  iban:                 string | null
+  forma_pago:           string | null
+  condiciones_pago:     string | null
+  notas:                string | null
+  mencion_legal:        string | null
+  es_rectificativa:     boolean
+  factura_original_id:  string | null
+  motivo_rectificacion: string | null
+  estado:               string
+  created_at:           string
 }
 
 interface Cliente {
@@ -318,17 +336,28 @@ const TotalsPreview = memo(function TotalsPreview({
 // ── CreateModal ───────────────────────────────────────────────────────────────
 
 function CreateModal({
-  clientes, proyectos, estudioConfig, prefill, onCreated, onClose,
+  clientes, proyectos, estudioConfig, prefill, editData, facturas, onCreated, onClose,
 }: {
   clientes: Cliente[]
   proyectos: Proyecto[]
   estudioConfig: EstudioConfig | null
   prefill: PrefillData | null
+  editData?: FacturaEmitida | null
+  facturas?: FacturaEmitida[]
   onCreated: () => void
   onClose: () => void
 }) {
-  const [, startTransition] = useTransition()
   const today = new Date().toISOString().split('T')[0]
+
+  const isEdit = !!editData
+
+  // For edit mode: look up the client record and original invoice number
+  const editClienteLookup = editData?.cliente_id
+    ? clientes.find(c => c.id === editData.cliente_id) ?? null
+    : null
+  const editOriginalNum = editData?.factura_original_id
+    ? ((facturas ?? []).find(f => f.id === editData.factura_original_id)?.numero_completo ?? '')
+    : ''
 
   // Emisor — always from estudioConfig (editable in /facturacion/empresa)
   const emisorNombre    = estudioConfig?.nombre         ?? ''
@@ -340,24 +369,36 @@ function CreateModal({
   const emisorTelefono  = estudioConfig?.telefono       ?? null
 
   // Factura meta
-  const [serie,          setSerie]          = useState('F')
-  const [fechaEmision,   setFechaEmision]   = useState(today)
-  const [fechaOperacion, setFechaOperacion] = useState('')
+  const [serie,          setSerie]          = useState(() => editData?.serie ?? 'F')
+  const [fechaEmision,   setFechaEmision]   = useState(() => editData?.fecha_emision ?? today)
+  const [fechaOperacion, setFechaOperacion] = useState(() => editData?.fecha_operacion ?? '')
 
-  // Cliente — from prefill or empty
-  const [clienteId,        setClienteId]        = useState(prefill?.clienteId        ?? '')
-  const [clienteContacto,  setClienteContacto]  = useState(prefill?.clienteContacto  ?? '')
-  const [clienteEmpresa,   setClienteEmpresa]   = useState(prefill?.clienteEmpresa   ?? '')
-  const [clienteNif,       setClienteNif]        = useState(prefill?.clienteNif       ?? '')
-  const [clienteDireccion, setClienteDireccion]  = useState(prefill?.clienteDireccion ?? '')
+  // Cliente — from editData, prefill, or empty
+  const [clienteId,        setClienteId]        = useState(() => editData?.cliente_id ?? prefill?.clienteId ?? '')
+  // In DB: cliente_contacto = contact person, cliente_nombre = company (or full name if individual)
+  // In modal: clienteEmpresa = company, clienteContacto = contact person
+  const [clienteContacto,  setClienteContacto]  = useState(() => {
+    if (editData) return editData.cliente_contacto ?? (editData.cliente_nombre && !editData.cliente_contacto ? editData.cliente_nombre : '')
+    return prefill?.clienteContacto ?? ''
+  })
+  const [clienteEmpresa,   setClienteEmpresa]   = useState(() => {
+    if (editData) return editData.cliente_contacto ? editData.cliente_nombre : ''
+    return prefill?.clienteEmpresa ?? ''
+  })
+  const [clienteNif,       setClienteNif]       = useState(() => editData?.cliente_nif       ?? prefill?.clienteNif       ?? '')
+  const [clienteDireccion, setClienteDireccion] = useState(() => editData?.cliente_direccion ?? prefill?.clienteDireccion ?? '')
 
   // Proyecto
-  const [proyectoId,        setProyectoId]        = useState(prefill?.proyectoId        ?? '')
-  const [proyectoNombre,    setProyectoNombre]    = useState(prefill?.proyectoNombre    ?? '')
-  const [proyectoDireccion, setProyectoDireccion] = useState(prefill?.proyectoDireccion ?? '')
+  const [proyectoId,        setProyectoId]        = useState(() => editData?.proyecto_id      ?? prefill?.proyectoId        ?? '')
+  const [proyectoNombre,    setProyectoNombre]    = useState(() => {
+    if (editData?.proyecto_nombre) return editData.proyecto_nombre
+    return prefill?.proyectoNombre ?? ''
+  })
+  const [proyectoDireccion, setProyectoDireccion] = useState(() => prefill?.proyectoDireccion ?? '')
 
-  // Items — if prefill, create a single line with the contract amount (append address if available)
+  // Items — from editData, prefill, or empty
   const [items, setItems] = useState<FacturaItem[]>(() => {
+    if (editData) return editData.items?.length ? editData.items : [{ descripcion: '', cantidad: 1, precio_unitario: 0, subtotal: 0 }]
     if (!prefill) return [{ descripcion: '', cantidad: 1, precio_unitario: 0, subtotal: 0 }]
     const desc = prefill.proyectoDireccion
       ? `${prefill.concepto} — ${prefill.proyectoDireccion}`
@@ -366,30 +407,63 @@ function CreateModal({
   })
 
   // Impuestos
-  const [tipoIva,  setTipoIva]  = useState(21)
-  const [tipoIrpf, setTipoIrpf] = useState<number | null>(null)
+  const [tipoIva,  setTipoIva]  = useState(() => editData?.tipo_iva  ?? 21)
+  const [tipoIrpf, setTipoIrpf] = useState<number | null>(() => editData?.tipo_irpf ?? null)
 
   // Pago / notas
-  const [iban,             setIban]             = useState(prefill?.iban ?? estudioConfig?.iban ?? '')
-  const [formaPago,        setFormaPago]        = useState('Transferencia bancaria')
-  const [condicionesPago,  setCondicionesPago]  = useState('')
-  const [notas,            setNotas]            = useState('')
-  const [mencionLegal,     setMencionLegal]     = useState('')
+  const [iban,            setIban]            = useState(() => editData?.iban            ?? prefill?.iban ?? estudioConfig?.iban ?? '')
+  const [formaPago,       setFormaPago]       = useState(() => editData?.forma_pago      ?? 'Transferencia bancaria')
+  const [condicionesPago, setCondicionesPago] = useState(() => editData?.condiciones_pago ?? '')
+  const [notas,           setNotas]           = useState(() => editData?.notas           ?? '')
+  const [mencionLegal,    setMencionLegal]    = useState(() => editData?.mencion_legal   ?? '')
 
   // Rectificativa
-  const [esRectificativa,     setEsRectificativa]     = useState(false)
-  const [facturaOriginalNum,  setFacturaOriginalNum]  = useState('')
-  const [motivoRectificacion, setMotivoRectificacion] = useState('')
+  const [esRectificativa,     setEsRectificativa]     = useState(() => editData?.es_rectificativa     ?? false)
+  const [facturaOriginalNum,  setFacturaOriginalNum]  = useState(() => editOriginalNum)
+  const [motivoRectificacion, setMotivoRectificacion] = useState(() => editData?.motivo_rectificacion ?? '')
 
-  const [loading,         setLoading]         = useState(false)
-  const [previewing,      setPreviewing]      = useState(false)
-  const [error,           setError]           = useState<string | null>(null)
+  const [loading,    setLoading]   = useState(false)
+  const [previewing, setPreviewing] = useState(false)
+  const [error,      setError]     = useState<string | null>(null)
 
-  const [emailCliente,    setEmailCliente]    = useState(prefill?.clienteEmail   ?? '')
-  const [emailClienteCC,  setEmailClienteCC]  = useState(prefill?.clienteEmailCC ?? '')
-  const [extraEmails,     setExtraEmails]     = useState<ExtraEmail[]>([])
+  // Edit-mode: correction email compose
+  const [showResendForm, setShowResendForm] = useState(false)
+  const [resendAsunto,   setResendAsunto]   = useState(() =>
+    editData
+      ? `Corrección — Factura ${editData.numero_completo}${editData.proyecto_nombre ? ` · ${editData.proyecto_nombre}` : ''}`
+      : ''
+  )
+  const [resendCuerpo,   setResendCuerpo]   = useState(() =>
+    editData
+      ? `Le enviamos la versión corregida de la factura ${editData.numero_completo}. Disculpe las molestias por cualquier error en el documento anterior.`
+      : ''
+  )
+
+  const [emailCliente,     setEmailCliente]     = useState(() => {
+    if (editData) return editClienteLookup?.email ?? ''
+    return prefill?.clienteEmail ?? ''
+  })
+  const [emailClienteCC,   setEmailClienteCC]   = useState(() => {
+    if (editData) return editClienteLookup?.email_cc ?? ''
+    return prefill?.clienteEmailCC ?? ''
+  })
+  const [extraEmails,      setExtraEmails]      = useState<ExtraEmail[]>([])
   const [proyectoClientes, setProyectoClientes] = useState<ClienteDelProyecto[]>([])
-  const [includeCTA,   setIncludeCTA]   = useState(false)
+  // Otros clientes del proyecto seleccionados explícitamente para incluir en el envío.
+  // Por defecto VACÍO: el usuario debe marcar uno por uno qué clientes adicionales reciben la factura.
+  // Esto previene incidentes como el de envío cruzado entre clientes de un mismo proyecto.
+  const [clientesIncluidos, setClientesIncluidos] = useState<Set<string>>(new Set())
+  const [partnersCC,       setPartnersCC]       = useState<PartnerCC[]>([])
+  const [includeCTA,       setIncludeCTA]       = useState(false)
+
+  // Load project clients when opening in edit mode with a project, and partners CC
+  useEffect(() => {
+    if (isEdit && editData?.proyecto_id) {
+      getClientesDelProyecto(editData.proyecto_id).then(setProyectoClientes)
+    }
+    getPartnerCCEmails().then(setPartnersCC)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleClienteChange = useCallback((id: string, c: Cliente | null) => {
     setClienteId(id)
@@ -423,7 +497,104 @@ function CreateModal({
     } else {
       setProyectoClientes([])
     }
+    // Reset selección de clientes adicionales: al cambiar de proyecto, ningún cliente
+    // del nuevo proyecto debe estar pre-seleccionado para recibir la factura.
+    setClientesIncluidos(new Set())
   }, [])
+
+  // ── Helpers for build input ───────────────────────────────────────────────
+
+  const buildInput = (): Omit<CreateFacturaInput, 'serie' | 'factura_origen_id'> => {
+    const clienteNombre = clienteEmpresa.trim() || clienteContacto.trim()
+    return {
+      fecha_emision:        fechaEmision,
+      fecha_operacion:      fechaOperacion || null,
+      emisor_nombre:        emisorNombre,
+      emisor_nif:           emisorNif,
+      emisor_direccion:     emisorDireccion,
+      emisor_ciudad:        emisorCiudad    || null,
+      emisor_cp:            emisorCp        || null,
+      emisor_email:         emisorEmail     || null,
+      emisor_telefono:      emisorTelefono  || null,
+      cliente_id:           clienteId       || null,
+      cliente_nombre:       clienteNombre,
+      cliente_contacto:     clienteEmpresa.trim() ? clienteContacto.trim() || null : null,
+      cliente_nif:          clienteNif      || null,
+      cliente_direccion:    clienteDireccion || null,
+      proyecto_id:          proyectoId      || null,
+      proyecto_nombre:      proyectoNombre  || null,
+      items,
+      tipo_iva:             tipoIva,
+      tipo_irpf:            tipoIrpf,
+      notas:                notas           || null,
+      mencion_legal:        mencionLegal    || null,
+      iban:                 iban            || null,
+      forma_pago:           formaPago       || null,
+      condiciones_pago:     condicionesPago || null,
+      es_rectificativa:     esRectificativa,
+      factura_original_id:  esRectificativa ? (editData?.factura_original_id ?? null) : null,
+      motivo_rectificacion: motivoRectificacion || null,
+    }
+  }
+
+  const validateEdit = (): string | null => {
+    const clienteNombre = clienteEmpresa.trim() || clienteContacto.trim()
+    if (!emisorNombre.trim()) return 'Configura primero los datos de empresa en Facturación → Información empresa.'
+    if (!clienteNombre) return 'El nombre del cliente o razón social es obligatorio.'
+    if (items.every(i => i.subtotal === 0)) return 'Añade al menos una línea con importe.'
+    return null
+  }
+
+  // ── Edit: save without email ──────────────────────────────────────────────
+
+  const handleSave = async () => {
+    const err = validateEdit()
+    if (err) { setError(err); return }
+    setLoading(true); setError(null)
+    const result = await updateFacturaEmitida(editData!.id, buildInput())
+    setLoading(false)
+    if ('error' in result) { setError(result.error); return }
+    onCreated()
+  }
+
+  // ── Edit: save + resend correction email ──────────────────────────────────
+
+  const handleSaveAndResend = async () => {
+    const err = validateEdit()
+    if (err) { setError(err); return }
+    if (!emailCliente.trim()) { setError('Introduce el email del cliente para el envío.'); return }
+    if (!resendAsunto.trim()) { setError('El asunto del correo es obligatorio.'); return }
+    setLoading(true); setError(null)
+
+    // 1. Save updated invoice
+    const saveResult = await updateFacturaEmitida(editData!.id, buildInput())
+    if ('error' in saveResult) { setError(saveResult.error); setLoading(false); return }
+
+    // 2. Resend correction email
+    const res = await fetch(`/api/facturas-emitidas/${editData!.id}/reenviar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        emailCliente,
+        extraEmails: [
+          ...(emailClienteCC.trim() ? [{ email: emailClienteCC.trim(), tipo: 'cc' as const }] : []),
+          ...extraEmails,
+        ],
+        asunto:      resendAsunto,
+        cuerpoIntro: resendCuerpo,
+        includeCTA,
+        clientesAdicionales: proyectoClientes
+          .filter(c => c.id !== clienteId && clientesIncluidos.has(c.id))
+          .map(c => ({ nombre: c.nombre, apellidos: c.apellidos, email: c.email, email_cc: c.email_cc })),
+      }),
+    })
+    const result = await res.json()
+    setLoading(false)
+    if (!res.ok || 'error' in result) { setError(result.error ?? 'Error al enviar el correo'); return }
+    onCreated()
+  }
+
+  // ── Create: submit ─────────────────────────────────────────────────────────
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -461,7 +632,7 @@ function CreateModal({
       body: JSON.stringify({
         input, emailCliente, includeCTA,
         clientesAdicionales: proyectoClientes
-          .filter(c => c.id !== clienteId)
+          .filter(c => c.id !== clienteId && clientesIncluidos.has(c.id))
           .map(c => ({
             nombre:    c.nombre,
             apellidos: c.apellidos,
@@ -561,10 +732,12 @@ function CreateModal({
         {/* Header */}
         <div style={{ padding: '20px 28px', borderBottom: '1px solid #E8E6E0', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <div>
-            <p style={{ fontSize: 10, color: prefill ? '#D85A30' : '#AAA', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 2 }}>
-              {prefill ? 'Revisión final · Pre-rellena desde contrato' : 'Nueva factura'}
+            <p style={{ fontSize: 10, color: isEdit ? '#D85A30' : prefill ? '#D85A30' : '#AAA', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 2 }}>
+              {isEdit ? `Editar factura · ${editData!.numero_completo}` : prefill ? 'Revisión final · Pre-rellena desde contrato' : 'Nueva factura'}
             </p>
-            <h2 style={{ fontSize: 20, fontWeight: 300, color: '#1A1A1A', margin: 0 }}>Emitir factura</h2>
+            <h2 style={{ fontSize: 20, fontWeight: 300, color: '#1A1A1A', margin: 0 }}>
+              {isEdit ? 'Editar factura' : 'Emitir factura'}
+            </h2>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#AAA', width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
         </div>
@@ -802,30 +975,66 @@ function CreateModal({
                 </div>
               )}
 
-              {/* Otros clientes del proyecto */}
+              {/* Otros clientes del proyecto — opt-in explícito por cliente */}
               {proyectoClientes.filter(c => c.id !== clienteId).length > 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: '#D85A30', display: 'block', marginBottom: 2 }}>
-                    Otros clientes del proyecto · se incluirán automáticamente
+                    Otros clientes del proyecto · marca solo los que deben recibir esta factura
+                  </span>
+                  <span style={{ fontSize: 10, color: '#888', marginBottom: 6, lineHeight: 1.4 }}>
+                    Por defecto NO se incluyen. Marca la casilla solo si este cliente concreto debe recibir esta factura.
                   </span>
                   {proyectoClientes.filter(c => c.id !== clienteId).map(c => {
                     const nombre = [c.nombre, c.apellidos].filter(Boolean).join(' ')
+                    const incluido = clientesIncluidos.has(c.id)
+                    const toggle = () => {
+                      setClientesIncluidos(prev => {
+                        const next = new Set(prev)
+                        if (next.has(c.id)) next.delete(c.id)
+                        else next.add(c.id)
+                        return next
+                      })
+                    }
                     return (
-                      <div key={c.id} style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '8px 12px', background: '#FDF3EE', border: '1px solid #F5DACE' }}>
-                        <span style={{ fontSize: 11, fontWeight: 600, color: '#1A1A1A' }}>{nombre}</span>
-                        {c.email && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' as const, color: '#AAA', flexShrink: 0, width: 16 }}>TO</span>
-                            <span style={{ fontSize: 11, color: '#555' }}>{c.email}</span>
-                          </div>
-                        )}
-                        {c.email_cc && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' as const, color: '#AAA', flexShrink: 0, width: 16 }}>CC</span>
-                            <span style={{ fontSize: 11, color: '#555' }}>{c.email_cc}</span>
-                          </div>
-                        )}
-                      </div>
+                      <label
+                        key={c.id}
+                        style={{
+                          display: 'flex', alignItems: 'flex-start', gap: 10,
+                          padding: '10px 12px',
+                          background: incluido ? '#FDF3EE' : '#FAFAF8',
+                          border: `1px solid ${incluido ? '#F5DACE' : '#E8E6E0'}`,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={incluido}
+                          onChange={toggle}
+                          style={{ marginTop: 2, flexShrink: 0, accentColor: '#D85A30', cursor: 'pointer' }}
+                        />
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: 1 }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, color: incluido ? '#1A1A1A' : '#888' }}>
+                            {nombre}
+                            {!incluido && (
+                              <span style={{ fontWeight: 400, fontSize: 10, color: '#AAA', marginLeft: 8 }}>
+                                · no recibirá la factura
+                              </span>
+                            )}
+                          </span>
+                          {c.email && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' as const, color: '#AAA', flexShrink: 0, width: 16 }}>TO</span>
+                              <span style={{ fontSize: 11, color: incluido ? '#555' : '#AAA', textDecoration: incluido ? 'none' : 'line-through' }}>{c.email}</span>
+                            </div>
+                          )}
+                          {c.email_cc && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' as const, color: '#AAA', flexShrink: 0, width: 16 }}>CC</span>
+                              <span style={{ fontSize: 11, color: incluido ? '#555' : '#AAA', textDecoration: incluido ? 'none' : 'line-through' }}>{c.email_cc}</span>
+                            </div>
+                          )}
+                        </div>
+                      </label>
                     )
                   })}
                 </div>
@@ -876,18 +1085,61 @@ function CreateModal({
                 + Añadir correo
               </button>
 
-              {/* Partners siempre en copia */}
+              {/* Partners siempre en copia — cargados dinámicamente desde profiles (rol fp_partner) */}
               <div style={{ background: '#F8F7F4', border: '1px solid #F0EEE8', padding: '10px 12px' }}>
                 <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: '#AAA', display: 'block', marginBottom: 5 }}>
-                  Siempre en copia
+                  Siempre en copia · Partners de Forma Prima
                 </span>
-                <span style={{ fontSize: 11, color: '#888' }}>
-                  jlorag@formaprima.es &nbsp;·&nbsp; ghidalgo@formaprima.es
+                {partnersCC.length === 0 ? (
+                  <span style={{ fontSize: 11, color: '#AAA', fontStyle: 'italic' }}>Cargando…</span>
+                ) : (
+                  <span style={{ fontSize: 11, color: '#555', lineHeight: 1.6 }}>
+                    {partnersCC.map((p, i) => (
+                      <React.Fragment key={p.email}>
+                        <span title={p.nombre}>{p.email}</span>
+                        {i < partnersCC.length - 1 && <span style={{ color: '#CCC', margin: '0 8px' }}>·</span>}
+                      </React.Fragment>
+                    ))}
+                  </span>
+                )}
+                <span style={{ display: 'block', fontSize: 10, color: '#AAA', marginTop: 6, lineHeight: 1.4 }}>
+                  Solo socios (fp_partner). Los managers NO reciben copia de las facturas.
                 </span>
               </div>
 
             </div>
           </div>
+
+          {/* ── Corrección de correo (sólo en modo edición y cuando se activa) ─── */}
+          {isEdit && showResendForm && (
+            <div style={{ marginTop: 28, paddingTop: 24, borderTop: '2px solid #D85A30' }}>
+              <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#D85A30', marginBottom: 14 }}>
+                Correo de corrección al cliente
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div>
+                  <span style={label()}>Asunto del correo <span style={{ color: '#DC2626' }}>*</span></span>
+                  <input
+                    value={resendAsunto}
+                    onChange={e => setResendAsunto(e.target.value)}
+                    style={inp()}
+                  />
+                </div>
+                <div>
+                  <span style={label()}>Mensaje introductorio</span>
+                  <textarea
+                    value={resendCuerpo}
+                    onChange={e => setResendCuerpo(e.target.value)}
+                    rows={3}
+                    style={{ width: '100%', padding: '8px 10px', fontSize: 12, border: '1px solid #E8E6E0', outline: 'none', fontFamily: 'inherit', resize: 'vertical', background: '#fff', color: '#1A1A1A', boxSizing: 'border-box' }}
+                  />
+                  <p style={{ margin: '4px 0 0', fontSize: 10, color: '#AAA' }}>
+                    El resto del correo incluirá automáticamente el desglose de conceptos y totales actualizados.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
         </form>
 
@@ -907,22 +1159,63 @@ function CreateModal({
           </label>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12 }}>
           {error && <span style={{ fontSize: 11, color: '#DC2626', flex: 1 }}>Error: {error}</span>}
-          <button type="button" onClick={onClose}
-            style={{ height: 36, padding: '0 18px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: '#AAA', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-            Cancelar
-          </button>
-          <button type="button" onClick={handlePreview} disabled={previewing || loading}
-            style={{ height: 36, padding: '0 20px', background: 'none', border: '1px solid #D0CEC9', cursor: (previewing || loading) ? 'not-allowed' : 'pointer', fontSize: 11, color: previewing ? '#AAA' : '#555', letterSpacing: '0.06em', textTransform: 'uppercase', opacity: (previewing || loading) ? 0.6 : 1 }}
-            onMouseEnter={e => { if (!previewing && !loading) { (e.currentTarget as HTMLElement).style.borderColor = '#888'; (e.currentTarget as HTMLElement).style.color = '#1A1A1A' } }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = '#D0CEC9'; (e.currentTarget as HTMLElement).style.color = previewing ? '#AAA' : '#555' }}>
-            {previewing ? 'Generando…' : 'Preview PDF'}
-          </button>
-          <button type="submit" form="factura-form" disabled={loading}
-            style={{ height: 36, padding: '0 24px', background: loading ? '#888' : '#1A1A1A', color: '#fff', border: 'none', cursor: loading ? 'not-allowed' : 'pointer', fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', opacity: loading ? 0.7 : 1 }}
-            onMouseEnter={e => { if (!loading) (e.currentTarget as HTMLElement).style.background = '#D85A30' }}
-            onMouseLeave={e => { if (!loading) (e.currentTarget as HTMLElement).style.background = '#1A1A1A' }}>
-            {loading ? 'Enviando…' : 'Emitir y enviar al cliente'}
-          </button>
+
+          {isEdit ? (
+            <>
+              {showResendForm ? (
+                <button type="button" onClick={() => setShowResendForm(false)}
+                  style={{ height: 36, padding: '0 18px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: '#AAA', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                  ← Volver
+                </button>
+              ) : (
+                <button type="button" onClick={onClose}
+                  style={{ height: 36, padding: '0 18px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: '#AAA', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                  Cancelar
+                </button>
+              )}
+              <button type="button" onClick={handlePreview} disabled={previewing || loading}
+                style={{ height: 36, padding: '0 20px', background: 'none', border: '1px solid #D0CEC9', cursor: (previewing || loading) ? 'not-allowed' : 'pointer', fontSize: 11, color: previewing ? '#AAA' : '#555', letterSpacing: '0.06em', textTransform: 'uppercase', opacity: (previewing || loading) ? 0.6 : 1 }}
+                onMouseEnter={e => { if (!previewing && !loading) { (e.currentTarget as HTMLElement).style.borderColor = '#888'; (e.currentTarget as HTMLElement).style.color = '#1A1A1A' } }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = '#D0CEC9'; (e.currentTarget as HTMLElement).style.color = previewing ? '#AAA' : '#555' }}>
+                {previewing ? 'Generando…' : 'Preview PDF'}
+              </button>
+              {!showResendForm && (
+                <button type="button" onClick={handleSave} disabled={loading}
+                  style={{ height: 36, padding: '0 20px', background: 'none', border: `1px solid ${loading ? '#DDD' : '#1A1A1A'}`, cursor: loading ? 'not-allowed' : 'pointer', fontSize: 11, fontWeight: 600, color: loading ? '#AAA' : '#1A1A1A', letterSpacing: '0.06em', textTransform: 'uppercase', opacity: loading ? 0.7 : 1 }}
+                  onMouseEnter={e => { if (!loading) { (e.currentTarget as HTMLElement).style.background = '#F8F7F4' } }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'none' }}>
+                  {loading ? 'Guardando…' : 'Guardar cambios'}
+                </button>
+              )}
+              <button type="button"
+                onClick={showResendForm ? handleSaveAndResend : () => { setShowResendForm(true); setTimeout(() => document.getElementById('resend-form-anchor')?.scrollIntoView({ behavior: 'smooth' }), 50) }}
+                disabled={loading}
+                style={{ height: 36, padding: '0 22px', background: loading ? '#888' : '#D85A30', color: '#fff', border: 'none', cursor: loading ? 'not-allowed' : 'pointer', fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', opacity: loading ? 0.7 : 1 }}
+                onMouseEnter={e => { if (!loading) (e.currentTarget as HTMLElement).style.background = '#B84D28' }}
+                onMouseLeave={e => { if (!loading) (e.currentTarget as HTMLElement).style.background = '#D85A30' }}>
+                {loading ? 'Enviando…' : showResendForm ? 'Confirmar y enviar' : 'Guardar y reenviar →'}
+              </button>
+            </>
+          ) : (
+            <>
+              <button type="button" onClick={onClose}
+                style={{ height: 36, padding: '0 18px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: '#AAA', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                Cancelar
+              </button>
+              <button type="button" onClick={handlePreview} disabled={previewing || loading}
+                style={{ height: 36, padding: '0 20px', background: 'none', border: '1px solid #D0CEC9', cursor: (previewing || loading) ? 'not-allowed' : 'pointer', fontSize: 11, color: previewing ? '#AAA' : '#555', letterSpacing: '0.06em', textTransform: 'uppercase', opacity: (previewing || loading) ? 0.6 : 1 }}
+                onMouseEnter={e => { if (!previewing && !loading) { (e.currentTarget as HTMLElement).style.borderColor = '#888'; (e.currentTarget as HTMLElement).style.color = '#1A1A1A' } }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = '#D0CEC9'; (e.currentTarget as HTMLElement).style.color = previewing ? '#AAA' : '#555' }}>
+                {previewing ? 'Generando…' : 'Preview PDF'}
+              </button>
+              <button type="submit" form="factura-form" disabled={loading}
+                style={{ height: 36, padding: '0 24px', background: loading ? '#888' : '#1A1A1A', color: '#fff', border: 'none', cursor: loading ? 'not-allowed' : 'pointer', fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', opacity: loading ? 0.7 : 1 }}
+                onMouseEnter={e => { if (!loading) (e.currentTarget as HTMLElement).style.background = '#D85A30' }}
+                onMouseLeave={e => { if (!loading) (e.currentTarget as HTMLElement).style.background = '#1A1A1A' }}>
+                {loading ? 'Enviando…' : 'Emitir y enviar al cliente'}
+              </button>
+            </>
+          )}
           </div>
         </div>
       </div>
@@ -1199,6 +1492,7 @@ export default function FacturasEmitidasPage({
 }) {
   const [facturas,       setFacturas]       = useState(initial)
   const [showCreate,     setShowCreate]     = useState(() => !!prefill)
+  const [editFactura,    setEditFactura]    = useState<FacturaEmitida | null>(null)
   const [showBatchPDF,   setShowBatchPDF]   = useState(false)
   const [query,          setQuery]          = useState('')
   const [proyectoFilter, setProyectoFilter] = useState('')
@@ -1386,15 +1680,26 @@ export default function FacturasEmitidasPage({
                       <EstadoBadge estado={f.estado} id={f.id} onUpdate={handleEstadoUpdate} />
                     </td>
                     <td style={{ ...TD, textAlign: 'center' }}>
-                      <a
-                        href={`/api/facturas-emitidas/${f.id}/pdf`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 600, color: '#D85A30', textDecoration: 'none', letterSpacing: '0.04em', padding: '4px 8px', border: '1px solid #D85A30', borderRadius: 3 }}
-                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#FDF0EC' }}
-                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}>
-                        PDF ↗
-                      </a>
+                      <div style={{ display: 'flex', gap: 6, justifyContent: 'center', alignItems: 'center' }}>
+                        <a
+                          href={`/api/facturas-emitidas/${f.id}/pdf`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 600, color: '#D85A30', textDecoration: 'none', letterSpacing: '0.04em', padding: '4px 8px', border: '1px solid #D85A30', borderRadius: 3 }}
+                          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#FDF0EC' }}
+                          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}>
+                          PDF ↗
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => setEditFactura(f)}
+                          title="Editar factura"
+                          style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, padding: '4px 8px', border: '1px solid #E8E6E0', borderRadius: 3, background: 'none', cursor: 'pointer', color: '#888', letterSpacing: '0.04em', fontWeight: 600 }}
+                          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = '#1A1A1A'; (e.currentTarget as HTMLElement).style.color = '#1A1A1A' }}
+                          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = '#E8E6E0'; (e.currentTarget as HTMLElement).style.color = '#888' }}>
+                          Editar
+                        </button>
+                      </div>
                     </td>
                     <td style={{ ...TD, textAlign: 'right' }}>
                       <button onClick={() => handleDelete(f.id, f.numero_completo)}
@@ -1428,6 +1733,20 @@ export default function FacturasEmitidasPage({
           prefill={prefill ?? null}
           onCreated={() => { setShowCreate(false); window.location.href = '/team/finanzas/facturacion/emitidas' }}
           onClose={() => { setShowCreate(false); window.history.replaceState({}, '', '/team/finanzas/facturacion/emitidas') }}
+        />
+      )}
+
+      {/* Edit modal */}
+      {editFactura && (
+        <CreateModal
+          clientes={clientes}
+          proyectos={proyectos}
+          estudioConfig={estudioConfig}
+          prefill={null}
+          editData={editFactura}
+          facturas={facturas}
+          onCreated={() => { setEditFactura(null); window.location.href = '/team/finanzas/facturacion/emitidas' }}
+          onClose={() => setEditFactura(null)}
         />
       )}
     </div>

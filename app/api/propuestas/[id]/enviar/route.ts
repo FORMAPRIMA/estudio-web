@@ -20,7 +20,7 @@ export async function POST(
 
     const { data: profile } = await supabase
       .from('profiles').select('rol, email').eq('id', user.id).single()
-    if (!profile || !['fp_manager', 'fp_partner'].includes(profile.rol)) {
+    if (!profile || !['fp_manager', 'fp_partner', 'fp_biz_dev'].includes(profile.rol)) {
       return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
     }
 

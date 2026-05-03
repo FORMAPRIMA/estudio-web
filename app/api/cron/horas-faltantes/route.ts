@@ -136,7 +136,7 @@ export async function GET(req: NextRequest) {
         destinatario_id: recipient.id,
         titulo:         `Horas sin registrar: ${member.nombre}`,
         contenido:      `${member.nombre} no ha registrado horas en los días: ${missingList}. ${avisoKey(member.id, recipient.id)}`,
-        nivel:          'alerta',
+        nivel:          'recordatorio',
         fecha_activa:   today,
       })
     }

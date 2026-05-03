@@ -229,11 +229,13 @@ function UnitScopeRow({
   scope,
   onToggle,
   onNotasChange,
+  hasMem = false,
 }: {
   unit: TemplateUnit
   scope: UnitScope
   onToggle: (unitId: string) => void
   onNotasChange: (unitId: string, notas: string) => void
+  hasMem?: boolean
 }) {
   const activeItems = unit.line_items.filter(li => li.activo)
 
@@ -261,6 +263,11 @@ function UnitScopeRow({
             <span style={{ fontSize: 11, color: '#999', marginLeft: 8 }}>{unit.descripcion}</span>
           )}
         </div>
+        {hasMem && (
+          <span style={{ fontSize: 8, fontWeight: 700, padding: '2px 6px', borderRadius: 3, background: '#D85A30', color: '#fff', flexShrink: 0, letterSpacing: '0.06em' }}>
+            MEM
+          </span>
+        )}
         <span style={{ fontSize: 10, color: '#AAA', whiteSpace: 'nowrap', flexShrink: 0 }}>
           {activeItems.length > 0 ? `${activeItems.length} partida${activeItems.length !== 1 ? 's' : ''}` : 'Sin partidas'}
         </span>
@@ -458,6 +465,7 @@ export default function ProjectScopePage({
   disciplines,
   scopedDisciplineIds,
   chapterSettingsMap,
+  memoriaUnitIds = [],
 }: {
   project: Project
   chapters: TemplateChapter[]
@@ -478,6 +486,7 @@ export default function ProjectScopePage({
   disciplines: FpeDiscipline[]
   scopedDisciplineIds: string[]
   chapterSettingsMap: Record<string, string | null>
+  memoriaUnitIds?: string[]
 }) {
   const [project, setProject] = useState<Project>(initialProject)
   const [scope, setScope] = useState<ScopeState>(() =>
@@ -732,6 +741,7 @@ export default function ProjectScopePage({
                           scope={scope[unit.id] ?? { included: false, notas: '' }}
                           onToggle={handleToggle}
                           onNotasChange={handleNotasChange}
+                          hasMem={memoriaUnitIds.includes(unit.id)}
                         />
                       ))}
                     </div>

@@ -33,6 +33,21 @@ const C = {
   hInk:     '#F0EDE8',
 }
 
+export interface ActaLabels {
+  actaLabel?: string      // "Acta de visita de obra" → "Site Visit Report"
+  numPrefix?: string      // "Nº" → "No."
+  proyecto?: string       // "Proyecto" → "Project"
+  asistentes?: string     // "Asistentes" → "Attendees"
+  tipoEquipo?: string     // "Equipo" → "Team"
+  tipoCliente?: string    // "Clientes" → "Clients"
+  tipoProveedor?: string  // "Proveedores" → "Suppliers"
+  tipoExterno?: string    // "Externos" → "Guests"
+  estado_obras?: string   // "Estado de obras" → "Works Status"
+  instrucciones?: string  // "Instrucciones" → "Instructions"
+  fotografias?: string    // "Fotografías de obra" → "Construction Photographs"
+  recorrido?: string      // "Recorrido virtual..." → "Virtual Tour..."
+}
+
 export interface ActaData {
   proyecto_nombre: string
   proyecto_codigo: string | null
@@ -44,6 +59,7 @@ export interface ActaData {
   floorfy_url?: string | null
   numero_visita?: number
   fotos?: string[]
+  labels?: ActaLabels
 }
 
 const MESES_ES = [
@@ -57,8 +73,29 @@ function fmtDateEs(d: string): string {
   return `${parseInt(day, 10)} de ${mes} de ${y}`
 }
 
+const MESES_EN = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+]
+
+function fmtDateEn(d: string): string {
+  const [y, m, day] = d.split('-')
+  const mes = MESES_EN[parseInt(m, 10) - 1] ?? m
+  return `${mes} ${parseInt(day, 10)}, ${y}`
+}
+
+/** Strip markdown formatting so asterisks/hashes don't appear literally in PDFs */
+function stripMd(text: string): string {
+  return text
+    .replace(/\*\*([^*]+)\*\*/g, '$1')  // **bold**
+    .replace(/\*([^*]+)\*/g, '$1')       // *italic*
+    .replace(/__([^_]+)__/g, '$1')       // __bold__
+    .replace(/_([^_]+)_/g, '$1')         // _italic_
+    .replace(/^#{1,6}\s+/gm, '')         // # headings
+    .replace(/`([^`]+)`/g, '$1')         // `code`
+}
+
 const TIPO_ORDER: Array<'equipo' | 'cliente' | 'proveedor' | 'externo'> = ['equipo', 'cliente', 'proveedor', 'externo']
-const TIPO_LABELS: Record<string, string> = { equipo: 'Equipo', cliente: 'Clientes', proveedor: 'Proveedores', externo: 'Externos' }
 
 // ── Factory: called AFTER @react-pdf/renderer has been dynamically imported ───
 
@@ -104,27 +141,62 @@ export function buildActaVisitaObraElement(
     return acc
   }, {})
 
+  // ── Resolved labels (Spanish by default, English when data.labels is provided) ──
+  const lb = data.labels
+  const L = {
+    actaLabel:    lb?.actaLabel    ?? 'Acta de visita de obra',
+    numPrefix:    lb?.numPrefix    ?? 'Nº',
+    proyecto:     lb?.proyecto     ?? 'Proyecto',
+    asistentes:   lb?.asistentes   ?? 'Asistentes',
+    tipoEquipo:   lb?.tipoEquipo   ?? 'Equipo',
+    tipoCliente:  lb?.tipoCliente  ?? 'Clientes',
+    tipoProveedor: lb?.tipoProveedor ?? 'Proveedores',
+    tipoExterno:  lb?.tipoExterno  ?? 'Externos',
+    estado_obras: lb?.estado_obras ?? 'Estado de obras',
+    instrucciones: lb?.instrucciones ?? 'Instrucciones',
+    fotografias:  lb?.fotografias  ?? 'Fotografías de obra',
+    recorrido:    lb?.recorrido    ?? 'Recorrido virtual actualizado de visita de obra',
+    fecha:        lb ? fmtDateEn(data.fecha) : fmtDateEs(data.fecha),
+    tipoMap:      {
+      equipo:    lb?.tipoEquipo   ?? 'Equipo',
+      cliente:   lb?.tipoCliente  ?? 'Clientes',
+      proveedor: lb?.tipoProveedor ?? 'Proveedores',
+      externo:   lb?.tipoExterno  ?? 'Externos',
+    } as Record<string, string>,
+  }
+
+  const instrText  = stripMd(data.instrucciones)
+  const estadoText = stripMd(data.estado_obras)
+
   return (
-    <Document title={`Acta de visita de obra — ${data.proyecto_nombre}`} author="Forma Prima" creator="Forma Prima">
+    <Document title={`${L.actaLabel} — ${data.proyecto_nombre}`} author="Forma Prima" creator="Forma Prima">
       <Page size="A4" style={s.page}>
+
+        {/* Top margin for pages 2+ — spacer BEFORE body so it reserves space correctly */}
+        <View
+          fixed
+          render={({ pageNumber }) => pageNumber > 1 ? (
+            <View style={{ height: 40, backgroundColor: C.white }} />
+          ) : null}
+        />
 
         <View style={s.headerBlock}>
           <View style={s.headerInner}>
             <View style={s.headerLeft}>
               <Image src={getLogo()} style={s.logo} />
               <Text style={s.actaLabel}>
-                Acta de visita de obra{data.numero_visita != null ? ` · Nº ${data.numero_visita}` : ''}
+                {L.actaLabel}{data.numero_visita != null ? ` · ${L.numPrefix} ${data.numero_visita}` : ''}
               </Text>
             </View>
             <View style={s.headerRight}>
-              <Text style={s.headerDate}>{fmtDateEs(data.fecha)}</Text>
+              <Text style={s.headerDate}>{L.fecha}</Text>
             </View>
           </View>
           <View style={s.headerAccent} />
         </View>
 
         <View style={s.projectBlock}>
-          <Text style={s.projectLabel}>Proyecto</Text>
+          <Text style={s.projectLabel}>{L.proyecto}</Text>
           <View style={s.projectNameRow}>
             <Text style={s.projectName}>{data.proyecto_nombre}</Text>
             {data.proyecto_codigo && <Text style={s.projectCode}>{data.proyecto_codigo}</Text>}
@@ -136,10 +208,10 @@ export function buildActaVisitaObraElement(
           {Object.keys(byTipo).length > 0 && (
             <>
               <View style={s.rule} />
-              <Text style={s.sectionLabel}>Asistentes</Text>
+              <Text style={s.sectionLabel}>{L.asistentes}</Text>
               {TIPO_ORDER.filter(t => byTipo[t]).map(tipo => (
                 <View key={tipo} style={{ marginBottom: 10 }}>
-                  <Text style={s.tipoLabel}>{TIPO_LABELS[tipo]}</Text>
+                  <Text style={s.tipoLabel}>{L.tipoMap[tipo]}</Text>
                   <View style={s.tipoRow}>
                     <Text style={s.chip}>{byTipo[tipo].join('  ·  ')}</Text>
                   </View>
@@ -148,26 +220,26 @@ export function buildActaVisitaObraElement(
             </>
           )}
 
-          {data.estado_obras && (
+          {estadoText && (
             <>
               <View style={s.rule} />
-              <Text style={s.sectionLabel}>Estado de obras</Text>
-              <Text style={s.bodyText}>{data.estado_obras}</Text>
+              <Text style={s.sectionLabel}>{L.estado_obras}</Text>
+              <Text style={s.bodyText}>{estadoText}</Text>
             </>
           )}
 
-          {data.instrucciones.trim().length > 0 && (
+          {instrText.trim().length > 0 && (
             <>
               <View style={s.rule} />
-              <Text style={s.sectionLabel}>Instrucciones</Text>
-              <Text style={s.bodyText}>{data.instrucciones}</Text>
+              <Text style={s.sectionLabel}>{L.instrucciones}</Text>
+              <Text style={s.bodyText}>{instrText}</Text>
             </>
           )}
 
           {data.fotos && data.fotos.length > 0 && (
             <>
               <View style={s.rule} />
-              <Text style={s.sectionLabel}>Fotografías de obra</Text>
+              <Text style={s.sectionLabel}>{L.fotografias}</Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
                 {data.fotos.map((url, i) => (
                   <Image key={i} src={url} style={{ width: 154, height: 116, objectFit: 'cover' as const }} />
@@ -179,7 +251,7 @@ export function buildActaVisitaObraElement(
           {data.floorfy_url && (
             <>
               <View style={s.rule} />
-              <Text style={s.sectionLabel}>Recorrido virtual actualizado de visita de obra</Text>
+              <Text style={s.sectionLabel}>{L.recorrido}</Text>
               <View style={s.floorfyRow}>
                 <Link src={data.floorfy_url} style={s.floorfyLink}>{data.floorfy_url}</Link>
               </View>
@@ -192,14 +264,6 @@ export function buildActaVisitaObraElement(
           <Text style={s.footerCenter} render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} />
           <Text style={s.footerText}>formaprima.es</Text>
         </View>
-
-        {/* Top spacer for pages 2+ — no repeat header, just margin */}
-        <View
-          fixed
-          render={({ pageNumber }) => pageNumber <= 1 ? null : (
-            <View style={{ height: 40 }} />
-          )}
-        />
 
       </Page>
     </Document>

@@ -3,8 +3,8 @@
 import { useState, useTransition, Fragment } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import {
-  updateMemberCosts, addCostoFijo, updateCostoFijo, deleteCostoFijo, updateFinanzasConfig,
-  addCostoVariable, updateCostoVariable, deleteCostoVariable,
+  updateMemberCosts, createCostoFijo, updateCostoFijo, deleteCostoFijo, updateFinanzasConfig,
+  createCostoVariable, updateCostoVariable, deleteCostoVariable,
 } from '@/app/actions/finanzas'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -592,7 +592,7 @@ export default function CostesGeneralesPage({
 
   const handleAddFijo = () => {
     startTransition(async () => {
-      const res = await addCostoFijo()
+      const res = await createCostoFijo()
       if ('id' in res) {
         setCostosFijos(prev => [...prev, { id: res.id, concepto: 'Nuevo concepto', monto: 0, orden: prev.length + 1 }])
       }
@@ -615,7 +615,7 @@ export default function CostesGeneralesPage({
 
   const handleAddVariable = (mes: number, categoria: string, concepto: string, monto: number) => {
     startTransition(async () => {
-      const res = await addCostoVariable({ año, mes, categoria, concepto, monto })
+      const res = await createCostoVariable({ año, mes, categoria, concepto, monto })
       if ('id' in res) {
         setCostosVariables(prev => [...prev, { id: res.id, año, mes, categoria, concepto, monto, notas: null }])
       }

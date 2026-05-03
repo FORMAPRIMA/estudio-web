@@ -314,28 +314,35 @@ export default function DueDiligenciaPage() {
             {esFijo ? (
               /* Importe fijo */
               <div>
-                <label style={labelStyle}>Importe total (€) *</label>
+                <label style={labelStyle}>Importe total (sin IVA) *</label>
                 <input
                   style={inputStyle} type="number" min="0" step="100"
                   value={form.importe_fijo} onChange={set('importe_fijo')}
                   placeholder="5000"
                 />
                 {impFijo > 0 && (
-                  <p style={{ fontSize: 11, color: '#AAA', marginTop: 8, marginBottom: 0 }}>
-                    Pago en 2 hitos: {fmtEur(hito)} a la aceptación + {fmtEur(hito)} a la entrega del informe. IVA no incluido.
-                  </p>
+                  <>
+                    <p style={{ fontSize: 11, color: '#6B7280', marginTop: 6, marginBottom: 0 }}>
+                      + IVA 21%: <strong>{fmtEur(impFijo * 1.21)}</strong> total con IVA
+                    </p>
+                    <p style={{ fontSize: 11, color: '#AAA', marginTop: 4, marginBottom: 0 }}>
+                      Pago en 2 hitos: {fmtEur(hito)} a la aceptación + {fmtEur(hito)} a la entrega del informe.
+                    </p>
+                  </>
                 )}
               </div>
             ) : (
               /* Por m² */
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <div>
-                  <label style={labelStyle}>Tarifa variable (€/m²)</label>
+                  <label style={labelStyle}>Tarifa variable (€/m²) (sin IVA)</label>
                   <input style={inputStyle} type="number" min="1" step="0.5" value={form.tarifa_m2} onChange={set('tarifa_m2')} placeholder="8" />
+                  {tar > 0 && <p style={{ fontSize: 11, color: '#6B7280', marginTop: 4, marginBottom: 0 }}>+ IVA 21%: {fmtEur(tar * 1.21)}/m²</p>}
                 </div>
                 <div>
-                  <label style={labelStyle}>Fee base — Movilización (€)</label>
+                  <label style={labelStyle}>Fee base — Movilización (sin IVA)</label>
                   <input style={inputStyle} type="number" min="0" step="100" value={form.fee_base} onChange={set('fee_base')} placeholder="1500" />
+                  {feeBase > 0 && <p style={{ fontSize: 11, color: '#6B7280', marginTop: 4, marginBottom: 0 }}>+ IVA 21%: {fmtEur(feeBase * 1.21)}</p>}
                 </div>
               </div>
             )}
@@ -360,14 +367,16 @@ export default function DueDiligenciaPage() {
                 </>
               )}
               <div style={{ flex: 1.5, borderLeft: esFijo ? 'none' : '1px solid #E8E6E0', paddingLeft: esFijo ? 0 : 20 }}>
-                <p style={{ fontSize: 10, color: '#AAA', margin: '0 0 3px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Total honorarios</p>
+                <p style={{ fontSize: 10, color: '#AAA', margin: '0 0 3px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Total honorarios (sin IVA)</p>
                 <p style={{ fontSize: 22, fontWeight: 700, color: '#D85A30', margin: 0 }}>{totalHonorarios > 0 ? fmtEur(totalHonorarios) : '—'}</p>
-                <p style={{ fontSize: 10, color: '#CCC', margin: '2px 0 0' }}>+ IVA si aplica</p>
+                {totalHonorarios > 0 && (
+                  <p style={{ fontSize: 11, color: '#6B7280', margin: '4px 0 0', fontWeight: 600 }}>{fmtEur(totalHonorarios * 1.21)} con IVA 21%</p>
+                )}
               </div>
             </div>
             {totalHonorarios > 0 && (
               <p style={{ fontSize: 11, color: '#AAA', marginTop: 10, marginBottom: 0 }}>
-                Pago en 2 hitos: {fmtEur(hito)} a la aceptación + {fmtEur(hito)} a la entrega del informe.
+                Pago en 2 hitos: {fmtEur(hito)} + {fmtEur(hito)} (sin IVA) → {fmtEur(hito * 1.21)} + {fmtEur(hito * 1.21)} con IVA.
               </p>
             )}
           </div>

@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+import type { LinkeableType } from '@/lib/avisos/getAvisoRoute'
 
 const PATH = '/team/dashboard'
 
@@ -13,6 +14,9 @@ export async function addAviso(data: {
   hora_activa?:      string | null   // "HH:MM" — only used when tipo === 'personal'
   fecha_activa:      string
   fecha_caducidad?:  string
+  linkeable_type?:   LinkeableType | null
+  linkeable_id?:     string | null
+  link_label?:       string | null
 }): Promise<{ success: true } | { error: string }> {
   try {
     const supabase = await createClient()
@@ -33,6 +37,9 @@ export async function addAviso(data: {
         hora_activa:     isPersonal ? (data.hora_activa || null) : null,
         fecha_activa:    data.fecha_activa,
         fecha_caducidad: data.fecha_caducidad || null,
+        linkeable_type:  data.linkeable_type  ?? null,
+        linkeable_id:    data.linkeable_id    ?? null,
+        link_label:      data.link_label      ?? null,
       })
 
     if (error) return { error: error.message }

@@ -599,7 +599,7 @@ export default function PropuestaDetalle({
                 />
               </Field>
               <Field>
-                <Label>Coste objetivo €/m²</Label>
+                <Label>Coste objetivo €/m² (sin IVA)</Label>
                 <input
                   type="number" style={inputStyle()} value={costoM2}
                   onChange={e => setCostoM2(e.target.value)}
@@ -782,6 +782,7 @@ export default function PropuestaDetalle({
                       )}
                     </div>
                     <div>
+                      <div style={{ fontSize: 10, color: '#AAA', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 4 }}>Sin IVA</div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <input
                           type="number"
@@ -801,8 +802,13 @@ export default function PropuestaDetalle({
                         <span style={{ fontSize: 12, color: '#AAA', flexShrink: 0 }}>€</span>
                       </div>
                       <div style={{ fontSize: 11, fontWeight: 700, color: '#D85A30', textAlign: 'right', marginTop: 4 }}>
-                        {fmtEur(displayed)}
+                        {fmtEur(displayed)} <span style={{ fontWeight: 400, color: '#AAA' }}>sin IVA</span>
                       </div>
+                      {displayed > 0 && (
+                        <div style={{ fontSize: 11, color: '#6B7280', textAlign: 'right', marginTop: 2 }}>
+                          {fmtEur(displayed * 1.21)} con IVA
+                        </div>
+                      )}
                     </div>
                   </div>
                 )
@@ -1172,6 +1178,7 @@ export default function PropuestaDetalle({
               <div style={{ fontSize: 22, fontWeight: 200, color: '#F0EDE8' }}>
                 {servicios.length > 0 && (calc || Object.keys(honorariosOverride).length > 0) ? fmtEur(effectiveTotal) : '—'}
               </div>
+              <div style={{ fontSize: 10, color: '#666', marginTop: 2 }}>sin IVA · {effectiveTotal > 0 ? fmtEur(effectiveTotal * 1.21) + ' con IVA 21%' : '+ 21% IVA'}</div>
             </div>
 
             <div style={{ padding: '16px 20px' }}>
@@ -1224,10 +1231,18 @@ export default function PropuestaDetalle({
 
               {/* Total line */}
               {servicios.length > 0 && (calc || true) && (
-                <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #E8E6E0', display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#1A1A1A' }}>Total</span>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: '#D85A30' }}>{fmtEur(effectiveTotal)}</span>
-                </div>
+                <>
+                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #E8E6E0', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#1A1A1A' }}>Total (sin IVA)</span>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: '#D85A30' }}>{fmtEur(effectiveTotal)}</span>
+                  </div>
+                  {effectiveTotal > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 4 }}>
+                      <span style={{ fontSize: 11, color: '#6B7280' }}>Con IVA 21%</span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: '#6B7280' }}>{fmtEur(effectiveTotal * 1.21)}</span>
+                    </div>
+                  )}
+                </>
               )}
             </div>
 

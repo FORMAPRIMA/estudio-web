@@ -1,4 +1,6 @@
-// ── Public / shared types ────────────────────────────────────────────────
+// ── Public / shared types ─────────────────────────────────────────────────────
+// Proyecto: tipo público usado en la web pública (/proyectos, /real-estate)
+// ProyectoInterno: tipo completo usado en el área interna del equipo (/team)
 
 export interface Proyecto {
   id: string
@@ -21,33 +23,6 @@ export interface Cliente {
   telefono?: string
 }
 
-export interface Tarea {
-  id: string
-  titulo: string
-  descripcion?: string
-  proyecto_id: string
-  asignado_a: string
-  estado: 'pendiente' | 'en_progreso' | 'completada'
-  fecha_limite?: string
-}
-
-export interface Documento {
-  id: string
-  nombre: string
-  url: string
-  proyecto_id: string
-  subido_por: string
-  fecha: string
-}
-
-export interface Evento {
-  id: string
-  titulo: string
-  fecha: string
-  descripcion?: string
-  proyecto_id?: string
-}
-
 export interface Propiedad {
   id: string
   nombre: string
@@ -59,31 +34,21 @@ export interface Propiedad {
   disponible: boolean
 }
 
-export interface Lead {
-  id: string
-  nombre: string
-  email: string
-  telefono?: string
-  propiedad_id: string
-  mensaje?: string
-  fecha: string
-}
-
-// ── User / role types ────────────────────────────────────────────────────
+// ── User / role types ─────────────────────────────────────────────────────────
 
 export interface UserProfile {
   id: string
   nombre: string
   email: string
-  rol: 'cliente' | 'fp_team' | 'fp_manager' | 'fp_partner'
+  rol: 'cliente' | 'fp_team' | 'fp_manager' | 'fp_partner' | 'fp_biz_dev'
   avatar_url?: string | null
 }
 
-export type FpRole = 'fp_team' | 'fp_manager' | 'fp_partner'
-export const FP_ROLES: FpRole[] = ['fp_team', 'fp_manager', 'fp_partner']
+export type FpRole = 'fp_team' | 'fp_manager' | 'fp_partner' | 'fp_biz_dev'
+export const FP_ROLES: FpRole[] = ['fp_team', 'fp_manager', 'fp_partner', 'fp_biz_dev']
 export const isFpRole = (rol: string): rol is FpRole => FP_ROLES.includes(rol as FpRole)
 
-// ── Proyectos module types ────────────────────────────────────────────────
+// ── Proyectos module types (área interna del equipo) ──────────────────────────
 
 export type ProyectoStatus = 'activo' | 'on_hold' | 'terminado' | 'archivado'
 export type NivelCalidad = 'master_piece' | 'select' | 'functional'
@@ -160,7 +125,7 @@ export interface Task {
   catalogo_fases?: CatalogoFase | null
 }
 
-// ── Time tracker types (legacy — keep for TimeTracker component) ──────────
+// ── Time tracker types (legacy — keep for TimeTracker component) ───────────────
 
 export interface TimeEntry {
   id: string

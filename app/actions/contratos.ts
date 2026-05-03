@@ -15,7 +15,7 @@ async function requirePartner() {
   if (!user) throw new Error('Sin sesión activa.')
   const { data: profile } = await supabase
     .from('profiles').select('rol').eq('id', user.id).single()
-  if (!profile || profile.rol !== 'fp_partner') throw new Error('Sin permisos.')
+  if (!profile || !['fp_partner', 'fp_manager', 'fp_biz_dev'].includes(profile.rol)) throw new Error('Sin permisos.')
   return user
 }
 

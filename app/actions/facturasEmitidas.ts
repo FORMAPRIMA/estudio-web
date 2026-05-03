@@ -228,6 +228,29 @@ export interface ClienteDelProyecto {
   email_cc: string | null
 }
 
+export interface PartnerCC {
+  nombre: string
+  email: string
+}
+
+export async function getPartnerCCEmails(): Promise<PartnerCC[]> {
+  try {
+    const admin = createAdminClient()
+    const { data } = await admin
+      .from('profiles')
+      .select('nombre, apellidos, email')
+      .eq('rol', 'fp_partner')
+    return (data ?? [])
+      .filter((p: { email: string | null }) => !!p.email)
+      .map((p: { nombre: string | null; apellidos: string | null; email: string }) => ({
+        nombre: [p.nombre, p.apellidos].filter(Boolean).join(' ').trim() || p.email,
+        email:  p.email,
+      }))
+  } catch {
+    return []
+  }
+}
+
 export async function getClientesDelProyecto(
   proyectoId: string
 ): Promise<ClienteDelProyecto[]> {
@@ -247,6 +270,60 @@ export async function getClientesDelProyecto(
     })
   } catch {
     return []
+  }
+}
+
+export async function updateFacturaEmitida(
+  id: string,
+  input: Omit<CreateFacturaInput, 'serie' | 'factura_origen_id'>
+): Promise<{ success: true } | { error: string }> {
+  try {
+    await requirePartner()
+    const admin  = createAdminClient()
+    const totals = calcTotals(input.items, input.tipo_iva, input.tipo_irpf)
+
+    const { error } = await admin.from('facturas_emitidas').update({
+      fecha_emision:        input.fecha_emision,
+      fecha_operacion:      input.fecha_operacion      ?? null,
+      emisor_nombre:        input.emisor_nombre,
+      emisor_nif:           input.emisor_nif,
+      emisor_direccion:     input.emisor_direccion,
+      emisor_ciudad:        input.emisor_ciudad        ?? null,
+      emisor_cp:            input.emisor_cp            ?? null,
+      emisor_email:         input.emisor_email         ?? null,
+      emisor_telefono:      input.emisor_telefono      ?? null,
+      cliente_id:           input.cliente_id           ?? null,
+      cliente_nombre:       input.cliente_nombre,
+      cliente_contacto:     input.cliente_contacto     ?? null,
+      cliente_nif:          input.cliente_nif          ?? null,
+      cliente_direccion:    input.cliente_direccion    ?? null,
+      proyecto_id:          input.proyecto_id          ?? null,
+      proyecto_nombre:      input.proyecto_nombre      ?? null,
+      items:                input.items,
+      tipo_iva:             input.tipo_iva,
+      tipo_irpf:            input.tipo_irpf            ?? null,
+      base_imponible:       totals.base_imponible,
+      cuota_iva:            totals.cuota_iva,
+      cuota_irpf:           input.tipo_irpf ? totals.cuota_irpf : null,
+      total:                totals.total,
+      notas:                input.notas                ?? null,
+      mencion_legal:        input.mencion_legal        ?? null,
+      iban:                 input.iban                 ?? null,
+      forma_pago:           input.forma_pago           ?? null,
+      condiciones_pago:     input.condiciones_pago     ?? null,
+      es_rectificativa:     input.es_rectificativa     ?? false,
+      factura_original_id:  input.factura_original_id  ?? null,
+      motivo_rectificacion: input.motivo_rectificacion ?? null,
+    }).eq('id', id)
+
+    if (error) return { error: error.message }
+
+    revalidatePath(PATH)
+    revalidatePath('/team/finanzas/facturacion/control')
+    revalidatePath('/team/finanzas/operativas/proyectos')
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
   }
 }
 

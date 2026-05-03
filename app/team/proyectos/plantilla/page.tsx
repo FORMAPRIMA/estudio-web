@@ -42,7 +42,7 @@ export default async function PlantillaPage() {
   ] = await Promise.all([
     supabase.from('catalogo_fases').select('id, numero, label, seccion, orden').order('orden'),
     supabase.from('plantilla_tasks').select('*').order('orden'),
-    supabase.from('proyectos_internos').select('id, nombre, activo, orden, visible_para').order('orden'),
+    supabase.from('proyectos_internos').select('id, nombre, activo, orden, visible_para, equipo').eq('equipo', 'arquitectura').order('orden'),
     supabase.from('proyectos_internos_secciones').select('id, proyecto_id, nombre, orden').order('orden'),
     supabase.from('proyectos_internos_fases').select('id, seccion_id, nombre, orden').order('orden'),
     supabase.from('ofertas_fp').select('id, nombre, cliente_potencial, activo, orden, visible_para').order('orden'),

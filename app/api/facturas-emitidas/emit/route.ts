@@ -44,9 +44,10 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Fetch partner emails dynamically from DB ─────────────────────────────
+    // Solo fp_partner: facturación es información sensible que NO debe llegar a managers
     const adminForCC = createAdminClient()
     const { data: partnerProfiles } = await adminForCC
-      .from('profiles').select('email').in('rol', ['fp_partner', 'fp_manager'])
+      .from('profiles').select('email').eq('rol', 'fp_partner')
     const PARTNERS_CC = (partnerProfiles ?? []).map((p: { email: string }) => p.email).filter(Boolean)
 
     // ── 1. Crear factura ────────────────────────────────────────────────────

@@ -11,16 +11,19 @@ export default async function FpeTemplatePage() {
     { data: milestones },
     { data: phaseLinks },
     { data: disciplines },
+    { data: phaseLineItemLinks },
   ] = await Promise.all([
     supabase
       .from('fpe_template_chapters')
       .select(`
         id, nombre, descripcion, orden, activo, duracion_pct, principal_discipline_id,
+        label_cliente, descripcion_cliente, imagen_portada_url,
         phases:fpe_template_phases (
           id, chapter_id, nombre, descripcion, lead_time_days, duracion_pct, orden
         ),
         units:fpe_template_units (
           id, chapter_id, nombre, descripcion, orden, activo, principal_discipline_id,
+          label_cliente, descripcion_cliente, imagen_portada_url,
           line_items:fpe_template_line_items (
             id, unit_id, nombre, descripcion, unidad_medida, orden, activo, discipline_id
           )
@@ -46,6 +49,11 @@ export default async function FpeTemplatePage() {
       .from('fpe_disciplines')
       .select('id, nombre, descripcion, color, orden, activo')
       .order('orden', { ascending: true }),
+
+    // Phase ↔ line item links
+    admin
+      .from('fpe_template_phase_line_items')
+      .select('phase_id, line_item_id'),
   ])
 
   // Build per-phase link maps
@@ -59,13 +67,26 @@ export default async function FpeTemplatePage() {
     }
   }
 
-  // Attach achieves/requires to each chapter-level phase
+  // Build line_item_id → phase_id[] map
+  const lineItemPhaseMap: Record<string, string[]> = {}
+  for (const row of phaseLineItemLinks ?? []) {
+    lineItemPhaseMap[row.line_item_id] = [...(lineItemPhaseMap[row.line_item_id] ?? []), row.phase_id]
+  }
+
+  // Attach achieves/requires to phases and phase_ids to line items
   const chaptersWithLinks = (chapters ?? []).map(ch => ({
     ...ch,
     phases: ch.phases.map(ph => ({
       ...ph,
       achieves: achievesMap[ph.id] ?? [],
       requires: requiresMap[ph.id] ?? [],
+    })),
+    units: ch.units.map(u => ({
+      ...u,
+      line_items: u.line_items.map(li => ({
+        ...li,
+        phase_ids: lineItemPhaseMap[li.id] ?? [],
+      })),
     })),
   }))
 

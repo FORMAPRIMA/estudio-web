@@ -6,12 +6,15 @@ import type { CatalogoFase, PlantillaTask } from '@/lib/types'
 
 // ── New exported types ────────────────────────────────────────────────────────
 
+export type EquipoNegocio = 'arquitectura' | 'marketing'
+
 export interface ProyectoNegocio {
   id: string
   nombre: string
   activo: boolean
   orden: number
   visible_para: string[] | null
+  equipo: EquipoNegocio
 }
 
 export interface SeccionNegocio {
@@ -395,7 +398,7 @@ function AddFaseForm({
 // PEOPLE PICKER — visibility per proyecto / oferta
 // ─────────────────────────────────────────────────────────────────────────────
 
-function PeoplePickerField({
+export function PeoplePickerField({
   teamMembers, visiblePara, onChange,
 }: {
   teamMembers: TeamMemberSimple[]
@@ -504,13 +507,14 @@ function PeoplePickerField({
 // PROYECTOS INTERNOS TAB
 // ─────────────────────────────────────────────────────────────────────────────
 
-function ProyectosInternosTab({
-  initialProyectos, initialSecciones, initialFases, teamMembers,
+export function ProyectosInternosTab({
+  initialProyectos, initialSecciones, initialFases, teamMembers, equipo = 'arquitectura',
 }: {
   initialProyectos: ProyectoNegocio[]
   initialSecciones: SeccionNegocio[]
   initialFases:     FaseNegocio[]
   teamMembers:      TeamMemberSimple[]
+  equipo?:          EquipoNegocio
 }) {
   const [proyectos, setProyectos] = useState(initialProyectos)
   const [secciones, setSecciones] = useState(initialSecciones)
@@ -537,8 +541,8 @@ function ProyectosInternosTab({
     if (!nombre) return
     const { data, error } = await supabase
       .from('proyectos_internos')
-      .insert({ nombre, orden: proyectos.length })
-      .select('id, nombre, activo, orden')
+      .insert({ nombre, orden: proyectos.length, equipo })
+      .select('id, nombre, activo, orden, visible_para, equipo')
       .single()
     if (!error && data) {
       setProyectos(prev => [...prev, data as ProyectoNegocio])

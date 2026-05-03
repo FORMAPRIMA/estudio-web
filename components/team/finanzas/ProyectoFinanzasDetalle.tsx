@@ -3,7 +3,7 @@
 import React, { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import type { CSSProperties } from 'react'
-import { addCostoVariableProyecto, deleteCostoVariableProyecto } from '@/app/actions/finanzas'
+import { createCostoVariableProyecto, deleteCostoVariableProyecto } from '@/app/actions/finanzas'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -144,7 +144,7 @@ export default function ProyectoFinanzasDetalle({
     const mes = parseInt(mesStr, 10)
     setAddError(null)
     startAddTransition(async () => {
-      const res = await addCostoVariableProyecto({
+      const res = await createCostoVariableProyecto({
         proyecto_id: proyecto.id,
         proyecto_nombre: proyecto.nombre,
         concepto: addForm.concepto.trim(),

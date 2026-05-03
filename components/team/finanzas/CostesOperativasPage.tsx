@@ -2,7 +2,7 @@
 
 import { useState, useTransition, Fragment } from 'react'
 import type { CSSProperties } from 'react'
-import { updateMemberCosts, addCostoFijo, updateCostoFijo, deleteCostoFijo, updateFinanzasConfig } from '@/app/actions/finanzas'
+import { updateMemberCosts, createCostoFijo, updateCostoFijo, deleteCostoFijo, updateFinanzasConfig } from '@/app/actions/finanzas'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -171,7 +171,7 @@ export default function CostesOperativasPage({
 
   const handleAddFijo = () => {
     startTransition(async () => {
-      const res = await addCostoFijo()
+      const res = await createCostoFijo()
       if ('id' in res) {
         setCostosFijos(prev => [...prev, { id: res.id, concepto: 'Nuevo concepto', monto: 0, orden: prev.length + 1 }])
       }

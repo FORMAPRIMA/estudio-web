@@ -1442,9 +1442,9 @@ function FacturacionTab({ facturas }: { facturas: Factura[] }) {
       {/* Summary */}
       <div className="pid-facturacion-summary" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
         {[
-          { label: 'Total facturado', value: fmtMoney(totalTotal), color: '#1A1A1A' },
-          { label: 'Cobrado', value: fmtMoney(totalPagado), color: '#1D9E75' },
-          { label: 'Pendiente', value: fmtMoney(totalTotal - totalPagado), color: '#C9A227' },
+          { label: 'Total facturado (sin IVA)', value: fmtMoney(totalTotal), color: '#1A1A1A' },
+          { label: 'Cobrado (sin IVA)', value: fmtMoney(totalPagado), color: '#1D9E75' },
+          { label: 'Pendiente (sin IVA)', value: fmtMoney(totalTotal - totalPagado), color: '#C9A227' },
         ].map(card => (
           <div key={card.label} style={{ ...S.card, textAlign: 'center' }}>
             <p style={{ ...S.label, textAlign: 'center', marginBottom: 8 }}>{card.label}</p>
@@ -1461,7 +1461,7 @@ function FacturacionTab({ facturas }: { facturas: Factura[] }) {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
-                {['Concepto', 'Importe', 'Estado', 'F. acordada', 'Nº factura'].map((h, i) => (
+                {['Concepto', 'Importe (sin IVA)', 'Estado', 'F. acordada', 'Nº factura'].map((h, i) => (
                   <th key={i} style={{ textAlign: 'left', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', padding: '0 12px 10px 0', borderBottom: '1px solid #E8E6E0' }}>{h}</th>
                 ))}
               </tr>
@@ -1585,15 +1585,16 @@ function ConstructoraTab({ proyectoId, initialPagos }: { proyectoId: string; ini
       {/* Summary */}
       <div style={{ ...S.card, display: 'flex', alignItems: 'center', gap: 28, flexWrap: 'wrap' }}>
         <div>
-          <p style={{ ...S.label, marginBottom: 4 }}>Total constructora</p>
+          <p style={{ ...S.label, marginBottom: 4 }}>Total constructora (sin IVA)</p>
           <p style={{ fontSize: 22, fontWeight: 300, color: '#1D4ED8', margin: 0, letterSpacing: '-0.01em' }}>{fmtMoney(totalConstructora)}</p>
+          {totalConstructora > 0 && <p style={{ fontSize: 11, color: '#6B7280', margin: '2px 0 0' }}>{fmtMoney(totalConstructora * 1.21)} con IVA</p>}
         </div>
         <div style={{ borderLeft: '1px solid #E8E6E0', paddingLeft: 24 }}>
-          <p style={{ ...S.label, marginBottom: 4 }}>Pagado</p>
+          <p style={{ ...S.label, marginBottom: 4 }}>Pagado (sin IVA)</p>
           <p style={{ fontSize: 18, fontWeight: 600, color: '#10B981', margin: 0 }}>{fmtMoney(pagos.filter(p => p.status === 'pagado').reduce((s, p) => s + (p.importe_estimado ?? 0), 0))}</p>
         </div>
         <div style={{ borderLeft: '1px solid #E8E6E0', paddingLeft: 24 }}>
-          <p style={{ ...S.label, marginBottom: 4 }}>Pendiente</p>
+          <p style={{ ...S.label, marginBottom: 4 }}>Pendiente (sin IVA)</p>
           <p style={{ fontSize: 18, fontWeight: 600, color: '#EF4444', margin: 0 }}>{fmtMoney(pagos.filter(p => p.status !== 'pagado').reduce((s, p) => s + (p.importe_estimado ?? 0), 0))}</p>
         </div>
         <div style={{ borderLeft: '1px solid #E8E6E0', paddingLeft: 24, marginLeft: 'auto' }}>
@@ -1622,8 +1623,11 @@ function ConstructoraTab({ proyectoId, initialPagos }: { proyectoId: string; ini
               <input style={S.input} placeholder="Ej: Certificación 1" value={form.concepto} onChange={e => setForm(f => ({ ...f, concepto: e.target.value }))} />
             </div>
             <div>
-              <label style={S.label}>Importe (€)</label>
+              <label style={S.label}>Importe (sin IVA)</label>
               <input style={S.input} type="number" placeholder="0.00" value={form.importe_estimado} onChange={e => setForm(f => ({ ...f, importe_estimado: e.target.value }))} />
+              {parseFloat(form.importe_estimado) > 0 && (
+                <p style={{ fontSize: 11, color: '#6B7280', marginTop: 3, marginBottom: 0 }}>+ IVA 21%: {fmtMoney(parseFloat(form.importe_estimado) * 1.21)}</p>
+              )}
             </div>
             <div>
               <label style={S.label}>Fecha estimada</label>
@@ -1653,7 +1657,7 @@ function ConstructoraTab({ proyectoId, initialPagos }: { proyectoId: string; ini
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
-                {['Concepto', 'Importe estimado', 'Fecha estimada', 'Estado', 'Notas', ''].map((h, i) => (
+                {['Concepto', 'Importe (sin IVA)', 'Fecha estimada', 'Estado', 'Notas', ''].map((h, i) => (
                   <th key={i} style={{ textAlign: 'left', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', padding: '0 12px 10px 0', borderBottom: '1px solid #E8E6E0' }}>{h}</th>
                 ))}
               </tr>
@@ -1666,6 +1670,9 @@ function ConstructoraTab({ proyectoId, initialPagos }: { proyectoId: string; ini
                   </td>
                   <td style={{ padding: '8px 12px 8px 0', borderBottom: '1px solid #F0EEE8' }}>
                     <input style={{ ...S.input, width: 110 }} type="number" value={editForm.importe_estimado} onChange={e => setEditForm(f => ({ ...f, importe_estimado: e.target.value }))} />
+                    {parseFloat(editForm.importe_estimado) > 0 && (
+                      <p style={{ fontSize: 10, color: '#6B7280', margin: '2px 0 0' }}>{fmtMoney(parseFloat(editForm.importe_estimado) * 1.21)} IVA</p>
+                    )}
                   </td>
                   <td style={{ padding: '8px 12px 8px 0', borderBottom: '1px solid #F0EEE8' }}>
                     <input style={{ ...S.input, width: 130 }} type="date" value={editForm.fecha_estimada} onChange={e => setEditForm(f => ({ ...f, fecha_estimada: e.target.value }))} />

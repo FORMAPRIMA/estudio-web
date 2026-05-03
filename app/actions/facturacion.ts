@@ -26,7 +26,7 @@ function revalidateBoth(proyectoId?: string) {
 
 // ── Facturas ──────────────────────────────────────────────────────────────────
 
-export async function addFactura(data: {
+export async function createFactura(data: {
   proyecto_id: string
   seccion: string
   concepto?: string

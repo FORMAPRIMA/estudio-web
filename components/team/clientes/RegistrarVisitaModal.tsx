@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
-import { getContactosParaVisita, crearActaVisita, compartirActaPorEmail, uploadFotoVisita } from '@/app/actions/actas'
+import { getContactosParaVisita, createActaVisita, sendActaByEmail, uploadFotoVisita } from '@/app/actions/actas'
 import type { ContactosParaVisita, AsistenteInput } from '@/app/actions/actas'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -81,6 +81,14 @@ function fmtDateEs(d: string): string {
   return `${parseInt(day, 10)} de ${mes} de ${y}`
 }
 
+const MESES_EN = ['January','February','March','April','May','June','July','August','September','October','November','December']
+function fmtDateEn(d: string): string {
+  if (!d) return ''
+  const [y, m, day] = d.split('-')
+  const mes = MESES_EN[parseInt(m, 10) - 1] ?? m
+  return `${mes} ${parseInt(day, 10)}, ${y}`
+}
+
 // ── Shared styles ──────────────────────────────────────────────────────────────
 
 const S = {
@@ -107,14 +115,18 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
   const [instrucciones, setInstrucciones] = useState('')
   const [instruccionesConstructor, setInstruccionesConstructor] = useState('')
   const [floorfyUrl, setFloorfyUrl] = useState('')
+  const [aiLoadingEstado, setAiLoadingEstado] = useState(false)
   const [aiLoadingConstructor, setAiLoadingConstructor] = useState(false)
   const [aiLoadingCliente, setAiLoadingCliente] = useState(false)
   const [generarCliente, setGenerarCliente] = useState(true)
   const [generarConstructor, setGenerarConstructor] = useState(true)
+  const [idiomaActa, setIdiomaActa] = useState<'es' | 'en'>('es')
   const [numeroVisita, setNumeroVisita] = useState(1)
   const [fotos, setFotos] = useState<FotoVisita[]>([])
   const fotoInputRef = useRef<HTMLInputElement>(null)
   const [activePreviewTab, setActivePreviewTab] = useState<'constructor' | 'cliente'>('constructor')
+  const [previewTraducido, setPreviewTraducido] = useState<{ titulo: string; estado_obras: string; instrucciones: string } | null>(null)
+  const [previewTranslating, setPreviewTranslating] = useState(false)
 
   // Asistentes
   const [asistentesSeleccionados, setAsistentesSeleccionados] = useState<AsistenteSeleccionado[]>([])
@@ -160,6 +172,14 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
+  const stripMd = (text: string): string => text
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/_([^_]+)_/g, '$1')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/`([^`]+)`/g, '$1')
+
   const renumerar = (text: string): string => {
     const lines = text.split('\n')
     let counter = 1
@@ -173,7 +193,15 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
 
   const selectedIds = new Set(asistentesSeleccionados.map(a => a.id))
 
-  const allContacts: Array<{ id: string; nombre: string; tipo: TipoAsistente }> = [
+  // Build a lookup map for proveedor contacts (contact UUID → { email, proveedorId })
+  const provContactMap = new Map<string, { email: string | null; proveedorId: string }>()
+  for (const p of (contacts?.proveedores ?? [])) {
+    for (const c of (p.proveedor_contactos ?? [])) {
+      provContactMap.set(c.id, { email: c.email, proveedorId: p.id })
+    }
+  }
+
+  const allContacts: Array<{ id: string; nombre: string; tipo: TipoAsistente; subtitulo?: string }> = [
     ...(contacts?.equipo ?? []).map(e => ({
       id: e.id,
       nombre: `${e.nombre}${e.apellido ? ' ' + e.apellido : ''}`,
@@ -184,11 +212,21 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
       nombre: `${c.nombre}${c.apellidos ? ' ' + c.apellidos : ''}`,
       tipo: 'cliente' as const,
     })),
-    ...(contacts?.proveedores ?? []).map(p => ({
-      id: p.id,
-      nombre: p.nombre,
-      tipo: 'proveedor' as const,
-    })),
+    // For each proveedor: always show company entry + individual contacts below
+    ...(contacts?.proveedores ?? []).flatMap(p => {
+      const items: Array<{ id: string; nombre: string; tipo: 'proveedor'; subtitulo?: string }> = [
+        { id: p.id, nombre: p.nombre, tipo: 'proveedor' as const },
+      ]
+      for (const c of (p.proveedor_contactos ?? [])) {
+        items.push({
+          id: c.id,
+          nombre: c.nombre,
+          tipo: 'proveedor' as const,
+          subtitulo: [c.cargo, p.nombre].filter(Boolean).join(' · '),
+        })
+      }
+      return items
+    }),
   ]
 
   const query = busquedaAsistente.trim().toLowerCase()
@@ -220,75 +258,7 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
     setAsistentesSeleccionados(prev => prev.filter(a => a.id !== id))
   }
 
-  // ── Build email recipient list ────────────────────────────────────────────
-
-  const buildRecipients = (): EmailRecipient[] => {
-    const seen = new Set<string>()
-    const list: EmailRecipient[] = []
-
-    const add = (r: EmailRecipient) => {
-      // Allow null-email entries (shown as disabled/warning in UI)
-      if (r.email && seen.has(r.email.toLowerCase())) return
-      if (r.email) seen.add(r.email.toLowerCase())
-      list.push(r)
-    }
-
-    // 1 — Project clients (if generarCliente)
-    if (generarCliente && contacts) {
-      contacts.clientes.forEach(c => {
-        if (!c.email) return
-        const nombre = `${c.nombre}${c.apellidos ? ' ' + c.apellidos : ''}`
-        add({
-          id: `cli-${c.id}`,
-          nombre,
-          email: c.email,
-          grupo: 'cliente_proyecto',
-          preChecked: true,
-        })
-        // Secondary email (CC) — always pre-checked when present
-        if (c.email_cc) {
-          add({
-            id: `cli-cc-${c.id}`,
-            nombre: `${nombre} (CC)`,
-            email: c.email_cc,
-            grupo: 'cliente_proyecto',
-            preChecked: true,
-          })
-        }
-      })
-    }
-
-    // 2 — Constructor (if generarConstructor, always show; email may be null)
-    if (generarConstructor && proyectoConstructor) {
-      const provEmail = contacts?.proveedores.find(p => p.id === proyectoConstructor.id)?.email ?? null
-      add({
-        id: `cons-${proyectoConstructor.id}`,
-        nombre: proyectoConstructor.nombre,
-        email: provEmail,
-        grupo: 'constructor',
-        preChecked: !!provEmail,
-      })
-    }
-
-    // 3 — Selected attendees with emails
-    if (contacts) {
-      asistentesSeleccionados.forEach(a => {
-        if (a.tipo === 'equipo') {
-          const m = contacts.equipo.find(e => e.id === a.id)
-          if (m?.email) add({ id: `eq-${m.id}`, nombre: a.nombre, email: m.email, grupo: 'asistente', preChecked: true })
-        } else if (a.tipo === 'cliente') {
-          const c = contacts.clientes.find(x => x.id === a.id)
-          if (c?.email) add({ id: `cli-asist-${c.id}`, nombre: a.nombre, email: c.email, grupo: 'asistente', preChecked: true })
-          if (c?.email_cc) add({ id: `cli-asist-cc-${c.id}`, nombre: `${a.nombre} (CC)`, email: c.email_cc, grupo: 'asistente', preChecked: true })
-        } else if (a.tipo === 'proveedor') {
-          const p = contacts.proveedores.find(x => x.id === a.id)
-          if (p?.email) add({ id: `prov-${p.id}`, nombre: a.nombre, email: p.email, grupo: 'asistente', preChecked: true })
-        }
-      })
-    }
-
-    return list
-  }
+  // ── Build email recipient lists (built independently in the preview handler) ──
 
   // ── Save ──────────────────────────────────────────────────────────────────
 
@@ -315,7 +285,7 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
     }
 
     // 1 — Create acta + generate PDF
-    const res = await crearActaVisita({
+    const res = await createActaVisita({
       proyecto_id:        proyecto.id,
       fecha,
       titulo,
@@ -333,6 +303,7 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
       numero_visita:      numeroVisita,
       fotos_constructor:  fotoConstructorUrls,
       fotos_cliente:      fotoClienteUrls,
+      idioma:             idiomaActa,
     })
 
     if (!res || 'error' in res) {
@@ -356,7 +327,9 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
 
     if (clienteEmails.length > 0 || constructorEmails.length > 0) {
       const asistenteStr = asistentesSeleccionados.map(a => a.nombre).join(', ')
-      await compartirActaPorEmail({
+      // Use translated content for client email if available (idioma === 'en')
+      const trad = !('error' in res) ? res.traducciones : undefined
+      await sendActaByEmail({
         clienteEmails,
         constructorEmails,
         clienteNombres,
@@ -369,10 +342,11 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
         acta_url:                  res.acta_url,
         acta_constructor_url:      res.acta_constructor_url,
         asistentes:                asistenteStr || null,
-        estado_obras:              estadoObras,
-        instrucciones,
+        estado_obras:              trad?.estado_obras  ?? estadoObras,
+        instrucciones:             trad?.instrucciones ?? instrucciones,
         instruccionesConstructor,
         floorfy_url:               floorfyUrl.trim() || null,
+        idioma:                    idiomaActa,
       })
     }
 
@@ -578,12 +552,19 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
                             <button
                               key={c.id}
                               onMouseDown={e => { e.preventDefault(); addAsistente(c) }}
-                              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#1A1A1A' }}
+                              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '7px 12px', background: 'none', border: 'none', cursor: 'pointer', color: '#1A1A1A' }}
                               onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#F8F7F4' }}
                               onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'none' }}
                             >
-                              <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: TIPO_COLOR.proveedor, marginRight: 8 }} />
-                              {c.nombre}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: TIPO_COLOR.proveedor, flexShrink: 0 }} />
+                                <div>
+                                  <div style={{ fontSize: 12 }}>{c.nombre}</div>
+                                  {(c as any).subtitulo && (
+                                    <div style={{ fontSize: 10, color: '#AAA', marginTop: 1 }}>{(c as any).subtitulo}</div>
+                                  )}
+                                </div>
+                              </div>
                             </button>
                           ))}
                         </>
@@ -608,12 +589,50 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
 
               {/* Estado de obras */}
               <div>
-                <label style={S.label}>
-                  Estado de obras{' '}
-                  <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: '#BBB' }}>
-                    (Describe qué capítulos se están ejecutando)
-                  </span>
-                </label>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <label style={{ ...S.label, marginBottom: 0 }}>
+                    Estado de obras{' '}
+                    <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: '#BBB' }}>
+                      (Describe qué capítulos se están ejecutando)
+                    </span>
+                  </label>
+                  <button
+                    type="button"
+                    disabled={aiLoadingEstado || !estadoObras.trim()}
+                    onClick={async () => {
+                      setAiLoadingEstado(true)
+                      try {
+                        const res = await fetch('/api/profesionalizar-instrucciones', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ notas: estadoObras, modo: 'estado' }),
+                        })
+                        const data = await res.json() as { texto?: string; error?: string }
+                        if (data.texto) setEstadoObras(data.texto)
+                      } finally {
+                        setAiLoadingEstado(false)
+                      }
+                    }}
+                    style={{
+                      fontSize: 10, fontWeight: 600, padding: '4px 10px',
+                      background: aiLoadingEstado ? '#F0EDE8' : '#1A1A1A',
+                      color: aiLoadingEstado ? '#AAA' : '#fff',
+                      border: 'none', borderRadius: 4, cursor: aiLoadingEstado || !estadoObras.trim() ? 'not-allowed' : 'pointer',
+                      letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 5,
+                      transition: 'background 0.15s',
+                      opacity: !estadoObras.trim() ? 0.4 : 1,
+                    }}
+                  >
+                    {aiLoadingEstado ? (
+                      <>
+                        <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', border: '2px solid #CCC', borderTopColor: '#888', animation: 'spin 0.7s linear infinite' }} />
+                        Procesando…
+                      </>
+                    ) : (
+                      <>✦ Desarrollar con IA</>
+                    )}
+                  </button>
+                </div>
                 <textarea
                   rows={4}
                   value={estadoObras}
@@ -830,6 +849,50 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
                 />
               </div>
 
+              {/* Idioma del acta cliente */}
+              {generarCliente && (
+                <div>
+                  <label style={S.label}>
+                    Idioma del acta cliente{' '}
+                    <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: '#BBB' }}>
+                      (acta constructor siempre en español)
+                    </span>
+                  </label>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {([
+                      { label: 'Español',  value: 'es' as const },
+                      { label: 'English',  value: 'en' as const },
+                    ]).map(opt => {
+                      const active = idiomaActa === opt.value
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setIdiomaActa(opt.value)}
+                          style={{
+                            padding: '7px 16px', borderRadius: 6, fontSize: 12,
+                            fontWeight: active ? 600 : 400,
+                            border: '1px solid',
+                            borderColor: active ? '#378ADD' : '#E8E6E0',
+                            background: active ? '#EEF4FD' : '#fff',
+                            color: active ? '#1A52A8' : '#888',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s',
+                          }}
+                        >
+                          {opt.value === 'es' ? '🇪🇸 ' : '🇬🇧 '}{opt.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {idiomaActa === 'en' && (
+                    <p style={{ margin: '6px 0 0', fontSize: 11, color: '#7A9CC8', fontStyle: 'italic' }}>
+                      El contenido del acta se traducirá automáticamente al inglés usando IA antes de generar el PDF.
+                    </p>
+                  )}
+                </div>
+              )}
+
               {/* Generar acta para */}
               <div>
                 <label style={S.label}>Generar acta para</label>
@@ -867,27 +930,92 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
               <button onClick={onClose} style={S.btnGhost}>Cancelar</button>
               <button
                 onClick={() => {
-                  const all = buildRecipients()
-                  const clienteList  = all.filter(r => r.grupo === 'cliente_proyecto' || r.grupo === 'asistente').map(r => ({ ...r }))
-                  const constructorList = all.filter(r => r.grupo === 'constructor').map(r => ({ ...r }))
+                  if (!contacts) return
+                  const mkAdd = (list: EmailRecipient[], seen: Set<string>) =>
+                    (r: EmailRecipient) => {
+                      if (r.email && seen.has(r.email.toLowerCase())) return
+                      if (r.email) seen.add(r.email.toLowerCase())
+                      list.push(r)
+                    }
 
-                  // Add all equipo FP members as optional (unchecked) recipients in both lists
-                  if (contacts) {
-                    const cliEmails  = new Set(clienteList.map(r => r.email?.toLowerCase()).filter(Boolean) as string[])
-                    const consEmails = new Set(constructorList.map(r => r.email?.toLowerCase()).filter(Boolean) as string[])
-                    contacts.equipo.forEach(e => {
-                      if (!e.email) return
-                      const nombre = `${e.nombre}${e.apellido ? ' ' + e.apellido : ''}`
-                      if (!cliEmails.has(e.email.toLowerCase()))
-                        clienteList.push({ id: `eq-cli-${e.id}`, nombre, email: e.email, grupo: 'equipo_fp', preChecked: false })
-                      if (!consEmails.has(e.email.toLowerCase()))
-                        constructorList.push({ id: `eq-cons-${e.id}`, nombre, email: e.email, grupo: 'equipo_fp', preChecked: false })
-                    })
+                  // ── CONSTRUCTOR list — built independently ──────────────────
+                  const constructorList: EmailRecipient[] = []
+                  const consSeen = new Set<string>()
+                  const addCons = mkAdd(constructorList, consSeen)
+                  if (generarConstructor && proyectoConstructor) {
+                    const prov = contacts.proveedores.find(p => p.id === proyectoConstructor.id)
+                    if (prov?.email)
+                      addCons({ id: 'cons-main', nombre: proyectoConstructor.nombre, email: prov.email, grupo: 'constructor', preChecked: true })
+                    for (const c of (prov?.proveedor_contactos ?? []))
+                      addCons({ id: `cons-c-${c.id}`, nombre: c.cargo ? `${c.nombre} (${c.cargo})` : c.nombre, email: c.email ?? null, grupo: 'constructor', preChecked: !!c.email })
+                    if (constructorList.length === 0)
+                      addCons({ id: 'cons-placeholder', nombre: proyectoConstructor.nombre, email: null, grupo: 'constructor', preChecked: false })
+                  }
+
+                  // ── CLIENTE list — built independently, NEVER includes constructor emails ──
+                  const clienteList: EmailRecipient[] = []
+                  const cliSeen = new Set<string>()
+                  const addCli = mkAdd(clienteList, cliSeen)
+                  if (generarCliente) {
+                    for (const c of contacts.clientes) {
+                      if (!c.email) continue
+                      const nombre = `${c.nombre}${c.apellidos ? ' ' + c.apellidos : ''}`
+                      addCli({ id: `cli-${c.id}`, nombre, email: c.email, grupo: 'cliente_proyecto', preChecked: true })
+                      if (c.email_cc) addCli({ id: `cli-cc-${c.id}`, nombre: `${nombre} (CC)`, email: c.email_cc, grupo: 'cliente_proyecto', preChecked: true })
+                    }
+                    for (const a of asistentesSeleccionados) {
+                      if (a.tipo === 'cliente') {
+                        const c = contacts.clientes.find(x => x.id === a.id)
+                        if (c?.email) addCli({ id: `cli-a-${c.id}`, nombre: a.nombre, email: c.email, grupo: 'asistente', preChecked: true })
+                        if (c?.email_cc) addCli({ id: `cli-a-cc-${c.id}`, nombre: `${a.nombre} (CC)`, email: c.email_cc, grupo: 'asistente', preChecked: true })
+                      } else if (a.tipo === 'proveedor') {
+                        // Skip constructor company attendees
+                        if (proyectoConstructor && a.id === proyectoConstructor.id) continue
+                        const contactInfo = provContactMap.get(a.id)
+                        if (contactInfo) {
+                          // Skip individual contacts that belong to the constructor
+                          if (proyectoConstructor && contactInfo.proveedorId === proyectoConstructor.id) continue
+                          if (contactInfo.email) addCli({ id: `prov-c-${a.id}`, nombre: a.nombre, email: contactInfo.email, grupo: 'asistente', preChecked: true })
+                        } else {
+                          const p = contacts.proveedores.find(x => x.id === a.id)
+                          if (p?.email) addCli({ id: `prov-${a.id}`, nombre: a.nombre, email: p.email, grupo: 'asistente', preChecked: true })
+                        }
+                      }
+                    }
+                  }
+
+                  // ── FP EQUIPO → both lists; partners and attendees pre-checked ──
+                  const attendeeEquipoIds = new Set(asistentesSeleccionados.filter(a => a.tipo === 'equipo').map(a => a.id))
+                  for (const e of contacts.equipo) {
+                    if (!e.email) continue
+                    const nombre = `${e.nombre}${e.apellido ? ' ' + e.apellido : ''}`
+                    const preChecked = e.rol === 'fp_partner' || attendeeEquipoIds.has(e.id)
+                    if (!cliSeen.has(e.email.toLowerCase()))
+                      clienteList.push({ id: `eq-cli-${e.id}`, nombre, email: e.email, grupo: 'equipo_fp', preChecked })
+                    if (!consSeen.has(e.email.toLowerCase()))
+                      constructorList.push({ id: `eq-cons-${e.id}`, nombre, email: e.email, grupo: 'equipo_fp', preChecked })
                   }
 
                   setClienteRecipients(clienteList)
                   setConstructorRecipients(constructorList)
-                  setActivePreviewTab(generarConstructor ? 'constructor' : 'cliente')
+                  // Only switch to cliente tab when we're actually generating the client PDF in English
+                  setActivePreviewTab(idiomaActa === 'en' && generarCliente ? 'cliente' : (generarConstructor ? 'constructor' : 'cliente'))
+                  if (idiomaActa === 'en') {
+                    setPreviewTranslating(true)
+                    setPreviewTraducido(null)
+                    fetch('/api/traducir-acta', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ contenido: { titulo, estado_obras: estadoObras, instrucciones }, idioma: 'en' }),
+                    })
+                      .then(r => {
+                        if (!r.ok) { console.error('[traducir-acta] HTTP', r.status); return null }
+                        return r.json()
+                      })
+                      .then(d => { if (d?.contenido) setPreviewTraducido(d.contenido) })
+                      .catch(err => console.error('[traducir-acta] fetch error', err))
+                      .finally(() => setPreviewTranslating(false))
+                  }
                   setStep('preview')
                 }}
                 style={S.btnPrimary}
@@ -910,7 +1038,27 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
           const instrCli  = instrucciones
 
           // Full-width readable HTML preview of the acta
-          const renderPreviewDoc = (instrText: string) => (
+          const renderPreviewDoc = (instrText: string, isClienteTab: boolean) => {
+            // Only show English when on the cliente tab, English selected, AND translation is loaded.
+            // If translation is still loading or failed, fall back to Spanish labels to avoid mixed-language state.
+            const wantsEn      = isClienteTab && idiomaActa === 'en'
+            const translationReady = wantsEn && !!previewTraducido && !previewTranslating
+            const showEn       = translationReady
+            const fechaDisplay = showEn ? fmtDateEn(fecha) : fmtDateEs(fecha)
+            const estadoDisplay = showEn ? previewTraducido!.estado_obras : estadoObras
+            const instrDisplay  = showEn ? previewTraducido!.instrucciones : instrText
+            const L = showEn ? {
+              actaLabel: 'Site Visit Report', numPrefix: 'No.', proyecto: 'Project',
+              asistentes: 'Attendees',
+              tipoLabels: { equipo: 'Team', cliente: 'Clients', proveedor: 'Suppliers', externo: 'Guests' } as Record<TipoAsistente, string>,
+              estadoObras: 'Works Status', instrucciones: 'Instructions', recorrido: 'Virtual tour',
+            } : {
+              actaLabel: 'Acta de visita de obra', numPrefix: 'Nº', proyecto: 'Proyecto',
+              asistentes: 'Asistentes',
+              tipoLabels: { equipo: 'Equipo', cliente: 'Clientes', proveedor: 'Proveedores', externo: 'Externos' } as Record<TipoAsistente, string>,
+              estadoObras: 'Estado de obras', instrucciones: 'Instrucciones', recorrido: 'Recorrido virtual',
+            }
+            return (
             <div style={{ fontFamily: 'Helvetica, Arial, sans-serif', background: '#fff' }}>
               {/* Dark header */}
               <div style={{ background: '#1A1A1A', padding: '28px 36px 18px' }}>
@@ -919,16 +1067,16 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src="/FORMA_PRIMA_BLANCO.png" alt="Forma Prima" style={{ height: 28, objectFit: 'contain', display: 'block', marginBottom: 10 }} />
                     <span style={{ fontSize: 10, color: '#D85A30', fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase' }}>
-                      Acta de visita de obra{numeroVisita ? ` · Nº ${numeroVisita}` : ''}
+                      {L.actaLabel}{numeroVisita ? ` · ${L.numPrefix} ${numeroVisita}` : ''}
                     </span>
                   </div>
-                  <span style={{ fontSize: 13, color: '#F0EDE8', paddingTop: 2 }}>{fmtDateEs(fecha)}</span>
+                  <span style={{ fontSize: 13, color: '#F0EDE8', paddingTop: 2 }}>{fechaDisplay}</span>
                 </div>
                 <div style={{ height: 2, background: '#D85A30' }} />
               </div>
               {/* Project info */}
               <div style={{ background: '#F8F7F4', padding: '14px 36px' }}>
-                <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#D85A30', marginBottom: 5 }}>Proyecto</div>
+                <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#D85A30', marginBottom: 5 }}>{L.proyecto}</div>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 3 }}>
                   <span style={{ fontSize: 16, fontWeight: 700, color: '#1A1A1A' }}>{proyecto.nombre}</span>
                   {proyecto.codigo && <span style={{ fontSize: 11, color: '#888', fontFamily: 'monospace' }}>{proyecto.codigo}</span>}
@@ -940,38 +1088,45 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
                 {asistentesSeleccionados.length > 0 && (
                   <div>
                     <div style={{ height: 1, background: '#E6E4DF', marginBottom: 12 }} />
-                    <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#D85A30', marginBottom: 8 }}>Asistentes</div>
+                    <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#D85A30', marginBottom: 8 }}>{L.asistentes}</div>
                     {(['equipo', 'cliente', 'proveedor', 'externo'] as TipoAsistente[]).map(tipo => {
                       const lista = asistentesSeleccionados.filter(a => a.tipo === tipo)
                       if (!lista.length) return null
-                      const labels: Record<TipoAsistente, string> = { equipo: 'Equipo', cliente: 'Clientes', proveedor: 'Proveedores', externo: 'Externos' }
                       return (
                         <div key={tipo} style={{ marginBottom: 6 }}>
-                          <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAAAAA', marginBottom: 3 }}>{labels[tipo]}</div>
+                          <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAAAAA', marginBottom: 3 }}>{L.tipoLabels[tipo]}</div>
                           <div style={{ fontSize: 13, color: '#3A3A3A' }}>{lista.map(a => a.nombre).join('  ·  ')}</div>
                         </div>
                       )
                     })}
                   </div>
                 )}
-                {estadoObras && (
-                  <div>
-                    <div style={{ height: 1, background: '#E6E4DF', marginBottom: 12 }} />
-                    <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#D85A30', marginBottom: 8 }}>Estado de obras</div>
-                    <p style={{ fontSize: 13, color: '#3A3A3A', lineHeight: 1.7, margin: 0, whiteSpace: 'pre-wrap' }}>{estadoObras}</p>
+                {wantsEn && previewTranslating ? (
+                  <div style={{ padding: '24px 0', textAlign: 'center', color: '#AAA', fontSize: 12, fontStyle: 'italic' }}>
+                    Translating content...
                   </div>
-                )}
-                {instrText.trim().length > 0 && (
-                  <div>
-                    <div style={{ height: 1, background: '#E6E4DF', marginBottom: 12 }} />
-                    <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#D85A30', marginBottom: 8 }}>Instrucciones</div>
-                    <p style={{ fontSize: 13, color: '#3A3A3A', lineHeight: 1.7, margin: 0, whiteSpace: 'pre-wrap' }}>{instrText}</p>
-                  </div>
+                ) : (
+                  <>
+                    {estadoDisplay && (
+                      <div>
+                        <div style={{ height: 1, background: '#E6E4DF', marginBottom: 12 }} />
+                        <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#D85A30', marginBottom: 8 }}>{L.estadoObras}</div>
+                        <p style={{ fontSize: 13, color: '#3A3A3A', lineHeight: 1.7, margin: 0, whiteSpace: 'pre-wrap' }}>{stripMd(estadoDisplay)}</p>
+                      </div>
+                    )}
+                    {instrDisplay.trim().length > 0 && (
+                      <div>
+                        <div style={{ height: 1, background: '#E6E4DF', marginBottom: 12 }} />
+                        <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#D85A30', marginBottom: 8 }}>{L.instrucciones}</div>
+                        <p style={{ fontSize: 13, color: '#3A3A3A', lineHeight: 1.7, margin: 0, whiteSpace: 'pre-wrap' }}>{stripMd(instrDisplay)}</p>
+                      </div>
+                    )}
+                  </>
                 )}
                 {floorfyUrl.trim() && (
                   <div>
                     <div style={{ height: 1, background: '#E6E4DF', marginBottom: 12 }} />
-                    <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#D85A30', marginBottom: 8 }}>Recorrido virtual</div>
+                    <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#D85A30', marginBottom: 8 }}>{L.recorrido}</div>
                     <p style={{ fontSize: 13, color: '#D85A30', margin: 0, wordBreak: 'break-all' }}>{floorfyUrl.trim()}</p>
                   </div>
                 )}
@@ -982,7 +1137,8 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
                 <span style={{ fontSize: 10, color: '#AAAAAA' }}>formaprima.es</span>
               </div>
             </div>
-          )
+            )
+          }
 
           return (
           <>
@@ -1055,7 +1211,7 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
                 overflowY: 'auto',
                 borderBottom: '1px solid #E8E6E0',
               }}>
-                {renderPreviewDoc(previewTab === 'constructor' ? instrCons : instrCli)}
+                {renderPreviewDoc(previewTab === 'constructor' ? instrCons : instrCli, previewTab === 'cliente')}
               </div>
 
               {/* Recipients + portal toggle */}
@@ -1092,9 +1248,14 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
                       <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', marginBottom: 8 }}>
                         Destinatarios — Acta {isCons ? 'constructor' : 'cliente'}
                       </div>
+                      {isCons && !proyectoConstructor && (
+                        <p style={{ fontSize: 11, color: '#C9A227', margin: '0 0 8px', fontStyle: 'italic' }}>
+                          ⚠ Sin constructor asignado al proyecto. Asígnalo desde la ficha del proyecto.
+                        </p>
+                      )}
                       {main.length === 0 && equipo.length === 0 ? (
                         <p style={{ fontSize: 11, color: isCons ? '#C9A227' : '#888', margin: 0, fontStyle: 'italic' }}>
-                          {isCons ? 'Sin email — añadir en proveedores' : 'Sin destinatarios de cliente.'}
+                          {isCons ? 'Sin email — añadir email al constructor en Proveedores' : 'Sin destinatarios de cliente.'}
                         </p>
                       ) : (
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>

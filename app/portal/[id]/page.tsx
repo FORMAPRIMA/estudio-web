@@ -116,7 +116,7 @@ export default async function PortalPage({ params }: { params: { id: string } })
       .order('created_at'),
     admin
       .from('proyecto_pagos_constructora')
-      .select('id, concepto, importe_estimado, fecha_estimada')
+      .select('id, concepto, importe_estimado, fecha_estimada, status')
       .eq('proyecto_id', id)
       .order('fecha_estimada', { ascending: true }),
   ])

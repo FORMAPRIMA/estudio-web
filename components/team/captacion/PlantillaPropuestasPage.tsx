@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { savePlantillaServicio, createServicio, deleteServicio, saveServicioEN } from '@/app/actions/plantillaPropuestas'
+import { updatePlantillaServicio, createServicio, deleteServicio, updateServicioTraduccion } from '@/app/actions/plantillaPropuestas'
 import { SERVICIOS_CONFIG } from '@/lib/propuestas/config'
 import type { ServicioEntry, ServicioPlantillaData } from '@/lib/propuestas/config'
 
@@ -44,10 +44,12 @@ function ServicioEditor({
   entry,
   onSaved,
   onDeleted,
+  readOnly = false,
 }: {
-  entry:    ServicioEntry
-  onSaved:  (id: string, data: ServicioPlantillaData) => void
+  entry:     ServicioEntry
+  onSaved:   (id: string, data: ServicioPlantillaData) => void
   onDeleted?: () => void
+  readOnly?: boolean
 }) {
   const [isPending, startSave] = useTransition()
   const [isDeleting, startDel] = useTransition()
@@ -162,7 +164,7 @@ function ServicioEditor({
   function handleSave() {
     setSaveOk(false); setError(null)
     startSave(async () => {
-      const result = await savePlantillaServicio(entry.id, {
+      const result = await updatePlantillaServicio(entry.id, {
         label, texto, entregables: grupos, semanas_default: semanas, pago, notas,
       })
       if ('error' in result) { setError(result.error) }
@@ -188,7 +190,7 @@ function ServicioEditor({
   function handleSaveEN() {
     setSaveENOk(false); setEnError(null)
     startSaveEN(async () => {
-      const result = await saveServicioEN(entry.id, {
+      const result = await updateServicioTraduccion(entry.id, {
         label_en:           labelEN || null,
         texto_en:           textoEN || null,
         entregables_en:     gruposEN.length > 0 ? gruposEN : null,
@@ -242,7 +244,7 @@ function ServicioEditor({
               </div>
             )}
           </div>
-          {entry.isCustom && (
+          {entry.isCustom && !readOnly && (
             <button
               onClick={handleDelete}
               disabled={isDeleting}
@@ -270,38 +272,42 @@ function ServicioEditor({
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <FieldLabel>Entregables</FieldLabel>
-            <button onClick={addGrupo} style={{ fontSize: 11, padding: '4px 12px', background: '#F0EEE8', border: 'none', borderRadius: 4, cursor: 'pointer', color: '#555' }}>
-              + Añadir grupo
-            </button>
+            {!readOnly && (
+              <button onClick={addGrupo} style={{ fontSize: 11, padding: '4px 12px', background: '#F0EEE8', border: 'none', borderRadius: 4, cursor: 'pointer', color: '#555' }}>
+                + Añadir grupo
+              </button>
+            )}
           </div>
           {grupos.length === 0 && <div style={{ fontSize: 12, color: '#CCC', fontStyle: 'italic', padding: '8px 0' }}>Sin grupos definidos</div>}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {grupos.map((g, gi) => (
               <div key={gi} style={{ border: '1px solid #E8E6E0', borderRadius: 6, overflow: 'hidden' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: '#F8F7F4', borderBottom: '1px solid #E8E6E0' }}>
-                  <button onClick={() => moveGrupo(gi, -1)} disabled={gi === 0}
-                    style={{ background: 'none', border: 'none', cursor: gi === 0 ? 'default' : 'pointer', color: gi === 0 ? '#DDD' : '#888', fontSize: 12, padding: '0 2px' }}>↑</button>
-                  <button onClick={() => moveGrupo(gi, 1)} disabled={gi === grupos.length - 1}
-                    style={{ background: 'none', border: 'none', cursor: gi === grupos.length - 1 ? 'default' : 'pointer', color: gi === grupos.length - 1 ? '#DDD' : '#888', fontSize: 12, padding: '0 2px' }}>↓</button>
-                  <input value={g.grupo} onChange={e => setGrupoName(gi, e.target.value)}
+                  {!readOnly && <button onClick={() => moveGrupo(gi, -1)} disabled={gi === 0}
+                    style={{ background: 'none', border: 'none', cursor: gi === 0 ? 'default' : 'pointer', color: gi === 0 ? '#DDD' : '#888', fontSize: 12, padding: '0 2px' }}>↑</button>}
+                  {!readOnly && <button onClick={() => moveGrupo(gi, 1)} disabled={gi === grupos.length - 1}
+                    style={{ background: 'none', border: 'none', cursor: gi === grupos.length - 1 ? 'default' : 'pointer', color: gi === grupos.length - 1 ? '#DDD' : '#888', fontSize: 12, padding: '0 2px' }}>↓</button>}
+                  <input value={g.grupo} onChange={e => setGrupoName(gi, e.target.value)} readOnly={readOnly}
                     style={{ ...inp(), flex: 1, fontWeight: 600, fontSize: 12, padding: '4px 8px' }} placeholder="Nombre del grupo" />
-                  <button onClick={() => removeGrupo(gi)}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#CCC', fontSize: 16, padding: '0 4px', lineHeight: 1 }}>×</button>
+                  {!readOnly && <button onClick={() => removeGrupo(gi)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#CCC', fontSize: 16, padding: '0 4px', lineHeight: 1 }}>×</button>}
                 </div>
                 <div style={{ padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {g.items.map((item, ii) => (
                     <div key={ii} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ color: '#CCC', fontSize: 12, flexShrink: 0 }}>·</span>
-                      <input value={item} onChange={e => setItem(gi, ii, e.target.value)}
+                      <input value={item} onChange={e => setItem(gi, ii, e.target.value)} readOnly={readOnly}
                         style={{ ...inp(), flex: 1, fontSize: 12, padding: '4px 8px' }} placeholder="Entregable…" />
-                      <button onClick={() => removeItem(gi, ii)}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#CCC', fontSize: 14, padding: '0 2px', lineHeight: 1, flexShrink: 0 }}>×</button>
+                      {!readOnly && <button onClick={() => removeItem(gi, ii)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#CCC', fontSize: 14, padding: '0 2px', lineHeight: 1, flexShrink: 0 }}>×</button>}
                     </div>
                   ))}
-                  <button onClick={() => addItem(gi)}
-                    style={{ alignSelf: 'flex-start', fontSize: 11, color: '#AAA', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0', marginTop: 2 }}>
-                    + Añadir ítem
-                  </button>
+                  {!readOnly && (
+                    <button onClick={() => addItem(gi)}
+                      style={{ alignSelf: 'flex-start', fontSize: 11, color: '#AAA', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0', marginTop: 2 }}>
+                      + Añadir ítem
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -318,9 +324,11 @@ function ServicioEditor({
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <FieldLabel>Hitos de pago</FieldLabel>
-            <button onClick={addHito} style={{ fontSize: 11, padding: '4px 12px', background: '#F0EEE8', border: 'none', borderRadius: 4, cursor: 'pointer', color: '#555' }}>
-              + Añadir hito
-            </button>
+            {!readOnly && (
+              <button onClick={addHito} style={{ fontSize: 11, padding: '4px 12px', background: '#F0EEE8', border: 'none', borderRadius: 4, cursor: 'pointer', color: '#555' }}>
+                + Añadir hito
+              </button>
+            )}
           </div>
           {pago.length === 0 && <div style={{ fontSize: 12, color: '#CCC', fontStyle: 'italic', padding: '8px 0' }}>Sin hitos definidos</div>}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -333,8 +341,8 @@ function ServicioEditor({
                     style={{ ...inp(), width: 72, textAlign: 'right' as const }} min={0} max={100} />
                   <span style={{ fontSize: 12, color: '#AAA', flexShrink: 0 }}>%</span>
                 </div>
-                <button onClick={() => removeHito(i)}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#CCC', fontSize: 16, padding: '0 4px', lineHeight: 1, flexShrink: 0 }}>×</button>
+                {!readOnly && <button onClick={() => removeHito(i)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#CCC', fontSize: 16, padding: '0 4px', lineHeight: 1, flexShrink: 0 }}>×</button>}
               </div>
             ))}
             {pago.length > 0 && (
@@ -362,17 +370,19 @@ function ServicioEditor({
         </div>
 
         {/* Actions ES */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingTop: 8, borderTop: '1px solid #F0EEE8' }}>
-          <button
-            onClick={handleSave}
-            disabled={isPending || (pago.length > 0 && pagoSum !== 100)}
-            style={{ padding: '9px 22px', background: '#1A1A1A', color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, cursor: isPending ? 'not-allowed' : 'pointer', opacity: isPending ? 0.6 : 1 }}
-          >
-            {isPending ? 'Guardando…' : 'Guardar cambios'}
-          </button>
-          {saveOk && <span style={{ fontSize: 12, color: '#4CAF50' }}>Guardado correctamente</span>}
-          {error  && <span style={{ fontSize: 12, color: '#E57373' }}>{error}</span>}
-        </div>
+        {!readOnly && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingTop: 8, borderTop: '1px solid #F0EEE8' }}>
+            <button
+              onClick={handleSave}
+              disabled={isPending || (pago.length > 0 && pagoSum !== 100)}
+              style={{ padding: '9px 22px', background: '#1A1A1A', color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, cursor: isPending ? 'not-allowed' : 'pointer', opacity: isPending ? 0.6 : 1 }}
+            >
+              {isPending ? 'Guardando…' : 'Guardar cambios'}
+            </button>
+            {saveOk && <span style={{ fontSize: 12, color: '#4CAF50' }}>Guardado correctamente</span>}
+            {error  && <span style={{ fontSize: 12, color: '#E57373' }}>{error}</span>}
+          </div>
+        )}
       </div>
 
       {/* ── RIGHT COLUMN: EN ────────────────────────────────────────────── */}
@@ -389,25 +399,27 @@ function ServicioEditor({
               {chip.label}
             </span>
           </div>
-          <button
-            onClick={() => doTranslate(label, texto, grupos, semanas, pago, notas)}
-            disabled={isTranslating}
-            style={{
-              fontSize: 11, padding: '5px 14px',
-              background: isTranslating ? '#F0EEE8' : '#F0EEE8',
-              border: '1px solid #E8E6E0', borderRadius: 4,
-              cursor: isTranslating ? 'not-allowed' : 'pointer',
-              color: isTranslating ? '#AAA' : '#555',
-              display: 'flex', alignItems: 'center', gap: 6,
-            }}
-          >
-            {isTranslating ? (
-              <>
-                <span style={{ display: 'inline-block', width: 12, height: 12, border: '2px solid #CCC', borderTopColor: '#D85A30', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-                Traduciendo…
-              </>
-            ) : '⟳ Auto-traducir'}
-          </button>
+          {!readOnly && (
+            <button
+              onClick={() => doTranslate(label, texto, grupos, semanas, pago, notas)}
+              disabled={isTranslating}
+              style={{
+                fontSize: 11, padding: '5px 14px',
+                background: isTranslating ? '#F0EEE8' : '#F0EEE8',
+                border: '1px solid #E8E6E0', borderRadius: 4,
+                cursor: isTranslating ? 'not-allowed' : 'pointer',
+                color: isTranslating ? '#AAA' : '#555',
+                display: 'flex', alignItems: 'center', gap: 6,
+              }}
+            >
+              {isTranslating ? (
+                <>
+                  <span style={{ display: 'inline-block', width: 12, height: 12, border: '2px solid #CCC', borderTopColor: '#D85A30', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                  Traduciendo…
+                </>
+              ) : '⟳ Auto-traducir'}
+            </button>
+          )}
         </div>
 
         {/* Label EN */}
@@ -431,34 +443,38 @@ function ServicioEditor({
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <FieldLabel>Deliverables</FieldLabel>
-            <button onClick={addGrupoEN} style={{ fontSize: 11, padding: '4px 12px', background: '#F0EEE8', border: 'none', borderRadius: 4, cursor: 'pointer', color: '#555' }}>
-              + Add group
-            </button>
+            {!readOnly && (
+              <button onClick={addGrupoEN} style={{ fontSize: 11, padding: '4px 12px', background: '#F0EEE8', border: 'none', borderRadius: 4, cursor: 'pointer', color: '#555' }}>
+                + Add group
+              </button>
+            )}
           </div>
           {gruposEN.length === 0 && <div style={{ fontSize: 12, color: '#CCC', fontStyle: 'italic', padding: '8px 0' }}>No groups defined</div>}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {gruposEN.map((g, gi) => (
               <div key={gi} style={{ border: '1px solid #E8E6E0', borderRadius: 6, overflow: 'hidden' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: '#FAFAF7', borderBottom: '1px solid #E8E6E0' }}>
-                  <input value={g.grupo} onChange={e => setGrupoNameEN(gi, e.target.value)}
+                  <input value={g.grupo} onChange={e => setGrupoNameEN(gi, e.target.value)} readOnly={readOnly}
                     style={{ ...inpEN(), flex: 1, fontWeight: 600, fontSize: 12, padding: '4px 8px' }} placeholder="Group name" />
-                  <button onClick={() => removeGrupoEN(gi)}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#CCC', fontSize: 16, padding: '0 4px', lineHeight: 1 }}>×</button>
+                  {!readOnly && <button onClick={() => removeGrupoEN(gi)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#CCC', fontSize: 16, padding: '0 4px', lineHeight: 1 }}>×</button>}
                 </div>
                 <div style={{ padding: '8px 12px', background: '#FAFAF7', display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {g.items.map((item, ii) => (
                     <div key={ii} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ color: '#CCC', fontSize: 12, flexShrink: 0 }}>·</span>
-                      <input value={item} onChange={e => setItemEN(gi, ii, e.target.value)}
+                      <input value={item} onChange={e => setItemEN(gi, ii, e.target.value)} readOnly={readOnly}
                         style={{ ...inpEN(), flex: 1, fontSize: 12, padding: '4px 8px' }} placeholder="Deliverable…" />
-                      <button onClick={() => removeItemEN(gi, ii)}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#CCC', fontSize: 14, padding: '0 2px', lineHeight: 1, flexShrink: 0 }}>×</button>
+                      {!readOnly && <button onClick={() => removeItemEN(gi, ii)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#CCC', fontSize: 14, padding: '0 2px', lineHeight: 1, flexShrink: 0 }}>×</button>}
                     </div>
                   ))}
-                  <button onClick={() => addItemEN(gi)}
-                    style={{ alignSelf: 'flex-start', fontSize: 11, color: '#AAA', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0', marginTop: 2 }}>
-                    + Add item
-                  </button>
+                  {!readOnly && (
+                    <button onClick={() => addItemEN(gi)}
+                      style={{ alignSelf: 'flex-start', fontSize: 11, color: '#AAA', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0', marginTop: 2 }}>
+                      + Add item
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -477,9 +493,11 @@ function ServicioEditor({
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <FieldLabel>Payment milestones</FieldLabel>
-            <button onClick={addHitoEN} style={{ fontSize: 11, padding: '4px 12px', background: '#F0EEE8', border: 'none', borderRadius: 4, cursor: 'pointer', color: '#555' }}>
-              + Add milestone
-            </button>
+            {!readOnly && (
+              <button onClick={addHitoEN} style={{ fontSize: 11, padding: '4px 12px', background: '#F0EEE8', border: 'none', borderRadius: 4, cursor: 'pointer', color: '#555' }}>
+                + Add milestone
+              </button>
+            )}
           </div>
           {pagoEN.length === 0 && <div style={{ fontSize: 12, color: '#CCC', fontStyle: 'italic', padding: '8px 0' }}>No milestones defined</div>}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -492,8 +510,8 @@ function ServicioEditor({
                     style={{ ...inpEN(), width: 72, textAlign: 'right' as const }} min={0} max={100} />
                   <span style={{ fontSize: 12, color: '#AAA', flexShrink: 0 }}>%</span>
                 </div>
-                <button onClick={() => removeHitoEN(i)}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#CCC', fontSize: 16, padding: '0 4px', lineHeight: 1, flexShrink: 0 }}>×</button>
+                {!readOnly && <button onClick={() => removeHitoEN(i)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#CCC', fontSize: 16, padding: '0 4px', lineHeight: 1, flexShrink: 0 }}>×</button>}
               </div>
             ))}
             {pagoEN.length > 0 && (
@@ -521,17 +539,19 @@ function ServicioEditor({
         </div>
 
         {/* Actions EN */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingTop: 8, borderTop: '1px solid #F0EEE8' }}>
-          <button
-            onClick={handleSaveEN}
-            disabled={isSavingEN}
-            style={{ padding: '9px 22px', background: '#D85A30', color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, cursor: isSavingEN ? 'not-allowed' : 'pointer', opacity: isSavingEN ? 0.6 : 1 }}
-          >
-            {isSavingEN ? 'Saving…' : 'Save EN'}
-          </button>
-          {saveENOk && <span style={{ fontSize: 12, color: '#4CAF50' }}>Saved successfully</span>}
-          {enError  && <span style={{ fontSize: 12, color: '#E57373' }}>{enError}</span>}
-        </div>
+        {!readOnly && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingTop: 8, borderTop: '1px solid #F0EEE8' }}>
+            <button
+              onClick={handleSaveEN}
+              disabled={isSavingEN}
+              style={{ padding: '9px 22px', background: '#D85A30', color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, cursor: isSavingEN ? 'not-allowed' : 'pointer', opacity: isSavingEN ? 0.6 : 1 }}
+            >
+              {isSavingEN ? 'Saving…' : 'Save EN'}
+            </button>
+            {saveENOk && <span style={{ fontSize: 12, color: '#4CAF50' }}>Saved successfully</span>}
+            {enError  && <span style={{ fontSize: 12, color: '#E57373' }}>{enError}</span>}
+          </div>
+        )}
 
         <style>{`
           @keyframes spin {
@@ -616,8 +636,10 @@ function NuevoServicioModal({
 // ── Page ─────────────────────────────────────────────────────────────────────
 export default function PlantillaPropuestasPage({
   servicios: initialServicios,
+  readOnly = false,
 }: {
   servicios: ServicioEntry[]
+  readOnly?: boolean
 }) {
   const router = useRouter()
   const [servicios, setServicios] = useState(initialServicios)
@@ -658,12 +680,19 @@ export default function PlantillaPropuestasPage({
             Define el contenido de cada servicio contratable: nombre, texto de presentación, entregables, plazo y hitos de pago.
           </p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          style={{ padding: '10px 20px', background: '#1A1A1A', color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' }}
-        >
-          + Nuevo servicio
-        </button>
+        {!readOnly && (
+          <button
+            onClick={() => setShowModal(true)}
+            style={{ padding: '10px 20px', background: '#1A1A1A', color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' }}
+          >
+            + Nuevo servicio
+          </button>
+        )}
+        {readOnly && (
+          <span style={{ fontSize: 12, color: '#AAA', fontStyle: 'italic', padding: '10px 0' }}>
+            Solo lectura — sin permisos de edición
+          </span>
+        )}
       </div>
 
       {/* Body */}
@@ -699,6 +728,7 @@ export default function PlantillaPropuestasPage({
               entry={currentEntry}
               onSaved={handleSaved}
               onDeleted={handleDeleted}
+              readOnly={readOnly}
             />
           ) : (
             <div style={{ color: '#CCC', fontStyle: 'italic', fontSize: 13, paddingTop: 40 }}>Selecciona un servicio</div>

@@ -185,7 +185,7 @@ function HonorariosTable({
           <tr style={{ background: '#1A1A1A' }}>
             <th style={{ ...TH, width: 180 }}>Sección / Fase</th>
             <th style={TH}>Descripción de servicios</th>
-            <th style={{ ...TH, width: 120, textAlign: 'right' }}>Honorarios (€)</th>
+            <th style={{ ...TH, width: 140, textAlign: 'right' }}>Honorarios (sin IVA)</th>
             <th style={{ ...TH, width: 140 }}>Fecha de pago acordada</th>
             {!disabled && <th style={{ ...TH, width: 36 }} />}
           </tr>
@@ -282,12 +282,24 @@ function HonorariosTable({
           </button>
         ) : <span />}
         <div style={{ textAlign: 'right' }}>
-          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', marginRight: 16 }}>
-            Total honorarios
-          </span>
-          <span style={{ fontSize: 16, fontWeight: 700, color: '#1A1A1A', fontVariantNumeric: 'tabular-nums' }}>
-            € {new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2 }).format(total)}
-          </span>
+          <div>
+            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', marginRight: 16 }}>
+              Total (sin IVA)
+            </span>
+            <span style={{ fontSize: 16, fontWeight: 700, color: '#1A1A1A', fontVariantNumeric: 'tabular-nums' }}>
+              € {new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2 }).format(total)}
+            </span>
+          </div>
+          {total > 0 && (
+            <div style={{ marginTop: 3 }}>
+              <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#6B7280', marginRight: 16 }}>
+                Total con IVA 21%
+              </span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: '#6B7280', fontVariantNumeric: 'tabular-nums' }}>
+                € {new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2 }).format(total * 1.21)}
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -366,12 +378,12 @@ export default function ContratoDetalle({
 
   // ── UI state ──────────────────────────────────────────────────────────────
   const [saving,          setSaving]          = useState(false)
-  const [firmandoLoading, setFirmandoLoading] = useState(false)
+  const [isFirmando, setIsFirmando] = useState(false)
   const [firmandoError,   setFirmandoError]   = useState<string | null>(null)
   const [successMsg,      setSuccessMsg]      = useState<string | null>(null)
 
   // ── DocuSign state ────────────────────────────────────────────────────────
-  const [dsLoading,       setDsLoading]       = useState(false)
+  const [isDocusignLoading,       setIsDocusignLoading]       = useState(false)
   const [dsError,         setDsError]         = useState<string | null>(null)
   const [dsEnvelopeId,    setDsEnvelopeId]    = useState<string | null>(initial.docusign_envelope_id ?? null)
   const [dsStatus,        setDsStatus]        = useState<string | null>(initial.docusign_status ?? null)
@@ -382,7 +394,7 @@ export default function ContratoDetalle({
   const [compartirNewEmail,setCompartirNewEmail]= useState('')
   const [compartirPdfLang, setCompartirPdfLang] = useState<'es' | 'en' | 'both'>('es')
   const [compartirEmailLang,setCompartirEmailLang]=useState<'es' | 'en'>('es')
-  const [compartirLoading, setCompartirLoading] = useState(false)
+  const [isCompartiendo, setIsCompartiendo] = useState(false)
   const [compartirError,   setCompartirError]   = useState<string | null>(null)
 
   function openCompartir() {
@@ -401,7 +413,7 @@ export default function ContratoDetalle({
 
   async function handleCompartir() {
     if (!compartirEmails.length) { setCompartirError('Añade al menos un destinatario.'); return }
-    setCompartirLoading(true)
+    setIsCompartiendo(true)
     setCompartirError(null)
     try {
       const res = await fetch(`/api/contratos/${initial.id}/compartir`, {
@@ -417,7 +429,7 @@ export default function ContratoDetalle({
     } catch {
       setCompartirError('Error de conexión.')
     } finally {
-      setCompartirLoading(false)
+      setIsCompartiendo(false)
     }
   }
 
@@ -564,10 +576,10 @@ export default function ContratoDetalle({
 
   const handleFirmar = async () => {
     if (!confirm('¿Firmar el contrato? Esto creará automáticamente el cliente, el proyecto y la estructura de facturación.')) return
-    setFirmandoLoading(true)
+    setIsFirmando(true)
     setFirmandoError(null)
     const result = await firmarContrato(initial.id)
-    setFirmandoLoading(false)
+    setIsFirmando(false)
     if ('error' in result) {
       setFirmandoError(result.error)
     } else {
@@ -579,7 +591,7 @@ export default function ContratoDetalle({
 
   const handleDocuSign = async () => {
     if (!confirm('¿Enviar a DocuSign? Se enviará el contrato por email a ambas partes para firma electrónica.')) return
-    setDsLoading(true)
+    setIsDocusignLoading(true)
     setDsError(null)
     try {
       const res = await fetch(`/api/contratos/${initial.id}/docusign`, { method: 'POST' })
@@ -595,7 +607,7 @@ export default function ContratoDetalle({
     } catch {
       setDsError('Error de conexión.')
     } finally {
-      setDsLoading(false)
+      setIsDocusignLoading(false)
     }
   }
 
@@ -682,19 +694,19 @@ export default function ContratoDetalle({
             {status !== 'firmado' && status !== 'cancelado' && (
               <button
                 onClick={handleFirmar}
-                disabled={firmandoLoading}
+                disabled={isFirmando}
                 style={{
                   height: 36, padding: '0 20px',
-                  background: firmandoLoading ? '#888' : '#1D9E75',
+                  background: isFirmando ? '#888' : '#1D9E75',
                   color: '#fff', border: 'none', borderRadius: 4,
-                  cursor: firmandoLoading ? 'not-allowed' : 'pointer',
+                  cursor: isFirmando ? 'not-allowed' : 'pointer',
                   fontSize: 11, fontWeight: 700, letterSpacing: '0.05em',
-                  opacity: firmandoLoading ? 0.7 : 1,
+                  opacity: isFirmando ? 0.7 : 1,
                 }}
-                onMouseEnter={e => { if (!firmandoLoading) (e.currentTarget as HTMLElement).style.background = '#15805E' }}
-                onMouseLeave={e => { if (!firmandoLoading) (e.currentTarget as HTMLElement).style.background = '#1D9E75' }}
+                onMouseEnter={e => { if (!isFirmando) (e.currentTarget as HTMLElement).style.background = '#15805E' }}
+                onMouseLeave={e => { if (!isFirmando) (e.currentTarget as HTMLElement).style.background = '#1D9E75' }}
               >
-                {firmandoLoading ? 'Procesando…' : '✓ Firmar contrato'}
+                {isFirmando ? 'Procesando…' : '✓ Firmar contrato'}
               </button>
             )}
 
@@ -714,20 +726,20 @@ export default function ContratoDetalle({
               ) : (
                 <button
                   onClick={handleDocuSign}
-                  disabled={dsLoading}
+                  disabled={isDocusignLoading}
                   title="Enviar a DocuSign para firma electrónica"
                   style={{
                     height: 36, padding: '0 18px',
-                    background: dsLoading ? '#888' : '#1A1A1A',
+                    background: isDocusignLoading ? '#888' : '#1A1A1A',
                     color: '#fff', border: 'none', borderRadius: 4,
-                    cursor: dsLoading ? 'not-allowed' : 'pointer',
+                    cursor: isDocusignLoading ? 'not-allowed' : 'pointer',
                     fontSize: 11, fontWeight: 600, letterSpacing: '0.03em',
-                    opacity: dsLoading ? 0.7 : 1,
+                    opacity: isDocusignLoading ? 0.7 : 1,
                   }}
-                  onMouseEnter={e => { if (!dsLoading) (e.currentTarget as HTMLElement).style.background = '#333' }}
-                  onMouseLeave={e => { if (!dsLoading) (e.currentTarget as HTMLElement).style.background = '#1A1A1A' }}
+                  onMouseEnter={e => { if (!isDocusignLoading) (e.currentTarget as HTMLElement).style.background = '#333' }}
+                  onMouseLeave={e => { if (!isDocusignLoading) (e.currentTarget as HTMLElement).style.background = '#1A1A1A' }}
                 >
-                  {dsLoading ? 'Enviando…' : '✍ DocuSign'}
+                  {isDocusignLoading ? 'Enviando…' : '✍ DocuSign'}
                 </button>
               )
             )}
@@ -1208,14 +1220,14 @@ export default function ContratoDetalle({
             </button>
             <button
               onClick={handleCompartir}
-              disabled={compartirLoading || !compartirEmails.length}
+              disabled={isCompartiendo || !compartirEmails.length}
               style={{
-                padding: '9px 22px', background: compartirLoading ? '#AAA' : '#378ADD',
+                padding: '9px 22px', background: isCompartiendo ? '#AAA' : '#378ADD',
                 color: '#fff', border: 'none', borderRadius: 5,
-                fontSize: 12, fontWeight: 600, cursor: compartirLoading ? 'not-allowed' : 'pointer',
+                fontSize: 12, fontWeight: 600, cursor: isCompartiendo ? 'not-allowed' : 'pointer',
               }}
             >
-              {compartirLoading ? 'Enviando…' : `↑ Enviar a ${compartirEmails.length} destinatario${compartirEmails.length !== 1 ? 's' : ''}`}
+              {isCompartiendo ? 'Enviando…' : `↑ Enviar a ${compartirEmails.length} destinatario${compartirEmails.length !== 1 ? 's' : ''}`}
             </button>
           </div>
         </div>

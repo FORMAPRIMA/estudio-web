@@ -13,8 +13,9 @@ export default async function Page() {
 
   const { data: profile } = await supabase
     .from('profiles').select('rol').eq('id', user.id).single()
-  if (!profile || !['fp_partner', 'fp_manager'].includes(profile.rol)) redirect('/team/dashboard')
+  if (!profile || !['fp_partner', 'fp_manager', 'fp_biz_dev'].includes(profile.rol)) redirect('/team/dashboard')
 
   const servicios = await getPlantillaServicios()
-  return <PlantillaPropuestasPage servicios={servicios} />
+  const readOnly = profile.rol === 'fp_biz_dev'
+  return <PlantillaPropuestasPage servicios={servicios} readOnly={readOnly} />
 }

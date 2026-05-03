@@ -1,0 +1,653 @@
+# CLAUDE.md — Contexto permanente del proyecto estudio-web
+
+> Este archivo es leído por Claude Code al inicio de cada sesión. Describe el
+> proyecto completo para que no sea necesario re-explorar el código desde cero.
+
+---
+
+## 1. Descripción general
+
+**Forma Prima** (`GEINEX GROUP, S.L.`) es un estudio de arquitectura y diseño.
+Este repositorio es su plataforma digital completa: web pública, portal de clientes
+y herramienta interna de gestión.
+
+**Tres audiencias:**
+| Zona | URL | Quién accede |
+|---|---|---|
+| Web pública | `/`, `/proyectos`, `/real-estate`, `/estudio`, `/contacto` | Público general |
+| Portal de clientes | `/portal/[id]`, `/bienvenida/[token]`, `/area-privada` | Clientes |
+| Área interna del equipo | `/team/*` | Staff FP (roles `fp_*`) |
+| Portal FP Execution | `/execution-portal/[token]` | Partners/subcontratistas |
+
+**Stack tecnológico:**
+- **Next.js 14.2.5** — App Router, Server Components, Server Actions
+- **React 18** + TypeScript 5
+- **Supabase** — PostgreSQL (base de datos), Auth, Storage (buckets: `portal`, `design-hunter`, `marketing`)
+- **Tailwind CSS** — utilidades CSS (no se usa casi en el área interna; los estilos son inline)
+- **Resend** — envío de emails transaccionales
+- **@react-pdf/renderer 4.x** — generación de PDFs en servidor (actas, propuestas, contratos, facturas, due diligence)
+- **Anthropic Claude API** (`claude-haiku-4-5-20251001`) — mejora de textos con IA en visitas de obra y due diligencia
+- **DocuSign eSignature API** — firma electrónica de contratos
+- **pdf-lib + pdfjs-dist** — lectura y manipulación de PDFs (scanner de tickets)
+- **xlsx + jszip** — exportación a Excel y ZIP
+- **`@anthropic-ai/sdk` `^0.82.0`**
+
+---
+
+## 2. Estructura de carpetas
+
+```
+estudio-web/
+├── app/
+│   ├── (public)/           # Layout para web pública (Header/Footer)
+│   ├── actions/            # Server Actions (todas las mutaciones de BD)
+│   ├── api/                # API Routes (PDFs, webhooks, IA, cron jobs)
+│   ├── area-privada/       # Portal de clientes (auth Supabase)
+│   ├── bienvenida/         # Flujo de onboarding de cliente nuevo
+│   ├── execution-portal/   # Portal externo para partners de FP Execution
+│   ├── login/              # Página de login compartida
+│   ├── portal/[id]/        # Vista de proyecto del cliente
+│   └── team/               # Área interna del equipo (layout protegido)
+├── components/
+│   ├── dev/                # RulerOverlay (solo dev)
+│   ├── fp-execution-portal/# PortalPage para partners externos
+│   ├── layout/             # Header y Footer públicos
+│   ├── pdfs/               # Componentes @react-pdf/renderer (6 PDFs)
+│   ├── portal/             # ClientPortal, ClientPortalGate
+│   ├── public/             # BienvenidaPage
+│   ├── team/               # Todos los componentes del área interna
+│   └── ui/                 # ProjectCard, PropertyCard (web pública)
+├── lib/
+│   ├── data/mock.ts        # Datos mock para la web pública
+│   ├── dashboard/          # avisos-permisos.ts (esAvisoVisiblePara, VISIBLE_ROLES_*)
+│   ├── design-hunter.ts    # Tipos DesignHunterEntry, isVideoUrl()
+│   ├── docusign/           # auth.ts + client.ts (DocuSign integration)
+│   ├── email.ts            # sendEmail() + wrapEmail() con template de Resend
+│   ├── facturasUtils.ts    # calcTotals(), formatNumeroCompleto()
+│   ├── finanzas/           # costs.ts, fixedCostHistory.ts, salaryHistory.ts
+│   ├── fp-execution/       # domain.ts (tipos Fpe*), schedule.ts
+│   ├── marketing.ts        # Tipos MarketingPost, PostStatus, RedSocial; getTransitions()
+│   ├── pdfs/               # dueDiligenciaDefaults.ts
+│   ├── propuestas/config.ts# SERVICIOS_CONFIG, calcPropuesta(), tipos
+│   ├── supabase/           # admin.ts, client.ts, server.ts
+│   └── types/index.ts      # Tipos compartidos + FpRole + FP_ROLES
+├── middleware.ts            # Protección de rutas /team/* y /area-privada/*
+├── next.config.mjs
+└── public/                 # FORMA_PRIMA_BLANCO.png (logo para PDFs y emails)
+```
+
+---
+
+## 3. Arquitectura: Server Actions vs API Routes
+
+**Regla general:** mutaciones → Server Actions. Acceso externo / PDFs server-side / webhooks → API Routes.
+
+| Patrón | Cuándo usarlo |
+|---|---|
+| `app/actions/*.ts` | CRUD de BD, lógica de negocio, todo lo que solo necesita un fetch interno |
+| `app/api/*/route.ts` | Generación de PDFs (respuesta binaria), webhooks DocuSign, jobs cron, endpoints de IA, endpoints que necesitan autenticación por header (`CRON_SECRET`, `PORTAL_SECRET`) |
+
+**Supabase clients:**
+- `lib/supabase/server.ts` — cliente con cookies de sesión (para leer el usuario autenticado)
+- `lib/supabase/admin.ts` — cliente con `SUPABASE_SERVICE_ROLE_KEY` (bypasea RLS, solo en servidor)
+- `lib/supabase/client.ts` — cliente browser (para componentes client-side)
+
+El patrón estándar en cada Server Action:
+```typescript
+async function requirePartner() {          // o requireManagerOrPartner() / requireAnyFP()
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Sin sesión activa.')
+  const { data: profile } = await supabase.from('profiles').select('rol').eq('id', user.id).single()
+  if (!profile || profile.rol !== 'fp_partner') throw new Error('Sin permisos.')
+}
+// Luego: const admin = createAdminClient() para todas las operaciones de BD
+```
+
+---
+
+## 4. Sistema de roles
+
+```typescript
+type FpRole = 'fp_team' | 'fp_manager' | 'fp_partner' | 'fp_biz_dev'
+```
+
+| Rol | Descripción | Acceso |
+|---|---|---|
+| `fp_partner` | Socio/dueño | Todo: finanzas, costes, contratos, equipo, facturas emitidas |
+| `fp_manager` | Manager | Captación, proyectos, clientes, FP Execution (sin finanzas macro) |
+| `fp_team` | Equipo técnico | Proyectos, time tracker, clientes (solo plataforma), proveedores |
+| `fp_biz_dev` | Biz development | Captación (leads, propuestas, contratos, due diligencia), proyectos, time tracker, marketing |
+| `cliente` | Cliente externo | Solo `/portal/[id]` y `/area-privada` |
+
+Los guards de rutas están en `app/team/layout.tsx` (sidebar) y en el `middleware.ts`
+(redirección). Los guards de actions están en cada función `require*()`.
+
+---
+
+## 5. Bloques funcionales (módulos)
+
+### 5.1 Captación (`/team/captacion`)
+Funnel comercial completo. Acceso: `fp_partner`, `fp_manager`, `fp_biz_dev`.
+
+**Flujo:** Lead → Propuesta → Contrato (firmado vía DocuSign o manualmente)
+
+- **Leads** — `app/actions/leads.ts` + `LeadsPage.tsx`
+- **Propuestas** — `app/actions/propuestas.ts` + `PropuestaDetalle.tsx`
+  - Genera PDF con `@react-pdf/renderer` (`components/pdfs/PropuestaPDF.tsx`)
+  - Se envía por email vía `app/api/propuestas/[id]/enviar/route.ts`
+  - Previsualización vía `app/api/propuestas/preview-pdf/route.ts`
+- **Contratos** — `app/actions/contratos.ts` + `ContratoDetalle.tsx`
+  - Número auto-generado: `C-YYYY-NNN`
+  - PDF: `components/pdfs/ContratoPDF.tsx`
+  - Firma DocuSign: `lib/docusign/client.ts`, webhook en `app/api/webhooks/docusign/route.ts`
+  - Compartir vía email: `app/api/contratos/[id]/compartir/route.ts`
+- **Plantilla propuestas** — `app/actions/plantillaPropuestas.ts`
+  - 5 servicios base definidos en `lib/propuestas/config.ts`: `anteproyecto`, `proyecto_ejecucion`, `direccion_obra`, `interiorismo` + 1 más
+  - Tabla `propuestas_servicios_plantilla` — sobrescribe los defaults del config
+  - Soporte de traducción EN por servicio
+- **Due Diligencia Técnica** — `app/actions/...` + `DueDiligenciaPage.tsx`
+  - PDF vía `app/api/due-diligencia/preview/route.ts` y `enviar/route.ts`
+  - Defaults en `lib/pdfs/dueDiligenciaDefaults.ts`
+
+### 5.2 Proyectos (`/team/proyectos`)
+Gestión interna de proyectos activos. Acceso: todos los roles FP.
+
+- `ProyectoDetalle.tsx` — ficha completa: fases, tasks, responsables, documentación
+- `DocumentacionTab.tsx` — planos PDF, renders, uploads a Supabase Storage (`portal` bucket)
+- `KanbanBoard.tsx` — vista kanban de tasks por proyecto
+- `PlantillaManager.tsx` — plantilla de fases reutilizable
+- `RatiosTable.tsx` — ratios objetivo por fase (solo `fp_partner`)
+- Tabla `catalogo_fases` — fases tipo (Anteproyecto, Proyecto de Ejecución, Obra, etc.)
+- Tabla `proyecto_fases` — fases asignadas a un proyecto concreto
+
+### 5.3 Finanzas (`/team/finanzas`) — solo `fp_partner`
+Sistema de control financiero completo.
+
+**Sub-módulos:**
+| Ruta | Componente | Función |
+|---|---|---|
+| `/operativas/costes` | `CostesOperativasPage` | Costes fijos del estudio, salarios del equipo |
+| `/operativas/proyectos` | `ProyectosAnalisisPage` → `ProyectoFinanzasDetalle` | P&L por proyecto |
+| `/macro/costes` | `CostesGeneralesPage` | Costes fijos + variables + historial |
+| `/facturacion/control` | `FacturacionKanbanPage` → `FacturacionProyectoDetalle` | Facturas por proyecto (kanban) |
+| `/facturacion/emitidas` | `FacturasEmitidasPage` | Facturas emitidas en PDF |
+| `/facturacion/empresa` | `InfoEmpresaPage` | Datos fiscales del estudio |
+| `/scanner` | `ScannerPage` | Escaneo de tickets con OCR (IA) |
+| `/conciliacion` | `ReconciliationPage` | Conciliación bancaria |
+| `/dashboard` | `FinanzasDashboard` | Dashboard general (aún en construcción) |
+
+**Sistema de históricos** (muy importante):
+- `salarios_historia` — snapshot de salario+horas cada vez que cambia un miembro
+- `costos_fijos_historia` — snapshot de coste fijo cada vez que cambia
+- Esto garantiza que los cálculos de costes pasados no se alteran con cambios presentes
+- Helpers: `lib/finanzas/salaryHistory.ts`, `lib/finanzas/fixedCostHistory.ts`
+
+**Facturas emitidas** (`facturas_emitidas`):
+- Se generan desde contratos (`emitirFacturaDesdeContrato` en `facturacion.ts`)
+- O se crean manualmente desde la lista de emitidas
+- Numeración: serie `F`, formato `F-NNN`, con offset configurable en `estudio_config`
+- PDF: `components/pdfs/FacturaEmitidaPDF.tsx`
+- Envío por email con recordatorio/reenvío
+
+### 5.4 Clientes (`/team/clientes`)
+- **Base de datos** (`/base-datos`) — `ClientesBDPage` — CRUD de clientes. `fp_partner` + `fp_manager`
+- **Plataforma interna** (`/plataforma/interna`) — `PlataformaInternaPage` + `PlataformaInternaDetalle` — vista de proyectos del cliente para el equipo
+- **Vista del cliente** (`/plataforma/externa`) — `PlataformaExternaPage` — simulación de lo que ve el cliente
+- **Portal real** (`/portal/[id]`) — `ClientPortal` — acceso del cliente (token-based vía `PORTAL_SECRET`)
+
+**Visitas de obra** (desde `PlataformaInternaDetalle`):
+- Modal `RegistrarVisitaModal.tsx` — registra visita, genera PDFs (acta cliente + acta constructor), envía emails
+- Action: `createActaVisita` + `sendActaByEmail` en `app/actions/actas.ts`
+- PDF: `components/pdfs/ActaVisitaObraPDF.tsx`
+- IA mejora instrucciones: `app/api/profesionalizar-instrucciones/route.ts` (Claude Haiku)
+
+### 5.5 Proveedores (`/team/proveedores`)
+CRUD de proveedores con contactos secundarios. Acceso: `fp_partner`, `fp_manager`, `fp_team`.
+- Tabla `proveedores` + `proveedor_contactos`
+- Datos fiscales para facturación (NIF, razón social, IBAN, forma de pago)
+
+### 5.6 FP Execution (`/team/fp-execution`) — `fp_partner`, `fp_manager`
+Sistema de gestión de licitaciones y subcontratación. Es un módulo independiente y complejo.
+
+**Flujo:** Proyecto FPE → Template (scope) → Tender (licitación) → Invitaciones a partners → Bids → Contrato FPE
+
+- Tablas con prefijo `fpe_*`: `fpe_projects`, `fpe_partners`, `fpe_tenders`, `fpe_invitations`, `fpe_bids`, `fpe_contracts`, `fpe_documents`
+- Portal externo para partners: `/execution-portal/[token]` (`components/fp-execution-portal/PortalPage.tsx`)
+- PDF de contrato FPE: `components/pdfs/FpeContractPDF.tsx`
+- Tipos en `lib/fp-execution/domain.ts` (prefijo `Fpe*`)
+
+### 5.7 Área Interna (`/team/area-interna`)
+Panel de gestión interna: avisos, mejoras/bugs, datos personales del equipo.
+- `AdminPanel.tsx` — gestión de equipo (solo `fp_partner`)
+- `AreaInternaPage.tsx` — panel general del equipo
+- `PersonalDashboard.tsx` — información personal
+- Tablas: `avisos`, `mejoras`
+
+### 5.8 Apps (`/team/apps`)
+Aplicaciones internas. Acceso: todos los roles FP.
+
+- **Design Hunter** (`/team/apps/design-hunter`) — `components/team/design-hunter/DesignHunterPage.tsx`
+  - Registro visual de inspiración/referencias organizados por viajes (`design_hunter_viajes`)
+  - Cada entrada (`design_hunter_entries`) tiene: titulo, descripcion, categoria, tags, foto_url, `media_urls text[]` (múltiples imágenes/videos)
+  - Subida a Supabase Storage bucket `design-hunter` (público). RLS policies requeridas en `storage.objects`
+  - Soporta multiselección, cámara directa (`capture="environment"`), thumbnails de vídeo (primer frame), lightbox fullscreen, vista "Stories" tipo Instagram
+  - `lib/design-hunter.ts` — tipos + `isVideoUrl()`
+
+### 5.9 Marketing (`/team/marketing`) — `fp_partner`, `fp_biz_dev`
+Gestión de contenido para redes sociales.
+
+- **Post Manager** (`/team/marketing/post-manager`) — `components/team/PostManagerPage.tsx`
+  - Kanban con 6 columnas de estado: `borrador → en_revision → feedback_disponible → aprobado → programado → publicado`
+  - Tabs por red social: Instagram / LinkedIn
+  - Creación/edición de posts con: tipo, título, caption, hashtags, ubicación (Instagram), fecha programada, media (imagen/vídeo)
+  - Media subida a bucket `marketing` (público). Registros en `marketing_post_media`
+  - Comentarios/feedback en `marketing_post_comentarios`
+  - Flujo de aprobación con notificaciones via `avisos` (ver tabla)
+  - Transiciones de estado según rol: `fp_biz_dev` crea y gestiona, `fp_partner` aprueba/rechaza
+  - `lib/marketing.ts` — tipos + `getTransitions(status, rol)` + `POST_STATUSES`
+  - `app/actions/marketing-posts.ts` — todas las acciones CRUD
+- **Time Tracker Sections** (`/team/marketing/time-tracker-sections`) — placeholder, en desarrollo
+
+**Flujo de aprobación:**
+`biz_dev` crea borrador → envía a revisión → `partner` aprueba o rechaza con feedback → `biz_dev` reenvía → `partner` aprueba → `biz_dev` programa → marca publicado
+
+**Avisos generados automáticamente:**
+- `en_revision` → aviso `informativo` a `fp_partner`
+- `aprobado` → aviso `informativo` a `fp_biz_dev`
+- `publicado` → aviso `informativo` a ambos
+- rechazo (`borrador` por partner) → aviso `importante` a `fp_biz_dev`
+- feedback (comentario de partner en `en_revision`) → aviso `importante` a `fp_biz_dev`
+
+### 5.10 Time Tracker (`/team/time-tracker`)
+Registro de horas por proyecto y fase. Todos los roles FP.
+- `TimeTracker.tsx` — UI principal (cliente)
+- `app/actions/time-tracker.ts` — deleteTimeEntry
+- Tabla `time_entries` (user_id, fecha, hora_inicio, horas, proyecto_id, fase_id, etc.)
+- Cron job de recordatorio: `app/api/cron/horas-faltantes/route.ts`
+
+---
+
+## 6. Base de datos — tablas principales
+
+### Usuarios y acceso
+| Tabla | Propósito |
+|---|---|
+| `profiles` | Perfil de cada usuario autenticado (nombre, rol, salario, horas_mensuales, avatar_url) |
+| `salarios_historia` | Histórico de salario+horas (valid_from / valid_to) |
+
+### Captación
+| Tabla | Propósito |
+|---|---|
+| `leads` | Potenciales clientes (origin, estado_lead, presupuesto_estimado) |
+| `propuestas` | Propuestas comerciales (servicios, PEM, honorarios calculados) |
+| `contratos` | Contratos (número C-YYYY-NNN, estado, DocuSign envelope_id) |
+| `propuestas_servicios_plantilla` | Override de textos de servicios (id = service_id o uuid para custom) |
+
+### Proyectos
+| Tabla | Propósito |
+|---|---|
+| `proyectos` | Proyectos internos (nombre, codigo, superficie, status, nivel_calidad) |
+| `proyecto_clientes` | Join many-to-many proyectos↔clientes |
+| `catalogo_fases` | Catálogo global de fases (numero, label, seccion, ratio) |
+| `proyecto_fases` | Fases activas de un proyecto (responsables, status, horas_objetivo) |
+| `tasks` | Tasks de un proyecto (codigo, titulo, responsable_ids, status, urgencia) |
+| `time_entries` | Registro de horas (user_id, fecha, hora_inicio, horas, proyecto_id, fase_id) |
+| `visitas_obra` | Actas de visita (PDFs en Storage, visible_cliente flag) |
+| `due_diligencia` | Informes de due diligencia técnica |
+
+### Clientes y proveedores
+| Tabla | Propósito |
+|---|---|
+| `clientes` | Base de datos de clientes (datos personales + fiscales) |
+| `proveedores` | Proveedores/constructores (datos fiscales, IBAN, forma_pago) |
+| `proveedor_contactos` | Contactos secundarios de un proveedor |
+
+### Finanzas
+| Tabla | Propósito |
+|---|---|
+| `facturas` | Facturas vinculadas a contratos (seccion, monto, status, clientes_ids) |
+| `facturas_emitidas` | Facturas reales emitidas (número, emisor, cliente, items, IVA, IRPF) |
+| `costos_fijos` | Costes fijos actuales del estudio |
+| `costos_fijos_historia` | Histórico de costes fijos (valid_from / valid_to) |
+| `costos_variables` | Costes variables (pueden estar vinculados a un proyecto_id) |
+| `estudio_config` | Datos fiscales del estudio, serie de facturación, offset de número |
+| `finanzas_config` | Configuración de finanzas (minoracion %, etc.) — key/value store |
+| `expense_scans` | Tickets escaneados con IA |
+| `bank_statements` | Movimientos bancarios para conciliación |
+
+### FP Execution
+| Tabla | Propósito |
+|---|---|
+| `fpe_projects` | Proyectos de licitación FP Execution |
+| `fpe_partners` | Empresas subcontratistas |
+| `fpe_tenders` | Licitaciones (vinculadas a un fpe_project) |
+| `fpe_invitations` | Invitaciones a partners para una licitación |
+| `fpe_bids` | Ofertas recibidas de partners |
+| `fpe_contracts` | Contratos FPE (estado, PDF firmado) |
+| `fpe_documents` | Documentos del proyecto (planos, specs) |
+| `fpe_template_chapters/units` | Template de scope (capítulos y unidades) |
+
+### Design Hunter
+| Tabla | Propósito |
+|---|---|
+| `design_hunter_viajes` | Colecciones/viajes de referencias |
+| `design_hunter_entries` | Entradas individuales (foto_url + `media_urls text[]` para múltiples archivos) |
+
+### Marketing
+| Tabla | Propósito |
+|---|---|
+| `marketing_posts` | Posts de Instagram/LinkedIn (titulo, caption, hashtags, status, red_social, autor_nombre) |
+| `marketing_post_media` | Media de cada post (url, tipo image/video, orden) |
+| `marketing_post_comentarios` | Comentarios/feedback en posts (autor_id, autor_nombre denormalizado) |
+
+### Misc
+| Tabla | Propósito |
+|---|---|
+| `mejoras` | Bugs y mejoras reportadas por el equipo |
+| `avisos` | Avisos internos. `visible_roles text[]` filtra por rol (null = todos). `nivel`: `informativo\|recordatorio\|importante\|urgente` |
+| `bienvenida_tokens` | Tokens de onboarding para nuevos clientes |
+
+---
+
+## 7. Variables de entorno
+
+| Variable | Propósito |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | URL del proyecto Supabase |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Clave pública anon de Supabase |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service role key (bypass RLS, solo servidor) |
+| `NEXT_PUBLIC_SITE_URL` | URL base del sitio (ej: `https://internal.formaprima.es`) |
+| `RESEND_API_KEY` | API key de Resend para envío de emails |
+| `ANTHROPIC_API_KEY` | API key de Anthropic para IA |
+| `PORTAL_SECRET` | Secret para tokens del portal de clientes (JWT/HMAC) |
+| `CRON_SECRET` | Bearer token para proteger los cron endpoints |
+| `NEXT_PUBLIC_MAPBOX_TOKEN` | Token de Mapbox (posiblemente para mapas en el portal) |
+| `DOCUSIGN_ACCOUNT_ID` | ID de cuenta DocuSign |
+| `DOCUSIGN_BASE_URL` | Base URL de DocuSign (demo vs prod) |
+| `DOCUSIGN_*` | Otras vars DocuSign (JWT key, integration key, etc.) |
+
+> **⚠️ `PORTAL_SECRET` y `CRON_SECRET` deben estar en Vercel production settings.**
+> Están en `.env.local` pero hay que añadirlos manualmente en Vercel si no están.
+
+---
+
+## 8. Rutas principales
+
+### Web pública
+```
+/                           Página principal (mock data)
+/proyectos                  Galería de proyectos
+/proyectos/[slug]           Detalle de proyecto
+/real-estate                Propiedades en venta
+/estudio                    Sobre el estudio
+/contacto                   Formulario de contacto
+```
+
+### Clientes
+```
+/login                      Login compartido (redirige según rol)
+/area-privada               Portal cliente (autenticado con Supabase)
+/portal/[id]                Vista de proyecto del cliente (token)
+/bienvenida/[token]         Onboarding de nuevo cliente
+/execution-portal/[token]   Portal para partners de FP Execution
+```
+
+### Área interna `/team`
+```
+/team/dashboard             Dashboard personal del equipo
+/team/time-tracker          Registro de horas
+/team/captacion             Índice captación
+/team/captacion/leads       CRM de leads
+/team/captacion/propuestas  Lista de propuestas
+/team/captacion/propuestas/[id]  Detalle/editor de propuesta
+/team/captacion/contratos   Lista de contratos
+/team/captacion/contratos/[id]   Detalle/editor de contrato
+/team/captacion/plantilla-propuestas  Editor de servicios base
+/team/captacion/due-diligencia  Due diligencia técnica
+/team/proyectos             Lista de proyectos internos
+/team/proyectos/[id]        Detalle de proyecto (fases, tasks, docs)
+/team/proyectos/plantilla   Plantilla de fases
+/team/proyectos/ratios      Ratios objetivo por fase
+/team/review                Review de proyectos
+/team/clientes/base-datos   Base de datos de clientes
+/team/clientes/plataforma/interna       Lista proyectos (equipo)
+/team/clientes/plataforma/interna/[id]  Detalle proyecto cliente (equipo)
+/team/clientes/plataforma/externa       Vista del cliente (preview)
+/team/proveedores           Gestión de proveedores
+/team/finanzas              Dashboard finanzas
+/team/finanzas/operativas/costes        Costes y salarios
+/team/finanzas/operativas/proyectos     P&L por proyecto
+/team/finanzas/operativas/proyectos/[id] Detalle finanzas proyecto
+/team/finanzas/macro/costes Costes generales (fijos + variables)
+/team/finanzas/facturacion/control      Kanban facturación por proyecto
+/team/finanzas/facturacion/control/[id] Detalle facturación proyecto
+/team/finanzas/facturacion/emitidas     Facturas emitidas
+/team/finanzas/facturacion/empresa      Datos fiscales estudio
+/team/finanzas/scanner      Scanner de tickets
+/team/finanzas/conciliacion Conciliación bancaria
+/team/fp-execution/dashboard     Dashboard FP Execution
+/team/fp-execution/projects      Lista proyectos FPE
+/team/fp-execution/projects/[id] Detalle proyecto FPE
+/team/fp-execution/partners      Directorio de partners
+/team/fp-execution/template      Editor de template de scope
+/team/area-interna          Panel interno del equipo
+/team/mejoras               Bugs y mejoras
+/team/equipo                Gestión del equipo (solo fp_partner)
+/team/perfil                Perfil personal
+/team/apps                  Índice de apps
+/team/apps/design-hunter    Design Hunter (inspiración/referencias)
+/team/marketing             Índice de marketing
+/team/marketing/post-manager          Kanban de posts por red social
+/team/marketing/time-tracker-sections Time tracker de secciones (en desarrollo)
+```
+
+### API Routes
+```
+/api/propuestas/[id]/enviar         POST — envía propuesta por email
+/api/propuestas/preview-pdf         POST — genera PDF preview de propuesta
+/api/contratos/[id]/compartir       POST — comparte contrato por email
+/api/contratos/[id]/docusign        POST — envía contrato a DocuSign
+/api/contratos/preview-pdf          POST — genera PDF preview de contrato
+/api/due-diligencia/preview         POST — genera PDF due diligencia
+/api/due-diligencia/enviar          POST — envía due diligencia por email
+/api/facturas-emitidas/[id]/pdf     GET  — descarga PDF de factura
+/api/facturas-emitidas/[id]/enviar  POST — envía factura por email
+/api/facturas-emitidas/[id]/recordatorio  POST — recordatorio de pago
+/api/facturas-emitidas/[id]/reenviar      POST — reenvía factura
+/api/facturas-emitidas/batch-pdf    POST — ZIP con varios PDFs
+/api/facturas-emitidas/emit         POST — emite factura borrador
+/api/facturas-emitidas/preview-pdf  POST — preview factura
+/api/profesionalizar-instrucciones  POST — mejora texto con IA (Claude Haiku)
+/api/scan-ticket                    POST — escanea ticket con IA
+/api/portal/verify                  POST — verifica token del portal cliente
+/api/bank-statement                 POST — importa extracto bancario
+/api/bank-statement/export          GET  — exporta extracto
+/api/expense-scans/upload           POST — sube imagen de ticket
+/api/expense-scans/backfill-hora    POST — backfill
+/api/expense-scans/export           GET  — exporta tickets
+/api/exchange-rates                 GET  — tipos de cambio
+/api/time-tracker-translator        POST — traduce categorías de time tracker
+/api/translate-servicio             POST — traduce servicio al inglés
+/api/mejoras/generar-prompt         POST — genera prompt de mejora
+/api/execution-portal/document      GET  — descarga documento FPE
+/api/fpe-documents/upload           POST — sube documento FPE
+/api/fpe-documents/upload-url       POST — URL firmada para upload
+/api/fpe-portal/bid                 POST — submit de oferta de partner
+/api/fpe-portal/question            POST — pregunta de partner
+/api/webhooks/docusign              POST — webhook de eventos DocuSign
+/api/cron/horas-faltantes           GET  — recuerda registrar horas
+/api/cron/docs-faltantes            GET  — avisa de documentos pendientes
+/api/cron/facturas-cobrables        GET  — avisa de facturas por cobrar
+/api/cron/fpe-reminders             GET  — recordatorios FPE
+/api/test-email                     GET  — test de envío de email
+```
+
+---
+
+## 9. Convenciones del proyecto
+
+### Naming de Server Actions
+
+| Prefijo | Semántica |
+|---|---|
+| `create*` | Crea un registro nuevo en BD (antes: `add*`) |
+| `update*` | Actualiza un registro existente |
+| `delete*` | Elimina un registro |
+| `send*` | Envía algo por email u otro canal externo |
+| `get*` | Lectura (aunque rara vez; la mayoría de lecturas son en Server Components) |
+
+**Convenciones específicas:**
+- `createProveedorVacio()` — crea proveedor vacío (no recibe data)
+- `updatePlantillaServicio()` — upsert de servicio de plantilla (no "save")
+- `updateServicioTraduccion()` — upsert de traducción EN de un servicio
+- `createActaVisita()` — genera PDFs y crea el registro
+- `sendActaByEmail()` — envía PDFs por email
+
+### Naming de variables de estado React
+
+| Patrón | Uso |
+|---|---|
+| `is*` / `setIs*` | Booleanos de estado (loading, error, etc.) |
+| `isDocusignLoading` | ¿Está enviando a DocuSign? |
+| `isFirmando` | ¿Está en proceso de firma? |
+| `isCompartiendo` | ¿Está compartiendo? |
+| `isSavingContacto` | ¿Está guardando un contacto? |
+| `isUploadingPlanos` | ¿Está subiendo planos? |
+| `isSavingResponsables` | ¿Está guardando responsables? |
+| Nombre descriptivo completo | `contactoForm`, `contactoError` — sin prefijos crípticos (evitar `cForm`, `cError`) |
+
+### TypeScript / tipos
+- `FpRole` y `FP_ROLES` viven **solo** en `lib/types/index.ts`
+- No redefinir localmente en layouts ni pages
+- Prefijo `Fpe*` para todos los tipos del módulo FP Execution
+- `ProyectoInterno` = proyecto del área interna del equipo
+- `Proyecto` = tipo web pública (menor, solo para display)
+
+### PDF rendering
+- Todos los PDFs usan `@react-pdf/renderer` server-side
+- El config de Next.js los excluye del bundle con `serverExternalPackages`
+- Las API routes de PDFs hacen `dynamic import` del renderer para evitar bundling estático:
+  ```typescript
+  const reactPdf = await import('@react-pdf/renderer')
+  const { buildXxxElement } = await import('@/components/pdfs/XxxPDF')
+  ```
+- `stripMd()` se aplica antes de pasar texto a PDF (asteriscos de la IA no funcionan en PDF)
+- **NO usar flags regex `s` (dotAll)**  — el target de TS no lo soporta. Usar `[^*]+` en lugar de `.+?`
+
+### Estilos en el área interna
+- **No se usa Tailwind en componentes del área interna** (`/team/*`)
+- Todos los estilos son objetos inline `style={{...}}`
+- Paleta: `#1A1A1A` (negro base), `#F8F7F4` (cream background), `#D85A30` (naranja accent), `#F0EEE8` (borde suave)
+
+### Supabase
+- **Siempre usar `createAdminClient()`** para escribir desde Server Actions (bypasea RLS)
+- **Usar `createClient()`** solo para leer el usuario autenticado (nunca para escribir en actions que ya verificaron permisos manualmente)
+- El admin client tiene `cache: 'no-store'` para evitar caché de fetch
+- **Joins anidados** (`tabla:otra_tabla(...)`) requieren que PostgREST haya cacheado las FK. Con tablas recién creadas puede fallar silenciosamente. Usar queries separadas + `.in('post_id', postIds)` como alternativa robusta
+- **`avisos.nivel`** acepta solo `'informativo' | 'recordatorio' | 'importante' | 'urgente'`. No usar `'info'` ni `'warning'`
+- **Storage upload desde cliente**: usar `createClient()` (browser) con `supabase.storage.from(bucket).upload(...)`. Requiere RLS policy `FOR INSERT TO authenticated WITH CHECK (bucket_id = 'X')` en `storage.objects`
+- **Crear bucket público vía SQL**: `INSERT INTO storage.buckets (id, name, public) VALUES ('X', 'X', true) ON CONFLICT (id) DO UPDATE SET public = true`
+- **Recargar schema cache** tras crear tablas nuevas: `NOTIFY pgrst, 'reload schema'`
+
+---
+
+## 10. Partes críticas — qué NO tocar sin entender bien
+
+### 🔴 Sistema de históricos de costes/salarios
+`costos_fijos_historia` y `salarios_historia` tienen lógica de `valid_from`/`valid_to` muy específica.
+Cada cambio de salario o coste fijo cierra el registro anterior (valid_to = ayer) y abre uno nuevo.
+Si se edita el mismo día, actualiza el de hoy en lugar de crear uno nuevo (para evitar gaps).
+**Romper este sistema afecta todos los cálculos de P&L histórico.**
+
+### 🔴 `@react-pdf/renderer` — import dinámico
+Nunca importar directamente en un Server Component de Next.js.
+Siempre usar `await import(...)` en la API route. Si se importa estáticamente, el build falla
+porque `@react-pdf/renderer` usa APIs de Node.js incompatibles con el bundler estático de Next.
+
+### 🔴 DocuSign webhook (`/api/webhooks/docusign`)
+Recibe eventos de DocuSign cuando se firma un contrato. Actualiza el estado del contrato en BD.
+No modificar sin entender el flujo de envelopes y el sistema de autenticación JWT de DocuSign.
+
+### 🔴 Portal de clientes — autenticación por token
+`/portal/[id]` no usa Supabase Auth. Usa `PORTAL_SECRET` para firmar/verificar tokens.
+`ClientPortalGate.tsx` verifica el token antes de renderizar. No confundir con el flujo `/area-privada` (que sí usa Auth).
+
+### 🟡 `SECCIONES_PRIVADAS` en `lib/finanzas/costs.ts`
+Las secciones `'Margen prorrateado de obra'` y `'Margen de mobiliario'` nunca deben
+mostrarse al cliente. Verificar siempre al añadir nuevas vistas de facturación.
+
+### 🟡 Propuesta: `calcPropuesta()` en `lib/propuestas/config.ts`
+Los honorarios se calculan sobre el PEM (Presupuesto de Ejecución Material) con splits
+por servicio. La lógica de cálculo es delicada y está vinculada a la generación del PDF
+y al contrato generado desde la propuesta.
+
+### 🟡 Número de facturas emitidas
+El número correlativo de facturas usa serie `F` con un offset configurable en `estudio_config.factura_numero_inicio`.
+El cálculo es: `max(número actual, offset) + 1`. No modificar sin entender este sistema.
+
+### 🟡 Middleware y FP_ROLES
+`middleware.ts` tiene su propia lista `FP_ROLES` inline (no puede importar de `lib/types`
+por potenciales incompatibilidades con edge runtime). Si se añade un rol nuevo, hay que
+actualizarlo en **ambos**: `lib/types/index.ts` Y `middleware.ts`.
+
+---
+
+## 11. Estado actual del desarrollo
+
+### ✅ Terminado y en producción
+- Web pública completa (proyectos, real estate, estudio, contacto)
+- Portal de clientes (visitas de obra, documentos, fases)
+- Sistema de captación completo (leads → propuestas → contratos con DocuSign)
+- Plantilla de propuestas con servicios base + custom + traducciones EN
+- Due Diligencia Técnica (PDF + email)
+- Módulo de proyectos internos (fases, tasks, kanban, documentación, renders)
+- Time Tracker completo
+- Sistema de finanzas: costes fijos/variables, históricos, P&L por proyecto
+- Facturación: control por proyecto (kanban), facturas emitidas con PDF y envío
+- Conciliación bancaria
+- Scanner de tickets (OCR con IA)
+- Proveedores con contactos secundarios
+- FP Execution (licitaciones, partners, contratos)
+- Sistema de avisos y mejoras
+- Área interna del equipo + gestión de equipo
+- Bienvenida token-based para nuevos clientes
+- Cron jobs (horas faltantes, docs faltantes, facturas cobrables)
+- Naming audit completo: `create/update/send` prefijos, variables descriptivas
+- Design Hunter (multiselección, vídeos, thumbnails, lightbox, vista Stories)
+- Marketing Post Manager (kanban, tabs Instagram/LinkedIn, media upload, flujo de aprobación, avisos)
+
+### 🚧 En progreso / incompleto
+- `/team/finanzas/facturacion/dashboard` — ruta existe pero redirige o está vacía
+- `/team/finanzas` (índice) — página de entrada a finanzas, posiblemente básica
+- Módulo de review (`/team/review`) — estructura creada, contenido pendiente
+- `/team/marketing/time-tracker-sections` — placeholder, en desarrollo
+
+### 📋 Notas de deuda técnica
+- `next.config.mjs` usa `serverExternalPackages` (key de Next.js 15), genera warning en Next.js 14. Funciona pero produce un warning de config en cada build.
+- Los estilos inline en el área interna hacen el código verboso. No hay plan de migrar a Tailwind (decisión consciente para control total de UI).
+- `lib/data/mock.ts` usa datos estáticos para la web pública. No hay CMS conectado.
+
+---
+
+## 12. Información de la empresa (para PDFs y emails)
+
+- **Nombre legal:** GEINEX GROUP, S.L.
+- **NIF:** B44873552
+- **Dirección:** CL/ Ppe de Vergara 56 6ª 2ª · 28006 Madrid
+- **Email:** contacto@formaprima.es
+- **Web interna:** `https://internal.formaprima.es`
+- **Logo:** `/public/FORMA_PRIMA_BLANCO.png` (fondo oscuro) — referenciado en PDFs y emails
+
+---
+
+## 13. Comandos útiles
+
+```bash
+npm run dev          # Desarrollo local
+npm run build        # Build de producción (verifica types)
+vercel --prod --yes  # Deploy a producción
+```
+
+El proyecto está en Vercel, proyecto `estudio-web` bajo el equipo `forma-prima`.
+URL de producción: `https://internal.formaprima.es` (alias de Vercel).

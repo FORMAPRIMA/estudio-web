@@ -983,12 +983,12 @@ function FaseRow({ pf, catalogo, faseTasks, faseProgress, responsableNames, canE
   const [starting, setStarting] = useState(false)
   const [editingResp, setEditingResp] = useState(false)
   const [localResp, setLocalResp] = useState<string[]>(pf.responsables)
-  const [savingResp, setSavingResp] = useState(false)
+  const [isSavingResponsables, setIsSavingResponsables] = useState(false)
 
   const handleSaveResp = async () => {
-    setSavingResp(true)
+    setIsSavingResponsables(true)
     await onUpdateFaseResponsables(pf.id, localResp)
-    setSavingResp(false)
+    setIsSavingResponsables(false)
     setEditingResp(false)
   }
 
@@ -1029,9 +1029,9 @@ function FaseRow({ pf, catalogo, faseTasks, faseProgress, responsableNames, canE
           {editingResp && (
             <div className="flex items-center gap-2 hidden sm:flex">
               <ResponsablesDropdown teamMembers={teamMembers} selected={localResp} onChange={setLocalResp} />
-              <button onClick={handleSaveResp} disabled={savingResp}
+              <button onClick={handleSaveResp} disabled={isSavingResponsables}
                 className="text-[9px] tracking-widest uppercase font-light px-2.5 py-1 bg-ink text-cream hover:bg-ink/80 transition-colors disabled:opacity-40">
-                {savingResp ? '…' : 'Guardar'}
+                {isSavingResponsables ? '…' : 'Guardar'}
               </button>
               <button onClick={() => setEditingResp(false)}
                 className="text-[9px] tracking-widest uppercase font-light text-meta hover:text-ink transition-colors">

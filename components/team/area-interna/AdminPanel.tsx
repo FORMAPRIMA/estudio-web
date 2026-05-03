@@ -126,7 +126,7 @@ function NominasTab({ allMembers, allNominas }: { allMembers: TeamMember[]; allN
   const [uploadMsg,   setUploadMsg]   = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
   const uploadFileRef = useRef<HTMLInputElement>(null)
 
-  const ROL_ORDER: Record<string, number> = { fp_partner: 0, fp_manager: 1, fp_team: 2 }
+  const ROL_ORDER: Record<string, number> = { fp_partner: 0, fp_manager: 1, fp_biz_dev: 2, fp_team: 3 }
   const sortedMembers = [...allMembers].sort(
     (a, b) => (ROL_ORDER[a.rol] ?? 3) - (ROL_ORDER[b.rol] ?? 3) || a.nombre.localeCompare(b.nombre)
   )
@@ -540,12 +540,13 @@ function ParticipacionesTab({
 // ── Equipo tab ────────────────────────────────────────────────────────────────
 
 const ROLE_LABELS_EQ: Record<string, string> = {
-  fp_team: 'Team', fp_manager: 'Manager', fp_partner: 'Partner',
+  fp_team: 'Team', fp_manager: 'Manager', fp_partner: 'Partner', fp_biz_dev: 'Biz Dev',
 }
 const ROLE_COLORS_EQ: Record<string, { bg: string; text: string; border: string }> = {
   fp_team:    { bg: '#1D9E7514', text: '#1D9E75', border: '#1D9E7530' },
   fp_manager: { bg: '#378ADD14', text: '#378ADD', border: '#378ADD30' },
   fp_partner: { bg: '#D85A3014', text: '#D85A30', border: '#D85A3030' },
+  fp_biz_dev: { bg: '#8B5CF614', text: '#8B5CF6', border: '#8B5CF630' },
 }
 const AVATAR_PALETTE = ['#D85A30','#E8913A','#C9A227','#E6B820','#B8860B','#D4622A','#F0A500','#C07020']
 
@@ -609,7 +610,7 @@ function EquipoTab({ allMembers: initialMembers }: { allMembers: TeamMember[] })
   }
 
   // ── Add form state ──
-  const [addForm,  setAddForm]  = useState({ nombre: '', apellido: '', email: '', password: '', rol: 'fp_team' as 'fp_team' | 'fp_manager' | 'fp_partner' })
+  const [addForm,  setAddForm]  = useState({ nombre: '', apellido: '', email: '', password: '', rol: 'fp_team' as 'fp_team' | 'fp_manager' | 'fp_partner' | 'fp_biz_dev' })
   const [addMsg,   setAddMsg]   = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
   const [adding,   setAdding]   = useState(false)
 
@@ -718,7 +719,7 @@ function EquipoTab({ allMembers: initialMembers }: { allMembers: TeamMember[] })
     setAddForm({ nombre: '', apellido: '', email: '', password: '', rol: 'fp_team' })
   }
 
-  const ROL_ORDER: Record<string, number> = { fp_partner: 0, fp_manager: 1, fp_team: 2 }
+  const ROL_ORDER: Record<string, number> = { fp_partner: 0, fp_manager: 1, fp_biz_dev: 2, fp_team: 3 }
   const sorted = [...members].sort((a, b) => (ROL_ORDER[a.rol] ?? 3) - (ROL_ORDER[b.rol] ?? 3) || a.nombre.localeCompare(b.nombre))
 
   const thSt: React.CSSProperties = {
@@ -773,6 +774,7 @@ function EquipoTab({ allMembers: initialMembers }: { allMembers: TeamMember[] })
                 <option value="fp_team">FP Team</option>
                 <option value="fp_manager">FP Manager</option>
                 <option value="fp_partner">FP Partner</option>
+                <option value="fp_biz_dev">FP Biz Dev</option>
               </select>
             </div>
           </div>
@@ -956,6 +958,7 @@ function EquipoTab({ allMembers: initialMembers }: { allMembers: TeamMember[] })
                               <option value="fp_team">FP Team</option>
                               <option value="fp_manager">FP Manager</option>
                               <option value="fp_partner">FP Partner</option>
+                              <option value="fp_biz_dev">FP Biz Dev</option>
                             </select>
                           </div>
                           <div>

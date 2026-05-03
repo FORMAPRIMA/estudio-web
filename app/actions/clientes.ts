@@ -36,7 +36,7 @@ async function requireAnyFP() {
 
 // ── Clientes CRUD ──────────────────────────────────────────────────────────
 
-export async function addCliente(): Promise<{ id: string } | { error: string }> {
+export async function createCliente(): Promise<{ id: string } | { error: string }> {
   try {
     await requireManagerOrPartner()
     const admin = createAdminClient()

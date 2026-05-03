@@ -10,6 +10,8 @@ import type { DashboardTask } from '@/components/team/dashboard/TasksUrgencia'
 import type { DashboardProyecto } from '@/components/team/dashboard/ProyectosCarrusel'
 import type { Aviso } from '@/components/team/dashboard/AvisosStrip'
 import type { FacturaCobrable } from '@/components/team/dashboard/FacturasCobrables'
+import { esAvisoVisiblePara } from '@/lib/dashboard/avisos-permisos'
+import type { FpRole } from '@/lib/types'
 
 export const metadata = { title: 'Dashboard' }
 export const dynamic = 'force-dynamic'
@@ -54,7 +56,7 @@ export default async function DashboardPage() {
   const [{ data: avisosRaw }, { data: archivadosRaw }] = await Promise.all([
     supabase
       .from('avisos')
-      .select('id, tipo, nivel, titulo, contenido, fecha_activa, hora_activa, fecha_caducidad, autor:profiles!autor_id(nombre)')
+      .select('id, tipo, nivel, titulo, contenido, fecha_activa, hora_activa, fecha_caducidad, visible_roles, linkeable_type, linkeable_id, link_label, autor:profiles!autor_id(nombre)')
       .lte('fecha_activa', today)
       .or(`fecha_caducidad.is.null,fecha_caducidad.gte.${today}`)
       .or(`destinatario_id.is.null,destinatario_id.eq.${user.id}`)
@@ -65,9 +67,11 @@ export default async function DashboardPage() {
       .eq('user_id', user.id),
   ])
 
+  const userRol = profile.rol as FpRole
   const archivedIds = new Set((archivadosRaw ?? []).map((r: any) => r.aviso_id))
   const avisos: Aviso[] = (avisosRaw ?? [])
     .filter((a: any) => !archivedIds.has(a.id))
+    .filter((a: any) => esAvisoVisiblePara(a.visible_roles, userRol))
     // If hora_activa is set, only show once that time has passed today
     .filter((a: any) => !a.hora_activa || a.fecha_activa < today || a.hora_activa <= nowTime)
     .map((a: any) => ({
@@ -80,6 +84,9 @@ export default async function DashboardPage() {
       hora_activa:     a.hora_activa ?? null,
       fecha_caducidad: a.fecha_caducidad ?? null,
       autor_nombre:    a.autor?.nombre ?? null,
+      linkeable_type:  a.linkeable_type ?? null,
+      linkeable_id:    a.linkeable_id   ?? null,
+      link_label:      a.link_label     ?? null,
     }))
 
   // ── Facturas cobrables + pendientes de pago (solo partners) ─────────────
@@ -104,7 +111,7 @@ export default async function DashboardPage() {
         .from('facturas_emitidas')
         .select(`
           id, numero_completo, fecha_emision, cliente_nombre, cliente_contacto,
-          cliente_id, proyecto_nombre, total,
+          cliente_id, proyecto_nombre, total, iban, forma_pago,
           clientes(id, email, email_cc)
         `)
         .eq('estado', 'enviada')
@@ -136,6 +143,8 @@ export default async function DashboardPage() {
         total:           f.total,
         fecha_emision:   f.fecha_emision,
         dias_pendiente:  dias,
+        iban:            f.iban        ?? null,
+        forma_pago:      f.forma_pago  ?? null,
       }
     })
   }

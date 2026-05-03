@@ -124,7 +124,7 @@ export default function DocumentacionTab({ proyectoId, renders: initialRenders, 
   const [lightboxIdx,  setLightboxIdx] = useState<number | null>(null)
   const [carouselIdx,  setCarouselIdx] = useState(0)
   const [uploading,    setUploading]   = useState(false)
-  const [uploadingPl,  setUploadingPl] = useState(false)
+  const [isUploadingPlanos,  setIsUploadingPlanos] = useState(false)
   const [error,        setError]       = useState<string | null>(null)
 
   // ── Upload renders ──────────────────────────────────────────────────────────
@@ -167,24 +167,24 @@ export default function DocumentacionTab({ proyectoId, renders: initialRenders, 
   const handlePlanosFile = async (files: File[]) => {
     const file = files[0]
     if (!file || file.type !== 'application/pdf') { setError('Solo se admite PDF para los planos.'); return }
-    setUploadingPl(true)
+    setIsUploadingPlanos(true)
     setError(null)
 
     const tokenResult = await getDocUploadToken(proyectoId, file.name, 'planos')
-    if ('error' in tokenResult) { setError(tokenResult.error); setUploadingPl(false); return }
+    if ('error' in tokenResult) { setError(tokenResult.error); setIsUploadingPlanos(false); return }
 
     const { token, path, publicUrl } = tokenResult
     const { error: upErr } = await supabase.storage
       .from('proyecto-planos')
       .uploadToSignedUrl(path, token, file, { contentType: 'application/pdf' })
 
-    if (upErr) { setError(upErr.message); setUploadingPl(false); return }
+    if (upErr) { setError(upErr.message); setIsUploadingPlanos(false); return }
 
     const res = await updateProyectoPlanos(proyectoId, publicUrl)
-    if ('error' in res) { setError(res.error); setUploadingPl(false); return }
+    if ('error' in res) { setError(res.error); setIsUploadingPlanos(false); return }
 
     setPlanos(publicUrl)
-    setUploadingPl(false)
+    setIsUploadingPlanos(false)
   }
 
   const prev = () => setCarouselIdx(i => (i - 1 + renders.length) % renders.length)
@@ -330,7 +330,7 @@ export default function DocumentacionTab({ proyectoId, renders: initialRenders, 
                   accept="application/pdf"
                   label="Reemplazar"
                   sublabel=""
-                  loading={uploadingPl}
+                  loading={isUploadingPlanos}
                   onFiles={handlePlanosFile}
                 />
               )}
@@ -342,7 +342,7 @@ export default function DocumentacionTab({ proyectoId, renders: initialRenders, 
               accept="application/pdf"
               label="Arrastra el PDF de planos aquí o haz clic para seleccionar"
               sublabel="Solo PDF — se reemplazará al subir uno nuevo"
-              loading={uploadingPl}
+              loading={isUploadingPlanos}
               onFiles={handlePlanosFile}
             />
           ) : (

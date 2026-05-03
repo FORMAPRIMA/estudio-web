@@ -97,7 +97,7 @@ export async function updateMemberCosts(
 
 // ── Costos fijos ──────────────────────────────────────────────────────────────
 
-export async function addCostoFijo(): Promise<{ id: string } | { error: string }> {
+export async function createCostoFijo(): Promise<{ id: string } | { error: string }> {
   try {
     await requirePartner()
     const admin = createAdminClient()
@@ -231,7 +231,7 @@ export async function updateFinanzasConfig(key: string, value: number): Promise<
 
 // ── Costos variables ──────────────────────────────────────────────────────────
 
-export async function addCostoVariable(data: {
+export async function createCostoVariable(data: {
   año: number; mes: number; categoria: string; concepto: string; monto: number
 }): Promise<{ id: string } | { error: string }> {
   try {
@@ -281,7 +281,7 @@ export async function deleteCostoVariable(id: string): Promise<{ success: true }
 
 // ── Costos variables de proyecto ──────────────────────────────────────────────
 
-export async function addCostoVariableProyecto(data: {
+export async function createCostoVariableProyecto(data: {
   proyecto_id: string
   proyecto_nombre: string
   concepto: string

@@ -1,13 +1,14 @@
 'use client'
 
 import React, { useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
 import {
   createChapter, updateChapter, deleteChapter,
   createUnit, updateUnit, deleteUnit,
   createLineItem, updateLineItem, deleteLineItem,
   createPhase, updatePhase, deletePhase,
-  createMilestone, updateMilestone, deleteMilestone,
-  setPhaseMilestoneLinks,
+  createMilestone, updateMilestone, deleteMilestone, mergeMilestones,
+  setPhaseMilestoneLinks, setLineItemPhases,
   createDiscipline, updateDiscipline, deleteDiscipline,
 } from '@/app/actions/fpe-template'
 
@@ -38,6 +39,7 @@ interface LineItem {
   orden: number
   activo: boolean
   discipline_id: string | null
+  phase_ids: string[]
 }
 
 interface Phase {
@@ -60,6 +62,9 @@ interface Unit {
   orden: number
   activo: boolean
   principal_discipline_id: string | null
+  label_cliente: string | null
+  descripcion_cliente: string | null
+  imagen_portada_url: string | null
   line_items: LineItem[]
 }
 
@@ -71,6 +76,9 @@ interface Chapter {
   activo: boolean
   duracion_pct: number
   principal_discipline_id: string | null
+  label_cliente: string | null
+  descripcion_cliente: string | null
+  imagen_portada_url: string | null
   phases: Phase[]
   units: Unit[]
 }
@@ -95,6 +103,16 @@ const S = {
     padding: '4px 10px', fontSize: 11, borderRadius: 4, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500,
     background: color ?? '#F0EEE8', color: color ? '#fff' : '#555',
   }),
+}
+
+async function uploadPortadaImage(file: File, folder: 'chapters' | 'units', entityId: string): Promise<string | null> {
+  const supabase = createClient()
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg'
+  const path = `portadas/${folder}/${entityId}/${Date.now()}.${ext}`
+  const { data, error } = await supabase.storage.from('warehouse').upload(path, file, { upsert: true })
+  if (error || !data) return null
+  const { data: { publicUrl } } = supabase.storage.from('warehouse').getPublicUrl(data.path)
+  return publicUrl
 }
 
 const overlay: React.CSSProperties = {
@@ -134,6 +152,10 @@ function ChapterModal({
   const [orden, setOrden] = useState(String(initial?.orden ?? 0))
   const [duracionPct, setDuracionPct] = useState(String(initial?.duracion_pct ?? 0))
   const [principalDiscId, setPrincipalDiscId] = useState<string>(initial?.principal_discipline_id ?? '')
+  const [labelCliente, setLabelCliente] = useState(initial?.label_cliente ?? '')
+  const [descripcionCliente, setDescripcionCliente] = useState(initial?.descripcion_cliente ?? '')
+  const [imagenPortadaUrl, setImagenPortadaUrl] = useState<string | null>(initial?.imagen_portada_url ?? null)
+  const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -153,15 +175,18 @@ function ChapterModal({
         orden: parseInt(orden) || 0,
         duracion_pct: pct,
         principal_discipline_id: pdid,
+        label_cliente: labelCliente.trim() || null,
+        descripcion_cliente: descripcionCliente.trim() || null,
+        imagen_portada_url: imagenPortadaUrl,
       })
       setSaving(false)
       if ('error' in res) { setError(res.error); return }
-      onSaved({ ...initial, nombre: nombre.trim(), descripcion: descripcion.trim() || null, orden: parseInt(orden) || 0, duracion_pct: pct, principal_discipline_id: pdid })
+      onSaved({ ...initial, nombre: nombre.trim(), descripcion: descripcion.trim() || null, orden: parseInt(orden) || 0, duracion_pct: pct, principal_discipline_id: pdid, label_cliente: labelCliente.trim() || null, descripcion_cliente: descripcionCliente.trim() || null, imagen_portada_url: imagenPortadaUrl })
     } else {
       const res = await createChapter({ nombre: nombre.trim(), descripcion: descripcion.trim() || null, orden: parseInt(orden) || 0, duracion_pct: pct, principal_discipline_id: pdid })
       setSaving(false)
       if ('error' in res) { setError(res.error); return }
-      onSaved({ id: res.id, nombre: nombre.trim(), descripcion: descripcion.trim() || null, orden: parseInt(orden) || 0, activo: true, duracion_pct: pct, principal_discipline_id: pdid, phases: [], units: [] })
+      onSaved({ id: res.id, nombre: nombre.trim(), descripcion: descripcion.trim() || null, orden: parseInt(orden) || 0, activo: true, duracion_pct: pct, principal_discipline_id: pdid, label_cliente: null, descripcion_cliente: null, imagen_portada_url: null, phases: [], units: [] })
     }
   }
 
@@ -208,7 +233,48 @@ function ChapterModal({
             </div>
             {error && <ErrorBanner msg={error} />}
           </div>
-          <div style={{ padding: '14px 24px', borderTop: '1px solid #E8E6E0', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+
+          {initial && (
+            <div style={{ padding: '16px 24px', borderTop: '1px solid #E8E6E0', background: '#FFF7F4' }}>
+              <p style={{ margin: '0 0 14px', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#D85A30' }}>
+                Memorias de Calidad — Presentación
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div>
+                  <label style={S.label}>Nombre en lookbook</label>
+                  <input value={labelCliente} onChange={e => setLabelCliente(e.target.value)} placeholder={initial.nombre} style={S.input} />
+                  <p style={{ margin: '3px 0 0', fontSize: 10, color: '#BBB' }}>Nombre visible al cliente. Si se deja vacío, se usa el nombre interno.</p>
+                </div>
+                <div>
+                  <label style={S.label}>Descripción editorial</label>
+                  <textarea rows={3} value={descripcionCliente} onChange={e => setDescripcionCliente(e.target.value)} placeholder="Texto de presentación que acompaña la portada de este capítulo en el anteproyecto…" style={S.textarea} />
+                </div>
+                <div>
+                  <label style={S.label}>Imagen de portada</label>
+                  {imagenPortadaUrl ? (
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                      <img src={imagenPortadaUrl} alt="portada" style={{ width: 120, height: 80, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }} />
+                      <button type="button" onClick={() => setImagenPortadaUrl(null)} style={{ ...S.btnSm('#DC2626'), color: '#fff' }}>Eliminar</button>
+                    </div>
+                  ) : (
+                    <label style={{ display: 'block', padding: '12px', border: '2px dashed #F0EEE8', borderRadius: 6, cursor: uploading ? 'default' : 'pointer', textAlign: 'center', fontSize: 11, color: '#999' }}>
+                      {uploading ? 'Subiendo…' : 'Haz click para subir imagen de portada'}
+                      <input type="file" accept="image/*" style={{ display: 'none' }} disabled={uploading} onChange={async (e) => {
+                        const file = e.target.files?.[0]
+                        if (!file) return
+                        setUploading(true)
+                        const url = await uploadPortadaImage(file, 'chapters', initial.id)
+                        setUploading(false)
+                        if (url) setImagenPortadaUrl(url)
+                      }} />
+                    </label>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+                    <div style={{ padding: '14px 24px', borderTop: '1px solid #E8E6E0', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button type="button" onClick={onClose} style={S.btn()}>Cancelar</button>
             <button type="submit" disabled={saving} style={S.btn(true)}>{saving ? 'Guardando…' : 'Guardar'}</button>
           </div>
@@ -236,6 +302,10 @@ function UnitModal({
   const [orden, setOrden] = useState(String(initial?.orden ?? 0))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [labelCliente, setLabelCliente] = useState(initial?.label_cliente ?? '')
+  const [descripcionCliente, setDescripcionCliente] = useState(initial?.descripcion_cliente ?? '')
+  const [imagenPortadaUrl, setImagenPortadaUrl] = useState<string | null>(initial?.imagen_portada_url ?? null)
+  const [uploading, setUploading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -247,15 +317,18 @@ function UnitModal({
         nombre: nombre.trim(),
         descripcion: descripcion.trim() || null,
         orden: parseInt(orden) || 0,
+        label_cliente: labelCliente.trim() || null,
+        descripcion_cliente: descripcionCliente.trim() || null,
+        imagen_portada_url: imagenPortadaUrl,
       })
       setSaving(false)
       if ('error' in res) { setError(res.error); return }
-      onSaved({ ...initial, nombre: nombre.trim(), descripcion: descripcion.trim() || null, orden: parseInt(orden) || 0 })
+      onSaved({ ...initial, nombre: nombre.trim(), descripcion: descripcion.trim() || null, orden: parseInt(orden) || 0, label_cliente: labelCliente.trim() || null, descripcion_cliente: descripcionCliente.trim() || null, imagen_portada_url: imagenPortadaUrl })
     } else {
       const res = await createUnit({ chapter_id: chapterId, nombre: nombre.trim(), descripcion: descripcion.trim() || null, orden: parseInt(orden) || 0 })
       setSaving(false)
       if ('error' in res) { setError(res.error); return }
-      onSaved({ id: res.id, chapter_id: chapterId, nombre: nombre.trim(), descripcion: descripcion.trim() || null, orden: parseInt(orden) || 0, activo: true, principal_discipline_id: null, line_items: [] })
+      onSaved({ id: res.id, chapter_id: chapterId, nombre: nombre.trim(), descripcion: descripcion.trim() || null, orden: parseInt(orden) || 0, activo: true, principal_discipline_id: null, label_cliente: null, descripcion_cliente: null, imagen_portada_url: null, line_items: [] })
     }
   }
 
@@ -282,7 +355,48 @@ function UnitModal({
             </div>
             {error && <ErrorBanner msg={error} />}
           </div>
-          <div style={{ padding: '14px 24px', borderTop: '1px solid #E8E6E0', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+
+          {initial && (
+            <div style={{ padding: '16px 24px', borderTop: '1px solid #E8E6E0', background: '#FFF7F4' }}>
+              <p style={{ margin: '0 0 14px', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#D85A30' }}>
+                Memorias de Calidad — Presentación
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div>
+                  <label style={S.label}>Nombre en lookbook</label>
+                  <input value={labelCliente} onChange={e => setLabelCliente(e.target.value)} placeholder={initial.nombre} style={S.input} />
+                  <p style={{ margin: '3px 0 0', fontSize: 10, color: '#BBB' }}>Nombre visible al cliente. Si se deja vacío, se usa el nombre interno.</p>
+                </div>
+                <div>
+                  <label style={S.label}>Descripción editorial</label>
+                  <textarea rows={3} value={descripcionCliente} onChange={e => setDescripcionCliente(e.target.value)} placeholder="Texto de presentación que acompaña la portada de esta unidad en el anteproyecto…" style={S.textarea} />
+                </div>
+                <div>
+                  <label style={S.label}>Imagen de portada</label>
+                  {imagenPortadaUrl ? (
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                      <img src={imagenPortadaUrl} alt="portada" style={{ width: 120, height: 80, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }} />
+                      <button type="button" onClick={() => setImagenPortadaUrl(null)} style={{ ...S.btnSm('#DC2626'), color: '#fff' }}>Eliminar</button>
+                    </div>
+                  ) : (
+                    <label style={{ display: 'block', padding: '12px', border: '2px dashed #F0EEE8', borderRadius: 6, cursor: uploading ? 'default' : 'pointer', textAlign: 'center', fontSize: 11, color: '#999' }}>
+                      {uploading ? 'Subiendo…' : 'Haz click para subir imagen de portada'}
+                      <input type="file" accept="image/*" style={{ display: 'none' }} disabled={uploading} onChange={async (e) => {
+                        const file = e.target.files?.[0]
+                        if (!file) return
+                        setUploading(true)
+                        const url = await uploadPortadaImage(file, 'units', initial.id)
+                        setUploading(false)
+                        if (url) setImagenPortadaUrl(url)
+                      }} />
+                    </label>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+                    <div style={{ padding: '14px 24px', borderTop: '1px solid #E8E6E0', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button type="button" onClick={onClose} style={S.btn()}>Cancelar</button>
             <button type="submit" disabled={saving} style={S.btn(true)}>{saving ? 'Guardando…' : 'Guardar'}</button>
           </div>
@@ -296,12 +410,14 @@ function UnitModal({
 
 function LineItemModal({
   unitId,
+  chapterPhases,
   initial,
   disciplines,
   onClose,
   onSaved,
 }: {
   unitId: string
+  chapterPhases: Phase[]
   initial: LineItem | null
   disciplines: Discipline[]
   onClose: () => void
@@ -312,14 +428,20 @@ function LineItemModal({
   const [unidad, setUnidad] = useState(initial?.unidad_medida ?? 'ud')
   const [orden, setOrden] = useState(String(initial?.orden ?? 0))
   const [disciplineId, setDisciplineId] = useState<string>(initial?.discipline_id ?? '')
+  const [selectedPhaseIds, setSelectedPhaseIds] = useState<string[]>(initial?.phase_ids ?? [])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const togglePhase = (id: string) =>
+    setSelectedPhaseIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!nombre.trim()) { setError('El nombre es obligatorio.'); return }
     setSaving(true); setError(null)
     const did = disciplineId || null
+
+    let lineItemId: string
 
     if (initial) {
       const res = await updateLineItem(initial.id, {
@@ -329,18 +451,26 @@ function LineItemModal({
         orden: parseInt(orden) || 0,
         discipline_id: did,
       })
-      setSaving(false)
-      if ('error' in res) { setError(res.error); return }
-      onSaved({ ...initial, nombre: nombre.trim(), descripcion: descripcion.trim() || null, unidad_medida: unidad, orden: parseInt(orden) || 0, discipline_id: did })
+      if ('error' in res) { setSaving(false); setError(res.error); return }
+      lineItemId = initial.id
     } else {
       const res = await createLineItem({ unit_id: unitId, nombre: nombre.trim(), descripcion: descripcion.trim() || null, unidad_medida: unidad, orden: parseInt(orden) || 0, discipline_id: did })
-      setSaving(false)
-      if ('error' in res) { setError(res.error); return }
-      onSaved({ id: res.id, unit_id: unitId, nombre: nombre.trim(), descripcion: descripcion.trim() || null, unidad_medida: unidad, orden: parseInt(orden) || 0, activo: true, discipline_id: did })
+      if ('error' in res) { setSaving(false); setError(res.error); return }
+      lineItemId = res.id
     }
+
+    const phasesRes = await setLineItemPhases(lineItemId, selectedPhaseIds)
+    setSaving(false)
+    if ('error' in phasesRes) { setError(phasesRes.error); return }
+
+    const saved: LineItem = initial
+      ? { ...initial, nombre: nombre.trim(), descripcion: descripcion.trim() || null, unidad_medida: unidad, orden: parseInt(orden) || 0, discipline_id: did, phase_ids: selectedPhaseIds }
+      : { id: lineItemId, unit_id: unitId, nombre: nombre.trim(), descripcion: descripcion.trim() || null, unidad_medida: unidad, orden: parseInt(orden) || 0, activo: true, discipline_id: did, phase_ids: selectedPhaseIds }
+    onSaved(saved)
   }
 
   const activeDisciplines = disciplines.filter(d => d.activo)
+  const sortedPhases = [...chapterPhases].sort((a, b) => a.orden - b.orden)
 
   return (
     <div style={overlay} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
@@ -376,6 +506,24 @@ function LineItemModal({
                 </select>
               </div>
             </div>
+            {sortedPhases.length > 0 && (
+              <div>
+                <label style={S.label}>Fases en que participa esta partida</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginTop: 6, padding: '10px 12px', background: '#F0F7FF', borderRadius: 6, border: '1px solid #DAEEFF' }}>
+                  {sortedPhases.map(ph => (
+                    <label key={ph.id} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12, color: '#1A1A1A' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedPhaseIds.includes(ph.id)}
+                        onChange={() => togglePhase(ph.id)}
+                        style={{ width: 14, height: 14, accentColor: '#378ADD', cursor: 'pointer', flexShrink: 0 }}
+                      />
+                      {ph.nombre}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
             <div style={{ width: 90 }}>
               <label style={S.label}>Orden</label>
               <input type="number" value={orden} onChange={e => setOrden(e.target.value)} style={S.input} />
@@ -574,10 +722,12 @@ function ConfirmDelete({ label, onConfirm, onCancel }: { label: string; onConfir
 
 function UnitDetail({
   unit,
+  chapterPhases,
   disciplines,
   onUnitChanged,
 }: {
   unit: Unit
+  chapterPhases: Phase[]
   disciplines: Discipline[]
   onUnitChanged: (updated: Unit) => void
 }) {
@@ -621,7 +771,7 @@ function UnitDetail({
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#1A1A1A' }}>
-                {['Nombre', 'Disciplina', 'Unidad', ''].map(h => (
+                {['Nombre', 'Disciplina', 'Unidad', 'Fases', ''].map(h => (
                   <th key={h} style={{ padding: '7px 12px', fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
@@ -629,6 +779,7 @@ function UnitDetail({
             <tbody>
               {[...unit.line_items].sort((a, b) => a.orden - b.orden).map((item, i) => {
                 const disc = item.discipline_id ? discMap[item.discipline_id] : null
+                const phaseCount = item.phase_ids.length
                 return (
                   <tr key={item.id} style={{ background: i % 2 === 0 ? '#fff' : '#FAFAF8' }}>
                     <td style={{ padding: '9px 12px', fontSize: 12, color: '#1A1A1A', borderBottom: '1px solid #F0EEE8' }}>
@@ -645,6 +796,15 @@ function UnitDetail({
                     <td style={{ padding: '9px 12px', fontSize: 11, color: '#555', borderBottom: '1px solid #F0EEE8', whiteSpace: 'nowrap' }}>
                       <span style={{ background: '#F0EEE8', borderRadius: 3, padding: '2px 6px', fontWeight: 600, fontFamily: 'monospace' }}>{item.unidad_medida}</span>
                     </td>
+                    <td style={{ padding: '9px 12px', fontSize: 11, borderBottom: '1px solid #F0EEE8', whiteSpace: 'nowrap' }}>
+                      {phaseCount > 0 ? (
+                        <span style={{ background: '#EBF5FF', color: '#378ADD', borderRadius: 3, padding: '2px 6px', fontWeight: 600, fontSize: 10 }}>
+                          {phaseCount} {phaseCount === 1 ? 'fase' : 'fases'}
+                        </span>
+                      ) : (
+                        <span style={{ color: '#CCC', fontSize: 10 }}>—</span>
+                      )}
+                    </td>
                     <td style={{ padding: '9px 12px', borderBottom: '1px solid #F0EEE8', whiteSpace: 'nowrap', textAlign: 'right' }}>
                       <button onClick={() => setLineItemModal({ mode: 'edit', item })} style={{ ...S.btnSm(), marginRight: 4 }}>Editar</button>
                       <button onClick={() => setDeletingItem(item)} style={{ ...S.btnSm('#DC2626'), color: '#fff' }}>×</button>
@@ -660,6 +820,7 @@ function UnitDetail({
       {lineItemModal && (
         <LineItemModal
           unitId={unit.id}
+          chapterPhases={chapterPhases}
           initial={lineItemModal.mode === 'edit' ? lineItemModal.item : null}
           disciplines={disciplines}
           onClose={() => setLineItemModal(null)}
@@ -681,11 +842,13 @@ function UnitDetail({
 
 function UnitRow({
   unit,
+  chapterPhases,
   disciplines,
   onUnitChanged,
   onUnitDeleted,
 }: {
   unit: Unit
+  chapterPhases: Phase[]
   disciplines: Discipline[]
   onUnitChanged: (updated: Unit) => void
   onUnitDeleted: (id: string) => void
@@ -711,6 +874,9 @@ function UnitRow({
         <span style={{ fontSize: 11, color: '#CCC', width: 14, flexShrink: 0 }}>{expanded ? '▼' : '▶'}</span>
         <span style={{ fontSize: 12, fontWeight: 600, color: '#333', flex: 1 }}>{unit.nombre}</span>
         {unit.descripcion && <span style={{ fontSize: 11, color: '#999', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{unit.descripcion}</span>}
+        {(unit.imagen_portada_url || unit.descripcion_cliente) && (
+          <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', padding: '2px 6px', borderRadius: 3, background: '#D85A30', color: '#fff', flexShrink: 0 }}>MEM</span>
+        )}
         <span style={{ fontSize: 10, color: '#AAA' }}>{unit.line_items.length} partidas</span>
         <button
           onClick={e => { e.stopPropagation(); setEditing(true) }}
@@ -725,7 +891,7 @@ function UnitRow({
       {/* Expanded detail */}
       {expanded && (
         <div style={{ background: '#fff' }}>
-          <UnitDetail unit={unit} disciplines={disciplines} onUnitChanged={onUnitChanged} />
+          <UnitDetail unit={unit} chapterPhases={chapterPhases} disciplines={disciplines} onUnitChanged={onUnitChanged} />
         </div>
       )}
 
@@ -818,6 +984,9 @@ function ChapterRow({
             {principalDisc.nombre}
           </span>
         )}
+        {(chapter.imagen_portada_url || chapter.descripcion_cliente) && (
+          <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', padding: '2px 6px', borderRadius: 3, background: '#D85A30', color: '#fff', flexShrink: 0 }}>MEM</span>
+        )}
         <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', whiteSpace: 'nowrap' }}>
           {chapter.duracion_pct > 0 ? `${chapter.duracion_pct}% · ` : ''}{chapter.units.length} unid. · {totalItems} part. · {chapter.phases.length} fases
         </span>
@@ -902,6 +1071,7 @@ function ChapterRow({
               <UnitRow
                 key={unit.id}
                 unit={unit}
+                chapterPhases={chapter.phases}
                 disciplines={disciplines}
                 onUnitChanged={handleUnitChanged}
                 onUnitDeleted={handleUnitDeleted}
@@ -1209,6 +1379,7 @@ function MilestonesSection({
   const [expanded, setExpanded] = useState(false)
   const [modal, setModal] = useState<{ mode: 'create' } | { mode: 'edit'; m: Milestone } | null>(null)
   const [deleting, setDeleting] = useState<Milestone | null>(null)
+  const [merging, setMerging] = useState(false)
 
   const handleDelete = async (m: Milestone) => {
     const res = await deleteMilestone(m.id)
@@ -1217,7 +1388,25 @@ function MilestonesSection({
     setDeleting(null)
   }
 
+  const handleMergeGroup = async (keep: Milestone, dupes: Milestone[]) => {
+    setMerging(true)
+    for (const dupe of dupes) {
+      const res = await mergeMilestones(keep.id, dupe.id)
+      if ('error' in res) { alert(res.error); setMerging(false); return }
+    }
+    onChange(milestones.filter(x => dupes.every(d => d.id !== x.id)))
+    setMerging(false)
+  }
+
   const sorted = [...milestones].sort((a, b) => a.orden - b.orden)
+
+  const duplicateGroups = Object.values(
+    sorted.reduce<Record<string, Milestone[]>>((acc, m) => {
+      const key = m.nombre.trim().toLowerCase()
+      acc[key] = [...(acc[key] ?? []), m]
+      return acc
+    }, {})
+  ).filter(g => g.length > 1)
 
   return (
     <div style={{ marginBottom: 24, borderRadius: 8, border: '2px solid #D85A30', overflow: 'hidden', background: '#fff' }}>
@@ -1230,12 +1419,40 @@ function MilestonesSection({
         <span style={{ fontSize: 13, fontWeight: 700, color: '#D85A30', flex: 1, letterSpacing: '0.02em' }}>
           Hitos de obra
         </span>
+        {duplicateGroups.length > 0 && (
+          <span style={{ fontSize: 10, fontWeight: 700, color: '#92400E', background: '#FEF3C7', border: '1px solid #FCD34D', borderRadius: 4, padding: '2px 6px' }}>
+            {duplicateGroups.length} duplicado{duplicateGroups.length > 1 ? 's' : ''}
+          </span>
+        )}
         <span style={{ fontSize: 10, color: '#D85A30', opacity: 0.6 }}>{milestones.length} hitos configurados</span>
         <button
           onClick={e => { e.stopPropagation(); setModal({ mode: 'create' }) }}
           style={{ padding: '4px 10px', fontSize: 11, borderRadius: 4, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, background: '#D85A30', color: '#fff' }}
         >+ Hito</button>
       </div>
+
+      {duplicateGroups.length > 0 && (
+        <div style={{ padding: '10px 16px', background: '#FFFBEB', borderBottom: '1px solid #FCD34D' }}>
+          {duplicateGroups.map(group => {
+            const [keep, ...dupes] = group
+            return (
+              <div key={keep.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12 }}>
+                <span style={{ color: '#92400E' }}>
+                  Hito duplicado: <strong>"{keep.nombre}"</strong> aparece {group.length} veces.
+                  Se conservará el primero (orden {keep.orden}) y se fusionarán los demás.
+                </span>
+                <button
+                  disabled={merging}
+                  onClick={() => handleMergeGroup(keep, dupes)}
+                  style={{ padding: '3px 10px', fontSize: 11, borderRadius: 4, border: 'none', cursor: merging ? 'default' : 'pointer', fontFamily: 'inherit', fontWeight: 600, background: '#D97706', color: '#fff', flexShrink: 0, opacity: merging ? 0.6 : 1 }}
+                >
+                  {merging ? 'Fusionando…' : 'Fusionar'}
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {expanded && (
         <div style={{ padding: '12px 16px' }}>

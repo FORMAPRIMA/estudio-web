@@ -52,7 +52,7 @@ export async function createChapter(data: {
 
 export async function updateChapter(
   id: string,
-  data: { nombre?: string; descripcion?: string | null; orden?: number; activo?: boolean; duracion_pct?: number; principal_discipline_id?: string | null }
+  data: { nombre?: string; descripcion?: string | null; orden?: number; activo?: boolean; duracion_pct?: number; principal_discipline_id?: string | null; label_cliente?: string | null; descripcion_cliente?: string | null; imagen_portada_url?: string | null }
 ): Promise<{ success: true } | { error: string }> {
   try {
     await requireManagerOrPartner()
@@ -115,7 +115,7 @@ export async function createUnit(data: {
 
 export async function updateUnit(
   id: string,
-  data: { nombre?: string; descripcion?: string | null; orden?: number; activo?: boolean; principal_discipline_id?: string | null }
+  data: { nombre?: string; descripcion?: string | null; orden?: number; activo?: boolean; principal_discipline_id?: string | null; label_cliente?: string | null; descripcion_cliente?: string | null; imagen_portada_url?: string | null }
 ): Promise<{ success: true } | { error: string }> {
   try {
     await requireManagerOrPartner()
@@ -330,6 +330,46 @@ export async function deleteMilestone(id: string): Promise<{ success: true } | {
   }
 }
 
+export async function mergeMilestones(
+  keepId: string,
+  deleteId: string,
+): Promise<{ success: true } | { error: string }> {
+  try {
+    await requireManagerOrPartner()
+    const admin = createAdminClient()
+
+    const { data: deleteLinks, error: e1 } = await admin
+      .from('fpe_template_phase_milestone_links')
+      .select('phase_id, link_type')
+      .eq('milestone_id', deleteId)
+    if (e1) return { error: e1.message }
+
+    const { data: keepLinks, error: e2 } = await admin
+      .from('fpe_template_phase_milestone_links')
+      .select('phase_id, link_type')
+      .eq('milestone_id', keepId)
+    if (e2) return { error: e2.message }
+
+    const existing = new Set((keepLinks ?? []).map(l => `${l.phase_id}:${l.link_type}`))
+    const toInsert = (deleteLinks ?? [])
+      .filter(l => !existing.has(`${l.phase_id}:${l.link_type}`))
+      .map(l => ({ phase_id: l.phase_id, milestone_id: keepId, link_type: l.link_type }))
+
+    if (toInsert.length > 0) {
+      const { error: e3 } = await admin.from('fpe_template_phase_milestone_links').insert(toInsert)
+      if (e3) return { error: e3.message }
+    }
+
+    const { error: e4 } = await admin.from('fpe_template_milestones').delete().eq('id', deleteId)
+    if (e4) return { error: e4.message }
+
+    revalidatePath(PATH)
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
 // ── Disciplines ───────────────────────────────────────────────────────────────
 
 export async function createDiscipline(data: {
@@ -379,6 +419,34 @@ export async function deleteDiscipline(id: string): Promise<{ success: true } | 
     const admin = createAdminClient()
     const { error } = await admin.from('fpe_disciplines').delete().eq('id', id)
     if (error) return { error: error.message }
+    revalidatePath(PATH)
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
+// ── Phase ↔ Line Item links ───────────────────────────────────────────────────
+// Replaces all phase links for a line item in one shot.
+
+export async function setLineItemPhases(
+  line_item_id: string,
+  phase_ids: string[],
+): Promise<{ success: true } | { error: string }> {
+  try {
+    await requireManagerOrPartner()
+    const admin = createAdminClient()
+    const { error: delErr } = await admin
+      .from('fpe_template_phase_line_items')
+      .delete()
+      .eq('line_item_id', line_item_id)
+    if (delErr) return { error: delErr.message }
+    if (phase_ids.length > 0) {
+      const { error: insErr } = await admin
+        .from('fpe_template_phase_line_items')
+        .insert(phase_ids.map(phase_id => ({ phase_id, line_item_id })))
+      if (insErr) return { error: insErr.message }
+    }
     revalidatePath(PATH)
     return { success: true }
   } catch (err) {

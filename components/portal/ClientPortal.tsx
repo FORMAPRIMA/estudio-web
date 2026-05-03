@@ -17,7 +17,7 @@ interface Visita       { id: string; fecha: string; titulo: string | null; asist
 interface Partida      { id: string; nombre: string; fecha_inicio: string | null; fecha_fin: string | null; color: string; orden: number; completado: boolean }
 interface Contratos    { contrato_arquitectura_url: string | null; contrato_obra_url: string | null; pdf_presupuesto_url: string | null }
 interface Factura      { id: string; seccion: string; concepto: string; monto: number; status: string; fecha_pago_acordada: string | null; numero_factura: string | null }
-interface PagoConstructora { id: string; concepto: string; importe_estimado: number | null; fecha_estimada: string }
+interface PagoConstructora { id: string; concepto: string; importe_estimado: number | null; fecha_estimada: string; status?: string }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -178,6 +178,35 @@ function TabInicio({ proyecto, renders, portal }: {
 
 function PdfDocCard({ label, url }: { label: string; url: string }) {
   const [hov, setHov] = useState(false)
+  const [thumbSrc, setThumbSrc] = useState<string | null>(null)
+  const [thumbErr, setThumbErr] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    async function renderThumb() {
+      try {
+        const pdfjsLib = await import('pdfjs-dist')
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
+        const pdf = await pdfjsLib.getDocument({ url }).promise
+        if (cancelled) return
+        const page = await pdf.getPage(1)
+        if (cancelled) return
+        const viewport = page.getViewport({ scale: 2 })
+        const canvas = document.createElement('canvas')
+        canvas.width = viewport.width
+        canvas.height = viewport.height
+        const ctx = canvas.getContext('2d')!
+        await page.render({ canvasContext: ctx, viewport, canvas }).promise
+        if (cancelled) return
+        setThumbSrc(canvas.toDataURL('image/jpeg', 0.88))
+      } catch {
+        if (!cancelled) setThumbErr(true)
+      }
+    }
+    renderThumb()
+    return () => { cancelled = true }
+  }, [url])
+
   return (
     <a href={url} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
       <div
@@ -191,22 +220,26 @@ function PdfDocCard({ label, url }: { label: string; url: string }) {
           transition: 'all 0.22s ease',
         }}
       >
-        {/* Document visual */}
-        <div style={{ background: '#F2F0EB', height: 148, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-          <svg width="72" height="92" viewBox="0 0 72 92" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M4 0h44l24 22v66H4V0z" fill="#FEFEFE" stroke="#DDD9D2" strokeWidth="1.2" strokeLinejoin="round"/>
-            <path d="M48 0v22h24" fill="none" stroke="#DDD9D2" strokeWidth="1.2" strokeLinejoin="round"/>
-            <path d="M48 0l24 22" fill="#E8E5DF" stroke="none"/>
-            <line x1="13" y1="38" x2="55" y2="38" stroke="#D8D4CC" strokeWidth="1.4" strokeLinecap="round"/>
-            <line x1="13" y1="47" x2="55" y2="47" stroke="#D8D4CC" strokeWidth="1.4" strokeLinecap="round"/>
-            <line x1="13" y1="56" x2="55" y2="56" stroke="#D8D4CC" strokeWidth="1.4" strokeLinecap="round"/>
-            <line x1="13" y1="65" x2="38" y2="65" stroke="#D8D4CC" strokeWidth="1.4" strokeLinecap="round"/>
-          </svg>
-          <span style={{
-            position: 'absolute', bottom: 11, right: 13,
-            fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase',
-            color: '#B0A090', background: '#E8E5DF', padding: '3px 7px', borderRadius: 3,
-          }}>PDF</span>
+        {/* Thumbnail — first page of the PDF */}
+        <div style={{ height: 148, overflow: 'hidden', background: '#ECEAE5', position: 'relative' }}>
+          {thumbSrc ? (
+            <img
+              src={thumbSrc}
+              alt=""
+              style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top center', display: 'block' }}
+            />
+          ) : !thumbErr ? (
+            /* Loading skeleton */
+            <div style={{
+              position: 'absolute', inset: 0,
+              background: 'linear-gradient(110deg, #ECEAE5 30%, #E2DFD8 50%, #ECEAE5 70%)',
+              backgroundSize: '200% 100%',
+              animation: 'cp-shimmer 1.6s ease-in-out infinite',
+            }} />
+          ) : (
+            /* Error: plain grey background, no icons */
+            <div style={{ position: 'absolute', inset: 0, background: '#ECEAE5' }} />
+          )}
         </div>
         {/* Label */}
         <div style={{ padding: '13px 17px 15px', background: '#fff', borderTop: '1px solid #F0EEE8' }}>
@@ -223,12 +256,15 @@ function PdfDocCard({ label, url }: { label: string; url: string }) {
 // ── Tab: DOCUMENTOS Y FACTURACIÓN ─────────────────────────────────────────────
 
 function TabDocumentosYPagos({
-  portal, contratos, facturas,
+  portal, contratos, facturas, pagosConstructora,
 }: {
   portal: PortalData | null
   contratos: Contratos | null
   facturas: Factura[]
+  pagosConstructora: PagoConstructora[]
 }) {
+  const [pagoTab, setPagoTab] = useState<'arquitectura' | 'constructora'>('arquitectura')
+
   const docs = [
     portal?.pdf_proyecto_url             ? { label: 'Proyecto Arquitectónico', url: portal.pdf_proyecto_url }            : null,
     contratos?.pdf_presupuesto_url       ? { label: 'Presupuesto de Obra',     url: contratos.pdf_presupuesto_url }      : null,
@@ -236,145 +272,295 @@ function TabDocumentosYPagos({
     contratos?.contrato_obra_url         ? { label: 'Contrato de Obra',        url: contratos.contrato_obra_url }        : null,
   ].filter(Boolean) as { label: string; url: string }[]
 
-  const hasDocs     = docs.length > 0
-  const hasFacturas = facturas.length > 0
+  const hasDocs         = docs.length > 0
+  const hasFacturas     = facturas.length > 0
+  const hasConstructora = pagosConstructora.length > 0
+  const hasPagos        = hasFacturas || hasConstructora
+  const showTabs        = hasFacturas && hasConstructora
 
-  const total     = facturas.reduce((s, f) => s + f.monto, 0)
-  const pagado    = facturas.filter(f => f.status === 'pagada').reduce((s, f) => s + f.monto, 0)
-  const pendiente = total - pagado
-  const pct       = total > 0 ? (pagado / total) * 100 : 0
-  const grouped   = facturas.reduce<Record<string, Factura[]>>((acc, f) => {
+  // ── Arquitectura metrics
+  const arcTotal     = facturas.reduce((s, f) => s + f.monto, 0)
+  const arcPagado    = facturas.filter(f => f.status === 'pagada').reduce((s, f) => s + f.monto, 0)
+  const arcPendiente = arcTotal - arcPagado
+  const arcPct       = arcTotal > 0 ? (arcPagado / arcTotal) * 100 : 0
+  const grouped      = facturas.reduce<Record<string, Factura[]>>((acc, f) => {
     if (!acc[f.seccion]) acc[f.seccion] = []
     acc[f.seccion].push(f)
     return acc
   }, {})
 
-  if (!hasDocs && !hasFacturas) {
+  // ── Constructora metrics
+  const conTotal     = pagosConstructora.reduce((s, p) => s + (p.importe_estimado ?? 0), 0)
+  const conPagado    = pagosConstructora.filter(p => p.status === 'pagado').reduce((s, p) => s + (p.importe_estimado ?? 0), 0)
+  const conPendiente = conTotal - conPagado
+  const conPct       = conTotal > 0 ? (conPagado / conTotal) * 100 : 0
+
+  if (!hasDocs && !hasPagos) {
     return (
       <div style={{ textAlign: 'center', padding: '80px 40px', color: '#CCC' }}>
-        <svg width="36" height="44" viewBox="0 0 36 44" fill="none" style={{ marginBottom: 16, opacity: 0.35 }}>
-          <path d="M2 0h22l12 11v31H2V0z" stroke="#888" strokeWidth="1.5" fill="none" strokeLinejoin="round"/>
-          <path d="M24 0v11h12" stroke="#888" strokeWidth="1.5" fill="none"/>
-          <line x1="7" y1="19" x2="27" y2="19" stroke="#888" strokeWidth="1.2" strokeLinecap="round"/>
-          <line x1="7" y1="25" x2="27" y2="25" stroke="#888" strokeWidth="1.2" strokeLinecap="round"/>
-          <line x1="7" y1="31" x2="18" y2="31" stroke="#888" strokeWidth="1.2" strokeLinecap="round"/>
-        </svg>
-        <p style={{ fontSize: 13 }}>No hay documentos ni información de facturación disponibles aún.</p>
+        <p style={{ fontSize: 13 }}>No hay documentos ni información de pagos disponibles aún.</p>
       </div>
     )
   }
 
-  return (
-    <div className="cp-section-pad" style={{ maxWidth: 1100, margin: '0 auto', padding: '56px 60px' }}>
+  // Shared invoice section renderer for arquitectura
+  const invoiceSection = (seccion: string, facts: Factura[]) => (
+    <div key={seccion} style={{ background: '#fff', borderRadius: 12, border: '1px solid #E8E6E0', overflow: 'hidden' }}>
+      <div style={{ padding: '13px 22px', background: '#F8F7F4', borderBottom: '1px solid #E8E6E0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#1A1A1A' }}>{seccion}</span>
+        <div>
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>{fmtMoney(facts.reduce((s, f) => s + f.monto, 0))}</span>
+          <span style={{ fontSize: 10, color: '#AAA', marginLeft: 6 }}>sin IVA</span>
+        </div>
+      </div>
+      {/* Desktop table */}
+      <div className="cp-invoice-table">
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <tbody>
+            {facts.map((f, i) => {
+              const st = FACTURA_STATUS[f.status] ?? { label: f.status, color: '#888', bg: '#F4F4F4' }
+              return (
+                <tr key={f.id} style={{ borderBottom: i < facts.length - 1 ? '1px solid #F5F4F1' : 'none' }}>
+                  <td style={{ padding: '13px 22px', fontSize: 13, color: '#1A1A1A' }}>{f.concepto}</td>
+                  <td style={{ padding: '13px 12px', textAlign: 'center' }}>
+                    <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '3px 9px', borderRadius: 4, background: st.bg, color: st.color, whiteSpace: 'nowrap' }}>
+                      {st.label}
+                    </span>
+                  </td>
+                  <td style={{ padding: '13px 12px', fontSize: 11, color: '#AAA', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                    {f.fecha_pago_acordada ? fmtShort(f.fecha_pago_acordada) : '—'}
+                  </td>
+                  <td style={{ padding: '13px 22px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1A1A' }}>{fmtMoney(f.monto)}</div>
+                    <div style={{ fontSize: 10, color: '#AAA', marginTop: 1 }}>sin IVA · {fmtMoney(f.monto * 1.21)} c/IVA</div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      {/* Mobile cards */}
+      <div className="cp-invoice-cards">
+        {facts.map((f, i) => {
+          const st = FACTURA_STATUS[f.status] ?? { label: f.status, color: '#888', bg: '#F4F4F4' }
+          return (
+            <div key={f.id} style={{ padding: '14px 18px', borderBottom: i < facts.length - 1 ? '1px solid #F5F4F1' : 'none' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 8 }}>
+                <p style={{ fontSize: 13, color: '#1A1A1A', margin: 0, flex: 1, lineHeight: 1.35 }}>{f.concepto}</p>
+                <div style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  <p style={{ fontSize: 16, fontWeight: 600, color: '#1A1A1A', margin: 0 }}>{fmtMoney(f.monto)}</p>
+                  <p style={{ fontSize: 10, color: '#AAA', margin: '1px 0 0' }}>sin IVA · {fmtMoney(f.monto * 1.21)} c/IVA</p>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '3px 9px', borderRadius: 4, background: st.bg, color: st.color }}>
+                  {st.label}
+                </span>
+                {f.fecha_pago_acordada && (
+                  <span style={{ fontSize: 10, color: '#AAA' }}>{fmtShort(f.fecha_pago_acordada)}</span>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
 
-      {/* ── Documentos ── */}
+  return (
+    <div className="cp-section-pad" style={{ maxWidth: 1100, margin: '0 auto', padding: '56px 60px', display: 'flex', flexDirection: 'column', gap: 52 }}>
+
+      {/* ── Documentación (always visible) ── */}
       {hasDocs && (
-        <>
+        <section>
           <STitle>Documentación</STitle>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14, marginBottom: hasFacturas ? 56 : 0 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14 }}>
             {docs.map(doc => <PdfDocCard key={doc.url} label={doc.label} url={doc.url} />)}
           </div>
-        </>
+        </section>
       )}
 
-      {/* ── Facturación ── */}
-      {hasFacturas && (
-        <>
-          <STitle>Facturación</STitle>
+      {/* ── Desglose de pagos ── */}
+      {hasPagos && (
+        <section>
+          <STitle>Desglose de pagos</STitle>
 
-          {/* Summary metrics */}
-          <div className="cp-metrics-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, marginBottom: 24 }}>
-            {[
-              { label: 'Total del proyecto', value: fmtMoney(total),    color: '#1A1A1A', sub: `${facturas.length} partida${facturas.length !== 1 ? 's' : ''}` },
-              { label: 'Importe cobrado',    value: fmtMoney(pagado),   color: '#1D9E75', sub: `${Math.round(pct)}% completado` },
-              { label: 'Pendiente de cobro', value: fmtMoney(pendiente), color: pendiente > 0 ? '#C9A227' : '#1D9E75', sub: pendiente > 0 ? 'Por facturar o cobrar' : 'Al corriente' },
-            ].map(card => (
-              <div key={card.label} style={{ background: '#fff', borderRadius: 12, border: '1px solid #E8E6E0', padding: '22px 26px' }}>
-                <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#AAA', margin: '0 0 10px' }}>{card.label}</p>
-                <p style={{ fontSize: 24, fontWeight: 300, color: card.color, margin: '0 0 4px', letterSpacing: '-0.01em' }}>{card.value}</p>
-                <p style={{ fontSize: 10, color: '#CCC', margin: 0 }}>{card.sub}</p>
+          {/* Tab bar — only shown when both panels have data */}
+          {showTabs && (
+            <div style={{ display: 'flex', borderBottom: '1px solid #E8E6E0', marginBottom: 36 }}>
+              {([
+                { id: 'arquitectura' as const, label: 'Pagos a estudio de arquitectura', color: '#D85A30' },
+                { id: 'constructora'  as const, label: 'Pagos a constructora',            color: '#2563EB' },
+              ]).map(t => (
+                <button
+                  key={t.id}
+                  onClick={() => setPagoTab(t.id)}
+                  style={{
+                    padding: '10px 22px 11px',
+                    fontSize: 11, fontWeight: pagoTab === t.id ? 700 : 500,
+                    letterSpacing: '0.04em', textTransform: 'uppercase',
+                    color: pagoTab === t.id ? t.color : '#BBB',
+                    background: 'none', border: 'none',
+                    borderBottom: `2px solid ${pagoTab === t.id ? t.color : 'transparent'}`,
+                    marginBottom: -1,
+                    cursor: 'pointer',
+                    transition: 'color 0.18s, border-color 0.18s',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* ── ARQUITECTURA PANEL ─────────────────────────────── */}
+          {(pagoTab === 'arquitectura' || !showTabs) && hasFacturas && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+
+              {/* Recipient banner */}
+              <div style={{
+                padding: '18px 24px',
+                background: 'linear-gradient(135deg, #FDF3EE 0%, #FEF7F4 100%)',
+                borderRadius: 12, border: '1px solid #F0D5C8',
+                display: 'flex', alignItems: 'center', gap: 18,
+              }}>
+                <div style={{ width: 3, alignSelf: 'stretch', borderRadius: 2, background: '#D85A30', flexShrink: 0 }} />
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#D85A30', margin: '0 0 4px' }}>Pagos al estudio de arquitectura</p>
+                  <p style={{ fontSize: 16, fontWeight: 600, color: '#1A1A1A', margin: '0 0 2px' }}>Forma Prima Arquitectura</p>
+                  <p style={{ fontSize: 11, color: '#B07060', margin: 0 }}>Honorarios profesionales de diseño y dirección de proyecto</p>
+                </div>
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#D85A30', margin: '0 0 4px' }}>Total sin IVA</p>
+                  <p style={{ fontSize: 22, fontWeight: 300, color: '#1A1A1A', margin: '0 0 2px', letterSpacing: '-0.01em' }}>{fmtMoney(arcTotal)}</p>
+                  <p style={{ fontSize: 10, color: '#AAA', margin: 0 }}>{fmtMoney(arcTotal * 1.21)} con IVA</p>
+                </div>
               </div>
-            ))}
-          </div>
 
-          {/* Progress bar */}
-          <div style={{ marginBottom: 32 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 7 }}>
-              <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA' }}>Progreso de cobro</span>
-              <span style={{ fontSize: 11, fontWeight: 600, color: '#1D9E75' }}>{Math.round(pct)}%</span>
-            </div>
-            <div style={{ height: 5, background: '#F0EEE8', borderRadius: 3, overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${pct}%`, background: 'linear-gradient(to right, #1D9E75, #27C490)', borderRadius: 3, transition: 'width 0.8s ease' }} />
-            </div>
-          </div>
+              {/* Metrics row */}
+              <div className="cp-metrics-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                {[
+                  { label: 'Cobrado (sin IVA)',   value: fmtMoney(arcPagado),    color: '#1D9E75', sub: `${Math.round(arcPct)}% del total · ${fmtMoney(arcPagado * 1.21)} con IVA` },
+                  { label: 'Pendiente (sin IVA)', value: fmtMoney(arcPendiente), color: arcPendiente > 0 ? '#C9A227' : '#1D9E75', sub: arcPendiente > 0 ? `${fmtMoney(arcPendiente * 1.21)} pendiente con IVA` : 'Al corriente' },
+                ].map(card => (
+                  <div key={card.label} style={{ background: '#fff', borderRadius: 10, border: '1px solid #E8E6E0', padding: '18px 22px' }}>
+                    <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#AAA', margin: '0 0 8px' }}>{card.label}</p>
+                    <p style={{ fontSize: 20, fontWeight: 300, color: card.color, margin: '0 0 4px', letterSpacing: '-0.01em' }}>{card.value}</p>
+                    <p style={{ fontSize: 10, color: '#CCC', margin: 0 }}>{card.sub}</p>
+                  </div>
+                ))}
+              </div>
 
-          {/* Invoice list by section */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {Object.entries(grouped).sort(([a], [b]) => {
-              const ia = SECCION_ORDER.indexOf(a as typeof SECCION_ORDER[number])
-              const ib = SECCION_ORDER.indexOf(b as typeof SECCION_ORDER[number])
-              return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib)
-            }).map(([seccion, facts]) => (
-              <div key={seccion} style={{ background: '#fff', borderRadius: 12, border: '1px solid #E8E6E0', overflow: 'hidden' }}>
-                {/* Section header */}
-                <div style={{ padding: '13px 22px', background: '#F8F7F4', borderBottom: '1px solid #E8E6E0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#1A1A1A' }}>{seccion}</span>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>{fmtMoney(facts.reduce((s, f) => s + f.monto, 0))}</span>
+              {/* Progress bar */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 7 }}>
+                  <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA' }}>Progreso de cobro</span>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: '#D85A30' }}>{Math.round(arcPct)}%</span>
                 </div>
-
-                {/* Desktop table */}
-                <div className="cp-invoice-table">
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <tbody>
-                      {facts.map((f, i) => {
-                        const st = FACTURA_STATUS[f.status] ?? { label: f.status, color: '#888', bg: '#F4F4F4' }
-                        return (
-                          <tr key={f.id} style={{ borderBottom: i < facts.length - 1 ? '1px solid #F5F4F1' : 'none' }}>
-                            <td style={{ padding: '13px 22px', fontSize: 13, color: '#1A1A1A' }}>{f.concepto}</td>
-                            <td style={{ padding: '13px 12px', textAlign: 'center' }}>
-                              <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '3px 9px', borderRadius: 4, background: st.bg, color: st.color, whiteSpace: 'nowrap' }}>
-                                {st.label}
-                              </span>
-                            </td>
-                            <td style={{ padding: '13px 12px', fontSize: 11, color: '#AAA', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                              {f.fecha_pago_acordada ? fmtShort(f.fecha_pago_acordada) : '—'}
-                            </td>
-                            <td style={{ padding: '13px 22px', fontSize: 14, fontWeight: 600, color: '#1A1A1A', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                              {fmtMoney(f.monto)}
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
+                <div style={{ height: 5, background: '#F0EEE8', borderRadius: 3, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${arcPct}%`, background: 'linear-gradient(to right, #D85A30, #E87050)', borderRadius: 3, transition: 'width 0.8s ease' }} />
                 </div>
+              </div>
 
-                {/* Mobile cards */}
-                <div className="cp-invoice-cards">
-                  {facts.map((f, i) => {
-                    const st = FACTURA_STATUS[f.status] ?? { label: f.status, color: '#888', bg: '#F4F4F4' }
+              {/* Invoice sections */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                {Object.entries(grouped).sort(([a], [b]) => {
+                  const ia = SECCION_ORDER.indexOf(a as typeof SECCION_ORDER[number])
+                  const ib = SECCION_ORDER.indexOf(b as typeof SECCION_ORDER[number])
+                  return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib)
+                }).map(([seccion, facts]) => invoiceSection(seccion, facts))}
+              </div>
+            </div>
+          )}
+
+          {/* ── CONSTRUCTORA PANEL ─────────────────────────────── */}
+          {(pagoTab === 'constructora' || !showTabs) && hasConstructora && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+
+              {/* Recipient banner */}
+              <div style={{
+                padding: '18px 24px',
+                background: 'linear-gradient(135deg, #EFF6FF 0%, #F5F9FF 100%)',
+                borderRadius: 12, border: '1px solid #BFDBFE',
+                display: 'flex', alignItems: 'center', gap: 18,
+              }}>
+                <div style={{ width: 3, alignSelf: 'stretch', borderRadius: 2, background: '#2563EB', flexShrink: 0 }} />
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#2563EB', margin: '0 0 4px' }}>Pagos a la constructora</p>
+                  <p style={{ fontSize: 16, fontWeight: 600, color: '#1A1A1A', margin: '0 0 2px' }}>Empresa Constructora</p>
+                  <p style={{ fontSize: 11, color: '#6095D0', margin: 0 }}>Costos de ejecución y materiales de obra</p>
+                </div>
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#2563EB', margin: '0 0 4px' }}>Total estimado sin IVA</p>
+                  <p style={{ fontSize: 22, fontWeight: 300, color: '#1A1A1A', margin: '0 0 2px', letterSpacing: '-0.01em' }}>{fmtMoney(conTotal)}</p>
+                  <p style={{ fontSize: 10, color: '#AAA', margin: 0 }}>{fmtMoney(conTotal * 1.21)} con IVA</p>
+                </div>
+              </div>
+
+              {/* Metrics row */}
+              <div className="cp-metrics-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                {[
+                  { label: 'Pagado (sin IVA)',   value: fmtMoney(conPagado),    color: '#1D9E75', sub: `${Math.round(conPct)}% del total · ${fmtMoney(conPagado * 1.21)} con IVA` },
+                  { label: 'Pendiente (sin IVA)', value: fmtMoney(conPendiente), color: conPendiente > 0 ? '#C9A227' : '#1D9E75', sub: conPendiente > 0 ? `${fmtMoney(conPendiente * 1.21)} pendiente con IVA` : 'Todo pagado' },
+                ].map(card => (
+                  <div key={card.label} style={{ background: '#fff', borderRadius: 10, border: '1px solid #E8E6E0', padding: '18px 22px' }}>
+                    <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#AAA', margin: '0 0 8px' }}>{card.label}</p>
+                    <p style={{ fontSize: 20, fontWeight: 300, color: card.color, margin: '0 0 4px', letterSpacing: '-0.01em' }}>{card.value}</p>
+                    <p style={{ fontSize: 10, color: '#CCC', margin: 0 }}>{card.sub}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Progress bar */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 7 }}>
+                  <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA' }}>Progreso de pago</span>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: '#2563EB' }}>{Math.round(conPct)}%</span>
+                </div>
+                <div style={{ height: 5, background: '#F0EEE8', borderRadius: 3, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${conPct}%`, background: 'linear-gradient(to right, #2563EB, #3B82F6)', borderRadius: 3, transition: 'width 0.8s ease' }} />
+                </div>
+              </div>
+
+              {/* Payment rows */}
+              <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #E8E6E0', overflow: 'hidden' }}>
+                {[...pagosConstructora]
+                  .sort((a, b) => a.fecha_estimada.localeCompare(b.fecha_estimada))
+                  .map((p, i) => {
+                    const paid = p.status === 'pagado'
+                    const st = paid
+                      ? { label: 'Pagado',    color: '#1D9E75', bg: '#EEF8F4' }
+                      : { label: 'Programado', color: '#888',   bg: '#F4F4F4' }
                     return (
-                      <div key={f.id} style={{ padding: '14px 18px', borderBottom: i < facts.length - 1 ? '1px solid #F5F4F1' : 'none' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 8 }}>
-                          <p style={{ fontSize: 13, color: '#1A1A1A', margin: 0, flex: 1, lineHeight: 1.35 }}>{f.concepto}</p>
-                          <p style={{ fontSize: 16, fontWeight: 600, color: '#1A1A1A', margin: 0, whiteSpace: 'nowrap' }}>{fmtMoney(f.monto)}</p>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '3px 9px', borderRadius: 4, background: st.bg, color: st.color }}>
+                      <div key={p.id} style={{
+                        padding: '14px 22px',
+                        borderBottom: i < pagosConstructora.length - 1 ? '1px solid #F5F4F1' : 'none',
+                        display: 'flex', alignItems: 'center', gap: 16,
+                      }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{ fontSize: 13, color: '#1A1A1A', margin: '0 0 5px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.concepto}</p>
+                          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 8px', borderRadius: 4, background: st.bg, color: st.color }}>
                             {st.label}
                           </span>
-                          {f.fecha_pago_acordada && (
-                            <span style={{ fontSize: 10, color: '#AAA' }}>{fmtShort(f.fecha_pago_acordada)}</span>
-                          )}
                         </div>
+                        <span style={{ fontSize: 11, color: '#AAA', whiteSpace: 'nowrap' }}>
+                          {fmtShort(p.fecha_estimada)}
+                        </span>
+                        {p.importe_estimado !== null && (
+                          <div style={{ textAlign: 'right', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                            <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1A1A' }}>{fmtMoney(p.importe_estimado)}</div>
+                            <div style={{ fontSize: 10, color: '#AAA', marginTop: 1 }}>sin IVA · {fmtMoney(p.importe_estimado * 1.21)} c/IVA</div>
+                          </div>
+                        )}
                       </div>
                     )
                   })}
-                </div>
               </div>
-            ))}
-          </div>
-        </>
+            </div>
+          )}
+        </section>
       )}
     </div>
   )
@@ -529,41 +715,138 @@ function groupPartidasForGantt(partidas: Partida[]): { label: string; color: str
   return result
 }
 
+// ── Mobile Gantt — full-width bars, labels stacked above ─────────────────────
+
+function GanttMobile({ groups, honorarios, pagosConstructora, start, end, totalMs, showToday, todayPct, months }: {
+  groups: ReturnType<typeof groupPartidasForGantt>
+  honorarios: { concepto: string; importe: number | null; fecha: string; status?: string }[]
+  pagosConstructora: { concepto: string; importe: number | null; fecha: string; status?: string }[]
+  start: Date
+  end: Date
+  totalMs: number
+  showToday: boolean
+  todayPct: number
+  months: { label: string; left: number }[]
+}) {
+  const pct = (d: string) => (new Date(d + 'T00:00:00').getTime() - start.getTime()) / totalMs * 100
+
+  return (
+    <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #E8E6E0', padding: '16px 16px 20px', overflow: 'hidden' }}>
+
+      {/* Month axis */}
+      <div style={{ position: 'relative', height: 18, marginBottom: 10 }}>
+        {months.map((m, i) => (
+          <div key={i} style={{ position: 'absolute', left: `${m.left}%`, fontSize: 8, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: '#CCC', whiteSpace: 'nowrap' }}>{m.label}</div>
+        ))}
+        {showToday && (
+          <div style={{ position: 'absolute', left: `${todayPct}%`, top: 3, transform: 'translateX(-50%)', fontSize: 7, fontWeight: 700, color: '#E53E3E', letterSpacing: '0.04em' }}>HOY</div>
+        )}
+      </div>
+
+      {/* Payment rows — estudio */}
+      {honorarios.length > 0 && (() => {
+        const valid = honorarios.filter(h => {
+          const p = (new Date(h.fecha + 'T00:00:00').getTime() - start.getTime()) / totalMs * 100
+          return p >= -2 && p <= 102
+        })
+        if (valid.length === 0) return null
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', height: 28, marginBottom: 4 }}>
+            <div style={{ position: 'relative', flex: 1, height: '100%' }}>
+              <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: 1, background: '#F0EEE8' }} />
+              <div style={{ position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)', fontSize: 8, fontWeight: 700, color: PAGO_COLORS.honorarios, letterSpacing: '0.04em', textTransform: 'uppercase', background: '#fff', paddingRight: 6, zIndex: 2 }}>
+                Estudio
+              </div>
+              {valid.map((h, i) => {
+                const left = Math.min(97, Math.max(2, pct(h.fecha)))
+                const paid = h.status === 'pagada'
+                const color = PAGO_COLORS.honorarios
+                return (
+                  <div key={i} style={{ position: 'absolute', left: `${left}%`, top: '50%', transform: 'translate(-50%, -50%)', width: 13, height: 13, borderRadius: '50%', background: color, border: '2px solid #fff', boxShadow: paid ? `0 0 0 2px ${color}` : `0 0 0 1.5px ${color}55`, zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {paid && <svg width="7" height="7" viewBox="0 0 10 10" fill="none"><path d="M2 5.5l2.2 2.2L8 3" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* Payment rows — constructora */}
+      {pagosConstructora.length > 0 && (() => {
+        const valid = pagosConstructora.filter(p => {
+          const pc = (new Date(p.fecha + 'T00:00:00').getTime() - start.getTime()) / totalMs * 100
+          return pc >= -2 && pc <= 102
+        })
+        if (valid.length === 0) return null
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', height: 28, marginBottom: 8 }}>
+            <div style={{ position: 'relative', flex: 1, height: '100%' }}>
+              <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: 1, background: '#F0EEE8' }} />
+              <div style={{ position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)', fontSize: 8, fontWeight: 700, color: PAGO_COLORS.constructora, letterSpacing: '0.04em', textTransform: 'uppercase', background: '#fff', paddingRight: 6, zIndex: 2 }}>
+                Constructora
+              </div>
+              {valid.map((p, i) => {
+                const left = Math.min(97, Math.max(2, pct(p.fecha)))
+                const paid = p.status === 'pagado'
+                const color = PAGO_COLORS.constructora
+                return (
+                  <div key={i} style={{ position: 'absolute', left: `${left}%`, top: '50%', transform: 'translate(-50%, -50%)', width: 13, height: 13, borderRadius: '50%', background: color, border: '2px solid #fff', boxShadow: paid ? `0 0 0 2px ${color}` : `0 0 0 1.5px ${color}55`, zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {paid && <svg width="7" height="7" viewBox="0 0 10 10" fill="none"><path d="M2 5.5l2.2 2.2L8 3" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* Phase rows — label above bar */}
+      {groups.map((g, gi) => {
+        const allDone = g.items.every(p => p.completado)
+        const hasBar  = g.items.some(p => p.fecha_inicio || p.fecha_fin)
+        return (
+          <div key={gi} style={{ marginBottom: gi < groups.length - 1 ? 10 : 0 }}>
+            {/* Label */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+              <div style={{ width: 7, height: 7, borderRadius: '50%', background: allDone ? '#CCC' : g.color, flexShrink: 0 }} />
+              <span style={{ fontSize: 11, fontWeight: 600, color: allDone ? '#AAA' : '#1A1A1A', textDecoration: allDone ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {g.label}
+              </span>
+            </div>
+            {/* Bar track */}
+            <div style={{ position: 'relative', height: 20, background: '#F5F4F1', borderRadius: 4 }}>
+              {g.items.map(p => {
+                if (!p.fecha_inicio && !p.fecha_fin) return null
+                const l = p.fecha_inicio ? Math.max(0, pct(p.fecha_inicio)) : 0
+                const r = p.fecha_fin    ? Math.min(100, pct(p.fecha_fin))  : l + 4
+                const w = Math.max(1, r - l)
+                return (
+                  <div key={p.id} style={{ position: 'absolute', left: `${l}%`, width: `${w}%`, top: 3, bottom: 3, borderRadius: 3, background: p.completado ? '#CCC' : p.color, opacity: p.completado ? 0.5 : 1 }} />
+                )
+              })}
+              {showToday && (
+                <div style={{ position: 'absolute', left: `${todayPct}%`, top: 0, bottom: 0, width: 1.5, background: '#E53E3E', zIndex: 2, opacity: 0.85 }} />
+              )}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function GanttReadOnly({ partidas, honorarios, pagosConstructora }: {
   partidas: Partida[]
-  honorarios: { concepto: string; importe: number | null; fecha: string }[]
-  pagosConstructora: { concepto: string; importe: number | null; fecha: string }[]
+  honorarios: { concepto: string; importe: number | null; fecha: string; status?: string }[]
+  pagosConstructora: { concepto: string; importe: number | null; fecha: string; status?: string }[]
 }) {
   const [tooltip,        setTooltip]        = useState<GanttTooltipInfo | null>(null)
   const [paymentTooltip, setPaymentTooltip] = useState<PaymentTooltipInfo | null>(null)
   const dates = partidas.flatMap(p => [p.fecha_inicio, p.fecha_fin].filter(Boolean) as string[])
   const groups = groupPartidasForGantt(partidas)
 
-  // Card list — always rendered; used as the only view when no dates,
-  // and as the mobile-only view when dates exist (cp-gantt-mobile hides on desktop)
-  const cardList = (
-    <div className={dates.length > 0 ? 'cp-gantt-mobile' : undefined} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {groups.map((g, gi) => {
-        const allDone = g.items.every(p => p.completado)
-        const fi = g.items.find(p => p.fecha_inicio)?.fecha_inicio ?? null
-        const ff = [...g.items].reverse().find(p => p.fecha_fin)?.fecha_fin ?? null
-        return (
-          <div key={gi} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 18px', background: '#fff', borderRadius: 8, border: '1px solid #E8E6E0' }}>
-            <div style={{ width: 8, height: 8, borderRadius: '50%', background: allDone ? '#CCC' : g.color, flexShrink: 0 }} />
-            <span style={{ fontSize: 13, color: allDone ? '#AAA' : '#1A1A1A', textDecoration: allDone ? 'line-through' : 'none', flex: 1 }}>{g.label}</span>
-            {(fi || ff) && !allDone && (
-              <span style={{ fontSize: 10, color: '#AAA', whiteSpace: 'nowrap' }}>
-                {fi ? fmtShort(fi) : ''}{fi && ff ? ' → ' : ''}{ff ? fmtShort(ff) : ''}
-              </span>
-            )}
-            {allDone && <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#1D9E75', background: '#EEF8F4', padding: '2px 8px', borderRadius: 3, flexShrink: 0 }}>Completado</span>}
-          </div>
-        )
-      })}
-    </div>
-  )
-
-  if (dates.length === 0) return cardList
+  if (dates.length === 0) return null
 
   const minD = dates.reduce((a, b) => a < b ? a : b)
   const maxD = dates.reduce((a, b) => a > b ? a : b)
@@ -598,40 +881,24 @@ function GanttReadOnly({ partidas, honorarios, pagosConstructora }: {
             </div>
           )}
         </div>
-        {/* Payment milestone dots row */}
-        {(honorarios.length > 0 || pagosConstructora.length > 0) && (() => {
-          const allPayments = [
-            ...honorarios.map(h => ({ ...h, tipo: 'honorarios' as const })),
-            ...pagosConstructora.map(p => ({ ...p, tipo: 'constructora' as const })),
-          ].filter(p => {
-            const pct = (new Date(p.fecha + 'T00:00:00').getTime() - start.getTime()) / totalMs * 100
-            return pct >= -2 && pct <= 102
+        {/* Payment milestone rows — estudio */}
+        {honorarios.length > 0 && (() => {
+          const valid = honorarios.filter(h => {
+            const p = (new Date(h.fecha + 'T00:00:00').getTime() - start.getTime()) / totalMs * 100
+            return p >= -2 && p <= 102
           })
-          if (allPayments.length === 0) return null
+          if (valid.length === 0) return null
           return (
-            <div style={{ display: 'flex', alignItems: 'center', height: 28, marginBottom: 10 }}>
-              {/* Legend */}
-              <div style={{ width: 200, flexShrink: 0, paddingRight: 18, display: 'flex', alignItems: 'center', gap: 10 }}>
-                {honorarios.length > 0 && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: PAGO_COLORS.honorarios }} />
-                    <span style={{ fontSize: 9, color: '#AAA', fontWeight: 600, letterSpacing: '0.04em' }}>Honorarios</span>
-                  </div>
-                )}
-                {pagosConstructora.length > 0 && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: PAGO_COLORS.constructora }} />
-                    <span style={{ fontSize: 9, color: '#AAA', fontWeight: 600, letterSpacing: '0.04em' }}>Constructora</span>
-                  </div>
-                )}
+            <div style={{ display: 'flex', alignItems: 'center', height: 32, marginBottom: 6 }}>
+              <div style={{ width: 200, flexShrink: 0, paddingRight: 18, display: 'flex', alignItems: 'center' }}>
+                <span style={{ fontSize: 9, color: PAGO_COLORS.honorarios, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Pagos a estudio</span>
               </div>
-              {/* Dots timeline */}
               <div style={{ flex: 1, height: '100%', position: 'relative' }}>
-                {/* Subtle baseline */}
                 <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: 1, background: '#F0EEE8' }} />
-                {allPayments.map((p, i) => {
-                  const left = Math.min(98, Math.max(0, (new Date(p.fecha + 'T00:00:00').getTime() - start.getTime()) / totalMs * 100))
-                  const color = PAGO_COLORS[p.tipo]
+                {valid.map((h, i) => {
+                  const left = Math.min(98, Math.max(0, (new Date(h.fecha + 'T00:00:00').getTime() - start.getTime()) / totalMs * 100))
+                  const paid = h.status === 'pagada'
+                  const color = PAGO_COLORS.honorarios
                   return (
                     <div
                       key={i}
@@ -640,20 +907,85 @@ function GanttReadOnly({ partidas, honorarios, pagosConstructora }: {
                         left: `${left}%`,
                         top: '50%',
                         transform: 'translate(-50%, -50%)',
-                        width: 11, height: 11,
+                        width: 14, height: 14,
                         borderRadius: '50%',
                         background: color,
                         border: '2px solid #fff',
-                        boxShadow: `0 1px 4px rgba(0,0,0,0.18), 0 0 0 1.5px ${color}55`,
+                        boxShadow: paid
+                          ? `0 1px 6px rgba(0,0,0,0.22), 0 0 0 2px ${color}`
+                          : `0 1px 4px rgba(0,0,0,0.18), 0 0 0 1.5px ${color}55`,
                         cursor: 'default',
                         zIndex: 3,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
                       }}
                       onMouseEnter={e => {
                         const rect = e.currentTarget.getBoundingClientRect()
-                        setPaymentTooltip({ tipo: p.tipo, concepto: p.concepto, importe: p.importe, fecha: p.fecha, x: rect.left + rect.width / 2, y: rect.top })
+                        setPaymentTooltip({ tipo: 'honorarios', concepto: h.concepto, importe: h.importe, fecha: h.fecha, x: rect.left + rect.width / 2, y: rect.top })
                       }}
                       onMouseLeave={() => setPaymentTooltip(null)}
-                    />
+                    >
+                      {paid && (
+                        <svg width="8" height="8" viewBox="0 0 10 10" fill="none">
+                          <path d="M2 5.5l2.2 2.2L8 3" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* Payment milestone rows — constructora */}
+        {pagosConstructora.length > 0 && (() => {
+          const valid = pagosConstructora.filter(p => {
+            const pc = (new Date(p.fecha + 'T00:00:00').getTime() - start.getTime()) / totalMs * 100
+            return pc >= -2 && pc <= 102
+          })
+          if (valid.length === 0) return null
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', height: 32, marginBottom: 10 }}>
+              <div style={{ width: 200, flexShrink: 0, paddingRight: 18, display: 'flex', alignItems: 'center' }}>
+                <span style={{ fontSize: 9, color: PAGO_COLORS.constructora, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Pagos a constructora</span>
+              </div>
+              <div style={{ flex: 1, height: '100%', position: 'relative' }}>
+                <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: 1, background: '#F0EEE8' }} />
+                {valid.map((p, i) => {
+                  const left = Math.min(98, Math.max(0, (new Date(p.fecha + 'T00:00:00').getTime() - start.getTime()) / totalMs * 100))
+                  const paid = p.status === 'pagado'
+                  const color = PAGO_COLORS.constructora
+                  return (
+                    <div
+                      key={i}
+                      style={{
+                        position: 'absolute',
+                        left: `${left}%`,
+                        top: '50%',
+                        transform: 'translate(-50%, -50%)',
+                        width: 14, height: 14,
+                        borderRadius: '50%',
+                        background: color,
+                        border: '2px solid #fff',
+                        boxShadow: paid
+                          ? `0 1px 6px rgba(0,0,0,0.22), 0 0 0 2px ${color}`
+                          : `0 1px 4px rgba(0,0,0,0.18), 0 0 0 1.5px ${color}55`,
+                        cursor: 'default',
+                        zIndex: 3,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}
+                      onMouseEnter={e => {
+                        const rect = e.currentTarget.getBoundingClientRect()
+                        setPaymentTooltip({ tipo: 'constructora', concepto: p.concepto, importe: p.importe, fecha: p.fecha, x: rect.left + rect.width / 2, y: rect.top })
+                      }}
+                      onMouseLeave={() => setPaymentTooltip(null)}
+                    >
+                      {paid && (
+                        <svg width="8" height="8" viewBox="0 0 10 10" fill="none">
+                          <path d="M2 5.5l2.2 2.2L8 3" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      )}
+                    </div>
                   )
                 })}
               </div>
@@ -698,8 +1030,10 @@ function GanttReadOnly({ partidas, honorarios, pagosConstructora }: {
       </div>
     </div>
 
-    {/* Mobile card list */}
-    {cardList}
+    {/* Mobile Gantt — full-width bars */}
+    <div className="cp-gantt-mobile">
+      <GanttMobile groups={groups} honorarios={honorarios} pagosConstructora={pagosConstructora} start={start} end={end} totalMs={totalMs} showToday={showToday} todayPct={todayPct} months={months} />
+    </div>
 
     <GanttTooltip   info={tooltip} />
     <PaymentTooltip info={paymentTooltip} />
@@ -710,8 +1044,8 @@ function GanttReadOnly({ partidas, honorarios, pagosConstructora }: {
 function TabObra({ visitas, partidas, honorarios, pagosConstructora }: {
   visitas: Visita[]
   partidas: Partida[]
-  honorarios: { concepto: string; importe: number | null; fecha: string }[]
-  pagosConstructora: { concepto: string; importe: number | null; fecha: string }[]
+  honorarios: { concepto: string; importe: number | null; fecha: string; status?: string }[]
+  pagosConstructora: { concepto: string; importe: number | null; fecha: string; status?: string }[]
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
@@ -722,24 +1056,6 @@ function TabObra({ visitas, partidas, honorarios, pagosConstructora }: {
         <section>
           <STitle>Cronograma de obra</STitle>
           <GanttReadOnly partidas={partidas} honorarios={honorarios} pagosConstructora={pagosConstructora} />
-          {/* Mobile: payment milestones list */}
-          {(honorarios.length > 0 || pagosConstructora.length > 0) && (
-            <div className="cp-gantt-mobile" style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {[
-                ...honorarios.map(h => ({ ...h, tipo: 'honorarios' as const })),
-                ...pagosConstructora.map(p => ({ ...p, tipo: 'constructora' as const })),
-              ].sort((a, b) => a.fecha.localeCompare(b.fecha)).map((p, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#fff', borderRadius: 8, border: '1px solid #E8E6E0' }}>
-                  <div style={{ width: 9, height: 9, borderRadius: '50%', background: PAGO_COLORS[p.tipo], flexShrink: 0, boxShadow: `0 0 0 2px ${PAGO_COLORS[p.tipo]}33` }} />
-                  <span style={{ fontSize: 12, color: '#1A1A1A', flex: 1 }}>{p.concepto}</span>
-                  {p.importe !== null && <span style={{ fontSize: 11, fontWeight: 600, color: '#1A1A1A', whiteSpace: 'nowrap' }}>{fmtEUR(p.importe)}</span>}
-                  <span style={{ fontSize: 10, color: '#AAA', whiteSpace: 'nowrap' }}>
-                    {new Date(p.fecha + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
         </section>
       )}
 
@@ -919,7 +1235,7 @@ const TABS = [
   { id: 'inicio',      label: 'Proyecto'    },
   { id: 'documentos',  label: 'Documentos'  },
   { id: 'galeria',     label: 'Galería'     },
-  { id: 'obra',        label: 'Obra'        },
+  { id: 'obra',        label: 'Cronograma de obra y pagos' },
   { id: 'novedades',   label: 'Visitas de obra' },
 ]
 
@@ -942,12 +1258,13 @@ export default function ClientPortal({
   // Prepare payment dots data
   const honorariosDots = facturas
     .filter(f => f.fecha_pago_acordada)
-    .map(f => ({ concepto: f.concepto, importe: f.monto, fecha: f.fecha_pago_acordada! }))
+    .map(f => ({ concepto: f.concepto, importe: f.monto, fecha: f.fecha_pago_acordada!, status: f.status }))
 
   const constructoraDots = pagosConstructora.map(p => ({
     concepto: p.concepto,
     importe:  p.importe_estimado,
     fecha:    p.fecha_estimada,
+    status:   p.status,
   }))
   const [tab, setTab] = useState('inicio')
   const router = useRouter()
@@ -1003,7 +1320,7 @@ export default function ClientPortal({
       {/* ── Content (offset by nav) ── */}
       <div style={{ paddingTop: NAV_H }}>
         {tab === 'inicio'     && <TabInicio            proyecto={proyecto} renders={renders} portal={portal} />}
-        {tab === 'documentos' && <TabDocumentosYPagos  portal={portal} contratos={contratos} facturas={facturas} />}
+        {tab === 'documentos' && <TabDocumentosYPagos  portal={portal} contratos={contratos} facturas={facturas} pagosConstructora={pagosConstructora} />}
         {tab === 'galeria'    && <TabGaleria            renders={renders} />}
         {tab === 'obra'       && <TabObra              visitas={visitas} partidas={partidas} honorarios={honorariosDots} pagosConstructora={constructoraDots} />}
         {tab === 'novedades'  && <TabVisitasObra        visitas={visitas} />}

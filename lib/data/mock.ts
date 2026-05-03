@@ -1,4 +1,14 @@
-import type { Proyecto, Propiedad, Tarea, Evento } from '@/lib/types'
+import type { Proyecto, Propiedad } from '@/lib/types'
+
+interface Tarea {
+  id: string; titulo: string; descripcion: string
+  proyecto_id: string; asignado_a: string
+  estado: string; fecha_limite: string
+}
+interface Evento {
+  id: string; titulo: string; fecha: string
+  descripcion: string; proyecto_id: string
+}
 
 export const proyectosMock: Proyecto[] = [
   {

@@ -252,6 +252,27 @@ export default async function ExecutionPortalTokenPage({
     })),
   }))
 
+  // Phase ↔ line item links: determine which phases are relevant for this partner's line items
+  const scopedPhaseIds = Object.values(portalPhasesByChapter).flat().filter(Boolean).map(ph => ph!.id)
+  const scopedTemplateLineItemIds = filteredProjectUnits.flatMap(pu =>
+    pu.line_items.map(pli => pli.template_line_item.id)
+  )
+
+  const { data: phaseLineItemLinks } = scopedPhaseIds.length > 0
+    ? await admin
+        .from('fpe_template_phase_line_items')
+        .select('phase_id, line_item_id')
+        .in('phase_id', scopedPhaseIds)
+    : { data: [] as { phase_id: string; line_item_id: string }[] }
+
+  // anyConfigExists: if no rows exist for these phases → feature not configured yet → show all phases
+  const anyConfigExists = (phaseLineItemLinks ?? []).length > 0
+  const relevantPhaseIds = new Set(
+    (phaseLineItemLinks ?? [])
+      .filter(r => scopedTemplateLineItemIds.includes(r.line_item_id))
+      .map(r => r.phase_id)
+  )
+
   // Portal chapters to pass down (with phases + lead_time_days for phase duration inputs)
   const portalChaptersForUI = chaptersWithPrincipal.map(ch => ({
     id:   ch.id,
@@ -259,6 +280,7 @@ export default async function ExecutionPortalTokenPage({
     isPrincipal: isPrincipalForChapterIds.includes(ch.id),
     phases: (portalPhasesByChapter[ch.id] ?? [])
       .sort((a, b) => a.orden - b.orden)
+      .filter(ph => !anyConfigExists || relevantPhaseIds.has(ph.id))
       .map(ph => ({
         id:             ph.id,
         nombre:         ph.nombre,

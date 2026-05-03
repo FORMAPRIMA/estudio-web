@@ -44,12 +44,16 @@ export async function GET(req: NextRequest) {
 
       await admin.from('facturas').update({ status: 'cobrable' }).eq('id', f.id)
       await admin.from('avisos').insert({
-        tipo:         'equipo',
-        autor_id:     null,
-        titulo:       `Factura cobrable: ${f.concepto}`,
-        contenido:    `La factura de ${montoFmt} del proyecto "${proyLabel}" ha llegado a su fecha acordada y está lista para emitir.`,
-        nivel:        'info',
-        fecha_activa: today,
+        tipo:           'equipo',
+        autor_id:       null,
+        titulo:         `Factura cobrable: ${f.concepto}`,
+        contenido:      `La factura de ${montoFmt} del proyecto "${proyLabel}" ha llegado a su fecha acordada y está lista para emitir.`,
+        nivel:          'recordatorio',
+        fecha_activa:   today,
+        visible_roles:  ['fp_partner'],
+        linkeable_type: 'factura',
+        linkeable_id:   f.id,
+        link_label:     'Ver en facturación',
       })
     })
   )

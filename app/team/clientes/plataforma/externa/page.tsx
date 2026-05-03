@@ -15,7 +15,7 @@ export default async function Page() {
     .select('rol')
     .eq('id', user.id)
     .single()
-  if (!profile || !['fp_partner', 'fp_manager', 'fp_team'].includes(profile.rol))
+  if (!profile || !['fp_partner', 'fp_manager', 'fp_team', 'fp_biz_dev'].includes(profile.rol))
     redirect('/team/dashboard')
 
   const admin = createAdminClient()

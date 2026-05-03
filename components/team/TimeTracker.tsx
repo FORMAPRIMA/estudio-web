@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { deleteTimeEntry } from '@/app/actions/time-tracker'
+import { MarketingMetricsView } from '@/components/team/marketing/MarketingMetricsView'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -53,7 +54,7 @@ interface TimeEntry {
 // Grid: [user_id][fecha][hora_inicio] = fase_id | 'int_CAT' | ''
 type Grid = Record<string, Record<string, Record<number, string>>>
 
-interface ProyectoNegocio { id: string; nombre: string; activo: boolean; orden: number; visible_para: string[] | null }
+interface ProyectoNegocio { id: string; nombre: string; activo: boolean; orden: number; visible_para: string[] | null; equipo: 'arquitectura' | 'marketing' }
 interface SeccionNegocio { id: string; proyecto_id: string; nombre: string; orden: number }
 interface FaseNegocio { id: string; seccion_id: string; nombre: string; orden: number }
 interface OfertaFP { id: string; nombre: string; cliente_potencial: string | null; activo: boolean; orden: number; visible_para: string[] | null }
@@ -114,10 +115,11 @@ const AVATAR_PALETTE = [
 const mkInitials = (n: string) =>
   n.trim().split(' ').slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('')
 
-// h<9 o h>=19 es extra siempre; h===14 (comida) solo es extra en fin de semana
-const isExtraSlot = (h: number) => h < 9 || h >= 19
+// h<9 o h>=18 es extra siempre; viernes h>=15 también es extra
+const isExtraSlot = (h: number) => h < 9 || h >= 18
 const isWeekendDate = (d: string) => { const day = new Date(d + 'T12:00:00').getDay(); return day === 0 || day === 6 }
-const isCellExtra = (h: number, d: string) => isWeekendDate(d) || h < 9 || h >= 19
+const isFridayDate = (d: string) => new Date(d + 'T12:00:00').getDay() === 5
+const isCellExtra = (h: number, d: string) => isWeekendDate(d) || h < 9 || h >= 18 || (isFridayDate(d) && h >= 15)
 
 const sectionColor = (sec: string): { bg: string; tc: string } => {
   if (sec === 'Anteproyecto')             return { bg: '#EAF3DE', tc: '#27500A' }
@@ -295,7 +297,7 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
 
     // Load proyectos internos + ofertas
     const [{ data: pnData }, { data: snData }, { data: fnData }, { data: ofData }] = await Promise.all([
-      supabase.from('proyectos_internos').select('id, nombre, activo, orden, visible_para').order('orden'),
+      supabase.from('proyectos_internos').select('id, nombre, activo, orden, visible_para, equipo').order('orden'),
       supabase.from('proyectos_internos_secciones').select('id, proyecto_id, nombre, orden').order('orden'),
       supabase.from('proyectos_internos_fases').select('id, seccion_id, nombre, orden').order('orden'),
       supabase.from('ofertas_fp').select('id, nombre, cliente_potencial, activo, orden, visible_para').order('orden'),
@@ -586,14 +588,18 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
     return me ? [me, ...others] : teamMembers
   }, [currentUserRole, teamMembers, currentUserId])
 
+  const isLaborEntry = (e: TimeEntry) =>
+    !isWeekendDate(e.fecha) && e.hora_inicio >= 9 &&
+    (isFridayDate(e.fecha) ? e.hora_inicio < 15 : e.hora_inicio < 18)
+
   const weekHours = (uid: string) =>
     allEntries
-      .filter((e) => e.user_id === uid && weekDates.includes(e.fecha) && !e.es_extra)
+      .filter((e) => e.user_id === uid && weekDates.includes(e.fecha) && isLaborEntry(e))
       .reduce((sum, e) => sum + e.horas, 0)
 
   const extraHours = (uid: string) =>
     allEntries
-      .filter((e) => e.user_id === uid && weekDates.includes(e.fecha) && e.es_extra)
+      .filter((e) => e.user_id === uid && weekDates.includes(e.fecha) && isCellExtra(e.hora_inicio, e.fecha))
       .reduce((sum, e) => sum + e.horas, 0)
 
   // ── Export / Import ────────────────────────────────────────────────────────
@@ -763,28 +769,51 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
   // ── Dropdown filtered options ──
 
   const dropdownOptions = useMemo(() => {
-    const q = dropSearch.toLowerCase()
-    const filteredIntCats = INTERNAL_CATS.filter(
-      (cat) => !q || cat.toLowerCase().includes(q) || 'interno'.includes(q)
-    )
-    const filteredProjects = proyectos.filter((p) => {
-      if (!q) return true
-      return p.nombre.toLowerCase().includes(q) || p.codigo.toLowerCase().includes(q)
-    }).map((p) => ({
-      proyecto: p,
-      fases: phasesByProject[p.id]?.fases ?? [],
-    })).filter((pg) => pg.fases.length > 0)
+    const q = dropSearch.toLowerCase().trim()
 
+    // Internal categories — match by category code or its display label
+    const filteredIntCats = INTERNAL_CATS.filter((cat) => {
+      if (!q) return true
+      const label = (INTERNAL_CATS_LABELS[cat] ?? cat).toLowerCase()
+      return cat.toLowerCase().includes(q) || label.includes(q) || 'interno'.includes(q)
+    })
+
+    // Architecture projects: drill into fases when project name doesn't match.
+    // A fase is shown if its label or its section matches; if the project matches,
+    // all its fases are shown.
+    const filteredProjects = proyectos.map((p) => {
+      const projFases = phasesByProject[p.id]?.fases ?? []
+      if (!q) return { proyecto: p, fases: projFases }
+      const projectMatches = p.nombre.toLowerCase().includes(q) || p.codigo.toLowerCase().includes(q)
+      if (projectMatches) return { proyecto: p, fases: projFases }
+      const matchingFases = projFases.filter(
+        (f) => f.label.toLowerCase().includes(q) || (f.seccion ?? '').toLowerCase().includes(q)
+      )
+      return { proyecto: p, fases: matchingFases }
+    }).filter((pg) => pg.fases.length > 0)
+
+    // Internal business projects (3-level): match on proyecto, sección or fase name.
     const filteredProyectosNegocio = proyectosNegocio
       .filter(p => p.activo)
+      .filter(p => {
+        // Equipo gating: marketing solo visible para fp_biz_dev y fp_partner;
+        // arquitectura visible para fp_team, fp_manager, fp_partner (no para fp_biz_dev).
+        if (p.equipo === 'marketing') return currentUserRole === 'fp_biz_dev' || currentUserRole === 'fp_partner'
+        return currentUserRole !== 'fp_biz_dev'
+      })
       .filter(p => !p.visible_para || p.visible_para.length === 0 || p.visible_para.includes(currentUserId))
-      .filter(p => !q || p.nombre.toLowerCase().includes(q) || 'interno negocio'.includes(q))
       .map(p => {
         const secciones = seccionesNegocio.filter(s => s.proyecto_id === p.id)
-        const fasesDeProy = secciones.flatMap(s =>
+        const allFases = secciones.flatMap(s =>
           fasesNegocio.filter(f => f.seccion_id === s.id).map(f => ({ ...f, seccionNombre: s.nombre }))
         )
-        return { proyecto: p, fases: fasesDeProy }
+        if (!q) return { proyecto: p, fases: allFases }
+        const projectMatches = p.nombre.toLowerCase().includes(q) || 'interno negocio'.includes(q)
+        if (projectMatches) return { proyecto: p, fases: allFases }
+        const matchingFases = allFases.filter(
+          f => f.nombre.toLowerCase().includes(q) || f.seccionNombre.toLowerCase().includes(q)
+        )
+        return { proyecto: p, fases: matchingFases }
       })
       .filter(pg => pg.fases.length > 0)
 
@@ -795,7 +824,7 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
         (o.cliente_potencial ?? '').toLowerCase().includes(q))
 
     return { filteredIntCats, filteredProjects, filteredProyectosNegocio, filteredOfertas }
-  }, [dropSearch, proyectos, phasesByProject, proyectosNegocio, seccionesNegocio, fasesNegocio, ofertasFP])
+  }, [dropSearch, proyectos, phasesByProject, proyectosNegocio, seccionesNegocio, fasesNegocio, ofertasFP, currentUserId, currentUserRole])
 
   // ── Notes ──
 
@@ -856,6 +885,8 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
           const fase = fasesNegocio.find(f => f.id === faseId)
           const sec = fase ? seccionesNegocio.find(s => s.id === fase.seccion_id) : null
           const proy = sec ? proyectosNegocio.find(p => p.id === sec.proyecto_id) : null
+          // Marketing entries render in their own block below — skip here to avoid duplicate counting.
+          if (proy?.equipo === 'marketing') return
           label = proy ? `${proy.nombre} · ${fase?.nombre ?? ''}` : (fase?.nombre ?? 'Interno')
         } else if (e.categoria_interna.startsWith('oferta_')) {
           const ofertaId = e.categoria_interna.slice(7)
@@ -932,6 +963,8 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
           const fase = fasesNegocio.find(f => f.id === faseId)
           const sec = fase ? seccionesNegocio.find(s => s.id === fase.seccion_id) : null
           const proy = sec ? proyectosNegocio.find(p => p.id === sec.proyecto_id) : null
+          // Marketing entries render in their own block — skip here to avoid duplicate counting.
+          if (proy?.equipo === 'marketing') return
           seccion = proy ? `${proy.nombre} · ${fase?.nombre ?? ''}` : (fase?.nombre ?? 'Interno')
         } else if (e.categoria_interna.startsWith('oferta_')) {
           const ofertaId = e.categoria_interna.slice(7)
@@ -1226,19 +1259,20 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
             </thead>
             <tbody>
               {HOURS.map((h) => {
-                const isExtraRow = isExtraSlot(h)  // para la etiqueta de hora (sin h===14)
+                const isExtraRow = isExtraSlot(h)
                 const isMid = h === 14
                 return (
                   <tr key={h} style={{ borderTop: isMid ? '2px solid #ccc' : '1px solid #eee' }}>
                     <td style={{
-                      ...tdStyle, fontWeight: 600, textAlign: 'center', minWidth: 36, fontSize: 10,
+                      ...tdStyle, fontWeight: 600, textAlign: 'center', minWidth: 82, fontSize: 9,
                       color: isExtraRow ? '#D85A30' : '#555',
                       background: isExtraRow ? 'rgba(216,90,48,0.04)' : '#FAFAF8',
+                      whiteSpace: 'nowrap',
                     }}>
-                      {h}:00
+                      {`${h}:00 – ${h + 1}:00`}
                     </td>
                     {displayDates.map((d) => {
-                      const isExtra = isCellExtra(h, d)  // por celda: incluye h===14 en fin de semana
+                      const isExtra = isCellExtra(h, d)  // por celda: fin de semana, h<9, h>=18, viernes h>=15
                       const val = getCell(viewingUserId, d, h)
                       const isFailed = failedCells.has(cellKey(viewingUserId, d, h))
                       const disp = cellDisplay(val)
@@ -1625,6 +1659,29 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
             )}
           </div>
         )}
+
+        {/* Marketing block — only renders if there are marketing entries in the period */}
+        {!analysisLoading && (currentUserRole === 'fp_partner' || currentUserRole === 'fp_biz_dev') && (
+          <div style={{ marginTop: 48, paddingTop: 32, borderTop: '1px solid #E8E6E0' }}>
+            <div style={{ marginBottom: 20 }}>
+              <p style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', marginBottom: 6, fontWeight: 600 }}>
+                Marketing
+              </p>
+              <h3 style={{ fontSize: 20, fontWeight: 200, color: '#1A1A1A', margin: 0, lineHeight: 1.1 }}>
+                Foco del período
+              </h3>
+            </div>
+            <MarketingMetricsView
+              entries={analysisEntries}
+              proyectosNegocio={proyectosNegocio}
+              seccionesNegocio={seccionesNegocio}
+              fasesNegocio={fasesNegocio}
+              teamMembers={teamMembers}
+              mode="personal"
+              periodLabel={periodLabel}
+            />
+          </div>
+        )}
       </div>
     )
   }
@@ -1951,6 +2008,29 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
                 <span style={{ fontSize: 11, color: '#777' }}>Zona naranja = horas extra</span>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Marketing block — team aggregate with foco-por-persona */}
+        {!teamAnalysisLoading && (
+          <div style={{ marginTop: 48, paddingTop: 32, borderTop: '1px solid #E8E6E0' }}>
+            <div style={{ marginBottom: 20 }}>
+              <p style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', marginBottom: 6, fontWeight: 600 }}>
+                Marketing
+              </p>
+              <h3 style={{ fontSize: 20, fontWeight: 200, color: '#1A1A1A', margin: 0, lineHeight: 1.1 }}>
+                Foco del equipo
+              </h3>
+            </div>
+            <MarketingMetricsView
+              entries={teamAnalysisEntries}
+              proyectosNegocio={proyectosNegocio}
+              seccionesNegocio={seccionesNegocio}
+              fasesNegocio={fasesNegocio}
+              teamMembers={teamMembers}
+              mode="team"
+              periodLabel={periodLabel}
+            />
           </div>
         )}
       </div>

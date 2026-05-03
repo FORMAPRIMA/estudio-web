@@ -21,7 +21,7 @@ export async function createTeamMember(input: {
   password: string
   nombre: string
   apellido: string
-  rol: 'fp_team' | 'fp_manager' | 'fp_partner'
+  rol: 'fp_team' | 'fp_manager' | 'fp_partner' | 'fp_biz_dev'
 }): Promise<{ success: true } | { error: string }> {
   try {
     await requirePartner()

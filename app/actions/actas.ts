@@ -4,6 +4,23 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { sendEmail, wrapEmail } from '@/lib/email'
+import Anthropic from '@anthropic-ai/sdk'
+import type { ActaLabels } from '@/components/pdfs/ActaVisitaObraPDF'
+
+const LABELS_EN: ActaLabels = {
+  actaLabel:    'Site Visit Report',
+  numPrefix:    'No.',
+  proyecto:     'Project',
+  asistentes:   'Attendees',
+  tipoEquipo:   'Team',
+  tipoCliente:  'Clients',
+  tipoProveedor: 'Suppliers',
+  tipoExterno:  'Guests',
+  estado_obras: 'Works Status',
+  instrucciones: 'Instructions',
+  fotografias:  'Construction Photographs',
+  recorrido:    'Updated virtual tour of the site visit',
+}
 
 const PATH_INTERNA = '/team/clientes/plataforma/interna'
 
@@ -41,11 +58,19 @@ export interface ClienteContacto {
   email_cc: string | null
 }
 
+export interface ProveedorContactoPersona {
+  id: string
+  nombre: string
+  cargo: string | null
+  email: string | null
+}
+
 export interface ProveedorContacto {
   id: string
   nombre: string
   tipo: string | null
   email: string | null
+  proveedor_contactos: ProveedorContactoPersona[]
 }
 
 export interface ContactosParaVisita {
@@ -78,6 +103,40 @@ export interface CrearActaInput {
   fotos_cliente?: string[]
   generarConstructor?: boolean
   generarCliente?: boolean
+  idioma?: 'es' | 'en'
+}
+
+// ── Translation helper (client PDF only, constructor always stays in Spanish) ──
+
+interface ContenidoTraducible {
+  titulo: string
+  estado_obras: string
+  instrucciones: string
+}
+
+async function traducirActaCliente(contenido: ContenidoTraducible): Promise<ContenidoTraducible> {
+  try {
+    const anthropic = new Anthropic()
+    const message = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 2048,
+      system: `You are a professional translator for Forma Prima, an architecture studio.
+Translate construction site visit report content from Spanish to English.
+Maintain a professional, formal, technical tone.
+Preserve proper nouns (project names, company names, people's names) exactly as they are.
+Return ONLY a valid JSON object with the exact same keys as input — no markdown, no explanation.`,
+      messages: [{
+        role: 'user',
+        content: `Translate to English, return ONLY the JSON:\n\n${JSON.stringify(contenido)}`,
+      }],
+    })
+    const raw = message.content[0].type === 'text' ? message.content[0].text.trim() : ''
+    const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim()
+    return JSON.parse(cleaned) as ContenidoTraducible
+  } catch (err) {
+    console.error('[traducirActaCliente] Error — using Spanish fallback:', err)
+    return contenido
+  }
 }
 
 // ── getContactosParaVisita ────────────────────────────────────────────────────
@@ -93,6 +152,7 @@ export async function getContactosParaVisita(
       { data: equipoData },
       { data: clientesData },
       { data: proveedoresData },
+      { data: provContactosData },
       { count: visitasCount },
     ] = await Promise.all([
       admin
@@ -108,6 +168,10 @@ export async function getContactosParaVisita(
         .from('proveedores')
         .select('id, nombre, tipo, email')
         .order('nombre'),
+      // Separate query — resilient if proveedor_contactos table doesn't exist yet
+      admin
+        .from('proveedor_contactos')
+        .select('id, proveedor_id, nombre, cargo, email'),
       admin
         .from('visitas_obra')
         .select('id', { count: 'exact', head: true })
@@ -131,11 +195,26 @@ export async function getContactosParaVisita(
         return [{ id: c.id, nombre: c.nombre, apellidos: c.apellidos ?? null, email: c.email ?? null, email_cc: c.email_cc ?? null }]
       })
 
+    // Group proveedor_contactos by proveedor_id (query returns null if table doesn't exist)
+    const contactosByProv = new Map<string, ProveedorContactoPersona[]>()
+    for (const c of (provContactosData ?? [])) {
+      const pid = (c as any).proveedor_id as string
+      const arr = contactosByProv.get(pid) ?? []
+      arr.push({
+        id: (c as any).id as string,
+        nombre: (c as any).nombre as string,
+        cargo: ((c as any).cargo ?? null) as string | null,
+        email: ((c as any).email ?? null) as string | null,
+      })
+      contactosByProv.set(pid, arr)
+    }
+
     const proveedores: ProveedorContacto[] = (proveedoresData ?? []).map(p => ({
       id: p.id as string,
       nombre: p.nombre as string,
       tipo: (p.tipo ?? null) as string | null,
       email: (p.email ?? null) as string | null,
+      proveedor_contactos: contactosByProv.get(p.id as string) ?? [],
     }))
 
     return { equipo, clientes, proveedores, proximoNumeroVisita: (visitasCount ?? 0) + 1 }
@@ -176,11 +255,11 @@ export async function uploadFotoVisita(
   }
 }
 
-// ── crearActaVisita ───────────────────────────────────────────────────────────
+// ── createActaVisita ──────────────────────────────────────────────────────────
 
-export async function crearActaVisita(
+export async function createActaVisita(
   data: CrearActaInput
-): Promise<{ id: string; acta_url: string; acta_constructor_url: string; floorfy_url: string | null } | { error: string }> {
+): Promise<{ id: string; acta_url: string; acta_constructor_url: string; floorfy_url: string | null; traducciones?: ContenidoTraducible } | { error: string }> {
   try {
     await requireAnyFP()
     const admin = createAdminClient()
@@ -190,7 +269,19 @@ export async function crearActaVisita(
     const reactPdf = await import('@react-pdf/renderer')
     const { buildActaVisitaObraElement } = await import('@/components/pdfs/ActaVisitaObraPDF')
 
-    // 2 — Build PDF data
+    const idioma = data.idioma ?? 'es'
+
+    // 1b — If English, translate client content (constructor always stays in Spanish)
+    let traducciones: ContenidoTraducible | undefined
+    if (idioma === 'en') {
+      traducciones = await traducirActaCliente({
+        titulo:        data.titulo,
+        estado_obras:  data.estado_obras,
+        instrucciones: data.instrucciones,
+      })
+    }
+
+    // 2 — Build PDF data (always Spanish base — used for constructor PDF)
     const baseActaData = {
       proyecto_nombre:    data.proyecto_nombre,
       proyecto_codigo:    data.proyecto_codigo,
@@ -209,7 +300,7 @@ export async function crearActaVisita(
     let acta_constructor_url = ''
     let acta_url = ''
 
-    // 2a — Constructor PDF (only if requested)
+    // 2a — Constructor PDF (always Spanish, never translated)
     if (doConstructor) {
       const constructorPdfElement = buildActaVisitaObraElement(reactPdf, {
         ...baseActaData,
@@ -227,17 +318,24 @@ export async function crearActaVisita(
       acta_constructor_url = admin.storage.from('portal').getPublicUrl(constructorPath).data.publicUrl
     }
 
-    // 2b — Client PDF (only if requested)
+    // 2b — Client PDF (translated if idioma === 'en')
     if (doCliente) {
+      const clienteInstrucciones = idioma === 'en' && traducciones ? traducciones.instrucciones : data.instrucciones
+      const clienteEstadoObras   = idioma === 'en' && traducciones ? traducciones.estado_obras  : data.estado_obras
+      const clienteLabels        = idioma === 'en' ? LABELS_EN : undefined
+
       const clientPdfElement = buildActaVisitaObraElement(reactPdf, {
         ...baseActaData,
-        instrucciones: data.instrucciones,
+        estado_obras:  clienteEstadoObras,
+        instrucciones: clienteInstrucciones,
         fotos:         data.fotos_cliente ?? [],
+        labels:        clienteLabels,
       })
       const clientePdfBuffer = await reactPdf.renderToBuffer(
         clientPdfElement as unknown as Parameters<typeof reactPdf.renderToBuffer>[0]
       )
-      const clientePath = `${data.proyecto_id}/actas/${data.fecha}-acta-cliente-${ts}.pdf`
+      const langSuffix = idioma.toUpperCase()
+      const clientePath = `${data.proyecto_id}/actas/${data.fecha}-acta-cliente-${langSuffix}-${ts}.pdf`
       const { error: upErr2 } = await admin.storage
         .from('portal')
         .upload(clientePath, clientePdfBuffer, { contentType: 'application/pdf', upsert: true })
@@ -279,16 +377,31 @@ export async function crearActaVisita(
 
     if (insertError) return { error: insertError.message }
 
+    // 7b — Store idioma_acta (best-effort: column may not exist yet in production)
+    if (idioma !== 'es') {
+      await admin
+        .from('visitas_obra')
+        .update({ idioma_acta: idioma } as Record<string, unknown>)
+        .eq('id', row.id)
+      // error intentionally ignored — missing column shouldn't block acta creation
+    }
+
     // 8 — Revalidate
     revalidatePath(PATH_INTERNA)
 
-    return { id: row.id as string, acta_url, acta_constructor_url, floorfy_url: data.floorfy_url || null }
+    return {
+      id:                  row.id as string,
+      acta_url,
+      acta_constructor_url,
+      floorfy_url:         data.floorfy_url || null,
+      traducciones,
+    }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
   }
 }
 
-// ── compartirActaPorEmail ─────────────────────────────────────────────────────
+// ── sendActaByEmail ───────────────────────────────────────────────────────────
 
 export interface CompartirActaInput {
   /** Destinatarios del acta del cliente (clientes del proyecto + asistentes) */
@@ -309,6 +422,8 @@ export interface CompartirActaInput {
   instrucciones: string              // instrucciones para el cliente
   instruccionesConstructor: string   // instrucciones para el constructor
   floorfy_url: string | null
+  /** When 'en', client email is sent in English; constructor always stays in Spanish */
+  idioma?: 'es' | 'en'
 }
 
 const MESES_ES = [
@@ -333,12 +448,32 @@ function buildActaEmailBody(opts: {
   floorfy_url: string | null
   portalUrl: string
   showPortalLink: boolean
+  lang?: 'es' | 'en'
 }): string {
-  const { saludoNombre, proyecto_nombre, proyecto_codigo, fechaFmt, asistentes, estado_obras, instrucciones, floorfy_url, portalUrl, showPortalLink } = opts
+  const { saludoNombre, proyecto_nombre, proyecto_codigo, fechaFmt, asistentes, estado_obras, instrucciones, floorfy_url, portalUrl, showPortalLink, lang } = opts
+  const en = lang === 'en'
+
+  const t = {
+    saludo:       en ? 'Dear'                         : 'Estimado/a',
+    subtitle:     en ? 'New site visit report'        : 'Nueva acta de visita de obra',
+    fechaLabel:   en ? 'Visit date'                   : 'Fecha de visita',
+    asistentes:   en ? 'Attendees'                    : 'Asistentes',
+    estadoLabel:  en ? 'Works status'                 : 'Estado de obras',
+    instrLabel:   en ? 'Instructions'                 : 'Instrucciones',
+    tourLabel:    en ? 'Virtual tour'                 : 'Tour virtual',
+    adjunto:      en
+      ? `Please find attached the complete site visit report in PDF.${showPortalLink ? ' You can also check the progress of your project in your private client area.' : ''}`
+      : `Adjuntamos el acta completa en PDF.${showPortalLink ? ' También puede consultar el avance de su proyecto en el área privada de cliente.' : ''}`,
+    cta:          en ? 'View my project →'            : 'Ver mi proyecto →',
+    footer:       en
+      ? 'If you have any questions about this visit, please do not hesitate to reply to this email.'
+      : 'Si tiene alguna pregunta sobre esta visita, no dude en responder a este correo.',
+  }
+
   return `
-    ${saludoNombre ? `<p style="margin:0 0 20px;font-size:20px;font-weight:300;color:#1A1A1A;line-height:1.3;">Estimado/a ${saludoNombre},</p>` : ''}
+    ${saludoNombre ? `<p style="margin:0 0 20px;font-size:20px;font-weight:300;color:#1A1A1A;line-height:1.3;">${t.saludo} ${saludoNombre},</p>` : ''}
     <p style="margin:0 0 6px;font-size:11px;color:#888;letter-spacing:0.08em;text-transform:uppercase;font-weight:600;">
-      Nueva acta de visita de obra
+      ${t.subtitle}
     </p>
     <h2 style="margin:0 0 20px;font-size:20px;font-weight:300;color:#1A1A1A;letter-spacing:-0.01em;">
       ${proyecto_nombre}${proyecto_codigo ? ` <span style="font-size:13px;color:#AAA;font-weight:400;">${proyecto_codigo}</span>` : ''}
@@ -347,38 +482,38 @@ function buildActaEmailBody(opts: {
     <table cellpadding="0" cellspacing="0" width="100%" style="margin-bottom:24px;border:1px solid #E8E6E0;">
       <tr>
         <td style="padding:12px 16px;background:#F8F7F4;border-bottom:1px solid #E8E6E0;">
-          <p style="margin:0;font-size:9px;color:#AAA;text-transform:uppercase;letter-spacing:0.1em;font-weight:600;">Fecha de visita</p>
+          <p style="margin:0;font-size:9px;color:#AAA;text-transform:uppercase;letter-spacing:0.1em;font-weight:600;">${t.fechaLabel}</p>
           <p style="margin:4px 0 0;font-size:13px;color:#1A1A1A;font-weight:400;">${fechaFmt}</p>
         </td>
       </tr>
       ${asistentes ? `<tr>
         <td style="padding:12px 16px;border-bottom:1px solid #E8E6E0;">
-          <p style="margin:0;font-size:9px;color:#AAA;text-transform:uppercase;letter-spacing:0.1em;font-weight:600;">Asistentes</p>
+          <p style="margin:0;font-size:9px;color:#AAA;text-transform:uppercase;letter-spacing:0.1em;font-weight:600;">${t.asistentes}</p>
           <p style="margin:4px 0 0;font-size:12px;color:#3A3A3A;line-height:1.6;">${asistentes}</p>
         </td>
       </tr>` : ''}
       ${estado_obras ? `<tr>
         <td style="padding:12px 16px;${instrucciones || floorfy_url ? 'border-bottom:1px solid #E8E6E0;' : ''}">
-          <p style="margin:0;font-size:9px;color:#AAA;text-transform:uppercase;letter-spacing:0.1em;font-weight:600;">Estado de obras</p>
+          <p style="margin:0;font-size:9px;color:#AAA;text-transform:uppercase;letter-spacing:0.1em;font-weight:600;">${t.estadoLabel}</p>
           <p style="margin:4px 0 0;font-size:12px;color:#3A3A3A;line-height:1.6;white-space:pre-wrap;">${estado_obras}</p>
         </td>
       </tr>` : ''}
       ${instrucciones ? `<tr>
         <td style="padding:12px 16px;${floorfy_url ? 'border-bottom:1px solid #E8E6E0;' : ''}">
-          <p style="margin:0;font-size:9px;color:#AAA;text-transform:uppercase;letter-spacing:0.1em;font-weight:600;">Instrucciones</p>
+          <p style="margin:0;font-size:9px;color:#AAA;text-transform:uppercase;letter-spacing:0.1em;font-weight:600;">${t.instrLabel}</p>
           <p style="margin:4px 0 0;font-size:12px;color:#3A3A3A;line-height:1.6;white-space:pre-wrap;">${instrucciones}</p>
         </td>
       </tr>` : ''}
       ${floorfy_url ? `<tr>
         <td style="padding:12px 16px;">
-          <p style="margin:0;font-size:9px;color:#AAA;text-transform:uppercase;letter-spacing:0.1em;font-weight:600;">Tour virtual</p>
+          <p style="margin:0;font-size:9px;color:#AAA;text-transform:uppercase;letter-spacing:0.1em;font-weight:600;">${t.tourLabel}</p>
           <p style="margin:4px 0 0;font-size:12px;"><a href="${floorfy_url}" style="color:#D85A30;text-decoration:none;">${floorfy_url}</a></p>
         </td>
       </tr>` : ''}
     </table>
 
     <p style="margin:0 0 24px;font-size:12px;color:#3A3A3A;line-height:1.7;">
-      Adjuntamos el acta completa en PDF.${showPortalLink ? ' También puede consultar el avance de su proyecto en el área privada de cliente.' : ''}
+      ${t.adjunto}
     </p>
 
     ${showPortalLink ? `
@@ -386,7 +521,7 @@ function buildActaEmailBody(opts: {
       <tr>
         <td style="background:#1A1A1A;border-radius:4px;">
           <a href="${portalUrl}" style="display:inline-block;padding:12px 28px;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#F0EDE8;text-decoration:none;">
-            Ver mi proyecto →
+            ${t.cta}
           </a>
         </td>
       </tr>
@@ -394,12 +529,12 @@ function buildActaEmailBody(opts: {
     ` : ''}
 
     <p style="margin:0;font-size:11px;color:#AAAAAA;line-height:1.6;">
-      Si tiene alguna pregunta sobre esta visita, no dude en responder a este correo.
+      ${t.footer}
     </p>
   `
 }
 
-export async function compartirActaPorEmail(
+export async function sendActaByEmail(
   data: CompartirActaInput
 ): Promise<{ success: true } | { error: string }> {
   try {
@@ -435,16 +570,24 @@ export async function compartirActaPorEmail(
     if (!clientPdfBuffer && constructorPdfBuffer) clientPdfBuffer = constructorPdfBuffer
     if (!constructorPdfBuffer && clientPdfBuffer) constructorPdfBuffer = clientPdfBuffer
 
+    const idioma    = data.idioma ?? 'es'
+    const en        = idioma === 'en'
     const portalUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? 'https://portal.formaprima.es'}/portal/${data.proyecto_id}`
-    const fechaFmt  = fmtDateEs(data.fecha)
-    const subject   = `FORMA PRIMA · Nueva visita de obra · ${data.proyecto_nombre}`
-    const pdfFilename = `Acta_visita_${data.fecha}_${data.proyecto_nombre.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`
+    const fechaFmtEs = fmtDateEs(data.fecha)
+    const MESES_EN_EMAIL = ['January','February','March','April','May','June','July','August','September','October','November','December']
+    const [fy, fm, fday] = data.fecha.split('-')
+    const fechaFmtEn = `${MESES_EN_EMAIL[parseInt(fm, 10) - 1] ?? fm} ${parseInt(fday, 10)}, ${fy}`
+    const fechaFmt   = en ? fechaFmtEn : fechaFmtEs
+
+    const subjectEs  = `FORMA PRIMA · Nueva visita de obra · ${data.proyecto_nombre}`
+    const subjectEn  = `FORMA PRIMA · New site visit report · ${data.proyecto_nombre}`
+    const proyNorm   = data.proyecto_nombre.replace(/[^a-zA-Z0-9]/g, '_')
 
     // ── 1. Email al cliente ───────────────────────────────────────────────────
     if (hasCliente) {
       const nombres = data.clienteNombres.filter(Boolean)
       const saludoNombre = nombres.length > 1
-        ? nombres.slice(0, -1).join(', ') + ' y ' + nombres[nombres.length - 1]
+        ? nombres.slice(0, -1).join(', ') + (en ? ' and ' : ' y ') + nombres[nombres.length - 1]
         : nombres[0] ?? null
 
       const bodyHtml = buildActaEmailBody({
@@ -458,20 +601,22 @@ export async function compartirActaPorEmail(
         floorfy_url:      data.floorfy_url,
         portalUrl,
         showPortalLink:   true,
+        lang:             idioma,
       })
 
+      const pdfFilenameCliente = `Acta_visita_${idioma.toUpperCase()}_${data.fecha}_${proyNorm}.pdf`
       const ccPartners = partnerEmails.filter(e => !data.clienteEmails.includes(e))
       const r = await sendEmail({
         to:          data.clienteEmails,
         cc:          ccPartners.length ? ccPartners : undefined,
-        subject,
+        subject:     en ? subjectEn : subjectEs,
         html:        wrapEmail(bodyHtml),
-        attachments: clientPdfBuffer ? [{ filename: pdfFilename, content: clientPdfBuffer }] : undefined,
+        attachments: clientPdfBuffer ? [{ filename: pdfFilenameCliente, content: clientPdfBuffer }] : undefined,
       })
       if (r.error) return { error: r.error }
     }
 
-    // ── 2. Email al constructor ───────────────────────────────────────────────
+    // ── 2. Email al constructor (always Spanish) ──────────────────────────────
     if (hasConstructor) {
       const instrCons = data.instruccionesConstructor.trim() || data.instrucciones
 
@@ -479,22 +624,24 @@ export async function compartirActaPorEmail(
         saludoNombre:    data.constructorNombre,
         proyecto_nombre: data.proyecto_nombre,
         proyecto_codigo: data.proyecto_codigo,
-        fechaFmt,
+        fechaFmt:        fechaFmtEs,
         asistentes:      data.asistentes,
         estado_obras:    data.estado_obras,
         instrucciones:   instrCons,
         floorfy_url:     data.floorfy_url,
         portalUrl,
         showPortalLink:  false,
+        lang:            'es',
       })
 
+      const pdfFilenameConstructor = `Acta_visita_ES_${data.fecha}_${proyNorm}.pdf`
       const ccPartners = partnerEmails.filter(e => !data.constructorEmails.includes(e))
       const r = await sendEmail({
         to:          data.constructorEmails,
         cc:          ccPartners.length ? ccPartners : undefined,
-        subject,
+        subject:     subjectEs,
         html:        wrapEmail(bodyHtml),
-        attachments: constructorPdfBuffer ? [{ filename: pdfFilename, content: constructorPdfBuffer }] : undefined,
+        attachments: constructorPdfBuffer ? [{ filename: pdfFilenameConstructor, content: constructorPdfBuffer }] : undefined,
       })
       if (r.error) return { error: r.error }
     }

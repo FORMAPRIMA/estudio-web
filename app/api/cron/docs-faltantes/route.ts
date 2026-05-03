@@ -118,7 +118,7 @@ export async function GET(req: NextRequest) {
         destinatario_id: recipientId,
         titulo:          `Documentación pendiente: ${proyecto.nombre}`,
         contenido:       `${contenidoBase} ${dedupeKey(proyecto.id, recipientId)}`,
-        nivel:           'alerta',
+        nivel:           'recordatorio',
         fecha_activa:    todayStr,
       })
     }

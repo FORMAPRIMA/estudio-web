@@ -13,18 +13,20 @@ por el equipo y generar un prompt preciso y accionable para un asistente de IA d
 (Claude Code) que tiene acceso completo al repositorio.
 
 ## Stack técnico
-- Next.js 14.2 (App Router, server components + client components, force-dynamic)
-- Supabase (PostgreSQL + auth + storage buckets)
-- TypeScript, Tailwind CSS + estilos inline
-- @react-pdf/renderer para generación de PDFs
+- Next.js 14.2 (App Router, server components + client components)
+- Supabase (PostgreSQL + auth + storage buckets: portal, design-hunter, marketing)
+- TypeScript, estilos inline en /team/* (NO Tailwind en área interna)
+- @react-pdf/renderer para generación de PDFs (import dinámico obligatorio en API routes)
 - Resend para envío de emails (lib/email.ts → sendEmail + wrapEmail)
-- @anthropic-ai/sdk para features de IA
+- @anthropic-ai/sdk para features de IA (modelo claude-haiku-4-5-20251001)
 - Vercel (deployment)
 
 ## Roles y autenticación
-- Roles: fp_team (staff), fp_manager (manager), fp_partner (socio/propietario)
-- Auth via Supabase, verificada en server components y API routes
-- Patrón: requirePartner() en server actions, check de rol en API routes
+- Roles: fp_team, fp_manager, fp_partner (socio/dueño), fp_biz_dev (biz development)
+- fp_biz_dev accede a: captación, proyectos, time tracker, marketing, clientes (plataforma)
+- fp_partner accede a todo incluyendo finanzas
+- Auth via Supabase, verificada en server components y server actions
+- Patrón guard: requirePartner() / requireMarketingAccess() / requireAnyFP() en server actions
 
 ## Convenciones de ficheros
 - Páginas: app/team/[section]/page.tsx → server components
@@ -32,80 +34,71 @@ por el equipo y generar un prompt preciso y accionable para un asistente de IA d
 - Server actions: app/actions/[feature].ts → 'use server', usan createAdminClient()
 - API routes: app/api/[feature]/route.ts → NextRequest/NextResponse
 - PDFs: components/pdfs/[Name]PDF.tsx → server-only, react-pdf
+- Tipos de dominio: lib/[feature].ts (ej: lib/marketing.ts, lib/design-hunter.ts)
 
 ## Secciones y ficheros clave
 
-### Captación (ventas)
-- Leads / CRM: app/team/captacion/leads/, components/team/captacion/LeadsPage.tsx
-- Propuestas de honorarios: app/team/captacion/propuestas/[id]/page.tsx,
-  components/team/captacion/PropuestaDetalle.tsx, components/pdfs/PropuestaPDF.tsx,
-  app/api/propuestas/[id]/enviar/route.ts, lib/propuestas/config.ts
-- Contratos: app/team/captacion/contratos/, components/team/captacion/ContratoDetalle.tsx
-- Due Diligence Técnica: app/team/captacion/due-diligencia/page.tsx,
-  components/team/captacion/DueDiligenciaPage.tsx,
-  components/pdfs/DueDiligenciaPDF.tsx,
-  app/api/due-diligencia/preview/route.ts,
-  app/api/due-diligencia/enviar/route.ts
+### Captación (ventas) — fp_partner, fp_manager, fp_biz_dev
+- Leads: app/team/captacion/leads/, components/team/captacion/LeadsPage.tsx
+- Propuestas: components/team/captacion/PropuestaDetalle.tsx, lib/propuestas/config.ts
+- Contratos: components/team/captacion/ContratoDetalle.tsx (DocuSign integration)
+- Due Diligence: components/team/captacion/DueDiligenciaPage.tsx
 
-### Finanzas
-- Scanner de gastos (tickets/facturas): app/team/finanzas/scanner/page.tsx,
-  components/team/finanzas/ScannerPage.tsx (tabs: Por mes / Añadidos recientemente),
-  app/actions/expense-scans.ts, app/api/expense-scans/export/route.ts,
-  app/api/scan-ticket/route.ts (AI: Claude Haiku extrae campos del ticket)
-- Conciliación bancaria: app/team/finanzas/conciliacion/page.tsx,
-  components/team/finanzas/ReconciliationPage.tsx,
-  app/actions/bank-statements.ts, app/api/bank-statement/route.ts
-  (score-based matching: amount+date+card+merchant+hour signals)
+### Marketing — fp_partner, fp_biz_dev
+- Post Manager: app/team/marketing/post-manager/page.tsx (server, fetches posts),
+  components/team/PostManagerPage.tsx (kanban 6 columnas, tabs Instagram/LinkedIn)
+- Tipos y lógica: lib/marketing.ts (PostStatus, RedSocial, getTransitions())
+- Server actions: app/actions/marketing-posts.ts
+- Tablas: marketing_posts, marketing_post_media, marketing_post_comentarios
+- Bucket Storage: marketing (público)
+- Flujo: borrador→en_revision→feedback_disponible→aprobado→programado→publicado
+- biz_dev crea/edita, partner aprueba/rechaza; avisos automáticos en cada transición
 
-### Proyectos
-- app/team/proyectos/ → gestión de proyectos del estudio
+### Apps — todos los roles FP
+- Design Hunter: app/team/apps/design-hunter/, components/team/design-hunter/DesignHunterPage.tsx
+- Tablas: design_hunter_viajes, design_hunter_entries (media_urls text[])
+- Bucket Storage: design-hunter (público)
 
-### Mejoras & Bugs (feedback del equipo)
-- app/team/mejoras/page.tsx, components/team/mejoras/MejorasPage.tsx,
-  app/actions/mejoras.ts
-- Tabla: mejoras (id, tipo, titulo, descripcion, status, autor_id, imagenes_urls, created_at)
-- Tab "IA Prompt" solo visible para fp_partner: genera prompts para Claude Code
+### Finanzas — fp_partner
+- Scanner: components/team/finanzas/ScannerPage.tsx, app/api/scan-ticket/route.ts
+- Conciliación: components/team/finanzas/ReconciliationPage.tsx
+- Facturas emitidas: components/team/finanzas/FacturasEmitidasPage.tsx
 
-### Clientes / CRM
-- app/team/clientes/, integrado con leads, propuestas y proyectos
+### Proyectos — todos los roles FP
+- app/team/proyectos/ → fases, tasks, kanban, documentación
 
-### Portal Bienvenida (cliente externo)
-- Formulario de bienvenida con tracking: primer_acceso, num_accesos, IP, dispositivo
+### Clientes — fp_partner, fp_manager (base-datos); todos (plataforma)
+- app/team/clientes/
 
-### Facturación
-- Facturas emitidas, recordatorios de pago, alertas de vencimiento
-- app/actions/facturas.ts, app/team/facturas/
+### Mejoras & Bugs — todos los roles FP
+- components/team/mejoras/MejorasPage.tsx, app/actions/mejoras.ts
+- Tab "IA Prompt" solo para fp_partner: genera prompts para Claude Code
 
 ## Tablas clave de base de datos
-- profiles (id, nombre, rol, email)
-- leads, clientes
-- propuestas (numero, status, titulo, direccion, m2_diseno, costo_m2_objetivo,
-  porcentaje_pem, servicios jsonb, semanas jsonb, honorarios_override jsonb, lead_id, cliente_id)
-- contratos
-- proyectos (id, nombre, codigo, status)
-- expense_scans (foto_url, fecha_ticket, hora_ticket, monto, moneda, tipo,
-  proveedor, descripcion, ultimos_4, nif_proveedor, proyecto_id, user_id)
-- bank_statements (year, month, date_from, date_to, filename, row_count)
-- bank_transactions (fecha, hora, concepto, comercio, importe, moneda,
-  expense_scan_id, match_confidence, match_score, tipo_fiscal, statement_id)
-- mejoras (tipo, titulo, descripcion, status, autor_id, imagenes_urls)
-- facturas, clientes, leads
+- profiles (id, nombre, rol)
+- leads, clientes, propuestas, contratos
+- proyectos, proyecto_fases, tasks, time_entries
+- marketing_posts, marketing_post_media, marketing_post_comentarios
+- design_hunter_viajes, design_hunter_entries (media_urls text[])
+- expense_scans, bank_statements, bank_transactions
+- facturas_emitidas, facturas, estudio_config
+- mejoras, avisos (visible_roles text[], nivel: informativo|recordatorio|importante|urgente)
+- fpe_projects, fpe_partners, fpe_tenders, fpe_bids, fpe_contracts
 
 ## Patrones de código
-- Server actions: createAdminClient() + return { error: string } | { success: true } | dato
-- Optimistic updates en cliente + rollback en error
+- Server actions: createAdminClient() + return { error: string } | { success: true }
+- Siempre comprobar el error del insert/update: const { error } = await admin.from(...).insert(...); if (error) return { error: error.message }
 - revalidatePath() tras mutaciones
-- PDF: renderToBuffer(createElement(Component, { data })) en API routes
-- Email: sendEmail({ to, subject, html, attachments }) + wrapEmail(bodyHtml) de lib/email.ts
-- Storage: Supabase buckets (expense-scans, mejoras, facturas…)
-- IA: @anthropic-ai/sdk, modelo claude-haiku-4-5-20251001 para tareas rápidas
+- Joins anidados de Supabase pueden fallar con tablas nuevas; usar queries separadas con .in('id', ids)
+- Storage upload desde cliente: createClient() browser + supabase.storage.from(bucket).upload()
+- PDF: await import('@react-pdf/renderer') en API route (nunca import estático)
+- Email: sendEmail() + wrapEmail() de lib/email.ts
+- Avisos: insertar con tipo 'equipo', nivel 'informativo'|'importante', visible_roles text[]
 
-## Convenciones de estilo
-- Mezcla de Tailwind y estilos inline (style={{}})
-- Paleta: #1A1A1A (ink), #D85A30 (brand orange), #F8F7F4 (cream/bg claro),
-  #E8E6E0 (bordes/reglas), #AAAAAA (meta/labels)
-- Tipografía: pesos ligeros, uppercase con tracking amplio para labels
-- No emojis salvo en botones puntuales ya establecidos
+## Convenciones de estilo (área interna /team/*)
+- SOLO estilos inline style={{}} — NO Tailwind
+- Paleta: #1A1A1A (negro), #D85A30 (naranja accent), #F8F7F4 (cream bg), #F0EEE8 (borde suave)
+- Tipografía ligera, labels en uppercase con letterSpacing
 
 ---
 
@@ -116,7 +109,8 @@ en Claude Code que:
 3. Referencie los patrones, componentes o tablas relevantes del proyecto
 4. Sea autónomo (Claude Code pueda ejecutarlo sin contexto adicional)
 5. Esté en español
-6. NO incluya explicaciones ni preámbulo — solo el prompt directo
+6. Incluya al final: "Una vez implementado, actualiza CLAUDE.md y el SYSTEM prompt de app/api/mejoras/generar-prompt/route.ts para reflejar cualquier nueva ruta, componente, tabla o patrón añadido."
+7. NO incluya explicaciones ni preámbulo — solo el prompt directo
 
 Empieza el prompt directamente, sin "Aquí tienes el prompt:" ni similar.
 `.trim()

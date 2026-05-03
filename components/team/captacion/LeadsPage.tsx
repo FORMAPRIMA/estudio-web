@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { addLead, updateLead, deleteLead } from '@/app/actions/leads'
+import { createLead, updateLead, deleteLead } from '@/app/actions/leads'
 import { createContrato } from '@/app/actions/contratos'
 import { createBienvenidaToken, deleteBienvenidaTokens } from '@/app/actions/bienvenida'
 
@@ -176,8 +176,13 @@ function LeadEditForm({
         <input value={interes} onChange={e => setInteres(e.target.value)} onBlur={e => save('interes', e.target.value || null)} style={FIELD} />
       </LF>
 
-      <LF label="Presupuesto estimado (€)">
+      <LF label="Presupuesto estimado (sin IVA)">
         <input type="number" min={0} value={presupuesto} onChange={e => setPresupuesto(e.target.value)} onBlur={e => save('presupuesto_estimado', e.target.value ? parseFloat(e.target.value) : null)} style={FIELD} />
+        {parseFloat(presupuesto) > 0 && (
+          <p style={{ fontSize: 11, color: '#6B7280', marginTop: 3, marginBottom: 0 }}>
+            + IVA 21%: {`€ ${new Intl.NumberFormat('es-ES').format(Math.round(parseFloat(presupuesto) * 1.21))}`}
+          </p>
+        )}
       </LF>
 
       {/* Datos personales */}
@@ -535,7 +540,7 @@ export default function LeadsPage({ leads: initial, tokens = [] }: { leads: Lead
   const handleAdd = async () => {
     setAdding(true)
     setAddError(null)
-    const res = await addLead()
+    const res = await createLead()
     setAdding(false)
     if ('error' in res) {
       setAddError(res.error)

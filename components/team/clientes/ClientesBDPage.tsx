@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useTransition, useMemo, useEffect } from 'react'
-import { addCliente, updateCliente, deleteCliente } from '@/app/actions/clientes'
+import { createCliente, updateCliente, deleteCliente } from '@/app/actions/clientes'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -711,7 +711,7 @@ export default function ClientesBDPage({ clientes: initial }: { clientes: Client
     if (adding) return
     setAdding(true)
     setAddError(null)
-    const res = await addCliente()
+    const res = await createCliente()
     setAdding(false)
     if ('error' in res) { setAddError(res.error); return }
     const newCliente: Cliente = {

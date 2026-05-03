@@ -15,7 +15,7 @@ async function requireManagerOrPartner() {
     .select('rol')
     .eq('id', user.id)
     .single()
-  if (!profile || !['fp_partner', 'fp_manager'].includes(profile.rol))
+  if (!profile || !['fp_partner', 'fp_manager', 'fp_team'].includes(profile.rol))
     throw new Error('Sin permisos.')
 }
 
@@ -52,7 +52,7 @@ export async function createProveedor(data: {
   }
 }
 
-export async function addProveedor(): Promise<{ id: string } | { error: string }> {
+export async function createProveedorVacio(): Promise<{ id: string } | { error: string }> {
   try {
     await requireManagerOrPartner()
     const admin = createAdminClient()
@@ -106,6 +106,57 @@ export async function deleteProveedor(id: string): Promise<{ success: true } | {
     await requireManagerOrPartner()
     const admin = createAdminClient()
     const { error } = await admin.from('proveedores').delete().eq('id', id)
+    if (error) return { error: error.message }
+    revalidatePath(PATH)
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
+// ── Proveedor contactos ───────────────────────────────────────────────────────
+
+export async function addProveedorContacto(
+  proveedor_id: string,
+  data: { nombre: string; cargo?: string | null; email?: string | null; telefono?: string | null }
+): Promise<{ id: string } | { error: string }> {
+  try {
+    await requireManagerOrPartner()
+    const admin = createAdminClient()
+    const { data: row, error } = await admin
+      .from('proveedor_contactos')
+      .insert({ proveedor_id, ...data })
+      .select('id')
+      .single()
+    if (error) return { error: error.message }
+    revalidatePath(PATH)
+    return { id: row.id }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
+export async function updateProveedorContacto(
+  id: string,
+  data: { nombre?: string; cargo?: string | null; email?: string | null; telefono?: string | null }
+): Promise<{ success: true } | { error: string }> {
+  try {
+    await requireManagerOrPartner()
+    const admin = createAdminClient()
+    const { error } = await admin.from('proveedor_contactos').update(data).eq('id', id)
+    if (error) return { error: error.message }
+    revalidatePath(PATH)
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
+export async function deleteProveedorContacto(id: string): Promise<{ success: true } | { error: string }> {
+  try {
+    await requireManagerOrPartner()
+    const admin = createAdminClient()
+    const { error } = await admin.from('proveedor_contactos').delete().eq('id', id)
     if (error) return { error: error.message }
     revalidatePath(PATH)
     return { success: true }

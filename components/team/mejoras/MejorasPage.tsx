@@ -70,12 +70,19 @@ interface PromptState {
 export default function MejorasPage({ mejoras: initialMejoras, currentUserId, currentUserRole }: Props) {
   const [mejoras, setMejoras] = useState<Mejora[]>(initialMejoras)
   const [filter, setFilter] = useState<MejoraStatus | 'todas'>('todas')
-  const [activeView, setActiveView] = useState<'lista' | 'ia'>('lista')
+  const [activeView, setActiveView] = useState<'lista' | 'ia' | 'generador'>('lista')
   const [showForm, setShowForm] = useState(false)
   const [seeding, setSeeding] = useState(false)
   const [lightbox, setLightbox] = useState<string | null>(null)
   const [promptStates, setPromptStates] = useState<Record<string, PromptState>>({})
   const [copiedId, setCopiedId] = useState<string | null>(null)
+
+  // ── Generador state ──────────────────────────────────────────────────────────
+  const [generadorInput,  setGeneradorInput]  = useState('')
+  const [generadorStep,   setGeneradorStep]   = useState<'idle' | 'step1' | 'step2'>('idle')
+  const [generadorResult, setGeneradorResult] = useState<string | null>(null)
+  const [generadorError,  setGeneradorError]  = useState<string | null>(null)
+  const [generadorCopied, setGeneradorCopied] = useState(false)
 
   const canManage = CAN_MANAGE.includes(currentUserRole)
   const isPartner = currentUserRole === 'fp_partner'
@@ -113,6 +120,37 @@ export default function MejorasPage({ mejoras: initialMejoras, currentUserId, cu
     navigator.clipboard.writeText(text).then(() => {
       setCopiedId(id)
       setTimeout(() => setCopiedId(null), 2000)
+    })
+  }
+
+  const handleGenerar = async () => {
+    if (!generadorInput.trim()) return
+    setGeneradorResult(null)
+    setGeneradorError(null)
+    setGeneradorCopied(false)
+    setGeneradorStep('step1')
+    try {
+      const res = await fetch('/api/mejoras/prompt-generator', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ descripcion: generadorInput }),
+      })
+      setGeneradorStep('step2')
+      const json = await res.json()
+      if (json.error) throw new Error(json.error)
+      setGeneradorResult(json.prompt)
+    } catch (err) {
+      setGeneradorError(err instanceof Error ? err.message : 'Error inesperado')
+    } finally {
+      setGeneradorStep('idle')
+    }
+  }
+
+  const handleCopyGenerador = () => {
+    if (!generadorResult) return
+    navigator.clipboard.writeText(generadorResult).then(() => {
+      setGeneradorCopied(true)
+      setTimeout(() => setGeneradorCopied(false), 2000)
     })
   }
 
@@ -191,6 +229,18 @@ export default function MejorasPage({ mejoras: initialMejoras, currentUserId, cu
             }`}
           >
             IA Prompt
+          </button>
+        )}
+        {isPartner && (
+          <button
+            onClick={() => setActiveView('generador')}
+            className={`text-[9px] tracking-widest uppercase font-medium px-4 py-2.5 transition-colors border-b-2 -mb-px ${
+              activeView === 'generador'
+                ? 'border-[#7C3AED] text-[#7C3AED]'
+                : 'border-transparent text-meta/40 hover:text-[#7C3AED]'
+            }`}
+          >
+            Generador
           </button>
         )}
       </div>
@@ -303,6 +353,79 @@ export default function MejorasPage({ mejoras: initialMejoras, currentUserId, cu
                 </div>
               )
             })
+          )}
+        </div>
+      )}
+
+      {/* ── Generador view ─────────────────────────────────────────────── */}
+      {activeView === 'generador' && (
+        <div className="space-y-5">
+          <p className="text-[10px] font-light text-meta/50 leading-relaxed">
+            Describe el cambio o mejora que quieres hacer. El sistema leerá el contexto del proyecto
+            y generará un prompt completo listo para pegar en Claude Code.
+          </p>
+
+          <div>
+            <label className="text-[9px] tracking-widest uppercase font-light text-meta/50 block mb-2">
+              ¿Qué quieres cambiar o implementar?
+            </label>
+            <textarea
+              value={generadorInput}
+              onChange={e => setGeneradorInput(e.target.value)}
+              placeholder="Ej: Quiero añadir un campo de notas internas en la ficha de cliente, que solo puedan ver los managers y partners. El campo debe guardarse en la tabla clientes y mostrarse en la vista de detalle de cliente."
+              rows={6}
+              disabled={generadorStep !== 'idle'}
+              className="w-full text-[11px] font-light text-ink border border-ink/15 px-3 py-2.5 focus:outline-none focus:border-ink/40 bg-cream/30 placeholder:text-meta/25 resize-none disabled:opacity-60"
+            />
+          </div>
+
+          <div className="flex items-center gap-4">
+            <button
+              onClick={handleGenerar}
+              disabled={!generadorInput.trim() || generadorStep !== 'idle'}
+              className="text-[9px] tracking-widest uppercase font-medium px-5 py-2.5 transition-colors disabled:opacity-40"
+              style={{ background: '#7C3AED', color: '#fff' }}
+            >
+              {generadorStep === 'step1'
+                ? 'Identificando contexto…'
+                : generadorStep === 'step2'
+                  ? 'Redactando prompt…'
+                  : 'Generar prompt'}
+            </button>
+            {generadorStep !== 'idle' && (
+              <p className="text-[10px] font-light text-meta/40 animate-pulse">
+                {generadorStep === 'step1' ? 'Paso 1 / 2 — Analizando CLAUDE.md…' : 'Paso 2 / 2 — Componiendo el prompt…'}
+              </p>
+            )}
+          </div>
+
+          {generadorError && (
+            <div className="flex items-center justify-between px-4 py-3 border text-[10px]" style={{ background: '#FEF2F2', borderColor: '#FCA5A5', color: '#991B1B' }}>
+              <span>{generadorError}</span>
+              <button onClick={() => setGeneradorError(null)} className="ml-4 opacity-60 hover:opacity-100">×</button>
+            </div>
+          )}
+
+          {generadorResult && (
+            <div className="border border-ink/10">
+              <div className="flex items-center justify-between px-4 py-2.5 border-b border-ink/8">
+                <p className="text-[9px] tracking-widest uppercase font-medium text-meta/40">Prompt generado</p>
+                <button
+                  onClick={handleCopyGenerador}
+                  className="text-[9px] tracking-widest uppercase font-medium px-3 py-1 border transition-colors"
+                  style={
+                    generadorCopied
+                      ? { background: '#D1FAE5', color: '#065F46', borderColor: '#6EE7B7' }
+                      : { background: 'transparent', color: '#1A1A1A', borderColor: '#E8E6E0' }
+                  }
+                >
+                  {generadorCopied ? '✓ Copiado' : 'Copiar'}
+                </button>
+              </div>
+              <pre className="text-[10px] font-mono text-ink/80 leading-relaxed whitespace-pre-wrap p-4 max-h-[480px] overflow-y-auto bg-cream/40">
+                {generadorResult}
+              </pre>
+            </div>
           )}
         </div>
       )}

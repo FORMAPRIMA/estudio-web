@@ -7,6 +7,15 @@ div:hover > .tt-avatar-overlay {
   background: rgba(0,0,0,0.38) !important;
 }
 
+/* Apps hub — card hover */
+.apps-card {
+  border: 1px solid #E8E6E0;
+  transition: border-color 0.15s;
+}
+.apps-card:hover {
+  border-color: #D85A30;
+}
+
 /* ═══════════════════════════════════════════════════════════════
    ÁREA INTERNA FP — Mobile overrides
    Breakpoint: < 768px
@@ -20,6 +29,12 @@ div:hover > .tt-avatar-overlay {
 .cbd-mobile-list  { display: none; }
 .cp-invoice-cards { display: none; }
 .cp-gantt-mobile  { display: none; }
+
+/* ── PDF thumbnail shimmer ── */
+@keyframes cp-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
 
 @media (max-width: 768px) {
 
@@ -194,9 +209,9 @@ div:hover > .tt-avatar-overlay {
   .cp-invoice-table { display: none !important; }
   .cp-invoice-cards { display: block !important; }
 
-  /* Gantt chart → phase card list */
+  /* Gantt chart → vertical timeline on mobile */
   .cp-gantt-desktop { display: none !important; }
-  .cp-gantt-mobile  { display: flex !important; flex-direction: column !important; gap: 8px !important; }
+  .cp-gantt-mobile  { display: block !important; }
 
   /* ── Time Tracker ────────────────────────────────────────── */
 

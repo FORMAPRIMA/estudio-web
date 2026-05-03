@@ -15,14 +15,14 @@ export default async function Page() {
     .select('rol')
     .eq('id', user.id)
     .single()
-  if (!profile || !['fp_partner', 'fp_manager'].includes(profile.rol))
+  if (!profile || !['fp_partner', 'fp_manager', 'fp_team'].includes(profile.rol))
     redirect('/team/dashboard')
 
   const admin = createAdminClient()
 
   const { data: proveedores } = await admin
     .from('proveedores')
-    .select('id, nombre, tipo, contacto_nombre, email, email_cc, telefono, web, direccion, notas, nif_cif, razon_social, direccion_fiscal, iban, forma_pago, condiciones_pago, created_at')
+    .select('id, nombre, tipo, contacto_nombre, email, email_cc, telefono, web, direccion, notas, nif_cif, razon_social, direccion_fiscal, iban, forma_pago, condiciones_pago, created_at, proveedor_contactos(id, nombre, cargo, email, telefono)')
     .order('nombre')
 
   return <ProveedoresPage proveedores={proveedores ?? []} />

@@ -40,12 +40,14 @@ const ROLE_LABELS: Record<string, string> = {
   fp_team: 'FP Team',
   fp_manager: 'FP Manager',
   fp_partner: 'FP Partner',
+  fp_biz_dev: 'FP Biz Dev',
 }
 
 const ROLE_COLORS: Record<string, string> = {
   fp_team: '#1D9E75',
   fp_manager: '#378ADD',
   fp_partner: '#D85A30',
+  fp_biz_dev: '#8B5CF6',
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
