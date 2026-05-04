@@ -1725,15 +1725,22 @@ export default function TemplatePage({
           const idx = targetSorted.findIndex(u => u.id === overUnitId)
           if (idx !== -1) insertIdx = idx
         }
-        const movedUnit = { ...unit, chapter_id: targetChapter.id, orden: insertIdx }
+        const movedUnit = { ...unit, chapter_id: targetChapter.id }
         const newTargetUnits = [...targetSorted.slice(0, insertIdx), movedUnit, ...targetSorted.slice(insertIdx)]
           .map((u, i) => ({ ...u, orden: i }))
+        const newSourceUnits = sourceChapter.units
+          .filter(u => u.id !== unitId)
+          .sort((a, b) => a.orden - b.orden)
+          .map((u, i) => ({ ...u, orden: i }))
         setChapters(prev => prev.map(c => {
-          if (c.id === sourceChapter.id) return { ...c, units: c.units.filter(u => u.id !== unitId) }
+          if (c.id === sourceChapter.id) return { ...c, units: newSourceUnits }
           if (c.id === targetChapter!.id) return { ...c, units: newTargetUnits }
           return c
         }))
-        moveUnit(unitId, targetChapter.id, insertIdx)
+        const newUnitOrder = newTargetUnits.findIndex(u => u.id === unitId)
+        moveUnit(unitId, targetChapter.id, newUnitOrder)
+        reorderUnits(newTargetUnits.map(u => u.id))
+        if (newSourceUnits.length > 0) reorderUnits(newSourceUnits.map(u => u.id))
       }
       return
     }
@@ -1793,18 +1800,27 @@ export default function TemplatePage({
           const idx = targetSorted.findIndex(i => i.id === overLiId)
           if (idx !== -1) insertIdx = idx
         }
-        const movedItem = { ...item, unit_id: targetUnit.id, orden: insertIdx }
+        const movedItem = { ...item, unit_id: targetUnit.id }
         const newTargetItems = [...targetSorted.slice(0, insertIdx), movedItem, ...targetSorted.slice(insertIdx)]
+          .map((i, idx) => ({ ...i, orden: idx }))
+        // Normalize orden of remaining source items to 0-based
+        const newSourceItems = sourceUnit.line_items
+          .filter(i => i.id !== liId)
+          .sort((a, b) => a.orden - b.orden)
           .map((i, idx) => ({ ...i, orden: idx }))
         setChapters(prev => prev.map(c => ({
           ...c,
           units: c.units.map(u => {
-            if (u.id === sourceUnit!.id) return { ...u, line_items: u.line_items.filter(i => i.id !== liId) }
+            if (u.id === sourceUnit!.id) return { ...u, line_items: newSourceItems }
             if (u.id === targetUnit!.id) return { ...u, line_items: newTargetItems }
             return u
           })
         })))
-        moveLineItem(liId, targetUnit.id, insertIdx)
+        // Persist unit_id change + full order for both affected units
+        const newOrder = newTargetItems.findIndex(i => i.id === liId)
+        moveLineItem(liId, targetUnit.id, newOrder)
+        reorderLineItems(newTargetItems.map(i => i.id))
+        if (newSourceItems.length > 0) reorderLineItems(newSourceItems.map(i => i.id))
       }
     }
   }
