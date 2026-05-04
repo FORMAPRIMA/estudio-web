@@ -426,6 +426,96 @@ export async function deleteDiscipline(id: string): Promise<{ success: true } | 
   }
 }
 
+// ── Reorder / Move ────────────────────────────────────────────────────────────
+
+export async function reorderChapters(orderedIds: string[]): Promise<{ success: true } | { error: string }> {
+  try {
+    await requireManagerOrPartner()
+    const admin = createAdminClient()
+    await Promise.all(
+      orderedIds.map((id, idx) =>
+        admin.from('fpe_template_chapters').update({ orden: idx, updated_at: new Date().toISOString() }).eq('id', id)
+      )
+    )
+    revalidatePath(PATH)
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
+export async function reorderUnits(orderedIds: string[]): Promise<{ success: true } | { error: string }> {
+  try {
+    await requireManagerOrPartner()
+    const admin = createAdminClient()
+    await Promise.all(
+      orderedIds.map((id, idx) =>
+        admin.from('fpe_template_units').update({ orden: idx, updated_at: new Date().toISOString() }).eq('id', id)
+      )
+    )
+    revalidatePath(PATH)
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
+export async function moveUnit(
+  unitId: string,
+  targetChapterId: string,
+  newOrder: number,
+): Promise<{ success: true } | { error: string }> {
+  try {
+    await requireManagerOrPartner()
+    const admin = createAdminClient()
+    const { error } = await admin
+      .from('fpe_template_units')
+      .update({ chapter_id: targetChapterId, orden: newOrder, updated_at: new Date().toISOString() })
+      .eq('id', unitId)
+    if (error) return { error: error.message }
+    revalidatePath(PATH)
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
+export async function reorderLineItems(orderedIds: string[]): Promise<{ success: true } | { error: string }> {
+  try {
+    await requireManagerOrPartner()
+    const admin = createAdminClient()
+    await Promise.all(
+      orderedIds.map((id, idx) =>
+        admin.from('fpe_template_line_items').update({ orden: idx, updated_at: new Date().toISOString() }).eq('id', id)
+      )
+    )
+    revalidatePath(PATH)
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
+export async function moveLineItem(
+  lineItemId: string,
+  targetUnitId: string,
+  newOrder: number,
+): Promise<{ success: true } | { error: string }> {
+  try {
+    await requireManagerOrPartner()
+    const admin = createAdminClient()
+    const { error } = await admin
+      .from('fpe_template_line_items')
+      .update({ unit_id: targetUnitId, orden: newOrder, updated_at: new Date().toISOString() })
+      .eq('id', lineItemId)
+    if (error) return { error: error.message }
+    revalidatePath(PATH)
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
 // ── Phase ↔ Line Item links ───────────────────────────────────────────────────
 // Replaces all phase links for a line item in one shot.
 

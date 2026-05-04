@@ -1,6 +1,24 @@
 'use client'
 
 import React, { useState } from 'react'
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+  type DragStartEvent,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import type { DraggableAttributes, DraggableSyntheticListeners } from '@dnd-kit/core'
 import { createClient } from '@/lib/supabase/client'
 import {
   createChapter, updateChapter, deleteChapter,
@@ -10,6 +28,7 @@ import {
   createMilestone, updateMilestone, deleteMilestone, mergeMilestones,
   setPhaseMilestoneLinks, setLineItemPhases,
   createDiscipline, updateDiscipline, deleteDiscipline,
+  reorderChapters, reorderUnits, moveUnit, reorderLineItems, moveLineItem,
 } from '@/app/actions/fpe-template'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -103,6 +122,17 @@ const S = {
     padding: '4px 10px', fontSize: 11, borderRadius: 4, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500,
     background: color ?? '#F0EEE8', color: color ? '#fff' : '#555',
   }),
+}
+
+function DragHandle({ listeners, attributes }: { listeners?: DraggableSyntheticListeners; attributes?: DraggableAttributes }) {
+  return (
+    <span
+      {...listeners}
+      {...attributes}
+      style={{ cursor: 'grab', padding: '0 6px', color: '#CCC', fontSize: 14, lineHeight: 1, userSelect: 'none', flexShrink: 0, touchAction: 'none' }}
+      title="Arrastrar para reordenar"
+    >⠿</span>
+  )
 }
 
 async function uploadPortadaImage(file: File, folder: 'chapters' | 'units', entityId: string): Promise<string | null> {
@@ -718,17 +748,85 @@ function ConfirmDelete({ label, onConfirm, onCancel }: { label: string; onConfir
   )
 }
 
+// ── Sortable Line Item Row ────────────────────────────────────────────────────
+
+function SortableLineItemRow({
+  item,
+  index,
+  discMap,
+  isReorderMode,
+  onEdit,
+  onDelete,
+}: {
+  item: LineItem
+  index: number
+  discMap: Record<string, Discipline>
+  isReorderMode: boolean
+  onEdit: (item: LineItem) => void
+  onDelete: (item: LineItem) => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: 'li-' + item.id })
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+    background: index % 2 === 0 ? '#fff' : '#FAFAF8',
+  }
+  const disc = item.discipline_id ? discMap[item.discipline_id] : null
+  const phaseCount = item.phase_ids.length
+  return (
+    <tr ref={setNodeRef} style={style}>
+      {isReorderMode && (
+        <td style={{ padding: '9px 8px', borderBottom: '1px solid #F0EEE8', width: 28 }}>
+          <DragHandle listeners={listeners} attributes={attributes} />
+        </td>
+      )}
+      <td style={{ padding: '9px 12px', fontSize: 12, color: '#1A1A1A', borderBottom: '1px solid #F0EEE8' }}>
+        {item.nombre}
+        <span style={{ marginLeft: 6, fontSize: 9, fontFamily: 'monospace', background: '#F0EEE8', borderRadius: 3, padding: '1px 5px', color: '#888' }}>{item.unidad_medida}</span>
+      </td>
+      <td style={{ padding: '9px 12px', fontSize: 11, borderBottom: '1px solid #F0EEE8', whiteSpace: 'nowrap' }}>
+        {disc ? (
+          <span style={{ background: disc.color + '22', color: disc.color, borderRadius: 3, padding: '2px 7px', fontWeight: 600, fontSize: 10 }}>{disc.nombre}</span>
+        ) : (
+          <span style={{ color: '#CCC', fontSize: 10 }}>—</span>
+        )}
+      </td>
+      <td style={{ padding: '9px 12px', fontSize: 11, color: '#555', borderBottom: '1px solid #F0EEE8', whiteSpace: 'nowrap' }}>
+        <span style={{ background: '#F0EEE8', borderRadius: 3, padding: '2px 6px', fontWeight: 600, fontFamily: 'monospace' }}>{item.unidad_medida}</span>
+      </td>
+      <td style={{ padding: '9px 12px', fontSize: 11, borderBottom: '1px solid #F0EEE8', whiteSpace: 'nowrap' }}>
+        {phaseCount > 0 ? (
+          <span style={{ background: '#EBF5FF', color: '#378ADD', borderRadius: 3, padding: '2px 6px', fontWeight: 600, fontSize: 10 }}>
+            {phaseCount} {phaseCount === 1 ? 'fase' : 'fases'}
+          </span>
+        ) : (
+          <span style={{ color: '#CCC', fontSize: 10 }}>—</span>
+        )}
+      </td>
+      {!isReorderMode && (
+        <td style={{ padding: '9px 12px', borderBottom: '1px solid #F0EEE8', whiteSpace: 'nowrap', textAlign: 'right' }}>
+          <button onClick={() => onEdit(item)} style={{ ...S.btnSm(), marginRight: 4 }}>Editar</button>
+          <button onClick={() => onDelete(item)} style={{ ...S.btnSm('#DC2626'), color: '#fff' }}>×</button>
+        </td>
+      )}
+    </tr>
+  )
+}
+
 // ── Unit Detail (partidas + fases) ────────────────────────────────────────────
 
 function UnitDetail({
   unit,
   chapterPhases,
   disciplines,
+  isReorderMode,
   onUnitChanged,
 }: {
   unit: Unit
   chapterPhases: Phase[]
   disciplines: Discipline[]
+  isReorderMode: boolean
   onUnitChanged: (updated: Unit) => void
 }) {
   const [lineItemModal, setLineItemModal] = useState<{ mode: 'create' } | { mode: 'edit'; item: LineItem } | null>(null)
@@ -753,15 +851,22 @@ function UnitDetail({
     setDeletingItem(null)
   }
 
+  const sortedItems = [...unit.line_items].sort((a, b) => a.orden - b.orden)
+  const itemIds = sortedItems.map(i => 'li-' + i.id)
+  const headers = isReorderMode
+    ? ['', 'Nombre', 'Disciplina', 'Unidad', 'Fases']
+    : ['Nombre', 'Disciplina', 'Unidad', 'Fases', '']
+
   return (
     <>
-      {/* Header bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 0, borderBottom: '1px solid #E8E6E0', background: '#FAFAF8', padding: '0 16px' }}>
         <span style={{ padding: '6px 14px', fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: '#1A1A1A', borderBottom: '2px solid #1A1A1A' }}>
           Partidas ({unit.line_items.length})
         </span>
         <div style={{ flex: 1 }} />
-        <button style={{ ...S.btnSm('#1A1A1A'), marginRight: 4 }} onClick={() => setLineItemModal({ mode: 'create' })}>+ Partida</button>
+        {!isReorderMode && (
+          <button style={{ ...S.btnSm('#1A1A1A'), marginRight: 4 }} onClick={() => setLineItemModal({ mode: 'create' })}>+ Partida</button>
+        )}
       </div>
 
       <div style={{ padding: '12px 16px' }}>
@@ -771,48 +876,26 @@ function UnitDetail({
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#1A1A1A' }}>
-                {['Nombre', 'Disciplina', 'Unidad', 'Fases', ''].map(h => (
+                {headers.map(h => (
                   <th key={h} style={{ padding: '7px 12px', fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>
-            <tbody>
-              {[...unit.line_items].sort((a, b) => a.orden - b.orden).map((item, i) => {
-                const disc = item.discipline_id ? discMap[item.discipline_id] : null
-                const phaseCount = item.phase_ids.length
-                return (
-                  <tr key={item.id} style={{ background: i % 2 === 0 ? '#fff' : '#FAFAF8' }}>
-                    <td style={{ padding: '9px 12px', fontSize: 12, color: '#1A1A1A', borderBottom: '1px solid #F0EEE8' }}>
-                      {item.nombre}
-                      <span style={{ marginLeft: 6, fontSize: 9, fontFamily: 'monospace', background: '#F0EEE8', borderRadius: 3, padding: '1px 5px', color: '#888' }}>{item.unidad_medida}</span>
-                    </td>
-                    <td style={{ padding: '9px 12px', fontSize: 11, borderBottom: '1px solid #F0EEE8', whiteSpace: 'nowrap' }}>
-                      {disc ? (
-                        <span style={{ background: disc.color + '22', color: disc.color, borderRadius: 3, padding: '2px 7px', fontWeight: 600, fontSize: 10 }}>{disc.nombre}</span>
-                      ) : (
-                        <span style={{ color: '#CCC', fontSize: 10 }}>—</span>
-                      )}
-                    </td>
-                    <td style={{ padding: '9px 12px', fontSize: 11, color: '#555', borderBottom: '1px solid #F0EEE8', whiteSpace: 'nowrap' }}>
-                      <span style={{ background: '#F0EEE8', borderRadius: 3, padding: '2px 6px', fontWeight: 600, fontFamily: 'monospace' }}>{item.unidad_medida}</span>
-                    </td>
-                    <td style={{ padding: '9px 12px', fontSize: 11, borderBottom: '1px solid #F0EEE8', whiteSpace: 'nowrap' }}>
-                      {phaseCount > 0 ? (
-                        <span style={{ background: '#EBF5FF', color: '#378ADD', borderRadius: 3, padding: '2px 6px', fontWeight: 600, fontSize: 10 }}>
-                          {phaseCount} {phaseCount === 1 ? 'fase' : 'fases'}
-                        </span>
-                      ) : (
-                        <span style={{ color: '#CCC', fontSize: 10 }}>—</span>
-                      )}
-                    </td>
-                    <td style={{ padding: '9px 12px', borderBottom: '1px solid #F0EEE8', whiteSpace: 'nowrap', textAlign: 'right' }}>
-                      <button onClick={() => setLineItemModal({ mode: 'edit', item })} style={{ ...S.btnSm(), marginRight: 4 }}>Editar</button>
-                      <button onClick={() => setDeletingItem(item)} style={{ ...S.btnSm('#DC2626'), color: '#fff' }}>×</button>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
+            <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
+              <tbody>
+                {sortedItems.map((item, i) => (
+                  <SortableLineItemRow
+                    key={item.id}
+                    item={item}
+                    index={i}
+                    discMap={discMap}
+                    isReorderMode={isReorderMode}
+                    onEdit={item => setLineItemModal({ mode: 'edit', item })}
+                    onDelete={setDeletingItem}
+                  />
+                ))}
+              </tbody>
+            </SortableContext>
           </table>
         )}
       </div>
@@ -844,18 +927,25 @@ function UnitRow({
   unit,
   chapterPhases,
   disciplines,
+  isReorderMode,
+  forceExpanded,
   onUnitChanged,
   onUnitDeleted,
 }: {
   unit: Unit
   chapterPhases: Phase[]
   disciplines: Discipline[]
+  isReorderMode: boolean
+  forceExpanded: boolean
   onUnitChanged: (updated: Unit) => void
   onUnitDeleted: (id: string) => void
 }) {
-  const [expanded, setExpanded] = useState(false)
+  const [expandedLocal, setExpandedLocal] = useState(false)
   const [editing, setEditing] = useState(false)
   const [deleting, setDeleting] = useState(false)
+
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: 'un-' + unit.id })
+  const expanded = forceExpanded || expandedLocal
 
   const handleDelete = async () => {
     const res = await deleteUnit(unit.id)
@@ -865,33 +955,36 @@ function UnitRow({
   }
 
   return (
-    <div style={{ borderBottom: '1px solid #E8E6E0' }}>
-      {/* Unit header */}
+    <div
+      ref={setNodeRef}
+      style={{ borderBottom: '1px solid #E8E6E0', transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
+    >
       <div
-        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: '#F5F4F0', cursor: 'pointer' }}
-        onClick={() => setExpanded(e => !e)}
+        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: '#F5F4F0', cursor: isReorderMode ? 'default' : 'pointer' }}
+        onClick={() => { if (!isReorderMode) setExpandedLocal(e => !e) }}
       >
-        <span style={{ fontSize: 11, color: '#CCC', width: 14, flexShrink: 0 }}>{expanded ? '▼' : '▶'}</span>
+        {isReorderMode ? (
+          <DragHandle listeners={listeners} attributes={attributes} />
+        ) : (
+          <span style={{ fontSize: 11, color: '#CCC', width: 14, flexShrink: 0 }}>{expanded ? '▼' : '▶'}</span>
+        )}
         <span style={{ fontSize: 12, fontWeight: 600, color: '#333', flex: 1 }}>{unit.nombre}</span>
         {unit.descripcion && <span style={{ fontSize: 11, color: '#999', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{unit.descripcion}</span>}
         {(unit.imagen_portada_url || unit.descripcion_cliente) && (
           <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', padding: '2px 6px', borderRadius: 3, background: '#D85A30', color: '#fff', flexShrink: 0 }}>MEM</span>
         )}
         <span style={{ fontSize: 10, color: '#AAA' }}>{unit.line_items.length} partidas</span>
-        <button
-          onClick={e => { e.stopPropagation(); setEditing(true) }}
-          style={{ ...S.btnSm(), fontSize: 11 }}
-        >Editar</button>
-        <button
-          onClick={e => { e.stopPropagation(); setDeleting(true) }}
-          style={{ ...S.btnSm('#DC2626'), color: '#fff', fontSize: 11 }}
-        >×</button>
+        {!isReorderMode && (
+          <>
+            <button onClick={e => { e.stopPropagation(); setEditing(true) }} style={{ ...S.btnSm(), fontSize: 11 }}>Editar</button>
+            <button onClick={e => { e.stopPropagation(); setDeleting(true) }} style={{ ...S.btnSm('#DC2626'), color: '#fff', fontSize: 11 }}>×</button>
+          </>
+        )}
       </div>
 
-      {/* Expanded detail */}
       {expanded && (
         <div style={{ background: '#fff' }}>
-          <UnitDetail unit={unit} chapterPhases={chapterPhases} disciplines={disciplines} onUnitChanged={onUnitChanged} />
+          <UnitDetail unit={unit} chapterPhases={chapterPhases} disciplines={disciplines} isReorderMode={isReorderMode} onUnitChanged={onUnitChanged} />
         </div>
       )}
 
@@ -920,21 +1013,26 @@ function ChapterRow({
   chapter,
   milestones,
   disciplines,
+  isReorderMode,
   onChapterChanged,
   onChapterDeleted,
 }: {
   chapter: Chapter
   milestones: Milestone[]
   disciplines: Discipline[]
+  isReorderMode: boolean
   onChapterChanged: (updated: Chapter) => void
   onChapterDeleted: (id: string) => void
 }) {
-  const [expanded, setExpanded] = useState(false)
+  const [expandedLocal, setExpandedLocal] = useState(false)
   const [editing, setEditing] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [addingUnit, setAddingUnit] = useState(false)
   const [phaseModal, setPhaseModal] = useState<{ mode: 'create' } | { mode: 'edit'; phase: Phase } | null>(null)
   const [deletingPhase, setDeletingPhase] = useState<Phase | null>(null)
+
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: 'ch-' + chapter.id })
+  const expanded = isReorderMode || expandedLocal
 
   const handleDelete = async () => {
     const res = await deleteChapter(chapter.id)
@@ -969,15 +1067,24 @@ function ChapterRow({
 
   const totalItems = chapter.units.reduce((acc, u) => acc + u.line_items.length, 0)
   const principalDisc = disciplines.find(d => d.id === chapter.principal_discipline_id)
+  const sortedUnits = [...chapter.units].sort((a, b) => a.orden - b.orden)
+  const unitIds = sortedUnits.map(u => 'un-' + u.id)
 
   return (
-    <div style={{ marginBottom: 8, borderRadius: 8, border: '1px solid #E8E6E0', overflow: 'hidden', background: '#fff' }}>
+    <div
+      ref={setNodeRef}
+      style={{ marginBottom: 8, borderRadius: 8, border: isReorderMode ? '2px dashed #D85A30' : '1px solid #E8E6E0', overflow: 'hidden', background: '#fff', transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
+    >
       {/* Chapter header — dark */}
       <div
-        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: '#1A1A1A', cursor: 'pointer' }}
-        onClick={() => setExpanded(e => !e)}
+        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: '#1A1A1A', cursor: isReorderMode ? 'default' : 'pointer' }}
+        onClick={() => { if (!isReorderMode) setExpandedLocal(e => !e) }}
       >
-        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', width: 14, flexShrink: 0 }}>{expanded ? '▼' : '▶'}</span>
+        {isReorderMode ? (
+          <DragHandle listeners={listeners} attributes={attributes} />
+        ) : (
+          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', width: 14, flexShrink: 0 }}>{expanded ? '▼' : '▶'}</span>
+        )}
         <span style={{ fontSize: 13, fontWeight: 700, color: '#fff', flex: 1, letterSpacing: '0.02em' }}>{chapter.nombre}</span>
         {principalDisc && (
           <span style={{ fontSize: 9, padding: '2px 7px', borderRadius: 10, background: principalDisc.color + '33', color: principalDisc.color, fontWeight: 700, whiteSpace: 'nowrap' }}>
@@ -990,93 +1097,96 @@ function ChapterRow({
         <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', whiteSpace: 'nowrap' }}>
           {chapter.duracion_pct > 0 ? `${chapter.duracion_pct}% · ` : ''}{chapter.units.length} unid. · {totalItems} part. · {chapter.phases.length} fases
         </span>
-        <button
-          onClick={e => { e.stopPropagation(); setAddingUnit(true) }}
-          style={{ padding: '4px 10px', fontSize: 11, borderRadius: 4, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500, background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.7)' }}
-        >+ Unidad</button>
-        <button
-          onClick={e => { e.stopPropagation(); setEditing(true) }}
-          style={{ padding: '4px 10px', fontSize: 11, borderRadius: 4, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500, background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.7)' }}
-        >Editar</button>
-        <button
-          onClick={e => { e.stopPropagation(); setDeleting(true) }}
-          style={{ padding: '4px 8px', fontSize: 11, borderRadius: 4, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500, background: 'rgba(220,38,38,0.25)', color: '#FCA5A5' }}
-        >×</button>
+        {!isReorderMode && (
+          <>
+            <button onClick={e => { e.stopPropagation(); setAddingUnit(true) }} style={{ padding: '4px 10px', fontSize: 11, borderRadius: 4, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500, background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.7)' }}>+ Unidad</button>
+            <button onClick={e => { e.stopPropagation(); setEditing(true) }} style={{ padding: '4px 10px', fontSize: 11, borderRadius: 4, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500, background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.7)' }}>Editar</button>
+            <button onClick={e => { e.stopPropagation(); setDeleting(true) }} style={{ padding: '4px 8px', fontSize: 11, borderRadius: 4, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500, background: 'rgba(220,38,38,0.25)', color: '#FCA5A5' }}>×</button>
+          </>
+        )}
       </div>
 
       {expanded && (
         <div>
-          {/* Phases section */}
-          <div style={{ borderBottom: '1px solid #E8E6E0', background: '#F0F7FF' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px' }}>
-              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#378ADD', flex: 1 }}>
-                Fases de ejecución ({chapter.phases.length})
-              </span>
-              <button
-                style={{ padding: '3px 10px', fontSize: 11, borderRadius: 4, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500, background: '#378ADD', color: '#fff' }}
-                onClick={() => setPhaseModal({ mode: 'create' })}
-              >+ Fase</button>
-            </div>
-            {chapter.phases.length === 0 ? (
-              <p style={{ margin: 0, padding: '0 16px 10px', fontSize: 11, color: '#9AC0E0' }}>Sin fases definidas para este capítulo.</p>
-            ) : (
-              <div style={{ padding: '0 16px 10px' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ background: '#1A5CA8' }}>
-                      {['Fase', 'Duración', 'Hitos', ''].map(h => (
-                        <th key={h} style={{ padding: '5px 10px', fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.7)', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[...chapter.phases].sort((a, b) => a.orden - b.orden).map((phase, i) => (
-                      <tr key={phase.id} style={{ background: i % 2 === 0 ? '#fff' : '#F0F7FF' }}>
-                        <td style={{ padding: '7px 10px', fontSize: 12, color: '#1A1A1A', borderBottom: '1px solid #DAEEFF' }}>{phase.nombre}</td>
-                        <td style={{ padding: '7px 10px', fontSize: 11, borderBottom: '1px solid #DAEEFF', whiteSpace: 'nowrap' }}>
-                          <span style={{ background: '#EBF5FF', color: '#378ADD', borderRadius: 3, padding: '2px 6px', fontWeight: 600, fontSize: 11 }}>{phase.duracion_pct}%</span>
-                        </td>
-                        <td style={{ padding: '7px 10px', borderBottom: '1px solid #DAEEFF' }}>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
-                            {phase.achieves.map(mid => {
-                              const m = milestones.find(x => x.id === mid)
-                              return m ? <span key={mid} style={{ fontSize: 9, padding: '1px 5px', borderRadius: 8, background: '#D1FAE5', color: '#065F46', fontWeight: 600 }}>{m.nombre}</span> : null
-                            })}
-                            {phase.requires.map(mid => {
-                              const m = milestones.find(x => x.id === mid)
-                              return m ? <span key={mid} style={{ fontSize: 9, padding: '1px 5px', borderRadius: 8, background: '#FEE2E2', color: '#991B1B', fontWeight: 600 }}>req: {m.nombre}</span> : null
-                            })}
-                          </div>
-                        </td>
-                        <td style={{ padding: '7px 10px', borderBottom: '1px solid #DAEEFF', whiteSpace: 'nowrap', textAlign: 'right' }}>
-                          <button onClick={() => setPhaseModal({ mode: 'edit', phase })} style={{ ...S.btnSm(), marginRight: 4, fontSize: 10 }}>Editar</button>
-                          <button onClick={() => setDeletingPhase(phase)} style={{ ...S.btnSm('#DC2626'), color: '#fff', fontSize: 10 }}>×</button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          {/* Phases section — hidden in reorder mode */}
+          {!isReorderMode && (
+            <div style={{ borderBottom: '1px solid #E8E6E0', background: '#F0F7FF' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px' }}>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#378ADD', flex: 1 }}>
+                  Fases de ejecución ({chapter.phases.length})
+                </span>
+                <button
+                  style={{ padding: '3px 10px', fontSize: 11, borderRadius: 4, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500, background: '#378ADD', color: '#fff' }}
+                  onClick={() => setPhaseModal({ mode: 'create' })}
+                >+ Fase</button>
               </div>
-            )}
-          </div>
+              {chapter.phases.length === 0 ? (
+                <p style={{ margin: 0, padding: '0 16px 10px', fontSize: 11, color: '#9AC0E0' }}>Sin fases definidas para este capítulo.</p>
+              ) : (
+                <div style={{ padding: '0 16px 10px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ background: '#1A5CA8' }}>
+                        {['Fase', 'Duración', 'Hitos', ''].map(h => (
+                          <th key={h} style={{ padding: '5px 10px', fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.7)', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...chapter.phases].sort((a, b) => a.orden - b.orden).map((phase, i) => (
+                        <tr key={phase.id} style={{ background: i % 2 === 0 ? '#fff' : '#F0F7FF' }}>
+                          <td style={{ padding: '7px 10px', fontSize: 12, color: '#1A1A1A', borderBottom: '1px solid #DAEEFF' }}>{phase.nombre}</td>
+                          <td style={{ padding: '7px 10px', fontSize: 11, borderBottom: '1px solid #DAEEFF', whiteSpace: 'nowrap' }}>
+                            <span style={{ background: '#EBF5FF', color: '#378ADD', borderRadius: 3, padding: '2px 6px', fontWeight: 600, fontSize: 11 }}>{phase.duracion_pct}%</span>
+                          </td>
+                          <td style={{ padding: '7px 10px', borderBottom: '1px solid #DAEEFF' }}>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+                              {phase.achieves.map(mid => {
+                                const m = milestones.find(x => x.id === mid)
+                                return m ? <span key={mid} style={{ fontSize: 9, padding: '1px 5px', borderRadius: 8, background: '#D1FAE5', color: '#065F46', fontWeight: 600 }}>{m.nombre}</span> : null
+                              })}
+                              {phase.requires.map(mid => {
+                                const m = milestones.find(x => x.id === mid)
+                                return m ? <span key={mid} style={{ fontSize: 9, padding: '1px 5px', borderRadius: 8, background: '#FEE2E2', color: '#991B1B', fontWeight: 600 }}>req: {m.nombre}</span> : null
+                              })}
+                            </div>
+                          </td>
+                          <td style={{ padding: '7px 10px', borderBottom: '1px solid #DAEEFF', whiteSpace: 'nowrap', textAlign: 'right' }}>
+                            <button onClick={() => setPhaseModal({ mode: 'edit', phase })} style={{ ...S.btnSm(), marginRight: 4, fontSize: 10 }}>Editar</button>
+                            <button onClick={() => setDeletingPhase(phase)} style={{ ...S.btnSm('#DC2626'), color: '#fff', fontSize: 10 }}>×</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Units */}
           {chapter.units.length === 0 ? (
-            <p style={{ margin: 0, padding: '16px', fontSize: 12, color: '#CCC', textAlign: 'center' }}>
-              Sin unidades de ejecución.{' '}
-              <button style={{ background: 'none', border: 'none', color: '#378ADD', cursor: 'pointer', fontSize: 12, padding: 0 }} onClick={() => setAddingUnit(true)}>Añadir la primera.</button>
-            </p>
+            !isReorderMode && (
+              <p style={{ margin: 0, padding: '16px', fontSize: 12, color: '#CCC', textAlign: 'center' }}>
+                Sin unidades de ejecución.{' '}
+                <button style={{ background: 'none', border: 'none', color: '#378ADD', cursor: 'pointer', fontSize: 12, padding: 0 }} onClick={() => setAddingUnit(true)}>Añadir la primera.</button>
+              </p>
+            )
           ) : (
-            [...chapter.units].sort((a, b) => a.orden - b.orden).map(unit => (
-              <UnitRow
-                key={unit.id}
-                unit={unit}
-                chapterPhases={chapter.phases}
-                disciplines={disciplines}
-                onUnitChanged={handleUnitChanged}
-                onUnitDeleted={handleUnitDeleted}
-              />
-            ))
+            <SortableContext items={unitIds} strategy={verticalListSortingStrategy}>
+              {sortedUnits.map(unit => (
+                <UnitRow
+                  key={unit.id}
+                  unit={unit}
+                  chapterPhases={chapter.phases}
+                  disciplines={disciplines}
+                  isReorderMode={isReorderMode}
+                  forceExpanded={isReorderMode}
+                  onUnitChanged={handleUnitChanged}
+                  onUnitDeleted={handleUnitDeleted}
+                />
+              ))}
+            </SortableContext>
           )}
         </div>
       )}
@@ -1503,6 +1613,11 @@ function MilestonesSection({
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
+type ActiveDrag =
+  | { type: 'chapter'; chapter: Chapter }
+  | { type: 'unit'; unit: Unit }
+  | { type: 'lineitem'; item: LineItem }
+
 export default function TemplatePage({
   initialChapters,
   initialMilestones,
@@ -1516,10 +1631,183 @@ export default function TemplatePage({
   const [milestones, setMilestones] = useState<Milestone[]>(initialMilestones)
   const [disciplines, setDisciplines] = useState<Discipline[]>(initialDisciplines)
   const [addingChapter, setAddingChapter] = useState(false)
+  const [isReorderMode, setIsReorderMode] = useState(false)
+  const [activeDrag, setActiveDrag] = useState<ActiveDrag | null>(null)
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
   const totalUnits  = chapters.reduce((a, c) => a + c.units.length, 0)
   const totalItems  = chapters.reduce((a, c) => a + c.units.reduce((b, u) => b + u.line_items.length, 0), 0)
   const totalPhases = chapters.reduce((a, c) => a + c.phases.length, 0)
+
+  const sortedChapters = [...chapters].sort((a, b) => a.orden - b.orden)
+  const chapterIds = sortedChapters.map(c => 'ch-' + c.id)
+
+  function handleDragStart(event: DragStartEvent) {
+    const id = String(event.active.id)
+    if (id.startsWith('ch-')) {
+      const chapterId = id.slice(3)
+      const chapter = chapters.find(c => c.id === chapterId)
+      if (chapter) setActiveDrag({ type: 'chapter', chapter })
+    } else if (id.startsWith('un-')) {
+      const unitId = id.slice(3)
+      for (const c of chapters) {
+        const unit = c.units.find(u => u.id === unitId)
+        if (unit) { setActiveDrag({ type: 'unit', unit }); break }
+      }
+    } else if (id.startsWith('li-')) {
+      const liId = id.slice(3)
+      for (const c of chapters) {
+        for (const u of c.units) {
+          const item = u.line_items.find(i => i.id === liId)
+          if (item) { setActiveDrag({ type: 'lineitem', item }); break }
+        }
+      }
+    }
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    setActiveDrag(null)
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+
+    const activeId = String(active.id)
+    const overId = String(over.id)
+
+    // ── Chapters ──
+    if (activeId.startsWith('ch-') && overId.startsWith('ch-')) {
+      const activeChId = activeId.slice(3)
+      const overChId = overId.slice(3)
+      const sorted = [...chapters].sort((a, b) => a.orden - b.orden)
+      const oldIdx = sorted.findIndex(c => c.id === activeChId)
+      const newIdx = sorted.findIndex(c => c.id === overChId)
+      if (oldIdx === -1 || newIdx === -1) return
+      const reordered = arrayMove(sorted, oldIdx, newIdx)
+      setChapters(reordered.map((c, i) => ({ ...c, orden: i })))
+      reorderChapters(reordered.map(c => c.id))
+      return
+    }
+
+    // ── Units ──
+    if (activeId.startsWith('un-')) {
+      const unitId = activeId.slice(3)
+      const sourceChapter = chapters.find(c => c.units.some(u => u.id === unitId))
+      if (!sourceChapter) return
+
+      // Determine target chapter: either the chapter the over-item belongs to, or the chapter itself
+      let targetChapter: Chapter | undefined
+      if (overId.startsWith('un-')) {
+        const overUnitId = overId.slice(3)
+        targetChapter = chapters.find(c => c.units.some(u => u.id === overUnitId))
+      } else if (overId.startsWith('ch-')) {
+        targetChapter = chapters.find(c => c.id === overId.slice(3))
+      }
+      if (!targetChapter) return
+
+      if (sourceChapter.id === targetChapter.id) {
+        // Same chapter — reorder
+        const sorted = [...sourceChapter.units].sort((a, b) => a.orden - b.orden)
+        const oldIdx = sorted.findIndex(u => u.id === unitId)
+        const overUnitId = overId.startsWith('un-') ? overId.slice(3) : null
+        const newIdx = overUnitId ? sorted.findIndex(u => u.id === overUnitId) : sorted.length - 1
+        if (oldIdx === -1 || newIdx === -1) return
+        const reordered = arrayMove(sorted, oldIdx, newIdx).map((u, i) => ({ ...u, orden: i }))
+        setChapters(prev => prev.map(c =>
+          c.id === sourceChapter.id ? { ...c, units: reordered } : c
+        ))
+        reorderUnits(reordered.map(u => u.id))
+      } else {
+        // Different chapter — move
+        const unit = sourceChapter.units.find(u => u.id === unitId)!
+        const targetSorted = [...targetChapter.units].sort((a, b) => a.orden - b.orden)
+        let insertIdx = targetSorted.length
+        if (overId.startsWith('un-')) {
+          const overUnitId = overId.slice(3)
+          const idx = targetSorted.findIndex(u => u.id === overUnitId)
+          if (idx !== -1) insertIdx = idx
+        }
+        const movedUnit = { ...unit, chapter_id: targetChapter.id, orden: insertIdx }
+        const newTargetUnits = [...targetSorted.slice(0, insertIdx), movedUnit, ...targetSorted.slice(insertIdx)]
+          .map((u, i) => ({ ...u, orden: i }))
+        setChapters(prev => prev.map(c => {
+          if (c.id === sourceChapter.id) return { ...c, units: c.units.filter(u => u.id !== unitId) }
+          if (c.id === targetChapter!.id) return { ...c, units: newTargetUnits }
+          return c
+        }))
+        moveUnit(unitId, targetChapter.id, insertIdx)
+      }
+      return
+    }
+
+    // ── Line Items ──
+    if (activeId.startsWith('li-')) {
+      const liId = activeId.slice(3)
+      let sourceChapter: Chapter | undefined
+      let sourceUnit: Unit | undefined
+      for (const c of chapters) {
+        for (const u of c.units) {
+          if (u.line_items.some(i => i.id === liId)) { sourceChapter = c; sourceUnit = u; break }
+        }
+        if (sourceUnit) break
+      }
+      if (!sourceChapter || !sourceUnit) return
+
+      let targetUnit: Unit | undefined
+      if (overId.startsWith('li-')) {
+        const overLiId = overId.slice(3)
+        for (const c of chapters) {
+          for (const u of c.units) {
+            if (u.line_items.some(i => i.id === overLiId)) { targetUnit = u; break }
+          }
+          if (targetUnit) break
+        }
+      } else if (overId.startsWith('un-')) {
+        const overUnitId = overId.slice(3)
+        for (const c of chapters) {
+          const u = c.units.find(u => u.id === overUnitId)
+          if (u) { targetUnit = u; break }
+        }
+      }
+      if (!targetUnit) return
+
+      if (sourceUnit.id === targetUnit.id) {
+        // Same unit — reorder
+        const sorted = [...sourceUnit.line_items].sort((a, b) => a.orden - b.orden)
+        const oldIdx = sorted.findIndex(i => i.id === liId)
+        const overLiId = overId.startsWith('li-') ? overId.slice(3) : null
+        const newIdx = overLiId ? sorted.findIndex(i => i.id === overLiId) : sorted.length - 1
+        if (oldIdx === -1 || newIdx === -1) return
+        const reordered = arrayMove(sorted, oldIdx, newIdx).map((i, idx) => ({ ...i, orden: idx }))
+        setChapters(prev => prev.map(c =>
+          c.id === sourceChapter!.id ? {
+            ...c, units: c.units.map(u => u.id === sourceUnit!.id ? { ...u, line_items: reordered } : u)
+          } : c
+        ))
+        reorderLineItems(reordered.map(i => i.id))
+      } else {
+        // Different unit — move
+        const item = sourceUnit.line_items.find(i => i.id === liId)!
+        const targetSorted = [...targetUnit.line_items].sort((a, b) => a.orden - b.orden)
+        let insertIdx = targetSorted.length
+        if (overId.startsWith('li-')) {
+          const overLiId = overId.slice(3)
+          const idx = targetSorted.findIndex(i => i.id === overLiId)
+          if (idx !== -1) insertIdx = idx
+        }
+        const movedItem = { ...item, unit_id: targetUnit.id, orden: insertIdx }
+        const newTargetItems = [...targetSorted.slice(0, insertIdx), movedItem, ...targetSorted.slice(insertIdx)]
+          .map((i, idx) => ({ ...i, orden: idx }))
+        setChapters(prev => prev.map(c => ({
+          ...c,
+          units: c.units.map(u => {
+            if (u.id === sourceUnit!.id) return { ...u, line_items: u.line_items.filter(i => i.id !== liId) }
+            if (u.id === targetUnit!.id) return { ...u, line_items: newTargetItems }
+            return u
+          })
+        })))
+        moveLineItem(liId, targetUnit.id, insertIdx)
+      }
+    }
+  }
 
   return (
     <div style={{ fontFamily: "'Inter', system-ui, sans-serif", padding: '28px 32px', maxWidth: 1000, margin: '0 auto' }}>
@@ -1533,19 +1821,36 @@ export default function TemplatePage({
             {chapters.length} capítulos · {totalUnits} unidades · {totalItems} partidas · {totalPhases} fases · {milestones.length} hitos · {disciplines.length} disciplinas
           </p>
         </div>
-        <button
-          onClick={() => setAddingChapter(true)}
-          style={{ ...S.btn(true), padding: '9px 18px', fontSize: 13 }}
-        >+ Capítulo</button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button
+            onClick={() => setIsReorderMode(m => !m)}
+            style={{
+              padding: '9px 18px', fontSize: 13, borderRadius: 5, border: 'none', cursor: 'pointer',
+              fontFamily: 'inherit', fontWeight: 600,
+              background: isReorderMode ? '#D85A30' : '#F0EEE8',
+              color: isReorderMode ? '#fff' : '#555',
+            }}
+          >{isReorderMode ? '✓ Salir del modo orden' : '⠿ Modo orden'}</button>
+          {!isReorderMode && (
+            <button onClick={() => setAddingChapter(true)} style={{ ...S.btn(true), padding: '9px 18px', fontSize: 13 }}>+ Capítulo</button>
+          )}
+        </div>
       </div>
 
-      {/* Disciplines section */}
-      <DisciplinesSection disciplines={disciplines} onChange={setDisciplines} />
+      {isReorderMode && (
+        <div style={{ marginBottom: 16, padding: '10px 16px', background: '#FFF7F4', border: '1px solid #F5D0C0', borderRadius: 8, fontSize: 12, color: '#92400E' }}>
+          Arrastra los capítulos, unidades y partidas para reordenarlos. Los cambios se guardan automáticamente al soltar.
+        </div>
+      )}
 
-      {/* Milestones section */}
-      <MilestonesSection milestones={milestones} onChange={setMilestones} />
+      {/* Disciplines & Milestones — hidden in reorder mode */}
+      {!isReorderMode && (
+        <>
+          <DisciplinesSection disciplines={disciplines} onChange={setDisciplines} />
+          <MilestonesSection milestones={milestones} onChange={setMilestones} />
+        </>
+      )}
 
-      {/* Empty state */}
       {chapters.length === 0 && (
         <div style={{ textAlign: 'center', padding: '60px 20px', color: '#BBB' }}>
           <p style={{ fontSize: 15, fontWeight: 600, marginBottom: 8, color: '#888' }}>Template vacío</p>
@@ -1554,21 +1859,47 @@ export default function TemplatePage({
         </div>
       )}
 
-      {/* Chapter list */}
-      <div>
-        {[...chapters].sort((a, b) => a.orden - b.orden).map(chapter => (
-          <ChapterRow
-            key={chapter.id}
-            chapter={chapter}
-            milestones={milestones}
-            disciplines={disciplines}
-            onChapterChanged={updated => setChapters(prev => prev.map(c => c.id === updated.id ? updated : c))}
-            onChapterDeleted={id => setChapters(prev => prev.filter(c => c.id !== id))}
-          />
-        ))}
-      </div>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext items={chapterIds} strategy={verticalListSortingStrategy}>
+          <div>
+            {sortedChapters.map(chapter => (
+              <ChapterRow
+                key={chapter.id}
+                chapter={chapter}
+                milestones={milestones}
+                disciplines={disciplines}
+                isReorderMode={isReorderMode}
+                onChapterChanged={updated => setChapters(prev => prev.map(c => c.id === updated.id ? updated : c))}
+                onChapterDeleted={id => setChapters(prev => prev.filter(c => c.id !== id))}
+              />
+            ))}
+          </div>
+        </SortableContext>
 
-      {/* Add chapter modal */}
+        <DragOverlay>
+          {activeDrag?.type === 'chapter' && (
+            <div style={{ padding: '12px 16px', background: '#1A1A1A', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 700, boxShadow: '0 8px 24px rgba(0,0,0,0.3)', opacity: 0.9 }}>
+              ⠿ {activeDrag.chapter.nombre}
+            </div>
+          )}
+          {activeDrag?.type === 'unit' && (
+            <div style={{ padding: '10px 16px', background: '#F5F4F0', borderRadius: 6, fontSize: 12, fontWeight: 600, color: '#333', boxShadow: '0 6px 20px rgba(0,0,0,0.15)', opacity: 0.95 }}>
+              ⠿ {activeDrag.unit.nombre}
+            </div>
+          )}
+          {activeDrag?.type === 'lineitem' && (
+            <div style={{ padding: '9px 12px', background: '#fff', borderRadius: 5, fontSize: 12, color: '#1A1A1A', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', opacity: 0.95, border: '1px solid #E8E6E0' }}>
+              ⠿ {activeDrag.item.nombre}
+            </div>
+          )}
+        </DragOverlay>
+      </DndContext>
+
       {addingChapter && (
         <ChapterModal
           initial={null}
