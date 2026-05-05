@@ -49,6 +49,7 @@ interface PortalChapter {
     nombre: string
     orden: number
     lead_time_days: number | null
+    requiere_duracion: boolean
   }[]
 }
 
@@ -115,6 +116,14 @@ interface PortalQuestion {
 }
 
 type ActiveTab = 'overview' | 'docs' | 'bid' | 'qa'
+
+interface PaymentScheduleItem {
+  id: string
+  nombre: string
+  pct: number
+  trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery'
+  milestone_nombre: string | null
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -674,6 +683,7 @@ export default function PortalPage({
   phaseStartDates = {},
   isPrincipalForChapterIds = [],
   portalChapters = [],
+  paymentSchedule = [],
 }: {
   token: string
   partner: Partner
@@ -689,6 +699,7 @@ export default function PortalPage({
   phaseStartDates?: Record<string, string>       // phaseId → ISO date string
   isPrincipalForChapterIds?: string[]            // chapter IDs where this partner proposes phase durations
   portalChapters?: PortalChapter[]               // chapters with phases for phase duration input
+  paymentSchedule?: PaymentScheduleItem[]
 }) {
   // ── Tab + scroll ──────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview')
@@ -1090,6 +1101,28 @@ export default function PortalPage({
                   <span style={{ fontSize: 13, color: '#AAA', marginRight: 16 }}>Total oferta</span>
                   <span style={{ fontSize: 20, fontWeight: 700, color: '#1A1A1A', fontFamily: 'monospace' }}>{formatEur(total)}</span>
                 </div>
+                {paymentSchedule.length > 0 && (
+                  <div style={{ background: '#ECFDF5', border: '1px solid #6EE7B7', borderRadius: 10, padding: '16px 22px', marginTop: 16 }}>
+                    <p style={{ margin: '0 0 12px', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#065F46' }}>
+                      Condiciones de pago (no modificables)
+                    </p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {paymentSchedule.map((item, i) => (
+                        <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <span style={{ width: 22, height: 22, borderRadius: '50%', background: '#059669', color: '#fff', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</span>
+                          <span style={{ flex: 1, fontSize: 12, color: '#1A1A1A' }}>{item.nombre}</span>
+                          <span style={{ fontSize: 11, color: '#6B7280' }}>
+                            {item.trigger_type === 'contract_signed' ? 'Al firmar' : item.trigger_type === 'delivery' ? 'A la entrega' : item.milestone_nombre ?? 'Hito de obra'}
+                          </span>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: '#059669', fontFamily: 'monospace', flexShrink: 0 }}>{item.pct}%</span>
+                        </div>
+                      ))}
+                    </div>
+                    <p style={{ margin: '12px 0 0', fontSize: 10, color: '#6B7280' }}>
+                      Al enviar tu oferta aceptas estas condiciones de pago. Los importes exactos se calcularán sobre el total de tu oferta aceptada.
+                    </p>
+                  </div>
+                )}
               </div>
             ) : (
               <div>
@@ -1141,33 +1174,61 @@ export default function PortalPage({
                     </div>
                   </div>
                 ))}
-                {/* Chapter-level phase duration inputs */}
-                {portalChapters.filter(ch => ch.isPrincipal && ch.phases.length > 0).map(ch => (
-                  <div key={ch.id} style={{ background: '#F0F7FF', border: '1px solid #BAD7F2', borderRadius: 10, padding: '16px 22px', marginBottom: 16 }}>
-                    <p style={{ margin: '0 0 12px', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#0369A1' }}>
-                      Plazos de ejecución — {ch.nombre} (días laborables)
+                {/* Payment schedule (non-negotiable) */}
+                {paymentSchedule.length > 0 && (
+                  <div style={{ background: '#ECFDF5', border: '1px solid #6EE7B7', borderRadius: 10, padding: '16px 22px', marginBottom: 16 }}>
+                    <p style={{ margin: '0 0 12px', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#065F46' }}>
+                      Condiciones de pago (no modificables)
                     </p>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {ch.phases.map(phase => {
-                        const days = phaseDays[phase.id] ?? 0
-                        return (
-                          <div key={phase.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <span style={{ flex: 1, fontSize: 12, color: '#1A1A1A' }}>{phase.nombre}</span>
-                            {phase.lead_time_days != null && <span style={{ fontSize: 10, color: '#9AC0E0', flexShrink: 0 }}>Ref: {phase.lead_time_days}d</span>}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
-                              <input
-                                type="number" min={1} value={days || ''} placeholder="0"
-                                onChange={e => setPhaseDays(prev => ({ ...prev, [phase.id]: parseInt(e.target.value) || 0 }))}
-                                style={{ width: 60, padding: '5px 8px', fontSize: 13, border: `1px solid ${days > 0 ? '#378ADD' : '#BFDBFE'}`, borderRadius: 5, fontFamily: 'monospace', color: '#1A1A1A', background: days > 0 ? '#E0F2FE' : '#fff', outline: 'none', textAlign: 'right' }}
-                              />
-                              <span style={{ fontSize: 11, color: '#9AC0E0' }}>días</span>
-                            </div>
-                          </div>
-                        )
-                      })}
+                      {paymentSchedule.map((item, i) => (
+                        <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <span style={{ width: 22, height: 22, borderRadius: '50%', background: '#059669', color: '#fff', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</span>
+                          <span style={{ flex: 1, fontSize: 12, color: '#1A1A1A' }}>{item.nombre}</span>
+                          <span style={{ fontSize: 11, color: '#6B7280' }}>
+                            {item.trigger_type === 'contract_signed' ? 'Al firmar' : item.trigger_type === 'delivery' ? 'A la entrega' : item.milestone_nombre ?? 'Hito de obra'}
+                          </span>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: '#059669', fontFamily: 'monospace', flexShrink: 0 }}>{item.pct}%</span>
+                        </div>
+                      ))}
                     </div>
+                    <p style={{ margin: '12px 0 0', fontSize: 10, color: '#6B7280' }}>
+                      Al enviar tu oferta aceptas estas condiciones de pago. Los importes exactos se calcularán sobre el total de tu oferta aceptada.
+                    </p>
                   </div>
-                ))}
+                )}
+
+                {/* Chapter-level phase duration inputs */}
+                {portalChapters.filter(ch => ch.isPrincipal).map(ch => {
+                  const visiblePhases = ch.phases.filter(ph => ph.requiere_duracion)
+                  if (visiblePhases.length === 0) return null
+                  return (
+                    <div key={ch.id} style={{ background: '#F0F7FF', border: '1px solid #BAD7F2', borderRadius: 10, padding: '16px 22px', marginBottom: 16 }}>
+                      <p style={{ margin: '0 0 12px', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#0369A1' }}>
+                        Plazos de ejecución — {ch.nombre} (días laborables)
+                      </p>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {visiblePhases.map(phase => {
+                          const days = phaseDays[phase.id] ?? 0
+                          return (
+                            <div key={phase.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              <span style={{ flex: 1, fontSize: 12, color: '#1A1A1A' }}>{phase.nombre}</span>
+                              {phase.lead_time_days != null && <span style={{ fontSize: 10, color: '#9AC0E0', flexShrink: 0 }}>Ref: {phase.lead_time_days}d</span>}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+                                <input
+                                  type="number" min={1} value={days || ''} placeholder="0"
+                                  onChange={e => setPhaseDays(prev => ({ ...prev, [phase.id]: parseInt(e.target.value) || 0 }))}
+                                  style={{ width: 60, padding: '5px 8px', fontSize: 13, border: `1px solid ${days > 0 ? '#378ADD' : '#BFDBFE'}`, borderRadius: 5, fontFamily: 'monospace', color: '#1A1A1A', background: days > 0 ? '#E0F2FE' : '#fff', outline: 'none', textAlign: 'right' }}
+                                />
+                                <span style={{ fontSize: 11, color: '#9AC0E0' }}>días</span>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })}
 
                 <div style={{ background: '#fff', border: '1px solid #E8E6E0', borderRadius: 10, padding: '20px 22px', marginTop: 8 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>

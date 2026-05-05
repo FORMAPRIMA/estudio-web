@@ -248,6 +248,7 @@ export default async function FpeProjectDetailPage({
                   nombre:       li.nombre,
                   unidad_medida: li.unidad_medida,
                   cantidad:     existing?.cantidad ?? 0,
+                  incluida:     !!existing,
                 }
               }),
           }
@@ -255,12 +256,22 @@ export default async function FpeProjectDetailPage({
     }))
     .filter(ch => ch.units.length > 0)
 
-  // Build partnersForDocs: partners with their discipline_ids (replaces unit capabilities)
+  // Build discipline → template_unit_ids map (based on principal_discipline_id on each unit)
   type PartnerRaw = { id: string; nombre: string; email_contacto: string | null; telefono: string | null; partner_disciplines: { discipline_id: string }[] }
+  const disciplineToUnitIds: Record<string, string[]> = {}
+  for (const ch of (chapters ?? [])) {
+    for (const u of ch.units) {
+      if (!u.activo) continue
+      const disc = (u as unknown as { principal_discipline_id: string | null }).principal_discipline_id
+      if (disc) disciplineToUnitIds[disc] = [...(disciplineToUnitIds[disc] ?? []), u.id]
+    }
+  }
+
+  // Build partnersForDocs: each partner's unit_ids derived from their discipline capabilities
   const partnersForDocs: PartnerForDocs[] = ((partners ?? []) as unknown as PartnerRaw[]).map(p => ({
     id:       p.id,
     nombre:   p.nombre,
-    unit_ids: (p.partner_disciplines ?? []).map(c => c.discipline_id),
+    unit_ids: (p.partner_disciplines ?? []).flatMap(c => disciplineToUnitIds[c.discipline_id] ?? []),
   }))
 
   // Build unitPartnersMap: project_unit_id → partner_ids[]

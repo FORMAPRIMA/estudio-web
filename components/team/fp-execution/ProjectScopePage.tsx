@@ -237,6 +237,7 @@ function UnitScopeRow({
   onNotasChange: (unitId: string, notas: string) => void
   hasMem?: boolean
 }) {
+  const [expanded, setExpanded] = useState(false)
   const activeItems = unit.line_items.filter(li => li.activo)
 
   return (
@@ -268,10 +269,43 @@ function UnitScopeRow({
             MEM
           </span>
         )}
-        <span style={{ fontSize: 10, color: '#AAA', whiteSpace: 'nowrap', flexShrink: 0 }}>
-          {activeItems.length > 0 ? `${activeItems.length} partida${activeItems.length !== 1 ? 's' : ''}` : 'Sin partidas'}
-        </span>
+        {activeItems.length > 0 ? (
+          <button
+            onClick={() => setExpanded(e => !e)}
+            style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', borderRadius: 4, color: '#888', flexShrink: 0 }}
+          >
+            <span style={{ fontSize: 10, color: '#AAA', whiteSpace: 'nowrap' }}>
+              {activeItems.length} partida{activeItems.length !== 1 ? 's' : ''}
+            </span>
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ transition: 'transform 0.15s', transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)', flexShrink: 0 }}>
+              <path d="M2 3.5L5 6.5L8 3.5" stroke="#AAA" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        ) : (
+          <span style={{ fontSize: 10, color: '#CCC', whiteSpace: 'nowrap', flexShrink: 0 }}>Sin partidas</span>
+        )}
       </div>
+
+      {/* Partidas list (read-only) */}
+      {expanded && activeItems.length > 0 && (
+        <div style={{ background: scope.included ? '#EBF4FF' : '#FAFAF8', borderTop: '1px solid #E8E6E0', padding: '8px 16px 8px 44px' }}>
+          {activeItems.map((li, i) => (
+            <div
+              key={li.id}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '5px 0',
+                borderBottom: i < activeItems.length - 1 ? '1px solid #EEE' : 'none',
+              }}
+            >
+              <span style={{ fontSize: 11, color: '#444' }}>{li.nombre}</span>
+              <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', padding: '2px 6px', borderRadius: 3, background: '#E8E6E0', color: '#888', flexShrink: 0, marginLeft: 12 }}>
+                {li.unidad_medida}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Notes when included */}
       {scope.included && (

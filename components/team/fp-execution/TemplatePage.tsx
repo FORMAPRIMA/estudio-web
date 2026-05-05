@@ -30,6 +30,11 @@ import {
   createDiscipline, updateDiscipline, deleteDiscipline,
   reorderChapters, reorderUnits, moveUnit, reorderLineItems, moveLineItem,
 } from '@/app/actions/fpe-template'
+import {
+  createDisciplinePaymentMilestone,
+  updateDisciplinePaymentMilestone,
+  deleteDisciplinePaymentMilestone,
+} from '@/app/actions/fpe-payment'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -46,6 +51,17 @@ interface Milestone {
   id: string
   nombre: string
   descripcion: string | null
+  orden: number
+  es_hito_pago: boolean
+}
+
+interface DisciplinePaymentMilestone {
+  id: string
+  discipline_id: string
+  milestone_id: string | null
+  trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery'
+  nombre: string
+  pct: number
   orden: number
 }
 
@@ -69,6 +85,7 @@ interface Phase {
   lead_time_days: number
   duracion_pct: number
   orden: number
+  requiere_duracion: boolean
   achieves: string[]   // milestone ids
   requires: string[]   // milestone ids
 }
@@ -636,6 +653,7 @@ function PhaseModal({
   const [descripcion, setDescripcion] = useState(initial?.descripcion ?? '')
   const [duracionPct, setDuracionPct] = useState(String(initial?.duracion_pct ?? 0))
   const [orden, setOrden] = useState(String(initial?.orden ?? 0))
+  const [requiereDuracion, setRequiereDuracion] = useState(initial?.requiere_duracion ?? true)
   const [achieves, setAchieves] = useState<string[]>(initial?.achieves ?? [])
   const [requires, setRequires] = useState<string[]>(initial?.requires ?? [])
   const [saving, setSaving] = useState(false)
@@ -649,19 +667,19 @@ function PhaseModal({
 
     if (initial) {
       const [res, linksRes] = await Promise.all([
-        updatePhase(initial.id, { nombre: nombre.trim(), descripcion: descripcion.trim() || null, duracion_pct: pct, orden: parseInt(orden) || 0 }),
+        updatePhase(initial.id, { nombre: nombre.trim(), descripcion: descripcion.trim() || null, duracion_pct: pct, orden: parseInt(orden) || 0, requiere_duracion: requiereDuracion }),
         setPhaseMilestoneLinks(initial.id, achieves, requires),
       ])
       setSaving(false)
       if ('error' in res) { setError(res.error); return }
       if ('error' in linksRes) { setError(linksRes.error); return }
-      onSaved({ ...initial, nombre: nombre.trim(), descripcion: descripcion.trim() || null, duracion_pct: pct, orden: parseInt(orden) || 0, achieves, requires })
+      onSaved({ ...initial, nombre: nombre.trim(), descripcion: descripcion.trim() || null, duracion_pct: pct, orden: parseInt(orden) || 0, requiere_duracion: requiereDuracion, achieves, requires })
     } else {
-      const res = await createPhase({ chapter_id: chapterId, nombre: nombre.trim(), descripcion: descripcion.trim() || null, duracion_pct: pct, orden: parseInt(orden) || 0 })
+      const res = await createPhase({ chapter_id: chapterId, nombre: nombre.trim(), descripcion: descripcion.trim() || null, duracion_pct: pct, orden: parseInt(orden) || 0, requiere_duracion: requiereDuracion })
       setSaving(false)
       if ('error' in res) { setError(res.error); return }
       await setPhaseMilestoneLinks(res.id, achieves, requires)
-      onSaved({ id: res.id, chapter_id: chapterId, nombre: nombre.trim(), descripcion: descripcion.trim() || null, lead_time_days: 7, duracion_pct: pct, orden: parseInt(orden) || 0, achieves, requires })
+      onSaved({ id: res.id, chapter_id: chapterId, nombre: nombre.trim(), descripcion: descripcion.trim() || null, lead_time_days: 7, duracion_pct: pct, orden: parseInt(orden) || 0, requiere_duracion: requiereDuracion, achieves, requires })
     }
   }
 
@@ -695,6 +713,22 @@ function PhaseModal({
                 <input type="number" value={orden} onChange={e => setOrden(e.target.value)} style={S.input} />
               </div>
             </div>
+
+            {/* Pedir duración */}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', userSelect: 'none' }}>
+              <input
+                type="checkbox"
+                checked={requiereDuracion}
+                onChange={e => setRequiereDuracion(e.target.checked)}
+                style={{ width: 16, height: 16, accentColor: '#D85A30', cursor: 'pointer', flexShrink: 0 }}
+              />
+              <div>
+                <span style={{ fontSize: 13, color: '#1A1A1A', fontWeight: 500 }}>Pedir duración al partner</span>
+                <p style={{ margin: '2px 0 0', fontSize: 11, color: '#AAA', lineHeight: 1.4 }}>
+                  Si está desactivado, esta fase no aparecerá en el formulario de oferta.
+                </p>
+              </div>
+            </label>
 
             {/* Hitos */}
             <div style={{ borderTop: '1px solid #F0EEE8', paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -1138,6 +1172,9 @@ function ChapterRow({
                           <td style={{ padding: '7px 10px', fontSize: 12, color: '#1A1A1A', borderBottom: '1px solid #DAEEFF' }}>{phase.nombre}</td>
                           <td style={{ padding: '7px 10px', fontSize: 11, borderBottom: '1px solid #DAEEFF', whiteSpace: 'nowrap' }}>
                             <span style={{ background: '#EBF5FF', color: '#378ADD', borderRadius: 3, padding: '2px 6px', fontWeight: 600, fontSize: 11 }}>{phase.duracion_pct}%</span>
+                            {!phase.requiere_duracion && (
+                              <span style={{ marginLeft: 5, background: '#FEF3C7', color: '#92400E', borderRadius: 3, padding: '2px 6px', fontWeight: 600, fontSize: 10 }}>Sin duración</span>
+                            )}
                           </td>
                           <td style={{ padding: '7px 10px', borderBottom: '1px solid #DAEEFF' }}>
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
@@ -1409,6 +1446,282 @@ function DisciplinesSection({
   )
 }
 
+// ── Discipline Payment Milestone Modal ────────────────────────────────────────
+
+function DisciplinePaymentMilestoneModal({
+  disciplineId,
+  disciplines,
+  milestones,
+  initial,
+  onClose,
+  onSaved,
+}: {
+  disciplineId: string
+  disciplines: Discipline[]
+  milestones: Milestone[]
+  initial: DisciplinePaymentMilestone | null
+  onClose: () => void
+  onSaved: (m: DisciplinePaymentMilestone) => void
+}) {
+  const [nombre, setNombre] = useState(initial?.nombre ?? '')
+  const [triggerType, setTriggerType] = useState<'contract_signed' | 'milestone_achieved' | 'delivery'>(initial?.trigger_type ?? 'milestone_achieved')
+  const [milestoneId, setMilestoneId] = useState<string>(initial?.milestone_id ?? '')
+  const [pct, setPct] = useState(String(initial?.pct ?? ''))
+  const [orden, setOrden] = useState(String(initial?.orden ?? 0))
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const paymentFirst = [...milestones].sort((a, b) => {
+    if (a.es_hito_pago && !b.es_hito_pago) return -1
+    if (!a.es_hito_pago && b.es_hito_pago) return 1
+    return a.orden - b.orden
+  })
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!nombre.trim()) { setError('El nombre es obligatorio.'); return }
+    const pctNum = parseFloat(pct)
+    if (isNaN(pctNum) || pctNum <= 0 || pctNum > 100) { setError('El porcentaje debe ser mayor que 0 y máximo 100.'); return }
+    setSaving(true); setError(null)
+
+    const mid = triggerType === 'milestone_achieved' ? (milestoneId || null) : null
+
+    if (initial) {
+      const res = await updateDisciplinePaymentMilestone(initial.id, {
+        nombre:       nombre.trim(),
+        trigger_type: triggerType,
+        milestone_id: mid,
+        pct:          pctNum,
+        orden:        parseInt(orden) || 0,
+      })
+      setSaving(false)
+      if ('error' in res) { setError(res.error); return }
+      onSaved({ ...initial, nombre: nombre.trim(), trigger_type: triggerType, milestone_id: mid, pct: pctNum, orden: parseInt(orden) || 0 })
+    } else {
+      const res = await createDisciplinePaymentMilestone({
+        discipline_id: disciplineId,
+        nombre:        nombre.trim(),
+        trigger_type:  triggerType,
+        milestone_id:  mid,
+        pct:           pctNum,
+        orden:         parseInt(orden) || 0,
+      })
+      setSaving(false)
+      if ('error' in res) { setError(res.error); return }
+      onSaved({ id: res.id, discipline_id: disciplineId, nombre: nombre.trim(), trigger_type: triggerType, milestone_id: mid, pct: pctNum, orden: parseInt(orden) || 0 })
+    }
+  }
+
+  const disc = disciplines.find(d => d.id === disciplineId)
+
+  return (
+    <div style={overlay} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div style={{ ...modalCard, maxWidth: 460 }}>
+        <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #E8E6E0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#1A1A1A' }}>{initial ? 'Editar hito de pago' : 'Nuevo hito de pago'}</h2>
+            {disc && <p style={{ margin: '2px 0 0', fontSize: 11, color: '#888' }}>{disc.nombre}</p>}
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: '#CCC', lineHeight: 1 }}>×</button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div>
+              <label style={S.label}>Nombre *</label>
+              <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Ej: Pago inicial a la firma" style={S.input} autoFocus />
+            </div>
+            <div>
+              <label style={S.label}>Trigger</label>
+              <select value={triggerType} onChange={e => setTriggerType(e.target.value as typeof triggerType)} style={S.select}>
+                <option value="contract_signed">Firma de contrato</option>
+                <option value="milestone_achieved">Al alcanzar un hito de obra</option>
+                <option value="delivery">Entrega final</option>
+              </select>
+            </div>
+            {triggerType === 'milestone_achieved' && (
+              <div>
+                <label style={S.label}>Hito vinculado</label>
+                <select value={milestoneId} onChange={e => setMilestoneId(e.target.value)} style={S.select}>
+                  <option value="">— Sin vincular —</option>
+                  {paymentFirst.map(m => (
+                    <option key={m.id} value={m.id}>
+                      {m.es_hito_pago ? '★ ' : ''}{m.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px', gap: 14 }}>
+              <div>
+                <label style={S.label}>% del contrato *</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input type="number" min={0.01} max={100} step={0.01} value={pct} onChange={e => setPct(e.target.value)} style={S.input} placeholder="0.00" />
+                  <span style={{ fontSize: 13, color: '#888', flexShrink: 0 }}>%</span>
+                </div>
+              </div>
+              <div>
+                <label style={S.label}>Orden</label>
+                <input type="number" value={orden} onChange={e => setOrden(e.target.value)} style={S.input} />
+              </div>
+            </div>
+            {error && <ErrorBanner msg={error} />}
+          </div>
+          <div style={{ padding: '14px 24px', borderTop: '1px solid #E8E6E0', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button type="button" onClick={onClose} style={S.btn()}>Cancelar</button>
+            <button type="submit" disabled={saving} style={S.btn(true)}>{saving ? 'Guardando…' : 'Guardar'}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ── Payment Milestones Section ─────────────────────────────────────────────────
+
+function PaymentMilestonesSection({
+  disciplines,
+  milestones,
+  paymentMilestones,
+  onChange,
+}: {
+  disciplines: Discipline[]
+  milestones: Milestone[]
+  paymentMilestones: DisciplinePaymentMilestone[]
+  onChange: (updated: DisciplinePaymentMilestone[]) => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const [modal, setModal] = useState<{ disciplineId: string; initial: DisciplinePaymentMilestone | null } | null>(null)
+  const [deleting, setDeleting] = useState<DisciplinePaymentMilestone | null>(null)
+
+  const handleDelete = async (pm: DisciplinePaymentMilestone) => {
+    const res = await deleteDisciplinePaymentMilestone(pm.id)
+    if ('error' in res) { alert(res.error); return }
+    onChange(paymentMilestones.filter(x => x.id !== pm.id))
+    setDeleting(null)
+  }
+
+  const activeDisciplines = [...disciplines].filter(d => d.activo).sort((a, b) => a.orden - b.orden)
+  const milestoneMap: Record<string, Milestone> = {}
+  for (const m of milestones) milestoneMap[m.id] = m
+
+  const triggerLabel = (pm: DisciplinePaymentMilestone): string => {
+    if (pm.trigger_type === 'contract_signed') return 'Firma contrato'
+    if (pm.trigger_type === 'delivery') return 'Entrega final'
+    return pm.milestone_id ? (milestoneMap[pm.milestone_id]?.nombre ?? 'Hito de obra') : 'Hito de obra'
+  }
+
+  const totalCount = paymentMilestones.length
+
+  return (
+    <div style={{ marginBottom: 16, borderRadius: 8, border: '2px solid #059669', overflow: 'hidden', background: '#fff' }}>
+      <div
+        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: '#ECFDF5', cursor: 'pointer' }}
+        onClick={() => setExpanded(e => !e)}
+      >
+        <span style={{ fontSize: 12, color: '#059669', width: 14, flexShrink: 0 }}>{expanded ? '▼' : '▶'}</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: '#065F46', flex: 1, letterSpacing: '0.02em' }}>Hitos de pago por disciplina</span>
+        <span style={{ fontSize: 10, fontWeight: 700, color: '#065F46', background: '#D1FAE5', borderRadius: 10, padding: '2px 8px' }}>{totalCount}</span>
+      </div>
+
+      {expanded && (
+        <div style={{ padding: '16px' }}>
+          {activeDisciplines.length === 0 ? (
+            <p style={{ margin: 0, fontSize: 12, color: '#BBB', textAlign: 'center', padding: '16px 0' }}>Sin disciplinas configuradas.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {activeDisciplines.map(disc => {
+                const discPms = [...paymentMilestones.filter(pm => pm.discipline_id === disc.id)].sort((a, b) => a.orden - b.orden)
+                const pctSum = discPms.reduce((s, pm) => s + pm.pct, 0)
+                const pctOk = Math.abs(pctSum - 100) < 0.01
+
+                return (
+                  <div key={disc.id} style={{ borderRadius: 6, border: '1px solid #D1FAE5', overflow: 'hidden' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', background: '#F0FDF4' }}>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: disc.color, flexShrink: 0 }} />
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#065F46', flex: 1 }}>{disc.nombre}</span>
+                      {discPms.length > 0 && (
+                        <span style={{
+                          fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 4,
+                          background: pctOk ? '#D1FAE5' : '#FEF3C7',
+                          color: pctOk ? '#065F46' : '#92400E',
+                          border: `1px solid ${pctOk ? '#6EE7B7' : '#FCD34D'}`,
+                        }}>
+                          {pctSum.toFixed(0)}%{!pctOk && ' ≠ 100%'}
+                        </span>
+                      )}
+                      <button
+                        onClick={e => { e.stopPropagation(); setModal({ disciplineId: disc.id, initial: null }) }}
+                        style={{ padding: '3px 9px', fontSize: 11, borderRadius: 4, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, background: '#059669', color: '#fff' }}
+                      >+ Hito</button>
+                    </div>
+
+                    {discPms.length === 0 ? (
+                      <p style={{ margin: 0, padding: '10px 14px', fontSize: 11, color: '#A7F3D0' }}>Sin hitos de pago.</p>
+                    ) : (
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ background: '#059669' }}>
+                            {['Nombre', 'Trigger', 'Hito vinculado', '%', ''].map(h => (
+                              <th key={h} style={{ padding: '5px 10px', fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.8)', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {discPms.map((pm, i) => (
+                            <tr key={pm.id} style={{ background: i % 2 === 0 ? '#fff' : '#F0FDF4' }}>
+                              <td style={{ padding: '7px 10px', fontSize: 12, color: '#1A1A1A', borderBottom: '1px solid #D1FAE5' }}>{pm.nombre}</td>
+                              <td style={{ padding: '7px 10px', fontSize: 11, color: '#555', borderBottom: '1px solid #D1FAE5', whiteSpace: 'nowrap' }}>
+                                {pm.trigger_type === 'contract_signed' ? 'Firma contrato' : pm.trigger_type === 'delivery' ? 'Entrega final' : 'Hito de obra'}
+                              </td>
+                              <td style={{ padding: '7px 10px', fontSize: 11, color: '#555', borderBottom: '1px solid #D1FAE5' }}>
+                                {pm.milestone_id && milestoneMap[pm.milestone_id]
+                                  ? <span style={{ fontSize: 10, background: '#D1FAE5', color: '#065F46', borderRadius: 3, padding: '1px 5px', fontWeight: 600 }}>{milestoneMap[pm.milestone_id].nombre}</span>
+                                  : <span style={{ color: '#CCC', fontSize: 10 }}>—</span>
+                                }
+                              </td>
+                              <td style={{ padding: '7px 10px', fontSize: 12, fontWeight: 700, color: '#059669', borderBottom: '1px solid #D1FAE5', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{pm.pct}%</td>
+                              <td style={{ padding: '7px 10px', borderBottom: '1px solid #D1FAE5', whiteSpace: 'nowrap', textAlign: 'right' }}>
+                                <button onClick={() => setModal({ disciplineId: disc.id, initial: pm })} style={{ ...S.btnSm(), marginRight: 4, fontSize: 10 }}>Editar</button>
+                                <button onClick={() => setDeleting(pm)} style={{ ...S.btnSm('#DC2626'), color: '#fff', fontSize: 10 }}>×</button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {modal && (
+        <DisciplinePaymentMilestoneModal
+          disciplineId={modal.disciplineId}
+          disciplines={disciplines}
+          milestones={milestones}
+          initial={modal.initial}
+          onClose={() => setModal(null)}
+          onSaved={saved => {
+            const exists = paymentMilestones.find(x => x.id === saved.id)
+            onChange(exists ? paymentMilestones.map(x => x.id === saved.id ? saved : x) : [...paymentMilestones, saved])
+            setModal(null)
+          }}
+        />
+      )}
+      {deleting && (
+        <ConfirmDelete
+          label={deleting.nombre}
+          onConfirm={() => handleDelete(deleting)}
+          onCancel={() => setDeleting(null)}
+        />
+      )}
+    </div>
+  )
+}
+
 // ── Milestone Modal ───────────────────────────────────────────────────────────
 
 function MilestoneModal({
@@ -1423,6 +1736,7 @@ function MilestoneModal({
   const [nombre, setNombre] = useState(initial?.nombre ?? '')
   const [descripcion, setDescripcion] = useState(initial?.descripcion ?? '')
   const [orden, setOrden] = useState(String(initial?.orden ?? 0))
+  const [esHitoPago, setEsHitoPago] = useState(initial?.es_hito_pago ?? false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -1432,15 +1746,15 @@ function MilestoneModal({
     setSaving(true); setError(null)
 
     if (initial) {
-      const res = await updateMilestone(initial.id, { nombre: nombre.trim(), descripcion: descripcion.trim() || null, orden: parseInt(orden) || 0 })
+      const res = await updateMilestone(initial.id, { nombre: nombre.trim(), descripcion: descripcion.trim() || null, orden: parseInt(orden) || 0, es_hito_pago: esHitoPago })
       setSaving(false)
       if ('error' in res) { setError(res.error); return }
-      onSaved({ ...initial, nombre: nombre.trim(), descripcion: descripcion.trim() || null, orden: parseInt(orden) || 0 })
+      onSaved({ ...initial, nombre: nombre.trim(), descripcion: descripcion.trim() || null, orden: parseInt(orden) || 0, es_hito_pago: esHitoPago })
     } else {
-      const res = await createMilestone({ nombre: nombre.trim(), descripcion: descripcion.trim() || null, orden: parseInt(orden) || 0 })
+      const res = await createMilestone({ nombre: nombre.trim(), descripcion: descripcion.trim() || null, orden: parseInt(orden) || 0, es_hito_pago: esHitoPago })
       setSaving(false)
       if ('error' in res) { setError(res.error); return }
-      onSaved({ id: res.id, nombre: nombre.trim(), descripcion: descripcion.trim() || null, orden: parseInt(orden) || 0 })
+      onSaved({ id: res.id, nombre: nombre.trim(), descripcion: descripcion.trim() || null, orden: parseInt(orden) || 0, es_hito_pago: esHitoPago })
     }
   }
 
@@ -1465,6 +1779,16 @@ function MilestoneModal({
               <label style={S.label}>Orden</label>
               <input type="number" value={orden} onChange={e => setOrden(e.target.value)} style={S.input} />
             </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', userSelect: 'none' }}>
+              <input type="checkbox" checked={esHitoPago} onChange={e => setEsHitoPago(e.target.checked)}
+                style={{ width: 16, height: 16, accentColor: '#059669', cursor: 'pointer', flexShrink: 0 }} />
+              <div>
+                <span style={{ fontSize: 13, color: '#1A1A1A', fontWeight: 500 }}>Hito de pago</span>
+                <p style={{ margin: '2px 0 0', fontSize: 11, color: '#AAA', lineHeight: 1.4 }}>
+                  Este hito puede usarse como trigger de pago en contratos FPE.
+                </p>
+              </div>
+            </label>
             {error && <ErrorBanner msg={error} />}
           </div>
           <div style={{ padding: '14px 24px', borderTop: '1px solid #E8E6E0', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
@@ -1576,9 +1900,12 @@ function MilestonesSection({
               {sorted.map((m, i) => (
                 <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 6, background: i % 2 === 0 ? '#FAFAF8' : '#fff', border: '1px solid #F0EEE8' }}>
                   <span style={{ fontSize: 10, fontWeight: 700, color: '#D85A30', width: 24, flexShrink: 0, fontFamily: 'monospace' }}>{String(m.orden).padStart(2, '0')}</span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
                     <span style={{ fontSize: 12, fontWeight: 600, color: '#1A1A1A' }}>{m.nombre}</span>
-                    {m.descripcion && <span style={{ fontSize: 11, color: '#AAA', marginLeft: 8 }}>{m.descripcion}</span>}
+                    {m.es_hito_pago && (
+                      <span style={{ fontSize: 9, fontWeight: 700, color: '#065F46', background: '#D1FAE5', borderRadius: 3, padding: '1px 6px', marginLeft: 4 }}>PAGO</span>
+                    )}
+                    {m.descripcion && <span style={{ fontSize: 11, color: '#AAA', marginLeft: 4 }}>{m.descripcion}</span>}
                   </div>
                   <button onClick={() => setModal({ mode: 'edit', m })} style={{ ...S.btnSm(), fontSize: 11 }}>Editar</button>
                   <button onClick={() => setDeleting(m)} style={{ ...S.btnSm('#DC2626'), color: '#fff', fontSize: 11 }}>×</button>
@@ -1622,14 +1949,17 @@ export default function TemplatePage({
   initialChapters,
   initialMilestones,
   initialDisciplines,
+  initialPaymentMilestones = [],
 }: {
   initialChapters: Chapter[]
   initialMilestones: Milestone[]
   initialDisciplines: Discipline[]
+  initialPaymentMilestones?: DisciplinePaymentMilestone[]
 }) {
   const [chapters, setChapters] = useState<Chapter[]>(initialChapters)
   const [milestones, setMilestones] = useState<Milestone[]>(initialMilestones)
   const [disciplines, setDisciplines] = useState<Discipline[]>(initialDisciplines)
+  const [paymentMilestones, setPaymentMilestones] = useState<DisciplinePaymentMilestone[]>(initialPaymentMilestones)
   const [addingChapter, setAddingChapter] = useState(false)
   const [isReorderMode, setIsReorderMode] = useState(false)
   const [activeDrag, setActiveDrag] = useState<ActiveDrag | null>(null)
@@ -1859,10 +2189,16 @@ export default function TemplatePage({
         </div>
       )}
 
-      {/* Disciplines & Milestones — hidden in reorder mode */}
+      {/* Disciplines, Payment Milestones & Milestones — hidden in reorder mode */}
       {!isReorderMode && (
         <>
           <DisciplinesSection disciplines={disciplines} onChange={setDisciplines} />
+          <PaymentMilestonesSection
+            disciplines={disciplines}
+            milestones={milestones}
+            paymentMilestones={paymentMilestones}
+            onChange={setPaymentMilestones}
+          />
           <MilestonesSection milestones={milestones} onChange={setMilestones} />
         </>
       )}

@@ -14,7 +14,7 @@ export default async function ExecutionPortalTokenPage({
   const { data: inv } = await admin
     .from('fpe_tender_invitations')
     .select(`
-      id, token, token_expires_at, scope_unit_ids, discipline_ids, status,
+      id, token, token_expires_at, scope_unit_ids, discipline_ids, governing_discipline_id, status,
       sent_at, viewed_at, bid_submitted_at,
       partner:fpe_partners ( id, nombre, contacto_nombre, email_contacto ),
       tender:fpe_tenders (
@@ -183,7 +183,7 @@ export default async function ExecutionPortalTokenPage({
               (await admin.from('fpe_template_units').select('chapter_id').in('id', scopedTemplateUnitIds))
                 .data?.map(u => u.chapter_id).filter(Boolean).join(',') ?? 'null'
             })`),
-          admin.from('fpe_template_phases').select('id, chapter_id, nombre, orden, lead_time_days, duracion_pct').order('orden', { ascending: true }),
+          admin.from('fpe_template_phases').select('id, chapter_id, nombre, orden, lead_time_days, duracion_pct, requiere_duracion').order('orden', { ascending: true }),
           admin.from('fpe_template_phase_milestone_links').select('phase_id, milestone_id, link_type'),
           admin.from('fpe_template_milestones').select('id, nombre, orden').order('orden', { ascending: true }),
           // Project-level principal discipline overrides
@@ -282,10 +282,11 @@ export default async function ExecutionPortalTokenPage({
       .sort((a, b) => a.orden - b.orden)
       .filter(ph => !anyConfigExists || relevantPhaseIds.has(ph.id))
       .map(ph => ({
-        id:             ph.id,
-        nombre:         ph.nombre,
-        orden:          ph.orden,
-        lead_time_days: ph.lead_time_days,
+        id:                ph.id,
+        nombre:            ph.nombre,
+        orden:             ph.orden,
+        lead_time_days:    ph.lead_time_days,
+        requiere_duracion: ph.requiere_duracion ?? true,
       })),
   }))
 
@@ -301,6 +302,28 @@ export default async function ExecutionPortalTokenPage({
       phaseStartDates[phId] = entry.startDate.toISOString()
     }
   }
+
+  // ── Payment schedule ────────────────────────────────────────────────────────
+  const govDisciplineId = (inv.governing_discipline_id as string | null) ?? null
+
+  const { data: paymentMilestonesRaw } = govDisciplineId
+    ? await admin
+        .from('fpe_discipline_payment_milestones')
+        .select('id, nombre, pct, trigger_type, milestone_id, orden')
+        .eq('discipline_id', govDisciplineId)
+        .order('orden', { ascending: true })
+    : { data: [] as { id: string; nombre: string; pct: number; trigger_type: string; milestone_id: string | null; orden: number }[] }
+
+  const milestoneNameMap: Record<string, string> = {}
+  for (const m of portalMilestones ?? []) milestoneNameMap[m.id] = m.nombre
+
+  const paymentScheduleForUI = (paymentMilestonesRaw ?? []).map(pm => ({
+    id:              pm.id,
+    nombre:          pm.nombre,
+    pct:             pm.pct,
+    trigger_type:    pm.trigger_type as 'contract_signed' | 'milestone_achieved' | 'delivery',
+    milestone_nombre: pm.milestone_id ? (milestoneNameMap[pm.milestone_id] ?? null) : null,
+  }))
 
   // Generate signed URLs for image docs (hero renders, max 8, 4-hour TTL)
   const IMAGE_EXTS = ['jpg','jpeg','png','webp','svg','gif']
@@ -334,6 +357,7 @@ export default async function ExecutionPortalTokenPage({
       phaseStartDates={phaseStartDates}
       isPrincipalForChapterIds={isPrincipalForChapterIds}
       portalChapters={portalChaptersForUI}
+      paymentSchedule={paymentScheduleForUI}
     />
   )
 }

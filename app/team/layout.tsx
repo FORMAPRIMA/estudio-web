@@ -164,6 +164,12 @@ const ALL_NAV: (NavItem & { roles: FpRole[] })[] = [
     roles: ['fp_team', 'fp_manager', 'fp_partner', 'fp_biz_dev'],
     isSubItem: true,
   },
+  {
+    href: '/team/apps/dd-visits',
+    label: 'DD Visits',
+    roles: ['fp_team', 'fp_manager', 'fp_partner', 'fp_biz_dev'],
+    isSubItem: true,
+  },
 ]
 
 export default async function TeamLayout({

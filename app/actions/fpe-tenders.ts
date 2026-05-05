@@ -129,11 +129,12 @@ export async function closeTender(
 // ── Invitations ───────────────────────────────────────────────────────────────
 
 export async function createInvitation(data: {
-  tender_id:              string
-  partner_id:             string
-  scope_project_unit_ids: string[]  // fpe_project_units.id array
-  discipline_ids?:        string[]  // which disciplines this partner covers
-  token_expires_days?:    number    // default 14
+  tender_id:               string
+  partner_id:              string
+  scope_project_unit_ids:  string[]  // fpe_project_units.id array
+  discipline_ids?:         string[]  // which disciplines this partner covers
+  token_expires_days?:     number    // default 14
+  governing_discipline_id?: string
 }): Promise<{ id: string; token: string } | { error: string }> {
   try {
     await requireManagerOrPartner()
@@ -145,12 +146,13 @@ export async function createInvitation(data: {
     const { data: row, error } = await admin
       .from('fpe_tender_invitations')
       .insert({
-        tender_id:        data.tender_id,
-        partner_id:       data.partner_id,
-        scope_unit_ids:   data.scope_project_unit_ids,
-        discipline_ids:   data.discipline_ids ?? [],
-        token_expires_at: expires,
-        status:           'pending',
+        tender_id:               data.tender_id,
+        partner_id:              data.partner_id,
+        scope_unit_ids:          data.scope_project_unit_ids,
+        discipline_ids:          data.discipline_ids ?? [],
+        governing_discipline_id: data.governing_discipline_id ?? null,
+        token_expires_at:        expires,
+        status:                  'pending',
       })
       .select('id, token')
       .single()

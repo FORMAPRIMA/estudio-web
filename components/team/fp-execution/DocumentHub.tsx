@@ -25,6 +25,7 @@ export interface ScopedLineItem {
   nombre: string
   unidad_medida: string
   cantidad: number
+  incluida: boolean
 }
 
 export interface ScopedUnit {
@@ -587,19 +588,30 @@ function UeCard({
     for (const li of unit.line_items) q[li.template_line_item_id] = li.cantidad
     return q
   })
+  const [includedItems, setIncludedItems] = useState<Set<string>>(
+    () => new Set(unit.line_items.filter(li => li.incluida).map(li => li.template_line_item_id))
+  )
   const [selectedPartners, setSelectedPartners] = useState<Set<string>>(new Set(initialPartnerIds))
   const [savingQty, setSavingQty] = useState(false)
   const [savingPt, setSavingPt]   = useState(false)
   const [qtyMsg, setQtyMsg]       = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
   const [ptMsg, setPtMsg]         = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
 
+  const toggleLineItem = (id: string) => {
+    setIncludedItems(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
   const saveQty = async () => {
     setSavingQty(true); setQtyMsg(null)
     const line_items = unit.line_items
-      .filter(li => (quantities[li.template_line_item_id] ?? 0) > 0)
+      .filter(li => includedItems.has(li.template_line_item_id))
       .map(li => ({
         template_line_item_id: li.template_line_item_id,
-        cantidad: quantities[li.template_line_item_id],
+        cantidad: quantities[li.template_line_item_id] ?? 0,
       }))
     const res = await saveUnitQuantities(projectId, unit.project_unit_id, line_items)
     setSavingQty(false)
@@ -639,7 +651,12 @@ function UeCard({
         {unit.line_items.length > 0 && (
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <span style={SL}>Cantidades</span>
+              <div>
+                <span style={SL}>Partidas a presupuestar</span>
+                <span style={{ fontSize: 10, color: '#AAA' }}>
+                  {includedItems.size} de {unit.line_items.length} seleccionadas
+                </span>
+              </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 {qtyMsg && (
                   <span style={{ fontSize: 11, color: qtyMsg.type === 'ok' ? '#059669' : '#DC2626', fontWeight: 600 }}>
@@ -647,25 +664,35 @@ function UeCard({
                   </span>
                 )}
                 <button onClick={saveQty} disabled={savingQty} style={btn(true)}>
-                  {savingQty ? 'Guardando…' : 'Guardar cantidades'}
+                  {savingQty ? 'Guardando…' : 'Guardar'}
                 </button>
               </div>
             </div>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  <th style={{ padding: '5px 8px 5px 0', fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', textAlign: 'left' }}>Partida</th>
-                  <th style={{ padding: '5px 8px', fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', textAlign: 'right', width: 100 }}>Cantidad</th>
-                  <th style={{ padding: '5px 0 5px 8px', fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', width: 50 }}>Ud.</th>
-                </tr>
-              </thead>
-              <tbody>
-                {unit.line_items.map(li => {
-                  const qty = quantities[li.template_line_item_id] ?? 0
-                  return (
-                    <tr key={li.template_line_item_id}>
-                      <td style={{ padding: '4px 8px 4px 0', fontSize: 12, color: '#333' }}>{li.nombre}</td>
-                      <td style={{ padding: '4px 8px', textAlign: 'right' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {unit.line_items.map(li => {
+                const included = includedItems.has(li.template_line_item_id)
+                const qty = quantities[li.template_line_item_id] ?? 0
+                return (
+                  <div
+                    key={li.template_line_item_id}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '6px 10px', borderRadius: 5, border: '1px solid',
+                      borderColor: included ? '#D0E8FF' : '#EEECE8',
+                      background: included ? '#F5F9FF' : '#FAFAF8',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={included}
+                      onChange={() => toggleLineItem(li.template_line_item_id)}
+                      style={{ width: 14, height: 14, accentColor: '#378ADD', flexShrink: 0, cursor: 'pointer' }}
+                    />
+                    <span style={{ flex: 1, fontSize: 12, color: included ? '#1A1A1A' : '#AAA' }}>
+                      {li.nombre}
+                    </span>
+                    {included ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
                         <input
                           type="number"
                           min={0}
@@ -679,19 +706,21 @@ function UeCard({
                           style={{
                             width: 80, textAlign: 'right', padding: '4px 6px', fontSize: 12,
                             border: `1px solid ${qty > 0 ? '#378ADD' : '#E8E6E0'}`,
-                            borderRadius: 4, background: qty > 0 ? '#F0F7FF' : '#FAFAF8',
+                            borderRadius: 4, background: qty > 0 ? '#EBF5FF' : '#fff',
                             fontFamily: 'monospace', outline: 'none',
                           }}
                         />
-                      </td>
-                      <td style={{ padding: '4px 0 4px 8px', fontSize: 11, color: '#888', fontWeight: 600 }}>
-                        {li.unidad_medida}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+                        <span style={{ fontSize: 11, color: '#888', fontWeight: 600, minWidth: 28 }}>
+                          {li.unidad_medida}
+                        </span>
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: 10, color: '#CCC', flexShrink: 0 }}>{li.unidad_medida}</span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
           </div>
         )}
 

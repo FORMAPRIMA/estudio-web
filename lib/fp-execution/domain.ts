@@ -83,6 +83,7 @@ export interface FpeTemplatePhase {
   descripcion: string | null
   orden: number
   lead_time_days: number
+  requiere_duracion: boolean
   created_at: string
   updated_at: string
   // joins
@@ -95,6 +96,34 @@ export interface FpeTemplateDependency {
   successor_phase_id: string
   lag_days: number
   created_at: string
+}
+
+export interface FpeDisciplinePaymentMilestone {
+  id: string
+  discipline_id: string
+  milestone_id: string | null
+  trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery'
+  nombre: string
+  pct: number
+  orden: number
+  created_at: string
+  updated_at: string
+}
+
+export interface FpeContractPaymentSchedule {
+  id: string
+  contract_id: string
+  discipline_payment_milestone_id: string | null
+  nombre: string
+  pct: number
+  monto: number
+  milestone_id: string | null
+  status: 'pendiente' | 'facturado' | 'cobrado'
+  fecha_estimada: string | null
+  fecha_pago: string | null
+  orden: number
+  created_at: string
+  updated_at: string
 }
 
 // Full template tree (used by Template page and Scope Builder)
@@ -224,6 +253,7 @@ export interface FpeTenderInvitation {
   token: string
   token_expires_at: string
   scope_unit_ids: string[]         // fpe_project_unit.id list
+  governing_discipline_id: string | null
   status: FpeInvitationStatus
   sent_at: string | null
   viewed_at: string | null

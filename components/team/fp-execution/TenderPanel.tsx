@@ -32,6 +32,7 @@ export interface FpeInvitation {
   status: InvitationStatus
   scope_unit_ids: string[]
   discipline_ids: string[]
+  governing_discipline_id: string | null
   token_expires_at: string
   sent_at: string | null
   viewed_at: string | null
@@ -181,24 +182,36 @@ function InviteModal({
   onClose:             () => void
   onInvited:           (inv: FpeInvitation) => void
 }) {
-  const [partnerId, setPartnerId]       = useState('')
-  const [selectedDiscIds, setSelDiscIds] = useState<string[]>(disciplines.map(d => d.id))
-  const [expiryDays, setExpiryDays]     = useState(21)
-  const [saving, setSaving]             = useState(false)
-  const [sending, setSending]           = useState(false)
-  const [error, setError]               = useState<string | null>(null)
+  const [partnerId, setPartnerId]           = useState('')
+  const [selectedDiscIds, setSelDiscIds]     = useState<string[]>(disciplines.map(d => d.id))
+  const [governingDiscId, setGoverningDiscId] = useState<string | null>(disciplines.length === 1 ? disciplines[0].id : null)
+  const [expiryDays, setExpiryDays]         = useState(21)
+  const [saving, setSaving]                 = useState(false)
+  const [sending, setSending]               = useState(false)
+  const [error, setError]                   = useState<string | null>(null)
 
   const available = partners.filter(p => !existingPartnerIds.includes(p.id))
-  const toggleDisc = (id: string) =>
-    setSelDiscIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  const toggleDisc = (id: string) => {
+    const next = selectedDiscIds.includes(id) ? selectedDiscIds.filter(x => x !== id) : [...selectedDiscIds, id]
+    setSelDiscIds(next)
+    if (next.length === 1) setGoverningDiscId(next[0])
+    else if (governingDiscId && !next.includes(governingDiscId)) setGoverningDiscId(null)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!partnerId)                 { setError('Selecciona un partner.'); return }
+    if (!partnerId)                   { setError('Selecciona un partner.'); return }
     if (selectedDiscIds.length === 0) { setError('Selecciona al menos una disciplina.'); return }
     setSaving(true); setError(null)
 
-    const res = await createInvitation({ tender_id: tenderId, partner_id: partnerId, scope_project_unit_ids: projectUnitIds, discipline_ids: selectedDiscIds, token_expires_days: expiryDays })
+    const res = await createInvitation({
+      tender_id:               tenderId,
+      partner_id:              partnerId,
+      scope_project_unit_ids:  projectUnitIds,
+      discipline_ids:          selectedDiscIds,
+      token_expires_days:      expiryDays,
+      governing_discipline_id: governingDiscId ?? undefined,
+    })
     if ('error' in res) { setSaving(false); setError(res.error); return }
 
     setSending(true)
@@ -210,6 +223,7 @@ function InviteModal({
     onInvited({
       id: res.id, token: res.token, status: 'sent',
       scope_unit_ids: projectUnitIds, discipline_ids: selectedDiscIds,
+      governing_discipline_id: governingDiscId,
       token_expires_at: expires,
       sent_at: new Date().toISOString(), viewed_at: null, bid_submitted_at: null,
       partner: { id: partnerId, nombre: partner.nombre, email_contacto: partner.email_contacto },
@@ -256,6 +270,22 @@ function InviteModal({
                   </label>
                 ))}
               </div>
+            </div>
+            <div>
+              <label style={S.label}>Disciplina rectora de pagos</label>
+              {selectedDiscIds.length === 1 ? (
+                <p style={{ margin: 0, fontSize: 12, color: '#059669', fontWeight: 500 }}>
+                  Auto: {disciplines.find(d => d.id === selectedDiscIds[0])?.nombre ?? selectedDiscIds[0]}
+                </p>
+              ) : (
+                <select value={governingDiscId ?? ''} onChange={e => setGoverningDiscId(e.target.value || null)} style={S.input}>
+                  <option value="">— Sin disciplina rectora —</option>
+                  {[...disciplines].filter(d => selectedDiscIds.includes(d.id)).sort((a, b) => a.orden - b.orden).map(d => (
+                    <option key={d.id} value={d.id}>{d.nombre}</option>
+                  ))}
+                </select>
+              )}
+              <p style={{ margin: '3px 0 0', fontSize: 10, color: '#BBB' }}>Determina el calendario de pagos aplicable al partner.</p>
             </div>
             <div>
               <label style={S.label}>Validez (días)</label>

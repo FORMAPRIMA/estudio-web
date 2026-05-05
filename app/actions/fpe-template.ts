@@ -219,6 +219,7 @@ export async function createPhase(data: {
   lead_time_days?: number
   duracion_pct?: number
   orden?: number
+  requiere_duracion?: boolean
 }): Promise<{ id: string } | { error: string }> {
   try {
     await requireManagerOrPartner()
@@ -232,6 +233,7 @@ export async function createPhase(data: {
         lead_time_days: data.lead_time_days ?? 7,
         duracion_pct: data.duracion_pct ?? 0,
         orden: data.orden ?? 0,
+        requiere_duracion: data.requiere_duracion ?? true,
       })
       .select('id')
       .single()
@@ -245,7 +247,7 @@ export async function createPhase(data: {
 
 export async function updatePhase(
   id: string,
-  data: { nombre?: string; descripcion?: string | null; lead_time_days?: number; duracion_pct?: number; orden?: number }
+  data: { nombre?: string; descripcion?: string | null; lead_time_days?: number; duracion_pct?: number; orden?: number; requiere_duracion?: boolean }
 ): Promise<{ success: true } | { error: string }> {
   try {
     await requireManagerOrPartner()
@@ -281,13 +283,14 @@ export async function createMilestone(data: {
   nombre: string
   descripcion?: string | null
   orden?: number
+  es_hito_pago?: boolean
 }): Promise<{ id: string } | { error: string }> {
   try {
     await requireManagerOrPartner()
     const admin = createAdminClient()
     const { data: row, error } = await admin
       .from('fpe_template_milestones')
-      .insert({ nombre: data.nombre, descripcion: data.descripcion ?? null, orden: data.orden ?? 0 })
+      .insert({ nombre: data.nombre, descripcion: data.descripcion ?? null, orden: data.orden ?? 0, es_hito_pago: data.es_hito_pago ?? false })
       .select('id')
       .single()
     if (error) return { error: error.message }
@@ -300,7 +303,7 @@ export async function createMilestone(data: {
 
 export async function updateMilestone(
   id: string,
-  data: { nombre?: string; descripcion?: string | null; orden?: number }
+  data: { nombre?: string; descripcion?: string | null; orden?: number; es_hito_pago?: boolean }
 ): Promise<{ success: true } | { error: string }> {
   try {
     await requireManagerOrPartner()

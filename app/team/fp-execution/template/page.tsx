@@ -12,6 +12,7 @@ export default async function FpeTemplatePage() {
     { data: phaseLinks },
     { data: disciplines },
     { data: phaseLineItemLinks },
+    { data: paymentMilestones },
   ] = await Promise.all([
     supabase
       .from('fpe_template_chapters')
@@ -19,7 +20,7 @@ export default async function FpeTemplatePage() {
         id, nombre, descripcion, orden, activo, duracion_pct, principal_discipline_id,
         label_cliente, descripcion_cliente, imagen_portada_url,
         phases:fpe_template_phases (
-          id, chapter_id, nombre, descripcion, lead_time_days, duracion_pct, orden
+          id, chapter_id, nombre, descripcion, lead_time_days, duracion_pct, orden, requiere_duracion
         ),
         units:fpe_template_units (
           id, chapter_id, nombre, descripcion, orden, activo, principal_discipline_id,
@@ -36,7 +37,7 @@ export default async function FpeTemplatePage() {
 
     supabase
       .from('fpe_template_milestones')
-      .select('id, nombre, descripcion, orden')
+      .select('id, nombre, descripcion, orden, es_hito_pago')
       .order('orden', { ascending: true }),
 
     // Phase-milestone links: fetch all at once, index client-side
@@ -54,6 +55,13 @@ export default async function FpeTemplatePage() {
     admin
       .from('fpe_template_phase_line_items')
       .select('phase_id, line_item_id'),
+
+    // Payment milestones per discipline
+    admin
+      .from('fpe_discipline_payment_milestones')
+      .select('id, discipline_id, milestone_id, trigger_type, nombre, pct, orden')
+      .order('discipline_id', { ascending: true })
+      .order('orden', { ascending: true }),
   ])
 
   // Build per-phase link maps
@@ -93,8 +101,9 @@ export default async function FpeTemplatePage() {
   return (
     <TemplatePage
       initialChapters={chaptersWithLinks as Parameters<typeof TemplatePage>[0]['initialChapters']}
-      initialMilestones={milestones ?? []}
+      initialMilestones={(milestones ?? []) as Parameters<typeof TemplatePage>[0]['initialMilestones']}
       initialDisciplines={(disciplines ?? []) as Parameters<typeof TemplatePage>[0]['initialDisciplines']}
+      initialPaymentMilestones={(paymentMilestones ?? []) as Parameters<typeof TemplatePage>[0]['initialPaymentMilestones']}
     />
   )
 }
