@@ -340,9 +340,15 @@ export default function InvitacionClient() {
   const [musicOn, setMusicOn] = useState(false)
   const [hintGone, setHintGone] = useState(false)
 
-  const audioRef = useRef<{ ctx: AudioContext; master: GainNode; scheduler: number | null } | null>(null)
-  const melTimeRef = useRef(0), melStepRef = useRef(0)
-  const nextTimeRef = useRef(0), stepRef = useRef(0)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  useEffect(() => {
+    const audio = new Audio('/cumple-minions.mp3')
+    audio.loop = true
+    audio.volume = 0.7
+    audioRef.current = audio
+    return () => { audio.pause(); audio.src = '' }
+  }, [])
 
   useEffect(() => {
     const t = setTimeout(() => document.getElementById('cumple-intro')?.classList.add('gone'), 1500)
@@ -420,65 +426,17 @@ export default function InvitacionClient() {
     setTimeout(() => t.remove(), 2200)
   }, [])
 
-  const startMusic = useCallback(() => {
-    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-    if (!AudioCtx) return
-    const ctx = new AudioCtx()
-    const master = ctx.createGain(); master.gain.value = 0.35; master.connect(ctx.destination)
-    const bpm = 132, beat = 60 / bpm, baseFreq = 261.63
-    const f = (s: number) => baseFreq * Math.pow(2, s / 12)
-    const melody = [[0,.5],[4,.5],[7,.5],[12,1],[7,.5],[12,1.5],[0,.5],[5,.5],[9,.5],[12,1],[9,.5],[5,1.5],[2,.5],[5,.5],[9,.5],[14,1],[12,.5],[9,1.5],[-1,.5],[2,.5],[7,.5],[11,1],[12,.5],[7,1.5]]
-    const bass = [[0,1],[7,1],[5,1],[7,1],[0,1],[5,1],[7,1],[0,1],[-3,1],[2,1],[5,1],[2,1],[-5,1],[-1,1],[2,1],[7,1]]
-    function note(freq: number, start: number, dur: number, type: OscillatorType = 'triangle', gain = 0.18) {
-      const o = ctx.createOscillator(), g = ctx.createGain()
-      o.type = type; o.frequency.value = freq
-      g.gain.setValueAtTime(0, start); g.gain.linearRampToValueAtTime(gain, start + 0.02); g.gain.exponentialRampToValueAtTime(0.001, start + dur * 0.95)
-      o.connect(g).connect(master); o.start(start); o.stop(start + dur)
-    }
-    function kick(start: number) {
-      const o = ctx.createOscillator(), g = ctx.createGain()
-      o.frequency.setValueAtTime(120, start); o.frequency.exponentialRampToValueAtTime(40, start + 0.15)
-      g.gain.setValueAtTime(0.5, start); g.gain.exponentialRampToValueAtTime(0.001, start + 0.18)
-      o.connect(g).connect(master); o.start(start); o.stop(start + 0.2)
-    }
-    nextTimeRef.current = ctx.currentTime + 0.1; melTimeRef.current = nextTimeRef.current; stepRef.current = 0; melStepRef.current = 0
-    function tick() {
-      const la = ctx.currentTime + 0.5
-      while (nextTimeRef.current < la) {
-        const bi = stepRef.current % 16, b = bass[bi]
-        note(f(b[0] - 12), nextTimeRef.current, beat * 0.95, 'sine', 0.22)
-        if (bi % 2 === 0) kick(nextTimeRef.current)
-        nextTimeRef.current += beat; stepRef.current++
-      }
-      while (melTimeRef.current < la) {
-        const n = melody[melStepRef.current % melody.length]
-        note(f(n[0] + 12), melTimeRef.current, beat * n[1] * 0.95, 'triangle', 0.14)
-        if (n[1] >= 0.5) note(f(n[0] + 12 + 4), melTimeRef.current, beat * n[1] * 0.8, 'sine', 0.05)
-        melTimeRef.current += beat * n[1]; melStepRef.current++
-      }
-    }
-    tick()
-    const scheduler = window.setInterval(tick, 100) as unknown as number
-    audioRef.current = { ctx, master, scheduler }
-    setMusicOn(true)
-  }, [])
-
-  const stopMusic = useCallback(() => {
-    const a = audioRef.current
-    if (!a) return
-    if (a.scheduler !== null) clearInterval(a.scheduler)
-    a.master.gain.cancelScheduledValues(a.ctx.currentTime)
-    a.master.gain.setValueAtTime(a.master.gain.value, a.ctx.currentTime)
-    a.master.gain.linearRampToValueAtTime(0, a.ctx.currentTime + 0.15)
-    setTimeout(() => a.ctx.suspend(), 200)
-    audioRef.current = null
-    setMusicOn(false)
-  }, [])
-
   const toggleMusic = useCallback(() => {
     setHintGone(true)
-    if (musicOn) stopMusic(); else startMusic()
-  }, [musicOn, startMusic, stopMusic])
+    const audio = audioRef.current
+    if (!audio) return
+    if (musicOn) {
+      audio.pause()
+      setMusicOn(false)
+    } else {
+      audio.play().then(() => setMusicOn(true)).catch(() => {})
+    }
+  }, [musicOn])
 
   const canSubmit = nombreNino.trim().length > 0 && asiste !== null && (asiste === false || menuOpcion !== null)
 
