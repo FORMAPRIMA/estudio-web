@@ -244,10 +244,39 @@ section{position:relative;width:100%;overflow:hidden}
 @keyframes heartBeat{0%,100%{transform:scale(1)}50%{transform:scale(1.2)}}
 .foot .small{font-size:11px;opacity:.5;margin-top:10px;letter-spacing:.05em}
 
-.intro{position:fixed;inset:0;background:var(--denim-deep);z-index:50;display:flex;align-items:center;justify-content:center;transition:opacity .6s ease,visibility .6s}
-.intro.gone{opacity:0;visibility:hidden;pointer-events:none}
-.intro .big{font-family:'Bowlby One';font-size:80px;color:var(--yellow);-webkit-text-stroke:3px var(--ink);text-shadow:0 6px 0 var(--ink),0 18px 30px rgba(0,0,0,.5);animation:introPop 1.4s cubic-bezier(.34,1.56,.64,1)}
-@keyframes introPop{0%{transform:scale(.2) rotate(-30deg);opacity:0}50%{transform:scale(1.15) rotate(5deg);opacity:1}70%{transform:scale(.95) rotate(-2deg)}100%{transform:scale(1) rotate(0)}}
+/* SPLASH */
+.splash{position:fixed;inset:0;background:var(--denim-deep);z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:36px;transition:opacity .9s ease,visibility .9s;overflow:hidden}
+.splash.gone{opacity:0;visibility:hidden;pointer-events:none}
+.splash-title{font-family:'Caveat',cursive;font-size:28px;color:rgba(255,255,255,.8);text-align:center;animation:fadeSlideUp .8s .1s both}
+.splash-hint{font-family:'Caveat',cursive;font-size:18px;color:rgba(255,255,255,.4);animation:fadeSlideUp .8s .6s both}
+@keyframes fadeSlideUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+
+/* ENVELOPE */
+.env-wrap{position:relative;width:260px;height:170px;perspective:700px;animation:envFloat 2.4s ease-in-out infinite;cursor:pointer}
+.env-wrap.open{animation:none}
+@keyframes envFloat{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-14px) rotate(2deg)}}
+
+.env-body{position:absolute;inset:0;background:var(--yellow);border:4px solid var(--ink);border-radius:10px 10px 18px 18px;box-shadow:0 10px 0 var(--yellow-deep),0 24px 50px rgba(0,0,0,.5);overflow:hidden}
+.env-left{position:absolute;top:0;left:0;width:51%;height:100%;background:#FFE566;clip-path:polygon(0 0,0 100%,100% 50%)}
+.env-right{position:absolute;top:0;right:0;width:51%;height:100%;background:#FFE566;clip-path:polygon(100% 0,100% 100%,0 50%)}
+.env-bottom{position:absolute;bottom:0;left:0;right:0;height:90px;background:var(--yellow-deep);clip-path:polygon(0% 100%,50% 0%,100% 100%)}
+
+.env-seal{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:54px;height:54px;border-radius:50%;background:var(--red);border:3px solid var(--ink);box-shadow:0 3px 0 #900,0 0 0 5px rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;font-family:'Bowlby One';font-size:24px;color:#fff;z-index:6;transition:transform .3s ease,opacity .3s ease}
+.env-wrap.open .env-seal{transform:translate(-50%,-50%) scale(0);opacity:0}
+
+.env-flap{position:absolute;top:-4px;left:-4px;right:-4px;height:100px;background:var(--denim);border:4px solid var(--ink);border-bottom:none;clip-path:polygon(0 0,50% 100%,100% 0);transform-origin:50% 0%;transition:transform .65s cubic-bezier(.4,0,.2,1);z-index:10;border-radius:10px 10px 0 0}
+.env-wrap.open .env-flap{transform:rotateX(-185deg)}
+
+.env-letter{position:absolute;top:12px;left:16px;right:16px;height:110px;background:#fff;border:3px solid var(--ink);border-radius:8px;z-index:4;display:flex;align-items:center;justify-content:center;transform:translateY(50px);transition:transform .55s .35s cubic-bezier(.34,1.56,.64,1);box-shadow:0 4px 0 rgba(0,0,0,.1)}
+.env-wrap.open .env-letter{transform:translateY(-48px)}
+.env-letter-inner{text-align:center;padding:8px}
+.env-letter .letter-title{font-family:'Bowlby One';font-size:13px;color:var(--denim-deep);letter-spacing:.5px}
+.env-letter .letter-emoji{font-size:24px;display:block;margin-bottom:4px}
+
+/* OPEN BUTTON */
+.open-btn{font-family:'Bowlby One';font-size:20px;background:var(--yellow);color:var(--denim-deep);border:4px solid var(--ink);border-radius:20px;padding:16px 40px;box-shadow:0 6px 0 var(--yellow-deep),0 14px 30px rgba(0,0,0,.35);cursor:pointer;animation:btnPulse 1.6s ease-in-out infinite;letter-spacing:.5px;transition:transform .1s ease}
+.open-btn:active{transform:translateY(4px);box-shadow:0 2px 0 var(--yellow-deep)}
+@keyframes btnPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
 
 .reveal{opacity:0;transform:translateY(30px);transition:opacity .8s cubic-bezier(.2,.8,.2,1),transform .8s cubic-bezier(.2,.8,.2,1)}
 .reveal.in{opacity:1;transform:translateY(0)}
@@ -339,20 +368,23 @@ export default function InvitacionClient() {
   const [menuOpcion, setMenuOpcion] = useState<string | null>(null)
   const [musicOn, setMusicOn] = useState(false)
   const [hintGone, setHintGone] = useState(false)
+  const [splashDone, setSplashDone] = useState(false)
+  const [envelopeOpen, setEnvelopeOpen] = useState(false)
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
   useEffect(() => {
     const audio = new Audio('/cumple-minions.mp3')
     audio.loop = true
-    audio.volume = 0.7
+    audio.volume = 0.4
     audioRef.current = audio
     return () => { audio.pause(); audio.src = '' }
   }, [])
 
-  useEffect(() => {
-    const t = setTimeout(() => document.getElementById('cumple-intro')?.classList.add('gone'), 1500)
-    return () => clearTimeout(t)
+  const handleOpenInvitation = useCallback(() => {
+    setEnvelopeOpen(true)
+    audioRef.current?.play().then(() => setMusicOn(true)).catch(() => {})
+    setTimeout(() => setSplashDone(true), 1400)
   }, [])
 
   useEffect(() => {
@@ -463,7 +495,34 @@ export default function InvitacionClient() {
     <>
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
 
-      <div className="intro" id="cumple-intro"><div className="big">¡Hey!</div></div>
+      {/* SPLASH — sobre sellado */}
+      <div className={`splash${splashDone ? ' gone' : ''}`}>
+        <div className="splash-title">¡Tienes una invitación especial! 🎉</div>
+
+        <div className={`env-wrap${envelopeOpen ? ' open' : ''}`} onClick={handleOpenInvitation}>
+          <div className="env-body">
+            <div className="env-left" />
+            <div className="env-right" />
+            <div className="env-bottom" />
+            <div className="env-letter">
+              <div className="env-letter-inner">
+                <span className="letter-emoji">🎂</span>
+                <div className="letter-title">¡Para ti!</div>
+              </div>
+            </div>
+            <div className="env-seal">M</div>
+          </div>
+          <div className="env-flap" />
+        </div>
+
+        {!envelopeOpen && (
+          <button className="open-btn" onClick={handleOpenInvitation}>
+            ✉️ Abrir invitación
+          </button>
+        )}
+
+        <div className="splash-hint">toca el sobre o el botón</div>
+      </div>
 
       <button className={`music-btn${musicOn ? ' on' : ''}`} onClick={toggleMusic} aria-label="Música">
         <svg className="ico-mute" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>
