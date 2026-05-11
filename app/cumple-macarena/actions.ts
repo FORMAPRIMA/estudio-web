@@ -4,6 +4,29 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { randomBytes } from 'crypto'
 
+export async function submitRsvpForm(
+  nombreNino: string,
+  asiste: boolean,
+  menuOpcion: string | null,
+) {
+  if (!nombreNino.trim()) throw new Error('Nombre requerido')
+  const admin = createAdminClient()
+  const { error } = await admin.from('cumple_form_rsvp').insert({
+    nombre_nino: nombreNino.trim(),
+    asiste,
+    menu_opcion: menuOpcion,
+  })
+  if (error) throw new Error('Error al guardar RSVP')
+  revalidatePath('/cumple-macarena/admin')
+}
+
+export async function deleteFormRsvp(id: string) {
+  const admin = createAdminClient()
+  const { error } = await admin.from('cumple_form_rsvp').delete().eq('id', id)
+  if (error) throw new Error('Error al eliminar RSVP')
+  revalidatePath('/cumple-macarena/admin')
+}
+
 export async function submitRsvp(
   token: string,
   asiste: boolean,

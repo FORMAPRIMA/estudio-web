@@ -19,24 +19,19 @@ export default async function AdminPage({
   }
 
   const admin = createAdminClient()
-
-  const { data: invitados } = await admin
-    .from('cumple_invitados')
-    .select('id, nombre, token, created_at')
-    .order('created_at', { ascending: true })
-
   const { data: rsvps } = await admin
-    .from('cumple_rsvp')
-    .select('invitado_id, asiste, menu_opcion, updated_at')
-
-  const rsvpMap = Object.fromEntries((rsvps ?? []).map(r => [r.invitado_id, r]))
-
-  const rows = (invitados ?? []).map(inv => ({
-    ...inv,
-    rsvp: rsvpMap[inv.id] ?? null,
-  }))
+    .from('cumple_form_rsvp')
+    .select('id, nombre_nino, asiste, menu_opcion, created_at')
+    .order('created_at', { ascending: false })
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
+  const invitacionUrl = `${siteUrl}/cumple-macarena/invitacion`
 
-  return <AdminClient rows={rows} siteUrl={siteUrl} adminKey={ADMIN_KEY} />
+  return (
+    <AdminClient
+      rsvps={rsvps ?? []}
+      invitacionUrl={invitacionUrl}
+      adminKey={ADMIN_KEY}
+    />
+  )
 }
