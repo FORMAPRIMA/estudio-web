@@ -296,30 +296,31 @@ export async function getTenderBids(
   }
 }
 
-// ── Discipline-based bulk invite ──────────────────────────────────────────────
-// Creates one invitation per partner based on discipline assignments.
-// Each invitation carries discipline_ids (what this partner covers) and
-// scope_unit_ids = all project unit IDs (portal filters by discipline).
+// ── Partner-based bulk invite ─────────────────────────────────────────────────
+// Crea una invitación por partner con sus disciplinas asociadas. Acepta
+// directamente partner_id → discipline_ids[] para soportar el caso de varios
+// partners que comparten disciplina principal (escenario común: cada UE de
+// la misma disciplina puede ir a un partner distinto).
 
 export async function createAndSendDisciplineInvitations(
   project_id:            string,
   fecha_limite:          string,
-  discipline_partner_map: Record<string, string>,  // discipline_id → partner_id
+  partner_disciplines_map: Record<string, string[]>,  // partner_id → discipline_ids[]
   token_expires_days = 21,
 ): Promise<{ success: true; tender_id: string; sent: number; total: number } | { error: string }> {
   try {
     await requireManagerOrPartner()
     const admin = createAdminClient()
 
-    // 1. Build reverse map: partner_id → discipline_ids[]
     const partnerDisciplines: Record<string, string[]> = {}
-    for (const [discId, pid] of Object.entries(discipline_partner_map)) {
+    for (const [pid, dids] of Object.entries(partner_disciplines_map)) {
       if (!pid) continue
-      if (!partnerDisciplines[pid]) partnerDisciplines[pid] = []
-      partnerDisciplines[pid].push(discId)
+      const filtered = (dids ?? []).filter(Boolean)
+      if (filtered.length === 0) continue
+      partnerDisciplines[pid] = Array.from(new Set(filtered))
     }
     const uniquePartners = Object.keys(partnerDisciplines)
-    if (uniquePartners.length === 0) return { error: 'No hay execution partners asignados a ninguna disciplina.' }
+    if (uniquePartners.length === 0) return { error: 'No hay execution partners con disciplinas para invitar.' }
 
     // 2. Find or create tender (same logic as createAndSendAllInvitations)
     const { data: existingTender } = await admin

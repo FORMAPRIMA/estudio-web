@@ -875,6 +875,27 @@ export default function TenderPanel({
     return m
   }, [unitPartnersMap])
 
+  // partner_id → discipline_ids[] derivado de las UEs asignadas. Solo partners
+  // con al menos una UE de disciplina principal definida. Esta es la fuente
+  // de verdad para "cuántas invitaciones enviar" y "qué disciplinas lleva
+  // cada partner en su invitación".
+  const partnerDisciplinesByPartner = useMemo(() => {
+    const unitById: Record<string, TenderProjectUnit> = {}
+    for (const u of projectUnits) unitById[u.id] = u
+    const m: Record<string, string[]> = {}
+    for (const [pid, unitIds] of Object.entries(partnerPacks)) {
+      const discSet = new Set<string>()
+      for (const uid of unitIds) {
+        const did = unitById[uid]?.principal_discipline_id
+        if (did) discSet.add(did)
+      }
+      if (discSet.size > 0) m[pid] = Array.from(discSet)
+    }
+    return m
+  }, [partnerPacks, projectUnits])
+
+  const partnerLaunchCount = Object.keys(partnerDisciplinesByPartner).length
+
   // partner_id → invitation
   const invByPartnerId = useMemo(() => {
     const m: Record<string, FpeInvitation> = {}
@@ -905,39 +926,24 @@ export default function TenderPanel({
     setUPM(prev => ({ ...prev, [project_unit_id]: partner_ids }))
   }
 
-  // Bulk send. Reuses createAndSendDisciplineInvitations (per user req: don't
-  // touch sending flow). Builds a discipline→partner map by picking, for each
-  // discipline present in the scope, the first partner that has it assigned.
-  // This is a temporary bridge until the sending flow is redesigned.
+  // Bulk send. Construye el map partner-céntrico: por cada partner con UEs
+  // asignadas, recolecta las disciplinas principales de esas UEs (NO el subset
+  // de disciplinas declaradas en el perfil del partner — eso lo filtra después
+  // el portal). De este modo dos partners que comparten una misma disciplina
+  // principal generan dos invitaciones distintas.
   const handleLaunch = async () => {
     if (!fechaLimite) { flash('err', 'Introduce la fecha límite de ofertas.'); return }
     if (!canLaunch) { flash('err', `Faltan ${unassignedUnits.length} UE(s) sin partner asignado.`); return }
 
-    // Build discipline_partner_map: for each discipline → one partner with that discipline
-    const discPartnerMap: Record<string, string> = {}
-    for (const u of projectUnits) {
-      if (!u.principal_discipline_id) continue
-      const partnerIds = unitPartnersMap[u.id] ?? []
-      for (const pid of partnerIds) {
-        const partner = partnersById[pid]
-        if (!partner) continue
-        if (partner.disciplines.some(d => d.id === u.principal_discipline_id)) {
-          discPartnerMap[u.principal_discipline_id] = pid
-          break
-        }
-      }
-    }
-
-    if (Object.keys(discPartnerMap).length === 0) {
-      flash('err', 'No se pudo derivar la asignación disciplina→partner. Revisa las disciplinas de los partners.')
+    if (partnerLaunchCount === 0) {
+      flash('err', 'No se pudo derivar la asignación de partners. Revisa las disciplinas principales de las UEs.')
       return
     }
 
-    const count = new Set(Object.values(discPartnerMap)).size
-    if (!confirm(`¿Enviar ${count} invitaciones de licitación? Se enviará un correo a cada execution partner.`)) return
+    if (!confirm(`¿Enviar ${partnerLaunchCount} invitaciones de licitación? Se enviará un correo a cada execution partner.`)) return
 
     setSending(true)
-    const res = await createAndSendDisciplineInvitations(projectId, fechaLimite, discPartnerMap)
+    const res = await createAndSendDisciplineInvitations(projectId, fechaLimite, partnerDisciplinesByPartner)
     setSending(false)
 
     if ('error' in res) { flash('err', res.error); return }
@@ -1088,7 +1094,7 @@ export default function TenderPanel({
               ? 'Enviando invitaciones…'
               : isLaunched
                 ? 'Enviar invitaciones pendientes'
-                : `Enviar ${Object.keys(partnerPacks).length} invitación${Object.keys(partnerPacks).length !== 1 ? 'es' : ''}`}
+                : `Enviar ${partnerLaunchCount} invitación${partnerLaunchCount !== 1 ? 'es' : ''}`}
           </button>
         </div>
       )}
