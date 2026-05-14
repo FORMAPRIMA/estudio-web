@@ -157,6 +157,9 @@ export interface InvitationPaymentPlanPayload {
   plan: FpeInvitationPaymentPlanItem[]
   disciplines: { id: string; nombre: string; color: string; weight: number }[]
   reference: { discipline_id: string; nombre: string; color: string; milestones: FpeDisciplinePaymentMilestone[] }[]
+  // Hitos de obra del proyecto, para resolver milestone_id → nombre y para
+  // ofrecer un selector en el modal cuando trigger_type === 'milestone_achieved'.
+  availableMilestones: { id: string; nombre: string }[]
 }
 
 // Computa peso por disciplina + referencia de hitos por disciplina para un
@@ -274,10 +277,16 @@ export async function getInvitationPaymentPlan(
       .eq('invitation_id', invitation_id)
       .order('orden', { ascending: true })
 
+    const { data: msRaw } = await admin
+      .from('fpe_template_milestones')
+      .select('id, nombre, orden')
+      .order('orden', { ascending: true })
+
     return {
-      plan:        (planRows ?? []) as FpeInvitationPaymentPlanItem[],
-      disciplines: ctx.disciplines,
-      reference:   ctx.reference,
+      plan:                (planRows ?? []) as FpeInvitationPaymentPlanItem[],
+      disciplines:         ctx.disciplines,
+      reference:           ctx.reference,
+      availableMilestones: (msRaw ?? []) as { id: string; nombre: string }[],
     }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
@@ -294,6 +303,7 @@ export async function previewPaymentPlanForPartner(
   preview: { nombre: string; pct: number; trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery'; milestone_id: string | null; source_discipline_id: string | null; orden: number }[]
   disciplines: { id: string; nombre: string; color: string; weight: number }[]
   reference: { discipline_id: string; nombre: string; color: string; milestones: FpeDisciplinePaymentMilestone[] }[]
+  availableMilestones: { id: string; nombre: string }[]
 } | { error: string }> {
   try {
     await requireManagerOrPartner()
@@ -312,7 +322,18 @@ export async function previewPaymentPlanForPartner(
     const normalized = totalWeight > 0 ? weights : weights.map(w => ({ ...w, weight: 1 }))
 
     const preview = buildPaymentPlanSeed('dominant', normalized)
-    return { preview, disciplines: ctx.disciplines, reference: ctx.reference }
+
+    const { data: msRaw } = await admin
+      .from('fpe_template_milestones')
+      .select('id, nombre, orden')
+      .order('orden', { ascending: true })
+
+    return {
+      preview,
+      disciplines:         ctx.disciplines,
+      reference:           ctx.reference,
+      availableMilestones: (msRaw ?? []) as { id: string; nombre: string }[],
+    }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
   }

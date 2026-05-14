@@ -570,6 +570,7 @@ interface PreviewItem {
   nombre: string
   pct: number
   trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery'
+  milestone_id: string | null
 }
 
 interface RefBlock {
@@ -595,14 +596,15 @@ function PartnerPaymentSummary({
   fechaLimiteDefault: string
   onInvitationCreated: (invId: string) => void
 }) {
-  const [persistedPlan, setPersistedPlan] = useState<FpeInvitationPaymentPlanItem[] | null>(null)
-  const [previewPlan, setPreviewPlan]     = useState<PreviewItem[] | null>(null)
-  const [reference, setReference]         = useState<RefBlock[]>([])
-  const [loading, setLoading]             = useState(true)
-  const [openModal, setOpenModal]         = useState(false)
-  const [showRef, setShowRef]             = useState(false)
-  const [creating, setCreating]           = useState(false)
-  const [err, setErr]                     = useState<string | null>(null)
+  const [persistedPlan, setPersistedPlan]    = useState<FpeInvitationPaymentPlanItem[] | null>(null)
+  const [previewPlan, setPreviewPlan]        = useState<PreviewItem[] | null>(null)
+  const [reference, setReference]            = useState<RefBlock[]>([])
+  const [milestoneNames, setMilestoneNames]  = useState<Record<string, string>>({})
+  const [loading, setLoading]                = useState(true)
+  const [openModal, setOpenModal]            = useState(false)
+  const [showRef, setShowRef]                = useState(false)
+  const [creating, setCreating]              = useState(false)
+  const [err, setErr]                        = useState<string | null>(null)
 
   const load = async () => {
     setLoading(true); setErr(null)
@@ -618,12 +620,15 @@ function PartnerPaymentSummary({
         weight:        res.disciplines.find(d => d.id === r.discipline_id)?.weight ?? 0,
         milestones:    r.milestones,
       })))
+      const map: Record<string, string> = {}
+      for (const m of res.availableMilestones) map[m.id] = m.nombre
+      setMilestoneNames(map)
     } else {
       const res = await previewPaymentPlanForPartner(projectId, partnerId)
       setLoading(false)
       if ('error' in res) { setErr(res.error); setPreviewPlan([]); return }
       setPreviewPlan(res.preview.map(p => ({
-        nombre: p.nombre, pct: Number(p.pct), trigger_type: p.trigger_type,
+        nombre: p.nombre, pct: Number(p.pct), trigger_type: p.trigger_type, milestone_id: p.milestone_id,
       })))
       setReference(res.reference.map(r => ({
         discipline_id: r.discipline_id,
@@ -632,6 +637,9 @@ function PartnerPaymentSummary({
         weight:        res.disciplines.find(d => d.id === r.discipline_id)?.weight ?? 0,
         milestones:    r.milestones,
       })))
+      const map: Record<string, string> = {}
+      for (const m of res.availableMilestones) map[m.id] = m.nombre
+      setMilestoneNames(map)
     }
   }
 
@@ -651,10 +659,10 @@ function PartnerPaymentSummary({
   }
 
   const isPreview = !invitationId
-  const items: { nombre: string; pct: number; trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery' }[] =
+  const items: { nombre: string; pct: number; trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery'; milestone_id: string | null }[] =
     isPreview
       ? (previewPlan ?? [])
-      : (persistedPlan ?? []).map(p => ({ nombre: p.nombre, pct: Number(p.pct), trigger_type: p.trigger_type }))
+      : (persistedPlan ?? []).map(p => ({ nombre: p.nombre, pct: Number(p.pct), trigger_type: p.trigger_type, milestone_id: p.milestone_id }))
 
   const total = items.reduce((s, p) => s + p.pct, 0)
   const totalOk = Math.abs(total - 100) < 0.01
@@ -712,14 +720,27 @@ function PartnerPaymentSummary({
           </span>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {items.map((p, i) => (
-              <div key={i} style={{ display: 'grid', gridTemplateColumns: '24px 1fr 60px 100px', gap: 8, padding: '5px 8px', background: '#FAFAF8', borderRadius: 4, fontSize: 11, color: '#555', alignItems: 'center' }}>
-                <span style={{ color: '#999' }}>{i + 1}</span>
-                <span style={{ color: '#1A1A1A' }}>{p.nombre}</span>
-                <span style={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 600, color: '#1A1A1A' }}>{p.pct.toFixed(2)}%</span>
-                <span style={{ fontSize: 10, color: '#888', textAlign: 'right' }}>{TRIGGER_SHORT[p.trigger_type]}</span>
-              </div>
-            ))}
+            {items.map((p, i) => {
+              const milestoneLabel =
+                p.trigger_type === 'milestone_achieved'
+                  ? (p.milestone_id ? (milestoneNames[p.milestone_id] ?? '—') : 'Sin hito asociado')
+                  : null
+              return (
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '24px 1fr 60px 180px', gap: 8, padding: '5px 8px', background: '#FAFAF8', borderRadius: 4, fontSize: 11, color: '#555', alignItems: 'center' }}>
+                  <span style={{ color: '#999' }}>{i + 1}</span>
+                  <span style={{ color: '#1A1A1A' }}>{p.nombre}</span>
+                  <span style={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 600, color: '#1A1A1A' }}>{p.pct.toFixed(2)}%</span>
+                  <span style={{ fontSize: 10, color: '#888', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {TRIGGER_SHORT[p.trigger_type]}
+                    {milestoneLabel && (
+                      <span style={{ marginLeft: 4, color: p.milestone_id ? '#1A1A1A' : '#DC2626' }}>
+                        · {milestoneLabel}
+                      </span>
+                    )}
+                  </span>
+                </div>
+              )
+            })}
           </div>
         )}
 
