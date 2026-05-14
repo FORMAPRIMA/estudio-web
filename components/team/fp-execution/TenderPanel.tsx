@@ -824,7 +824,9 @@ export default function TenderPanel({
   const [projectStatus, setProjStatus]     = useState(initialProjectStatus)
   const [view, setView]                   = useState<'by_unit' | 'by_partner'>('by_unit')
   // Inicializa desde el tender existente; el autosave persiste cualquier cambio.
-  const [fechaLimite, setFechaLimite]     = useState(initialTender?.fecha_limite ?? '')
+  // fpe_tenders.fecha_limite es timestamptz → llega como ISO con tz; <input type="date">
+  // necesita YYYY-MM-DD exacto o se queda vacío.
+  const [fechaLimite, setFechaLimite]     = useState((initialTender?.fecha_limite ?? '').slice(0, 10))
   const [fechaStatus, setFechaStatus]     = useState<'idle' | 'saving' | 'saved' | 'err'>('idle')
   const [sending, setSending]             = useState(false)
   const [closing, setClosing]             = useState(false)
