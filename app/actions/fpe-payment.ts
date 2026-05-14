@@ -159,11 +159,89 @@ export interface InvitationPaymentPlanPayload {
   reference: { discipline_id: string; nombre: string; color: string; milestones: FpeDisciplinePaymentMilestone[] }[]
 }
 
-// Para una invitación, calcula:
-// - El plan actual (filas en fpe_invitation_payment_plan).
-// - Peso por disciplina del partner = nº UEs del proyecto donde
-//   (partner está asignado) AND (principal_discipline_id de la UE = disciplina).
-// - Hitos de referencia por disciplina (fpe_discipline_payment_milestones).
+// Computa peso por disciplina + referencia de hitos por disciplina para un
+// partner dentro de un proyecto. Reutilizado por:
+//   - getInvitationPaymentPlan (con invitación existente)
+//   - previewPaymentPlanForPartner (preview antes de crear invitación)
+async function computePartnerDisciplineContext(
+  admin: ReturnType<typeof createAdminClient>,
+  project_id: string,
+  partner_id: string,
+  hintDisciplineIds: string[] = [],
+): Promise<{
+  disciplines: { id: string; nombre: string; color: string; weight: number }[]
+  reference:   { discipline_id: string; nombre: string; color: string; milestones: FpeDisciplinePaymentMilestone[] }[]
+}> {
+  const { data: unitsRaw } = await admin
+    .from('fpe_project_units')
+    .select(`
+      id,
+      template_unit:fpe_template_units ( principal_discipline_id ),
+      partners:fpe_project_unit_partners ( partner_id )
+    `)
+    .eq('project_id', project_id)
+
+  type UnitRow = {
+    id: string
+    template_unit: { principal_discipline_id: string | null } | null
+    partners: { partner_id: string }[] | null
+  }
+  const units = (unitsRaw ?? []) as unknown as UnitRow[]
+
+  const weightByDiscipline: Record<string, number> = {}
+  for (const u of units) {
+    const principal = u.template_unit?.principal_discipline_id
+    if (!principal) continue
+    const has = (u.partners ?? []).some(p => p.partner_id === partner_id)
+    if (!has) continue
+    weightByDiscipline[principal] = (weightByDiscipline[principal] ?? 0) + 1
+  }
+
+  for (const did of hintDisciplineIds) {
+    if (!(did in weightByDiscipline)) weightByDiscipline[did] = 0
+  }
+
+  const relevantDisciplineIds = Array.from(new Set([...hintDisciplineIds, ...Object.keys(weightByDiscipline)])).filter(Boolean)
+  const safeIds = relevantDisciplineIds.length > 0 ? relevantDisciplineIds : ['00000000-0000-0000-0000-000000000000']
+
+  const { data: discs } = await admin
+    .from('fpe_disciplines')
+    .select('id, nombre, color')
+    .in('id', safeIds)
+
+  type DiscRow = { id: string; nombre: string; color: string | null }
+  const discsArr = (discs ?? []) as DiscRow[]
+
+  const { data: pmRows } = await admin
+    .from('fpe_discipline_payment_milestones')
+    .select('id, discipline_id, milestone_id, trigger_type, nombre, pct, orden, created_at, updated_at')
+    .in('discipline_id', safeIds)
+    .order('orden', { ascending: true })
+
+  const milestonesByDiscipline: Record<string, FpeDisciplinePaymentMilestone[]> = {}
+  for (const m of (pmRows ?? []) as FpeDisciplinePaymentMilestone[]) {
+    if (!milestonesByDiscipline[m.discipline_id]) milestonesByDiscipline[m.discipline_id] = []
+    milestonesByDiscipline[m.discipline_id].push(m)
+  }
+
+  const disciplines = discsArr.map(d => ({
+    id:     d.id,
+    nombre: d.nombre,
+    color:  d.color ?? '#888',
+    weight: weightByDiscipline[d.id] ?? 0,
+  })).sort((a, b) => b.weight - a.weight || a.nombre.localeCompare(b.nombre))
+
+  const reference = disciplines.map(d => ({
+    discipline_id: d.id,
+    nombre:        d.nombre,
+    color:         d.color,
+    milestones:    milestonesByDiscipline[d.id] ?? [],
+  }))
+
+  return { disciplines, reference }
+}
+
+// Para una invitación existente, devuelve plan persistido + contexto.
 export async function getInvitationPaymentPlan(
   invitation_id: string,
 ): Promise<InvitationPaymentPlanPayload | { error: string }> {
@@ -183,76 +261,12 @@ export async function getInvitationPaymentPlan(
     const projectId = invRow.tender?.project_id
     if (!projectId) return { error: 'No se pudo derivar el proyecto de la invitación.' }
 
-    const disciplineIds = (invRow.discipline_ids ?? []).filter(Boolean)
-
-    // Peso por disciplina = nº UEs del proyecto donde el partner está asignado
-    // y la disciplina principal coincide.
-    const { data: unitsRaw } = await admin
-      .from('fpe_project_units')
-      .select(`
-        id,
-        template_unit:fpe_template_units ( principal_discipline_id ),
-        partners:fpe_project_unit_partners ( partner_id )
-      `)
-      .eq('project_id', projectId)
-
-    type UnitRow = {
-      id: string
-      template_unit: { principal_discipline_id: string | null } | null
-      partners: { partner_id: string }[] | null
-    }
-    const units = (unitsRaw ?? []) as unknown as UnitRow[]
-
-    const weightByDiscipline: Record<string, number> = {}
-    for (const u of units) {
-      const principal = u.template_unit?.principal_discipline_id
-      if (!principal) continue
-      const has = (u.partners ?? []).some(p => p.partner_id === invRow.partner_id)
-      if (!has) continue
-      weightByDiscipline[principal] = (weightByDiscipline[principal] ?? 0) + 1
-    }
-
-    // Asegura que las disciplinas declaradas en la invitación aparezcan aunque
-    // su peso sea 0 (por si la asignación de partners cambió después de invitar).
-    for (const did of disciplineIds) {
-      if (!(did in weightByDiscipline)) weightByDiscipline[did] = 0
-    }
-
-    const relevantDisciplineIds = Array.from(new Set([...disciplineIds, ...Object.keys(weightByDiscipline)])).filter(Boolean)
-
-    const { data: discs } = await admin
-      .from('fpe_disciplines')
-      .select('id, nombre, color')
-      .in('id', relevantDisciplineIds.length > 0 ? relevantDisciplineIds : ['00000000-0000-0000-0000-000000000000'])
-
-    type DiscRow = { id: string; nombre: string; color: string | null }
-    const discsArr = (discs ?? []) as DiscRow[]
-
-    const { data: pmRows } = await admin
-      .from('fpe_discipline_payment_milestones')
-      .select('id, discipline_id, milestone_id, trigger_type, nombre, pct, orden, created_at, updated_at')
-      .in('discipline_id', relevantDisciplineIds.length > 0 ? relevantDisciplineIds : ['00000000-0000-0000-0000-000000000000'])
-      .order('orden', { ascending: true })
-
-    const milestonesByDiscipline: Record<string, FpeDisciplinePaymentMilestone[]> = {}
-    for (const m of (pmRows ?? []) as FpeDisciplinePaymentMilestone[]) {
-      if (!milestonesByDiscipline[m.discipline_id]) milestonesByDiscipline[m.discipline_id] = []
-      milestonesByDiscipline[m.discipline_id].push(m)
-    }
-
-    const disciplines = discsArr.map(d => ({
-      id:     d.id,
-      nombre: d.nombre,
-      color:  d.color ?? '#888',
-      weight: weightByDiscipline[d.id] ?? 0,
-    })).sort((a, b) => b.weight - a.weight || a.nombre.localeCompare(b.nombre))
-
-    const reference = disciplines.map(d => ({
-      discipline_id: d.id,
-      nombre:        d.nombre,
-      color:         d.color,
-      milestones:    milestonesByDiscipline[d.id] ?? [],
-    }))
+    const ctx = await computePartnerDisciplineContext(
+      admin,
+      projectId,
+      invRow.partner_id,
+      (invRow.discipline_ids ?? []).filter(Boolean),
+    )
 
     const { data: planRows } = await admin
       .from('fpe_invitation_payment_plan')
@@ -262,9 +276,153 @@ export async function getInvitationPaymentPlan(
 
     return {
       plan:        (planRows ?? []) as FpeInvitationPaymentPlanItem[],
-      disciplines,
-      reference,
+      disciplines: ctx.disciplines,
+      reference:   ctx.reference,
     }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
+// Preview ANTES de existir invitación. Calcula el plan que se sembraría
+// (estrategia dominante por defecto) y devuelve también la referencia de
+// hitos de cada disciplina del pack. No toca BD.
+export async function previewPaymentPlanForPartner(
+  project_id: string,
+  partner_id: string,
+): Promise<{
+  preview: { nombre: string; pct: number; trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery'; milestone_id: string | null; source_discipline_id: string | null; orden: number }[]
+  disciplines: { id: string; nombre: string; color: string; weight: number }[]
+  reference: { discipline_id: string; nombre: string; color: string; milestones: FpeDisciplinePaymentMilestone[] }[]
+} | { error: string }> {
+  try {
+    await requireManagerOrPartner()
+    const admin = createAdminClient()
+    const ctx = await computePartnerDisciplineContext(admin, project_id, partner_id)
+
+    const weights = ctx.reference
+      .map(r => ({
+        discipline_id: r.discipline_id,
+        weight:        ctx.disciplines.find(d => d.id === r.discipline_id)?.weight ?? 0,
+        milestones:    r.milestones,
+      }))
+      .filter(w => w.milestones.length > 0)
+
+    const totalWeight = weights.reduce((s, w) => s + w.weight, 0)
+    const normalized = totalWeight > 0 ? weights : weights.map(w => ({ ...w, weight: 1 }))
+
+    const preview = buildPaymentPlanSeed('dominant', normalized)
+    return { preview, disciplines: ctx.disciplines, reference: ctx.reference }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
+// Crea una invitación en estado pending (sin email) para poder personalizar
+// el plan antes del lanzamiento. Reutiliza un tender 'draft' existente o crea
+// uno nuevo. NO marca el proyecto como tender_launched.
+export async function createPendingInvitationForPartner(
+  project_id: string,
+  partner_id: string,
+  fecha_limite_default: string,  // YYYY-MM-DD (luego configurable en launch)
+  token_expires_days = 21,
+): Promise<{ invitation_id: string } | { error: string }> {
+  try {
+    await requireManagerOrPartner()
+    const admin = createAdminClient()
+
+    // Disciplinas del partner que entran en el pack
+    const { data: unitsRaw } = await admin
+      .from('fpe_project_units')
+      .select(`
+        id,
+        template_unit:fpe_template_units ( principal_discipline_id ),
+        partners:fpe_project_unit_partners ( partner_id )
+      `)
+      .eq('project_id', project_id)
+
+    type UnitRow = {
+      id: string
+      template_unit: { principal_discipline_id: string | null } | null
+      partners: { partner_id: string }[] | null
+    }
+    const units = (unitsRaw ?? []) as unknown as UnitRow[]
+
+    const disciplineIds = Array.from(new Set(
+      units
+        .filter(u => (u.partners ?? []).some(p => p.partner_id === partner_id))
+        .map(u => u.template_unit?.principal_discipline_id)
+        .filter((d): d is string => !!d)
+    ))
+
+    const allUnitIds = units.map(u => u.id)
+
+    // Tender: reusa draft o crea uno
+    const { data: existingTender } = await admin
+      .from('fpe_tenders')
+      .select('id, status')
+      .eq('project_id', project_id)
+      .not('status', 'in', '("cancelled")')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    let tenderId: string
+    if (existingTender) {
+      tenderId = existingTender.id
+    } else {
+      const { data: newTender, error: tErr } = await admin
+        .from('fpe_tenders')
+        .insert({ project_id, fecha_limite: fecha_limite_default, status: 'draft' })
+        .select('id')
+        .single()
+      if (tErr || !newTender) return { error: tErr?.message ?? 'Error creando licitación.' }
+      tenderId = newTender.id
+    }
+
+    // Si ya hay una invitación pending/sent/etc. para este partner, no duplicar.
+    const { data: existingInv } = await admin
+      .from('fpe_tender_invitations')
+      .select('id, status')
+      .eq('tender_id', tenderId)
+      .eq('partner_id', partner_id)
+      .not('status', 'in', '("revoked","expired")')
+      .maybeSingle()
+
+    if (existingInv) {
+      return { invitation_id: existingInv.id }
+    }
+
+    const expires = new Date(Date.now() + token_expires_days * 24 * 60 * 60 * 1000).toISOString()
+
+    const { data: inv, error: invErr } = await admin
+      .from('fpe_tender_invitations')
+      .insert({
+        tender_id:        tenderId,
+        partner_id,
+        scope_unit_ids:   allUnitIds,
+        discipline_ids:   disciplineIds,
+        token_expires_at: expires,
+        status:           'pending',  // sin email todavía
+      })
+      .select('id')
+      .single()
+
+    if (invErr || !inv) return { error: invErr?.message ?? 'Error creando invitación pending.' }
+
+    // Seed con estrategia dominante
+    try {
+      const res = await regenerateInvitationPaymentPlan(inv.id, 'dominant')
+      if ('error' in res) {
+        // Si el seed falla (p.ej. sin hitos en plantilla), dejamos la invitación
+        // creada igualmente — el usuario puede añadir hitos manualmente.
+      }
+    } catch {
+      // ignorar
+    }
+
+    revalidatePath(PROJECTS_PATH)
+    return { invitation_id: inv.id }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
   }

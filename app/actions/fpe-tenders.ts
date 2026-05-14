@@ -320,14 +320,26 @@ export async function createAndSendDisciplineInvitations(
 
     const allUnitIds = (projectUnits ?? []).map(u => u.id)
 
-    // 4. Skip already-invited partners for this tender
+    // 4. Carga invitaciones ya existentes (incluye las 'pending' creadas desde
+    //    "Personalizar plan" antes de lanzar). Mapeamos por partner_id para
+    //    decidir si crear nueva o reusar/mandar email a la existente.
+    type ExistingInv = { id: string; partner_id: string; status: string; token: string; token_expires_at: string }
     const { data: existingInvs } = await admin
       .from('fpe_tender_invitations')
-      .select('partner_id')
+      .select('id, partner_id, status, token, token_expires_at')
       .eq('tender_id', tenderId)
       .not('status', 'in', '("revoked","expired")')
 
-    const alreadyInvited = new Set((existingInvs ?? []).map(i => i.partner_id))
+    const existingByPartner = new Map<string, ExistingInv>()
+    for (const e of (existingInvs ?? []) as ExistingInv[]) {
+      existingByPartner.set(e.partner_id, e)
+    }
+    // Partners cuya invitación ya está sent/viewed/bid_submitted → no re-mandar.
+    const alreadySent = new Set(
+      (existingInvs ?? [])
+        .filter(e => ['sent', 'viewed', 'bid_submitted'].includes(e.status))
+        .map(e => e.partner_id)
+    )
 
     // 5. Fetch project info for email
     const { data: project } = await admin
@@ -345,35 +357,54 @@ export async function createAndSendDisciplineInvitations(
     let sent = 0
 
     for (const partnerId of uniquePartners) {
-      if (alreadyInvited.has(partnerId)) continue
+      if (alreadySent.has(partnerId)) continue
 
       const disciplineIds = partnerDisciplines[partnerId]
 
-      const { data: inv, error: invErr } = await admin
-        .from('fpe_tender_invitations')
-        .insert({
-          tender_id:        tenderId,
-          partner_id:       partnerId,
-          scope_unit_ids:   allUnitIds,
-          discipline_ids:   disciplineIds,
-          token_expires_at: expires,
-          status:           'pending',
-        })
-        .select('id, token, token_expires_at')
-        .single()
+      // Reusa invitación pending pre-creada desde "Personalizar plan" (su plan
+      // ya fue sembrado y posiblemente editado). Si no existe, créala ahora.
+      let inv: { id: string; token: string; token_expires_at: string } | null = null
+      const existing = existingByPartner.get(partnerId)
 
-      if (invErr || !inv) continue
+      if (existing && existing.status === 'pending') {
+        // Actualiza fecha de expiración (puede haber estado mucho tiempo pending)
+        // y refresca discipline_ids/scope por si cambiaron.
+        await admin
+          .from('fpe_tender_invitations')
+          .update({
+            scope_unit_ids:   allUnitIds,
+            discipline_ids:   disciplineIds,
+            token_expires_at: expires,
+          })
+          .eq('id', existing.id)
+        inv = { id: existing.id, token: existing.token, token_expires_at: expires }
+      } else {
+        const { data: newInv, error: invErr } = await admin
+          .from('fpe_tender_invitations')
+          .insert({
+            tender_id:        tenderId,
+            partner_id:       partnerId,
+            scope_unit_ids:   allUnitIds,
+            discipline_ids:   disciplineIds,
+            token_expires_at: expires,
+            status:           'pending',
+          })
+          .select('id, token, token_expires_at')
+          .single()
+        if (invErr || !newInv) continue
+        inv = newInv
 
-      // Seed automático del plan de pago de esta invitación con estrategia
-      // "dominant" (disciplina con más UEs del partner). Fallo silencioso:
-      // si no hay hitos configurados para esa disciplina, la invitación queda
-      // sin plan y se podrá editar después desde el modal.
-      try {
-        const mod = await import('./fpe-payment')
-        await mod.regenerateInvitationPaymentPlan(inv.id, 'dominant')
-      } catch {
-        // ignorar
+        // Seed automático del plan de pago (solo para invitaciones nuevas;
+        // las pending pre-existentes ya tienen su plan sembrado).
+        try {
+          const mod = await import('./fpe-payment')
+          await mod.regenerateInvitationPaymentPlan(inv.id, 'dominant')
+        } catch {
+          // ignorar
+        }
       }
+
+      if (!inv) continue
 
       const { data: partner } = await admin
         .from('fpe_partners')

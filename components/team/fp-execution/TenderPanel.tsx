@@ -11,8 +11,12 @@ import {
 import BidComparison from '@/components/team/fp-execution/BidComparison'
 import QAPanel from '@/components/team/fp-execution/QAPanel'
 import PartnerPaymentPlanModal from '@/components/team/fp-execution/PartnerPaymentPlanModal'
-import { getInvitationPaymentPlan } from '@/app/actions/fpe-payment'
-import type { FpeInvitationPaymentPlanItem } from '@/lib/fp-execution/domain'
+import {
+  getInvitationPaymentPlan,
+  previewPaymentPlanForPartner,
+  createPendingInvitationForPartner,
+} from '@/app/actions/fpe-payment'
+import type { FpeInvitationPaymentPlanItem, FpeDisciplinePaymentMilestone } from '@/lib/fp-execution/domain'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -387,6 +391,8 @@ function ByPartnerView({
   projectId,
   editingDisabled,
   onRevoke,
+  fechaLimite,
+  onInvitationCreated,
 }: {
   units: TenderProjectUnit[]
   partnerPacks: Record<string, string[]>     // partner_id → project_unit_ids[]
@@ -395,6 +401,8 @@ function ByPartnerView({
   projectId: string
   editingDisabled: boolean
   onRevoke: (invId: string) => Promise<void>
+  fechaLimite: string
+  onInvitationCreated: (partnerId: string, invId: string) => void
 }) {
   const unitsById: Record<string, TenderProjectUnit> = useMemo(() => {
     const m: Record<string, TenderProjectUnit> = {}
@@ -500,8 +508,16 @@ function ByPartnerView({
                 ))}
               </div>
 
-              {/* Payment plan */}
-              {inv && <PartnerPaymentSummary invitationId={inv.id} partnerNombre={partner?.nombre ?? pid} />}
+              {/* Payment plan — siempre visible: preview si aún no hay invitación,
+                  plan persistido si ya existe. */}
+              <PartnerPaymentSummary
+                invitationId={inv?.id ?? null}
+                partnerId={pid}
+                projectId={projectId}
+                partnerNombre={partner?.nombre ?? pid}
+                fechaLimiteDefault={fechaLimite}
+                onInvitationCreated={(invId) => onInvitationCreated(pid, invId)}
+              />
 
               {/* Invitation meta */}
               {inv && (
@@ -550,70 +566,209 @@ const TRIGGER_SHORT: Record<'contract_signed' | 'milestone_achieved' | 'delivery
   delivery:           'Entrega',
 }
 
-function PartnerPaymentSummary({ invitationId, partnerNombre }: { invitationId: string; partnerNombre: string }) {
-  const [plan, setPlan] = useState<FpeInvitationPaymentPlanItem[] | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [open, setOpen] = useState(false)
+interface PreviewItem {
+  nombre: string
+  pct: number
+  trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery'
+}
+
+interface RefBlock {
+  discipline_id: string
+  nombre: string
+  color: string
+  weight: number
+  milestones: FpeDisciplinePaymentMilestone[]
+}
+
+function PartnerPaymentSummary({
+  invitationId,
+  partnerId,
+  projectId,
+  partnerNombre,
+  fechaLimiteDefault,
+  onInvitationCreated,
+}: {
+  invitationId: string | null
+  partnerId: string
+  projectId: string
+  partnerNombre: string
+  fechaLimiteDefault: string
+  onInvitationCreated: (invId: string) => void
+}) {
+  const [persistedPlan, setPersistedPlan] = useState<FpeInvitationPaymentPlanItem[] | null>(null)
+  const [previewPlan, setPreviewPlan]     = useState<PreviewItem[] | null>(null)
+  const [reference, setReference]         = useState<RefBlock[]>([])
+  const [loading, setLoading]             = useState(true)
+  const [openModal, setOpenModal]         = useState(false)
+  const [showRef, setShowRef]             = useState(false)
+  const [creating, setCreating]           = useState(false)
+  const [err, setErr]                     = useState<string | null>(null)
 
   const load = async () => {
-    setLoading(true)
-    const res = await getInvitationPaymentPlan(invitationId)
-    setLoading(false)
-    if ('error' in res) { setPlan([]); return }
-    setPlan(res.plan)
+    setLoading(true); setErr(null)
+    if (invitationId) {
+      const res = await getInvitationPaymentPlan(invitationId)
+      setLoading(false)
+      if ('error' in res) { setPersistedPlan([]); return }
+      setPersistedPlan(res.plan)
+      setReference(res.reference.map(r => ({
+        discipline_id: r.discipline_id,
+        nombre:        r.nombre,
+        color:         r.color,
+        weight:        res.disciplines.find(d => d.id === r.discipline_id)?.weight ?? 0,
+        milestones:    r.milestones,
+      })))
+    } else {
+      const res = await previewPaymentPlanForPartner(projectId, partnerId)
+      setLoading(false)
+      if ('error' in res) { setErr(res.error); setPreviewPlan([]); return }
+      setPreviewPlan(res.preview.map(p => ({
+        nombre: p.nombre, pct: Number(p.pct), trigger_type: p.trigger_type,
+      })))
+      setReference(res.reference.map(r => ({
+        discipline_id: r.discipline_id,
+        nombre:        r.nombre,
+        color:         r.color,
+        weight:        res.disciplines.find(d => d.id === r.discipline_id)?.weight ?? 0,
+        milestones:    r.milestones,
+      })))
+    }
   }
 
-  useEffect(() => { void load() /* eslint-disable-next-line */ }, [invitationId])
+  useEffect(() => { void load() /* eslint-disable-next-line */ }, [invitationId, partnerId, projectId])
 
-  const total = (plan ?? []).reduce((s, p) => s + Number(p.pct), 0)
+  const handlePersonalize = async () => {
+    if (!fechaLimiteDefault) {
+      setErr('Define primero la fecha límite de ofertas arriba.')
+      return
+    }
+    setCreating(true); setErr(null)
+    const res = await createPendingInvitationForPartner(projectId, partnerId, fechaLimiteDefault)
+    setCreating(false)
+    if ('error' in res) { setErr(res.error); return }
+    onInvitationCreated(res.invitation_id)
+    setOpenModal(true)
+  }
+
+  const isPreview = !invitationId
+  const items: { nombre: string; pct: number; trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery' }[] =
+    isPreview
+      ? (previewPlan ?? [])
+      : (persistedPlan ?? []).map(p => ({ nombre: p.nombre, pct: Number(p.pct), trigger_type: p.trigger_type }))
+
+  const total = items.reduce((s, p) => s + p.pct, 0)
   const totalOk = Math.abs(total - 100) < 0.01
+  const refsWithMilestones = reference.filter(r => r.milestones.length > 0)
+  const hasMultipleDisciplines = reference.filter(r => r.weight > 0).length > 1
 
   return (
     <>
       <div style={{ paddingTop: 10, borderTop: '1px solid #F0EEE8' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={S.label}>Plan de pago propuesto</span>
-            {plan && plan.length > 0 && (
+            <span style={S.label}>{isPreview ? 'Plan de pago (preview)' : 'Plan de pago propuesto'}</span>
+            {items.length > 0 && (
               <span style={{ fontSize: 10, color: totalOk ? '#059669' : '#DC2626', fontWeight: 600 }}>
-                {plan.length} hito{plan.length !== 1 ? 's' : ''} · {total.toFixed(0)}%
+                {items.length} hito{items.length !== 1 ? 's' : ''} · {total.toFixed(0)}%
+              </span>
+            )}
+            {isPreview && (
+              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', padding: '2px 6px', borderRadius: 8, background: '#FEF3C7', color: '#92400E' }}>
+                PREVIEW
+              </span>
+            )}
+            {hasMultipleDisciplines && (
+              <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 8, background: '#DBEAFE', color: '#1E40AF' }}>
+                Cruza disciplinas · revisar
               </span>
             )}
           </div>
-          <button onClick={() => setOpen(true)} style={{ padding: '4px 10px', fontSize: 10, fontWeight: 600, background: '#fff', color: '#1A1A1A', border: '1px solid #E8E6E0', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit' }}>
-            Editar plan
-          </button>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {refsWithMilestones.length > 0 && (
+              <button onClick={() => setShowRef(v => !v)} style={miniLinkBtn}>
+                {showRef ? 'Ocultar referencia' : `Ver referencia (${refsWithMilestones.length})`}
+              </button>
+            )}
+            {isPreview ? (
+              <button onClick={handlePersonalize} disabled={creating} style={{ ...miniLinkBtn, background: '#1A1A1A', color: '#fff', border: '1px solid #1A1A1A' }}>
+                {creating ? 'Creando…' : 'Personalizar plan'}
+              </button>
+            ) : (
+              <button onClick={() => setOpenModal(true)} style={miniLinkBtn}>
+                Editar plan
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* Plan items */}
         {loading ? (
           <span style={{ fontSize: 11, color: '#BBB', fontStyle: 'italic' }}>Cargando plan…</span>
-        ) : !plan || plan.length === 0 ? (
+        ) : items.length === 0 ? (
           <span style={{ fontSize: 11, color: '#999', fontStyle: 'italic' }}>
-            Sin hitos de pago. Pulsa &quot;Editar plan&quot; para configurarlos.
+            {isPreview
+              ? 'No hay hitos de pago configurados para las disciplinas de este pack. Define los hitos estándar en /team/fp-execution/template antes de lanzar.'
+              : 'Sin hitos de pago. Pulsa "Editar plan" para configurarlos.'}
           </span>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {plan.map((p, i) => (
-              <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '24px 1fr 60px 100px', gap: 8, padding: '5px 8px', background: '#FAFAF8', borderRadius: 4, fontSize: 11, color: '#555', alignItems: 'center' }}>
+            {items.map((p, i) => (
+              <div key={i} style={{ display: 'grid', gridTemplateColumns: '24px 1fr 60px 100px', gap: 8, padding: '5px 8px', background: '#FAFAF8', borderRadius: 4, fontSize: 11, color: '#555', alignItems: 'center' }}>
                 <span style={{ color: '#999' }}>{i + 1}</span>
                 <span style={{ color: '#1A1A1A' }}>{p.nombre}</span>
-                <span style={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 600, color: '#1A1A1A' }}>{Number(p.pct).toFixed(2)}%</span>
+                <span style={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 600, color: '#1A1A1A' }}>{p.pct.toFixed(2)}%</span>
                 <span style={{ fontSize: 10, color: '#888', textAlign: 'right' }}>{TRIGGER_SHORT[p.trigger_type]}</span>
               </div>
             ))}
           </div>
         )}
+
+        {/* Reference (estándar de mercado por disciplina) */}
+        {showRef && refsWithMilestones.length > 0 && (
+          <div style={{ marginTop: 10, padding: '10px 12px', background: '#fff', border: '1px dashed #E8E6E0', borderRadius: 6 }}>
+            <div style={{ fontSize: 10, color: '#888', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 8 }}>
+              Estándar de mercado por disciplina del pack
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {refsWithMilestones.map(r => (
+                <div key={r.discipline_id} style={{ padding: '6px 8px', background: '#FAFAF8', borderRadius: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: 4, background: r.color }} />
+                    <span style={{ fontSize: 11, fontWeight: 600, color: '#1A1A1A' }}>{r.nombre}</span>
+                    <span style={{ fontSize: 10, color: '#888' }}>· {r.weight} UE</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                    {r.milestones.map(m => (
+                      <span key={m.id} style={{ fontSize: 10, padding: '2px 6px', background: '#fff', border: '1px solid #E8E6E0', borderRadius: 8, color: '#555' }}>
+                        {m.nombre} · {Number(m.pct).toFixed(0)}% · {TRIGGER_SHORT[m.trigger_type]}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {err && <div style={{ marginTop: 6, fontSize: 11, color: '#DC2626' }}>✗ {err}</div>}
       </div>
 
-      {open && (
+      {openModal && invitationId && (
         <PartnerPaymentPlanModal
           invitationId={invitationId}
           partnerNombre={partnerNombre}
-          onClose={() => setOpen(false)}
+          onClose={() => setOpenModal(false)}
           onSaved={() => { void load() }}
         />
       )}
     </>
   )
+}
+
+const miniLinkBtn: React.CSSProperties = {
+  padding: '4px 10px', fontSize: 10, fontWeight: 600,
+  background: '#fff', color: '#1A1A1A', border: '1px solid #E8E6E0',
+  borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit',
 }
 
 // ── Main TenderPanel ──────────────────────────────────────────────────────────
@@ -765,6 +920,13 @@ export default function TenderPanel({
     if ('error' in res) { flash('err', res.error); return }
     setProjStatus('contracted')
     flash('ok', 'Proyecto marcado como contratado.')
+    router.refresh()
+  }
+
+  // Al pulsar "Personalizar plan" en una card sin invitación todavía, el modal
+  // crea una invitación pending. Refrescamos para que la card pase del modo
+  // "preview" al modo "plan persistido".
+  const handlePendingInvitationCreated = (_partnerId: string, _invId: string) => {
     router.refresh()
   }
 
@@ -925,6 +1087,8 @@ export default function TenderPanel({
           projectId={projectId}
           editingDisabled={isLaunched}
           onRevoke={handleRevoke}
+          fechaLimite={fechaLimite}
+          onInvitationCreated={handlePendingInvitationCreated}
         />
       )}
 
