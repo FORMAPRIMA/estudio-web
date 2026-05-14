@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useRef, useCallback } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { deleteDocument, getDocumentSignedUrl, getReadinessChecks } from '@/app/actions/fpe-documents'
 import { saveUnitQuantities, saveUnitPartners, saveFpeProjectTourUrl } from '@/app/actions/fpe-projects'
 
@@ -603,10 +603,13 @@ function UeCard({
     () => new Set(unit.line_items.filter(li => li.incluida).map(li => li.template_line_item_id))
   )
   const [selectedPartners, setSelectedPartners] = useState<Set<string>>(new Set(initialPartnerIds))
-  const [savingQty, setSavingQty] = useState(false)
-  const [savingPt, setSavingPt]   = useState(false)
-  const [qtyMsg, setQtyMsg]       = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
-  const [ptMsg, setPtMsg]         = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
+  const [qtyStatus, setQtyStatus] = useState<{ type: 'saving' | 'ok' | 'err'; text: string } | null>(null)
+  const [ptStatus,  setPtStatus]  = useState<{ type: 'saving' | 'ok' | 'err'; text: string } | null>(null)
+
+  const qtyTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const ptTimer  = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isFirstQty = useRef(true)
+  const isFirstPt  = useRef(true)
 
   const toggleLineItem = (id: string) => {
     setIncludedItems(prev => {
@@ -616,37 +619,54 @@ function UeCard({
     })
   }
 
-  const saveQty = async () => {
-    setSavingQty(true); setQtyMsg(null)
-    const line_items = unit.line_items
-      .filter(li => includedItems.has(li.template_line_item_id))
-      .map(li => ({
-        template_line_item_id: li.template_line_item_id,
-        cantidad: quantities[li.template_line_item_id] ?? 0,
-      }))
-    const res = await saveUnitQuantities(projectId, unit.project_unit_id, line_items)
-    setSavingQty(false)
-    if ('error' in res) { setQtyMsg({ type: 'err', text: res.error }); return }
-    setQtyMsg({ type: 'ok', text: 'Guardado' })
-    setTimeout(() => setQtyMsg(null), 2500)
-    await onSaved()
-  }
+  // Autosave: line items (cantidad + inclusión) — debounced 700ms tras última edición
+  useEffect(() => {
+    if (isFirstQty.current) { isFirstQty.current = false; return }
+    if (qtyTimer.current) clearTimeout(qtyTimer.current)
+    qtyTimer.current = setTimeout(async () => {
+      setQtyStatus({ type: 'saving', text: 'Guardando…' })
+      const line_items = unit.line_items
+        .filter(li => includedItems.has(li.template_line_item_id))
+        .map(li => ({
+          template_line_item_id: li.template_line_item_id,
+          cantidad: quantities[li.template_line_item_id] ?? 0,
+        }))
+      const res = await saveUnitQuantities(projectId, unit.project_unit_id, line_items)
+      if ('error' in res) { setQtyStatus({ type: 'err', text: res.error }); return }
+      setQtyStatus({ type: 'ok', text: 'Guardado' })
+      setTimeout(() => setQtyStatus(null), 2000)
+      await onSaved()
+    }, 700)
+    return () => { if (qtyTimer.current) clearTimeout(qtyTimer.current) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quantities, includedItems])
 
-  const savePt = async () => {
-    setSavingPt(true); setPtMsg(null)
-    const res = await saveUnitPartners(projectId, unit.project_unit_id, Array.from(selectedPartners))
-    setSavingPt(false)
-    if ('error' in res) { setPtMsg({ type: 'err', text: res.error }); return }
-    setPtMsg({ type: 'ok', text: 'Guardado' })
-    setTimeout(() => setPtMsg(null), 2500)
-    await onSaved()
-  }
+  // Autosave: partners — debounced 500ms tras última edición
+  useEffect(() => {
+    if (isFirstPt.current) { isFirstPt.current = false; return }
+    if (ptTimer.current) clearTimeout(ptTimer.current)
+    ptTimer.current = setTimeout(async () => {
+      setPtStatus({ type: 'saving', text: 'Guardando…' })
+      const res = await saveUnitPartners(projectId, unit.project_unit_id, Array.from(selectedPartners))
+      if ('error' in res) { setPtStatus({ type: 'err', text: res.error }); return }
+      setPtStatus({ type: 'ok', text: 'Guardado' })
+      setTimeout(() => setPtStatus(null), 2000)
+      await onSaved()
+    }, 500)
+    return () => { if (ptTimer.current) clearTimeout(ptTimer.current) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPartners])
 
   const togglePartner = (id: string) => setSelectedPartners(prev => {
     const next = new Set(prev)
     if (next.has(id)) next.delete(id); else next.add(id)
     return next
   })
+
+  const statusColor = (t: 'saving' | 'ok' | 'err') =>
+    t === 'ok' ? '#059669' : t === 'err' ? '#DC2626' : '#888'
+  const statusIcon = (t: 'saving' | 'ok' | 'err') =>
+    t === 'ok' ? '✓' : t === 'err' ? '✗' : '•'
 
   const borderColor = hasPartners ? '#E8E6E0' : '#FECACA'
   const headerBg    = hasPartners ? '#F8F7F4' : '#FEF2F2'
@@ -676,16 +696,11 @@ function UeCard({
                   {includedItems.size} de {unit.line_items.length} seleccionadas
                 </span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                {qtyMsg && (
-                  <span style={{ fontSize: 11, color: qtyMsg.type === 'ok' ? '#059669' : '#DC2626', fontWeight: 600 }}>
-                    {qtyMsg.type === 'ok' ? '✓' : '✗'} {qtyMsg.text}
-                  </span>
-                )}
-                <button onClick={saveQty} disabled={savingQty} style={btn(true)}>
-                  {savingQty ? 'Guardando…' : 'Guardar'}
-                </button>
-              </div>
+              {qtyStatus && (
+                <span style={{ fontSize: 11, color: statusColor(qtyStatus.type), fontWeight: 600 }}>
+                  {statusIcon(qtyStatus.type)} {qtyStatus.text}
+                </span>
+              )}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               {unit.line_items.map(li => {
@@ -749,17 +764,10 @@ function UeCard({
             <span style={SL}>
               Partners asignados
             </span>
-            {relevantPartners.length > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                {ptMsg && (
-                  <span style={{ fontSize: 11, color: ptMsg.type === 'ok' ? '#059669' : '#DC2626', fontWeight: 600 }}>
-                    {ptMsg.type === 'ok' ? '✓' : '✗'} {ptMsg.text}
-                  </span>
-                )}
-                <button onClick={savePt} disabled={savingPt} style={btn(true)}>
-                  {savingPt ? 'Guardando…' : 'Guardar partners'}
-                </button>
-              </div>
+            {relevantPartners.length > 0 && ptStatus && (
+              <span style={{ fontSize: 11, color: statusColor(ptStatus.type), fontWeight: 600 }}>
+                {statusIcon(ptStatus.type)} {ptStatus.text}
+              </span>
             )}
           </div>
 
