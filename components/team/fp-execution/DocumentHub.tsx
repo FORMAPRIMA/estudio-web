@@ -33,6 +33,7 @@ export interface ScopedUnit {
   template_unit_id: string
   chapter_id: string
   nombre: string
+  principal_discipline_id: string | null
   line_items: ScopedLineItem[]
 }
 
@@ -42,10 +43,16 @@ export interface ScopedChapter {
   units: ScopedUnit[]
 }
 
+export interface PartnerDisciplineTag {
+  id: string
+  nombre: string
+  color: string
+}
+
 export interface PartnerForDocs {
   id: string
   nombre: string
-  unit_ids: string[]
+  disciplines: PartnerDisciplineTag[]
 }
 
 export interface ReadinessCheck {
@@ -581,7 +588,11 @@ function UeCard({
   initialPartnerIds: string[]
   onSaved: () => Promise<void>
 }) {
-  const relevantPartners = partners.filter(p => p.unit_ids.includes(unit.template_unit_id))
+  const unitDisciplineId = unit.principal_discipline_id
+  const relevantPartners = unitDisciplineId
+    ? partners.filter(p => p.disciplines.some(d => d.id === unitDisciplineId))
+    : []
+  const hasPartners = initialPartnerIds.length > 0
 
   const [quantities, setQuantities] = useState<Record<string, number>>(() => {
     const q: Record<string, number> = {}
@@ -637,12 +648,20 @@ function UeCard({
     return next
   })
 
+  const borderColor = hasPartners ? '#E8E6E0' : '#FECACA'
+  const headerBg    = hasPartners ? '#F8F7F4' : '#FEF2F2'
+
   return (
-    <div style={{ border: '1px solid #E8E6E0', borderRadius: 8, overflow: 'hidden', background: '#fff' }}>
+    <div style={{ border: `1px solid ${borderColor}`, borderRadius: 8, overflow: 'hidden', background: '#fff' }}>
 
       {/* Header */}
-      <div style={{ padding: '10px 16px', background: '#F8F7F4', borderBottom: '1px solid #E8E6E0' }}>
+      <div style={{ padding: '10px 16px', background: headerBg, borderBottom: `1px solid ${borderColor}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <span style={{ fontSize: 12, fontWeight: 700, color: '#1A1A1A' }}>{unit.nombre}</span>
+        {!hasPartners && (
+          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', padding: '3px 8px', borderRadius: 10, background: '#FEE2E2', color: '#991B1B', flexShrink: 0 }}>
+            SIN PARTNERS
+          </span>
+        )}
       </div>
 
       <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -744,9 +763,13 @@ function UeCard({
             )}
           </div>
 
-          {relevantPartners.length === 0 ? (
+          {!unitDisciplineId ? (
+            <p style={{ margin: 0, fontSize: 11, color: '#D97706', fontStyle: 'italic' }}>
+              Esta UE no tiene disciplina asignada en el template. Asigna una para poder invitar partners.
+            </p>
+          ) : relevantPartners.length === 0 ? (
             <p style={{ margin: 0, fontSize: 11, color: '#CCC', fontStyle: 'italic' }}>
-              Ningún partner tiene capacidad registrada para esta unidad.
+              Ningún partner registrado tiene la disciplina de esta UE.
             </p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -768,9 +791,26 @@ function UeCard({
                       onChange={() => togglePartner(p.id)}
                       style={{ accentColor: '#378ADD', flexShrink: 0 }}
                     />
-                    <span style={{ fontSize: 12, color: '#333', fontWeight: selected ? 600 : 400 }}>
+                    <span style={{ fontSize: 12, color: '#333', fontWeight: selected ? 600 : 400, flex: 1, minWidth: 0 }}>
                       {p.nombre}
                     </span>
+                    <div style={{ display: 'flex', gap: 3, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: '50%' }}>
+                      {p.disciplines.map(d => (
+                        <span
+                          key={d.id}
+                          title={d.nombre}
+                          style={{
+                            fontSize: 9, fontWeight: 600, padding: '2px 6px', borderRadius: 8,
+                            background: d.id === unitDisciplineId ? d.color : '#F0EEE8',
+                            color:      d.id === unitDisciplineId ? '#fff'   : '#888',
+                            whiteSpace: 'nowrap',
+                            maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis',
+                          }}
+                        >
+                          {d.nombre}
+                        </span>
+                      ))}
+                    </div>
                   </label>
                 )
               })}

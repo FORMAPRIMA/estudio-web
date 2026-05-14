@@ -26,6 +26,8 @@ export async function createChapter(data: {
   descripcion?: string | null
   orden?: number
   duracion_pct?: number
+  duracion_dias_min?: number | null
+  duracion_dias_max?: number | null
   principal_discipline_id?: string | null
 }): Promise<{ id: string } | { error: string }> {
   try {
@@ -38,6 +40,8 @@ export async function createChapter(data: {
         descripcion: data.descripcion ?? null,
         orden: data.orden ?? 0,
         duracion_pct: data.duracion_pct ?? 0,
+        duracion_dias_min: data.duracion_dias_min ?? null,
+        duracion_dias_max: data.duracion_dias_max ?? null,
         principal_discipline_id: data.principal_discipline_id ?? null,
       })
       .select('id')
@@ -52,7 +56,7 @@ export async function createChapter(data: {
 
 export async function updateChapter(
   id: string,
-  data: { nombre?: string; descripcion?: string | null; orden?: number; activo?: boolean; duracion_pct?: number; principal_discipline_id?: string | null; label_cliente?: string | null; descripcion_cliente?: string | null; imagen_portada_url?: string | null }
+  data: { nombre?: string; descripcion?: string | null; orden?: number; activo?: boolean; duracion_pct?: number; duracion_dias_min?: number | null; duracion_dias_max?: number | null; principal_discipline_id?: string | null; label_cliente?: string | null; descripcion_cliente?: string | null; imagen_portada_url?: string | null }
 ): Promise<{ success: true } | { error: string }> {
   try {
     await requireManagerOrPartner()
@@ -467,17 +471,43 @@ export async function moveUnit(
   unitId: string,
   targetChapterId: string,
   newOrder: number,
-): Promise<{ success: true } | { error: string }> {
+): Promise<{ success: true; phasesCleared: number } | { error: string }> {
   try {
     await requireManagerOrPartner()
     const admin = createAdminClient()
+
+    // Cross-chapter move? If yes, clear phase_links of all line items in this unit
+    // (their phases belong to the previous chapter and would become huérfanos).
+    const { data: currentUnit } = await admin
+      .from('fpe_template_units')
+      .select('chapter_id')
+      .eq('id', unitId)
+      .single()
+
+    let phasesCleared = 0
+    if (currentUnit && currentUnit.chapter_id !== targetChapterId) {
+      const { data: lineItems } = await admin
+        .from('fpe_template_line_items')
+        .select('id')
+        .eq('unit_id', unitId)
+      const lineItemIds = (lineItems ?? []).map(li => li.id)
+      if (lineItemIds.length > 0) {
+        const { count, error: delErr } = await admin
+          .from('fpe_template_phase_line_items')
+          .delete({ count: 'exact' })
+          .in('line_item_id', lineItemIds)
+        if (delErr) return { error: delErr.message }
+        phasesCleared = count ?? 0
+      }
+    }
+
     const { error } = await admin
       .from('fpe_template_units')
       .update({ chapter_id: targetChapterId, orden: newOrder, updated_at: new Date().toISOString() })
       .eq('id', unitId)
     if (error) return { error: error.message }
     revalidatePath(PATH)
-    return { success: true }
+    return { success: true, phasesCleared }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
   }
@@ -503,17 +533,42 @@ export async function moveLineItem(
   lineItemId: string,
   targetUnitId: string,
   newOrder: number,
-): Promise<{ success: true } | { error: string }> {
+): Promise<{ success: true; phasesCleared: number } | { error: string }> {
   try {
     await requireManagerOrPartner()
     const admin = createAdminClient()
+
+    // Cross-chapter move? If yes, clear phase_links of this line item
+    // (its phases belong to the previous chapter and would become huérfanos).
+    const { data: currentLi } = await admin
+      .from('fpe_template_line_items')
+      .select('unit:fpe_template_units(chapter_id)')
+      .eq('id', lineItemId)
+      .single()
+    const { data: targetUnit } = await admin
+      .from('fpe_template_units')
+      .select('chapter_id')
+      .eq('id', targetUnitId)
+      .single()
+
+    let phasesCleared = 0
+    const currentChapterId = (currentLi?.unit as unknown as { chapter_id: string } | null)?.chapter_id
+    if (currentChapterId && targetUnit && currentChapterId !== targetUnit.chapter_id) {
+      const { count, error: delErr } = await admin
+        .from('fpe_template_phase_line_items')
+        .delete({ count: 'exact' })
+        .eq('line_item_id', lineItemId)
+      if (delErr) return { error: delErr.message }
+      phasesCleared = count ?? 0
+    }
+
     const { error } = await admin
       .from('fpe_template_line_items')
       .update({ unit_id: targetUnitId, orden: newOrder, updated_at: new Date().toISOString() })
       .eq('id', lineItemId)
     if (error) return { error: error.message }
     revalidatePath(PATH)
-    return { success: true }
+    return { success: true, phasesCleared }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
   }

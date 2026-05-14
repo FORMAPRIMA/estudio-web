@@ -17,7 +17,7 @@ export default async function FpeTemplatePage() {
     supabase
       .from('fpe_template_chapters')
       .select(`
-        id, nombre, descripcion, orden, activo, duracion_pct, principal_discipline_id,
+        id, nombre, descripcion, orden, activo, duracion_pct, duracion_dias_min, duracion_dias_max, principal_discipline_id,
         label_cliente, descripcion_cliente, imagen_portada_url,
         phases:fpe_template_phases (
           id, chapter_id, nombre, descripcion, lead_time_days, duracion_pct, orden, requiere_duracion

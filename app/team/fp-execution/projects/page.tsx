@@ -9,7 +9,8 @@ export default async function FpeProjectsPage() {
       .from('fpe_projects')
       .select(`
         id, nombre, descripcion, direccion, ciudad,
-        linked_proyecto_id, status, readiness_score, created_at
+        linked_proyecto_id, status, readiness_score, created_at,
+        m2_construccion
       `)
       .order('created_at', { ascending: false }),
 

@@ -381,6 +381,17 @@ export default function InvitacionClient() {
     return () => { audio.pause(); audio.src = '' }
   }, [])
 
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.hidden) {
+        audioRef.current?.pause()
+        setMusicOn(false)
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [])
+
   const handleOpenInvitation = useCallback(() => {
     setEnvelopeOpen(true)
     audioRef.current?.play().then(() => setMusicOn(true)).catch(() => {})

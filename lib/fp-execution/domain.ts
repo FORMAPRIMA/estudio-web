@@ -157,17 +157,6 @@ export interface FpePartner {
   activo: boolean
   created_at: string
   updated_at: string
-  // joins
-  capabilities?: FpePartnerCapability[]
-}
-
-export interface FpePartnerCapability {
-  id: string
-  partner_id: string
-  unit_id: string
-  created_at: string
-  // joins
-  unit?: Pick<FpeTemplateUnit, 'id' | 'nombre' | 'chapter_id'>
 }
 
 // ── Project Layer ─────────────────────────────────────────────────────────────
@@ -322,7 +311,20 @@ export interface FpeQaAnswer {
   created_at: string
 }
 
-// ── Award & Contract ──────────────────────────────────────────────────────────
+// ── Per-unit award (new model) ────────────────────────────────────────────────
+
+export interface FpeProjectUnitAward {
+  id: string
+  project_id: string
+  project_unit_id: string
+  bid_id: string
+  partner_id: string
+  awarded_at: string
+  awarded_by: string | null
+  created_at: string
+}
+
+// ── Award & Contract (legacy whole-bid model) ─────────────────────────────────
 
 export interface FpeAward {
   id: string
@@ -384,7 +386,7 @@ export interface CreateFpePartnerInput {
   pais?: string
   iban?: string
   notas?: string
-  capability_unit_ids?: string[]
+  discipline_ids?: string[]
 }
 
 export interface UpsertProjectUnitInput {
@@ -405,13 +407,6 @@ export interface CreateTenderInput {
   project_id: string
   descripcion?: string
   fecha_limite: string
-}
-
-export interface CreateInvitationInput {
-  tender_id: string
-  partner_id: string
-  scope_unit_ids: string[]
-  token_expires_hours?: number   // default: 48
 }
 
 export interface SubmitBidInput {

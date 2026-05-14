@@ -1089,7 +1089,7 @@ export default function PortalPage({
                           if (!pd) return null
                           return (
                             <span key={ph.id} style={{ fontSize: 11, padding: '3px 9px', background: '#fff', borderRadius: 20, color: '#1A1A1A', border: '1px solid #BAD7F2' }}>
-                              {ph.nombre}: <strong style={{ color: '#0369A1' }}>{pd.duracion_dias}d</strong>
+                              {ph.nombre}: <strong style={{ color: '#0369A1' }}>{pd.duracion_dias} DL</strong>
                             </span>
                           )
                         })}
@@ -1220,7 +1220,7 @@ export default function PortalPage({
                                   onChange={e => setPhaseDays(prev => ({ ...prev, [phase.id]: parseInt(e.target.value) || 0 }))}
                                   style={{ width: 60, padding: '5px 8px', fontSize: 13, border: `1px solid ${days > 0 ? '#378ADD' : '#BFDBFE'}`, borderRadius: 5, fontFamily: 'monospace', color: '#1A1A1A', background: days > 0 ? '#E0F2FE' : '#fff', outline: 'none', textAlign: 'right' }}
                                 />
-                                <span style={{ fontSize: 11, color: '#9AC0E0' }}>días</span>
+                                <span style={{ fontSize: 11, color: '#9AC0E0' }}>DL</span>
                               </div>
                             </div>
                           )

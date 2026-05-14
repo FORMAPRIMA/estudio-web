@@ -18,6 +18,7 @@ interface Project {
   status: ProjectStatus
   readiness_score: number
   created_at: string
+  m2_construccion: number | null
 }
 
 interface LinkedProyecto { id: string; nombre: string; codigo: string | null }
@@ -94,6 +95,7 @@ function ProjectModal({
   const [direccion, setDireccion] = useState(initial?.direccion ?? '')
   const [ciudad, setCiudad] = useState(initial?.ciudad ?? '')
   const [linkedId, setLinkedId] = useState(initial?.linked_proyecto_id ?? '')
+  const [m2, setM2] = useState(initial?.m2_construccion != null ? String(initial.m2_construccion) : '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -102,12 +104,14 @@ function ProjectModal({
     if (!nombre.trim()) { setError('El nombre es obligatorio.'); return }
     setSaving(true); setError(null)
 
+    const m2Val = m2.trim() === '' ? null : parseFloat(m2)
     const payload = {
       nombre:             nombre.trim(),
       descripcion:        descripcion.trim() || null,
       direccion:          direccion.trim() || null,
       ciudad:             ciudad.trim() || null,
       linked_proyecto_id: linkedId || null,
+      m2_construccion:    m2Val,
     }
 
     if (initial) {
@@ -154,6 +158,15 @@ function ProjectModal({
               <div>
                 <label style={S.label}>Ciudad</label>
                 <input value={ciudad} onChange={e => setCiudad(e.target.value)} placeholder="Madrid" style={S.input} />
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 14 }}>
+              <div>
+                <label style={S.label}>m² de construcción</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input type="number" min={0} step={1} value={m2} onChange={e => setM2(e.target.value)} placeholder="0" style={S.input} />
+                  <span style={{ fontSize: 11, color: '#888', flexShrink: 0 }}>m²</span>
+                </div>
               </div>
             </div>
             {linkedProyectos.length > 0 && (

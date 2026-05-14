@@ -21,7 +21,7 @@ export default async function ExecutionPortalTokenPage({
         id, descripcion, fecha_limite, status,
         project:fpe_projects (
           id, nombre, descripcion, direccion, ciudad, tour_virtual_url,
-          fecha_inicio_obra, duracion_obra_semanas
+          fecha_inicio_obra, duracion_obra_semanas, m2_construccion
         )
       )
     `)
@@ -43,7 +43,7 @@ export default async function ExecutionPortalTokenPage({
   }
 
   const partner = inv.partner as unknown as { id: string; nombre: string; contacto_nombre: string | null; email_contacto: string | null }
-  const tender  = inv.tender  as unknown as { id: string; descripcion: string | null; fecha_limite: string; status: string; project: { id: string; nombre: string; descripcion: string | null; direccion: string | null; ciudad: string | null; tour_virtual_url: string | null; fecha_inicio_obra: string | null; duracion_obra_semanas: number | null } }
+  const tender  = inv.tender  as unknown as { id: string; descripcion: string | null; fecha_limite: string; status: string; project: { id: string; nombre: string; descripcion: string | null; direccion: string | null; ciudad: string | null; tour_virtual_url: string | null; fecha_inicio_obra: string | null; duracion_obra_semanas: number | null; m2_construccion: number | null } }
 
   if (expired || revoked) {
     return (
@@ -173,10 +173,10 @@ export default async function ExecutionPortalTokenPage({
   const [{ data: portalChaptersRaw }, { data: portalPhasesRaw }, { data: portalPhaseLinks }, { data: portalMilestones }, { data: portalChapterSettings }] =
     scopedTemplateUnitIds.length > 0
       ? await Promise.all([
-          // Chapters that contain scoped units (with duracion_pct + principal_discipline_id)
+          // Chapters that contain scoped units (with days range + principal_discipline_id)
           admin
             .from('fpe_template_chapters')
-            .select('id, nombre, orden, duracion_pct, principal_discipline_id')
+            .select('id, nombre, orden, duracion_pct, duracion_dias_min, duracion_dias_max, principal_discipline_id')
             .filter('id', 'in', `(${
               // We need the chapter IDs. Derive them from the invitation's project units.
               // Re-fetch units to get chapter_id.
@@ -186,9 +186,9 @@ export default async function ExecutionPortalTokenPage({
           admin.from('fpe_template_phases').select('id, chapter_id, nombre, orden, lead_time_days, duracion_pct, requiere_duracion').order('orden', { ascending: true }),
           admin.from('fpe_template_phase_milestone_links').select('phase_id, milestone_id, link_type'),
           admin.from('fpe_template_milestones').select('id, nombre, orden').order('orden', { ascending: true }),
-          // Project-level principal discipline overrides
+          // Project-level principal discipline + days overrides
           admin.from('fpe_project_chapter_settings')
-            .select('chapter_id, principal_discipline_id')
+            .select('chapter_id, principal_discipline_id, duracion_dias_override')
             .eq('project_id', tender.project.id),
         ])
       : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] }]
@@ -236,11 +236,13 @@ export default async function ExecutionPortalTokenPage({
   }
 
   // Build ScheduleChapter[] for parametric schedule
+  type ChWithDays = { duracion_dias_min: number | null; duracion_dias_max: number | null }
   const portalScheduleChapters: ScheduleChapter[] = chaptersWithPrincipal.map(ch => ({
-    id:           ch.id,
-    nombre:       ch.nombre,
-    orden:        ch.orden,
-    duracion_pct: (ch as unknown as { duracion_pct: number | null }).duracion_pct ?? 0,
+    id:                ch.id,
+    nombre:            ch.nombre,
+    orden:             ch.orden,
+    duracion_dias_min: (ch as unknown as ChWithDays).duracion_dias_min ?? null,
+    duracion_dias_max: (ch as unknown as ChWithDays).duracion_dias_max ?? null,
     phases: (portalPhasesByChapter[ch.id] ?? []).map(ph => ({
       id:           ph.id,
       chapter_id:   ph.chapter_id ?? ch.id,
@@ -251,6 +253,13 @@ export default async function ExecutionPortalTokenPage({
       requires:     portalRequiresMap[ph.id] ?? [],
     })),
   }))
+
+  // Per-project chapter days overrides
+  const portalChapterDaysOverrides: Record<string, number | null> = {}
+  for (const cs of portalChapterSettings ?? []) {
+    const ov = (cs as unknown as { duracion_dias_override: number | null }).duracion_dias_override
+    portalChapterDaysOverrides[cs.chapter_id] = ov ?? null
+  }
 
   // Phase ↔ line item links: determine which phases are relevant for this partner's line items
   const scopedPhaseIds = Object.values(portalPhasesByChapter).flat().filter(Boolean).map(ph => ph!.id)
@@ -290,15 +299,20 @@ export default async function ExecutionPortalTokenPage({
       })),
   }))
 
-  const { fecha_inicio_obra, duracion_obra_semanas } = tender.project
-  const portalSchedule = fecha_inicio_obra && duracion_obra_semanas && duracion_obra_semanas > 0
-    ? computeParametricSchedule(portalScheduleChapters, new Date(fecha_inicio_obra), duracion_obra_semanas)
+  const { fecha_inicio_obra, m2_construccion } = tender.project
+  const portalSchedule = fecha_inicio_obra
+    ? computeParametricSchedule(
+        portalScheduleChapters,
+        new Date(fecha_inicio_obra),
+        m2_construccion,
+        portalChapterDaysOverrides,
+      )
     : null
 
   // Map phaseId → ISO start date string (only start date goes to portal, no durations)
   const phaseStartDates: Record<string, string> = {}
   if (portalSchedule) {
-    for (const [phId, entry] of Object.entries(portalSchedule)) {
+    for (const [phId, entry] of Object.entries(portalSchedule.phases)) {
       phaseStartDates[phId] = entry.startDate.toISOString()
     }
   }

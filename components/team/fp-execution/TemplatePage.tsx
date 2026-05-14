@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -111,6 +111,8 @@ interface Chapter {
   orden: number
   activo: boolean
   duracion_pct: number
+  duracion_dias_min: number | null
+  duracion_dias_max: number | null
   principal_discipline_id: string | null
   label_cliente: string | null
   descripcion_cliente: string | null
@@ -197,7 +199,8 @@ function ChapterModal({
   const [nombre, setNombre] = useState(initial?.nombre ?? '')
   const [descripcion, setDescripcion] = useState(initial?.descripcion ?? '')
   const [orden, setOrden] = useState(String(initial?.orden ?? 0))
-  const [duracionPct, setDuracionPct] = useState(String(initial?.duracion_pct ?? 0))
+  const [diasMin, setDiasMin] = useState(initial?.duracion_dias_min != null ? String(initial.duracion_dias_min) : '')
+  const [diasMax, setDiasMax] = useState(initial?.duracion_dias_max != null ? String(initial.duracion_dias_max) : '')
   const [principalDiscId, setPrincipalDiscId] = useState<string>(initial?.principal_discipline_id ?? '')
   const [labelCliente, setLabelCliente] = useState(initial?.label_cliente ?? '')
   const [descripcionCliente, setDescripcionCliente] = useState(initial?.descripcion_cliente ?? '')
@@ -208,11 +211,22 @@ function ChapterModal({
 
   const activeDisciplines = disciplines.filter(d => d.activo)
 
+  // Preview de días estimados para un proyecto de 150m² (midpoint informativo)
+  const previewDays = (() => {
+    const min = parseFloat(diasMin)
+    const max = parseFloat(diasMax)
+    if (isNaN(min) || isNaN(max)) return null
+    // Interpolación lineal con clamp en [80, 300]
+    const t = (150 - 80) / (300 - 80)
+    return (min + t * (max - min)).toFixed(1)
+  })()
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!nombre.trim()) { setError('El nombre es obligatorio.'); return }
     setSaving(true); setError(null)
-    const pct  = parseFloat(duracionPct) || 0
+    const minVal = diasMin.trim() === '' ? null : parseFloat(diasMin)
+    const maxVal = diasMax.trim() === '' ? null : parseFloat(diasMax)
     const pdid = principalDiscId || null
 
     if (initial) {
@@ -220,7 +234,8 @@ function ChapterModal({
         nombre: nombre.trim(),
         descripcion: descripcion.trim() || null,
         orden: parseInt(orden) || 0,
-        duracion_pct: pct,
+        duracion_dias_min: minVal,
+        duracion_dias_max: maxVal,
         principal_discipline_id: pdid,
         label_cliente: labelCliente.trim() || null,
         descripcion_cliente: descripcionCliente.trim() || null,
@@ -228,12 +243,12 @@ function ChapterModal({
       })
       setSaving(false)
       if ('error' in res) { setError(res.error); return }
-      onSaved({ ...initial, nombre: nombre.trim(), descripcion: descripcion.trim() || null, orden: parseInt(orden) || 0, duracion_pct: pct, principal_discipline_id: pdid, label_cliente: labelCliente.trim() || null, descripcion_cliente: descripcionCliente.trim() || null, imagen_portada_url: imagenPortadaUrl })
+      onSaved({ ...initial, nombre: nombre.trim(), descripcion: descripcion.trim() || null, orden: parseInt(orden) || 0, duracion_dias_min: minVal, duracion_dias_max: maxVal, principal_discipline_id: pdid, label_cliente: labelCliente.trim() || null, descripcion_cliente: descripcionCliente.trim() || null, imagen_portada_url: imagenPortadaUrl })
     } else {
-      const res = await createChapter({ nombre: nombre.trim(), descripcion: descripcion.trim() || null, orden: parseInt(orden) || 0, duracion_pct: pct, principal_discipline_id: pdid })
+      const res = await createChapter({ nombre: nombre.trim(), descripcion: descripcion.trim() || null, orden: parseInt(orden) || 0, duracion_dias_min: minVal, duracion_dias_max: maxVal, principal_discipline_id: pdid })
       setSaving(false)
       if ('error' in res) { setError(res.error); return }
-      onSaved({ id: res.id, nombre: nombre.trim(), descripcion: descripcion.trim() || null, orden: parseInt(orden) || 0, activo: true, duracion_pct: pct, principal_discipline_id: pdid, label_cliente: null, descripcion_cliente: null, imagen_portada_url: null, phases: [], units: [] })
+      onSaved({ id: res.id, nombre: nombre.trim(), descripcion: descripcion.trim() || null, orden: parseInt(orden) || 0, activo: true, duracion_pct: 0, duracion_dias_min: minVal, duracion_dias_max: maxVal, principal_discipline_id: pdid, label_cliente: null, descripcion_cliente: null, imagen_portada_url: null, phases: [], units: [] })
     }
   }
 
@@ -254,15 +269,34 @@ function ChapterModal({
               <label style={S.label}>Descripción</label>
               <textarea rows={2} value={descripcion} onChange={e => setDescripcion(e.target.value)} placeholder="Descripción opcional…" style={S.textarea} />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px', gap: 14 }}>
-              <div>
-                <label style={S.label}>% del tiempo total de obra</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <input type="number" min={0} max={100} step={0.5} value={duracionPct} onChange={e => setDuracionPct(e.target.value)} style={S.input} />
-                  <span style={{ fontSize: 13, color: '#888', flexShrink: 0 }}>%</span>
+            <div>
+              <label style={S.label}>Duración estimada (días laborables)</label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 4 }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <input type="number" min={0} step={0.5} value={diasMin} onChange={e => setDiasMin(e.target.value)} placeholder="0" style={S.input} />
+                    <span style={{ fontSize: 11, color: '#888', flexShrink: 0 }}>DL</span>
+                  </div>
+                  <p style={{ margin: '3px 0 0', fontSize: 10, color: '#BBB' }}>Para proyecto de 80 m²</p>
                 </div>
-                <p style={{ margin: '3px 0 0', fontSize: 10, color: '#BBB' }}>Cuánto ocupa este capítulo del total de la obra</p>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <input type="number" min={0} step={0.5} value={diasMax} onChange={e => setDiasMax(e.target.value)} placeholder="0" style={S.input} />
+                    <span style={{ fontSize: 11, color: '#888', flexShrink: 0 }}>DL</span>
+                  </div>
+                  <p style={{ margin: '3px 0 0', fontSize: 10, color: '#BBB' }}>Para proyecto de 300 m²</p>
+                </div>
               </div>
+              {previewDays && (
+                <p style={{ margin: '8px 0 0', fontSize: 11, color: '#378ADD', fontWeight: 600 }}>
+                  Para un proyecto de 150 m²: ~{previewDays} días laborables
+                </p>
+              )}
+              <p style={{ margin: '4px 0 0', fontSize: 10, color: '#BBB' }}>
+                DL = Días Laborables (Lun-Vie, sin festivos). 5 DL = 1 semana.
+              </p>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr', gap: 14 }}>
               <div>
                 <label style={S.label}>Orden</label>
                 <input type="number" value={orden} onChange={e => setOrden(e.target.value)} style={S.input} />
@@ -460,6 +494,7 @@ function LineItemModal({
   chapterPhases,
   initial,
   disciplines,
+  reason,
   onClose,
   onSaved,
 }: {
@@ -467,6 +502,7 @@ function LineItemModal({
   chapterPhases: Phase[]
   initial: LineItem | null
   disciplines: Discipline[]
+  reason?: 'reassign'
   onClose: () => void
   onSaved: (item: LineItem) => void
 }) {
@@ -475,7 +511,14 @@ function LineItemModal({
   const [unidad, setUnidad] = useState(initial?.unidad_medida ?? 'ud')
   const [orden, setOrden] = useState(String(initial?.orden ?? 0))
   const [disciplineId, setDisciplineId] = useState<string>(initial?.discipline_id ?? '')
-  const [selectedPhaseIds, setSelectedPhaseIds] = useState<string[]>(initial?.phase_ids ?? [])
+  // Defensive filter: only keep phase ids that belong to this chapter. Drops legacy
+  // cross-chapter huérfanos so they get cleaned on the next save instead of being
+  // re-inserted invisibly.
+  const chapterPhaseIdSet = React.useMemo(() => new Set(chapterPhases.map(p => p.id)), [chapterPhases])
+  const initialPhaseIdsAll = initial?.phase_ids ?? []
+  const initialPhaseIdsValid = initialPhaseIdsAll.filter(id => chapterPhaseIdSet.has(id))
+  const orphanCount = initialPhaseIdsAll.length - initialPhaseIdsValid.length
+  const [selectedPhaseIds, setSelectedPhaseIds] = useState<string[]>(initialPhaseIdsValid)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -528,6 +571,16 @@ function LineItemModal({
         </div>
         <form onSubmit={handleSubmit}>
           <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {reason === 'reassign' && (
+              <div style={{ padding: '10px 12px', background: '#FFF7F4', border: '1px solid #F5D0C0', borderRadius: 6, fontSize: 12, color: '#92400E' }}>
+                Esta partida cambió de capítulo. Las fases anteriores fueron descartadas. Asigna las nuevas fases del capítulo actual y guarda.
+              </div>
+            )}
+            {!reason && orphanCount > 0 && (
+              <div style={{ padding: '10px 12px', background: '#FFF7F4', border: '1px solid #F5D0C0', borderRadius: 6, fontSize: 12, color: '#92400E' }}>
+                Se descartaron {orphanCount} asignación(es) de fases que ya no pertenecen a este capítulo. Revisa las fases y guarda para limpiar.
+              </div>
+            )}
             <div>
               <label style={S.label}>Nombre *</label>
               <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Ej: Excavación mecánica" style={S.input} autoFocus />
@@ -855,16 +908,30 @@ function UnitDetail({
   chapterPhases,
   disciplines,
   isReorderMode,
+  pendingEditItemId,
+  onPendingHandled,
   onUnitChanged,
 }: {
   unit: Unit
   chapterPhases: Phase[]
   disciplines: Discipline[]
   isReorderMode: boolean
+  pendingEditItemId: string | null
+  onPendingHandled: () => void
   onUnitChanged: (updated: Unit) => void
 }) {
-  const [lineItemModal, setLineItemModal] = useState<{ mode: 'create' } | { mode: 'edit'; item: LineItem } | null>(null)
+  const [lineItemModal, setLineItemModal] = useState<{ mode: 'create' } | { mode: 'edit'; item: LineItem; reason?: 'reassign' } | null>(null)
   const [deletingItem, setDeletingItem] = useState<LineItem | null>(null)
+
+  // After a cross-chapter move the parent sets pendingEditItemId; open the modal here.
+  useEffect(() => {
+    if (!pendingEditItemId) return
+    const item = unit.line_items.find(i => i.id === pendingEditItemId)
+    if (item) {
+      setLineItemModal({ mode: 'edit', item, reason: 'reassign' })
+      onPendingHandled()
+    }
+  }, [pendingEditItemId, unit.line_items, onPendingHandled])
 
   const discMap: Record<string, Discipline> = {}
   for (const d of disciplines) discMap[d.id] = d
@@ -940,6 +1007,7 @@ function UnitDetail({
           chapterPhases={chapterPhases}
           initial={lineItemModal.mode === 'edit' ? lineItemModal.item : null}
           disciplines={disciplines}
+          reason={lineItemModal.mode === 'edit' ? lineItemModal.reason : undefined}
           onClose={() => setLineItemModal(null)}
           onSaved={handleItemSaved}
         />
@@ -963,6 +1031,8 @@ function UnitRow({
   disciplines,
   isReorderMode,
   forceExpanded,
+  pendingEditItemId,
+  onPendingHandled,
   onUnitChanged,
   onUnitDeleted,
 }: {
@@ -971,6 +1041,8 @@ function UnitRow({
   disciplines: Discipline[]
   isReorderMode: boolean
   forceExpanded: boolean
+  pendingEditItemId: string | null
+  onPendingHandled: () => void
   onUnitChanged: (updated: Unit) => void
   onUnitDeleted: (id: string) => void
 }) {
@@ -1018,7 +1090,7 @@ function UnitRow({
 
       {expanded && (
         <div style={{ background: '#fff' }}>
-          <UnitDetail unit={unit} chapterPhases={chapterPhases} disciplines={disciplines} isReorderMode={isReorderMode} onUnitChanged={onUnitChanged} />
+          <UnitDetail unit={unit} chapterPhases={chapterPhases} disciplines={disciplines} isReorderMode={isReorderMode} pendingEditItemId={pendingEditItemId} onPendingHandled={onPendingHandled} onUnitChanged={onUnitChanged} />
         </div>
       )}
 
@@ -1048,6 +1120,8 @@ function ChapterRow({
   milestones,
   disciplines,
   isReorderMode,
+  pendingEditItemId,
+  onPendingHandled,
   onChapterChanged,
   onChapterDeleted,
 }: {
@@ -1055,6 +1129,8 @@ function ChapterRow({
   milestones: Milestone[]
   disciplines: Discipline[]
   isReorderMode: boolean
+  pendingEditItemId: string | null
+  onPendingHandled: () => void
   onChapterChanged: (updated: Chapter) => void
   onChapterDeleted: (id: string) => void
 }) {
@@ -1066,7 +1142,10 @@ function ChapterRow({
   const [deletingPhase, setDeletingPhase] = useState<Phase | null>(null)
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: 'ch-' + chapter.id })
-  const expanded = isReorderMode || expandedLocal
+  // Auto-expand if there's a pending edit on one of our line items (after cross-chapter move).
+  const hasPendingInThisChapter = pendingEditItemId !== null
+    && chapter.units.some(u => u.line_items.some(i => i.id === pendingEditItemId))
+  const expanded = isReorderMode || expandedLocal || hasPendingInThisChapter
 
   const handleDelete = async () => {
     const res = await deleteChapter(chapter.id)
@@ -1129,7 +1208,10 @@ function ChapterRow({
           <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', padding: '2px 6px', borderRadius: 3, background: '#D85A30', color: '#fff', flexShrink: 0 }}>MEM</span>
         )}
         <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', whiteSpace: 'nowrap' }}>
-          {chapter.duracion_pct > 0 ? `${chapter.duracion_pct}% · ` : ''}{chapter.units.length} unid. · {totalItems} part. · {chapter.phases.length} fases
+          {chapter.duracion_dias_min != null && chapter.duracion_dias_max != null
+            ? `${chapter.duracion_dias_min}–${chapter.duracion_dias_max} DL · `
+            : ''}
+          {chapter.units.length} unid. · {totalItems} part. · {chapter.phases.length} fases
         </span>
         {!isReorderMode && (
           <>
@@ -1218,7 +1300,9 @@ function ChapterRow({
                   chapterPhases={chapter.phases}
                   disciplines={disciplines}
                   isReorderMode={isReorderMode}
-                  forceExpanded={isReorderMode}
+                  forceExpanded={isReorderMode || (pendingEditItemId !== null && unit.line_items.some(i => i.id === pendingEditItemId))}
+                  pendingEditItemId={pendingEditItemId}
+                  onPendingHandled={onPendingHandled}
                   onUnitChanged={handleUnitChanged}
                   onUnitDeleted={handleUnitDeleted}
                 />
@@ -1963,6 +2047,9 @@ export default function TemplatePage({
   const [addingChapter, setAddingChapter] = useState(false)
   const [isReorderMode, setIsReorderMode] = useState(false)
   const [activeDrag, setActiveDrag] = useState<ActiveDrag | null>(null)
+  // After a cross-chapter move of a line item we ask the user to reassign its phases by
+  // auto-opening the edit modal on the destination unit.
+  const [pendingEditItemId, setPendingEditItemId] = useState<string | null>(null)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
   const totalUnits  = chapters.reduce((a, c) => a + c.units.length, 0)
@@ -1995,7 +2082,7 @@ export default function TemplatePage({
     }
   }
 
-  function handleDragEnd(event: DragEndEvent) {
+  async function handleDragEnd(event: DragEndEvent) {
     setActiveDrag(null)
     const { active, over } = event
     if (!over || active.id === over.id) return
@@ -2055,7 +2142,13 @@ export default function TemplatePage({
           const idx = targetSorted.findIndex(u => u.id === overUnitId)
           if (idx !== -1) insertIdx = idx
         }
-        const movedUnit = { ...unit, chapter_id: targetChapter.id }
+        // Cross-chapter move clears phase_links of all line items in this unit (server side).
+        // Mirror it in local state so the UI matches.
+        const movedUnit = {
+          ...unit,
+          chapter_id: targetChapter.id,
+          line_items: unit.line_items.map(li => ({ ...li, phase_ids: [] })),
+        }
         const newTargetUnits = [...targetSorted.slice(0, insertIdx), movedUnit, ...targetSorted.slice(insertIdx)]
           .map((u, i) => ({ ...u, orden: i }))
         const newSourceUnits = sourceChapter.units
@@ -2068,7 +2161,12 @@ export default function TemplatePage({
           return c
         }))
         const newUnitOrder = newTargetUnits.findIndex(u => u.id === unitId)
-        moveUnit(unitId, targetChapter.id, newUnitOrder)
+        const moveRes = await moveUnit(unitId, targetChapter.id, newUnitOrder)
+        if ('error' in moveRes) {
+          alert(moveRes.error)
+        } else if (moveRes.phasesCleared > 0) {
+          alert(`La unidad cambió de capítulo. Se descartaron ${moveRes.phasesCleared} asignación(es) de fases en sus partidas. Edita cada partida para reasignar fases del nuevo capítulo.`)
+        }
         reorderUnits(newTargetUnits.map(u => u.id))
         if (newSourceUnits.length > 0) reorderUnits(newSourceUnits.map(u => u.id))
       }
@@ -2130,7 +2228,14 @@ export default function TemplatePage({
           const idx = targetSorted.findIndex(i => i.id === overLiId)
           if (idx !== -1) insertIdx = idx
         }
-        const movedItem = { ...item, unit_id: targetUnit.id }
+        // If the target unit is in a different chapter, phase_links will be cleared server-side.
+        // Mirror that locally so the UI matches.
+        const isCrossChapter = sourceUnit.chapter_id !== targetUnit.chapter_id
+        const movedItem = {
+          ...item,
+          unit_id: targetUnit.id,
+          phase_ids: isCrossChapter ? [] : item.phase_ids,
+        }
         const newTargetItems = [...targetSorted.slice(0, insertIdx), movedItem, ...targetSorted.slice(insertIdx)]
           .map((i, idx) => ({ ...i, orden: idx }))
         // Normalize orden of remaining source items to 0-based
@@ -2148,7 +2253,13 @@ export default function TemplatePage({
         })))
         // Persist unit_id change + full order for both affected units
         const newOrder = newTargetItems.findIndex(i => i.id === liId)
-        moveLineItem(liId, targetUnit.id, newOrder)
+        const moveRes = await moveLineItem(liId, targetUnit.id, newOrder)
+        if ('error' in moveRes) {
+          alert(moveRes.error)
+        } else if (moveRes.phasesCleared > 0) {
+          // Auto-open the edit modal on the destination unit so the user reassigns phases.
+          setPendingEditItemId(liId)
+        }
         reorderLineItems(newTargetItems.map(i => i.id))
         if (newSourceItems.length > 0) reorderLineItems(newSourceItems.map(i => i.id))
       }
@@ -2226,6 +2337,8 @@ export default function TemplatePage({
                 milestones={milestones}
                 disciplines={disciplines}
                 isReorderMode={isReorderMode}
+                pendingEditItemId={pendingEditItemId}
+                onPendingHandled={() => setPendingEditItemId(null)}
                 onChapterChanged={updated => setChapters(prev => prev.map(c => c.id === updated.id ? updated : c))}
                 onChapterDeleted={id => setChapters(prev => prev.filter(c => c.id !== id))}
               />

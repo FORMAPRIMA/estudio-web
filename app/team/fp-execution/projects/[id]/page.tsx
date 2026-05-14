@@ -31,6 +31,7 @@ export default async function FpeProjectDetailPage({
         id, nombre, descripcion, direccion, ciudad,
         linked_proyecto_id, status, readiness_score, created_at,
         tour_virtual_url, fecha_inicio_obra, duracion_obra_semanas,
+        m2_construccion, duracion_factor,
         project_units:fpe_project_units (
           id, template_unit_id, notas, orden,
           line_items:fpe_project_line_items (
@@ -45,7 +46,7 @@ export default async function FpeProjectDetailPage({
     supabase
       .from('fpe_template_chapters')
       .select(`
-        id, nombre, orden, duracion_pct, principal_discipline_id,
+        id, nombre, orden, duracion_pct, duracion_dias_min, duracion_dias_max, principal_discipline_id,
         units:fpe_template_units (
           id, nombre, descripcion, orden, activo, principal_discipline_id,
           line_items:fpe_template_line_items (
@@ -131,7 +132,7 @@ export default async function FpeProjectDetailPage({
             .select('phase_id, milestone_id, link_type'),
           admin
             .from('fpe_project_chapter_settings')
-            .select('chapter_id, principal_discipline_id')
+            .select('chapter_id, principal_discipline_id, duracion_dias_override')
             .eq('project_id', params.id),
         ])
       : [{ data: [] }, { data: [] }, { data: [] }]
@@ -151,6 +152,13 @@ export default async function FpeProjectDetailPage({
   const chapterSettingsMap: Record<string, string | null> = {}
   for (const cs of chapterSettings ?? []) chapterSettingsMap[cs.chapter_id] = cs.principal_discipline_id
 
+  // Build per-project chapter days overrides
+  const chapterDaysOverrides: Record<string, number | null> = {}
+  for (const cs of chapterSettings ?? []) {
+    const ov = (cs as unknown as { duracion_dias_override: number | null }).duracion_dias_override
+    chapterDaysOverrides[cs.chapter_id] = ov ?? null
+  }
+
   // Group phases by chapter_id
   const phasesByChapter: Record<string, typeof schedulePhasesRaw> = {}
   for (const ph of schedulePhasesRaw ?? []) {
@@ -159,13 +167,15 @@ export default async function FpeProjectDetailPage({
   }
 
   // Build ScheduleChapter[] from scoped chapters
+  type ChapterWithDays = { duracion_dias_min: number | null; duracion_dias_max: number | null }
   const scheduleChapters: ScheduleChapter[] = (chapters ?? [])
     .filter(ch => scopedChapterIds.includes(ch.id))
     .map(ch => ({
-      id:          ch.id,
-      nombre:      ch.nombre,
-      orden:       ch.orden,
-      duracion_pct: (ch as unknown as { duracion_pct: number | null }).duracion_pct ?? 0,
+      id:                ch.id,
+      nombre:            ch.nombre,
+      orden:             ch.orden,
+      duracion_dias_min: (ch as unknown as ChapterWithDays).duracion_dias_min ?? null,
+      duracion_dias_max: (ch as unknown as ChapterWithDays).duracion_dias_max ?? null,
       phases: (phasesByChapter[ch.id] ?? []).map(ph => ({
         id:           ph.id,
         chapter_id:   ph.chapter_id ?? ch.id,
@@ -225,53 +235,57 @@ export default async function FpeProjectDetailPage({
   const puByTemplateUnitId: Record<string, typeof project.project_units[0]> = {}
   for (const pu of (project.project_units ?? [])) puByTemplateUnitId[pu.template_unit_id] = pu
 
+  // Disciplines lookup (by id) to enrich partner tags
+  const disciplinesById: Record<string, { id: string; nombre: string; color: string; orden: number }> = {}
+  for (const d of (disciplines ?? [])) disciplinesById[d.id] = d as { id: string; nombre: string; color: string; orden: number }
+
   // Build scopedChapters for DocumentHub: chapters with ≥1 selected UE
+  // For each UE, compute principal_discipline_id (unit's own OR chapter fallback)
   const scopedChapters: ScopedChapter[] = (chapters ?? [])
-    .map(ch => ({
-      id:    ch.id,
-      nombre: ch.nombre,
-      units: ch.units
-        .filter(u => u.activo && puByTemplateUnitId[u.id])
-        .map(u => {
-          const pu = puByTemplateUnitId[u.id]
-          return {
-            project_unit_id:  pu.id,
-            template_unit_id: u.id,
-            chapter_id:       ch.id,
-            nombre:           u.nombre,
-            line_items: u.line_items
-              .filter(li => li.activo)
-              .map(li => {
-                const existing = pu.line_items.find(pli => pli.template_line_item_id === li.id)
-                return {
-                  template_line_item_id: li.id,
-                  nombre:       li.nombre,
-                  unidad_medida: li.unidad_medida,
-                  cantidad:     existing?.cantidad ?? 0,
-                  incluida:     !!existing,
-                }
-              }),
-          }
-        }),
-    }))
+    .map(ch => {
+      const chDisc = (ch as unknown as { principal_discipline_id: string | null }).principal_discipline_id
+      return {
+        id:    ch.id,
+        nombre: ch.nombre,
+        units: ch.units
+          .filter(u => u.activo && puByTemplateUnitId[u.id])
+          .map(u => {
+            const pu = puByTemplateUnitId[u.id]
+            const unitDisc = (u as unknown as { principal_discipline_id: string | null }).principal_discipline_id
+            return {
+              project_unit_id:  pu.id,
+              template_unit_id: u.id,
+              chapter_id:       ch.id,
+              nombre:           u.nombre,
+              principal_discipline_id: unitDisc ?? chDisc ?? null,
+              line_items: u.line_items
+                .filter(li => li.activo)
+                .map(li => {
+                  const existing = pu.line_items.find(pli => pli.template_line_item_id === li.id)
+                  return {
+                    template_line_item_id: li.id,
+                    nombre:       li.nombre,
+                    unidad_medida: li.unidad_medida,
+                    cantidad:     existing?.cantidad ?? 0,
+                    incluida:     !!existing,
+                  }
+                }),
+            }
+          }),
+      }
+    })
     .filter(ch => ch.units.length > 0)
 
-  // Build discipline → template_unit_ids map (based on principal_discipline_id on each unit)
+  // Build partnersForDocs: each partner exposes its disciplines (id + nombre + color)
   type PartnerRaw = { id: string; nombre: string; email_contacto: string | null; telefono: string | null; partner_disciplines: { discipline_id: string }[] }
-  const disciplineToUnitIds: Record<string, string[]> = {}
-  for (const ch of (chapters ?? [])) {
-    for (const u of ch.units) {
-      if (!u.activo) continue
-      const disc = (u as unknown as { principal_discipline_id: string | null }).principal_discipline_id
-      if (disc) disciplineToUnitIds[disc] = [...(disciplineToUnitIds[disc] ?? []), u.id]
-    }
-  }
-
-  // Build partnersForDocs: each partner's unit_ids derived from their discipline capabilities
   const partnersForDocs: PartnerForDocs[] = ((partners ?? []) as unknown as PartnerRaw[]).map(p => ({
-    id:       p.id,
-    nombre:   p.nombre,
-    unit_ids: (p.partner_disciplines ?? []).flatMap(c => disciplineToUnitIds[c.discipline_id] ?? []),
+    id:     p.id,
+    nombre: p.nombre,
+    disciplines: (p.partner_disciplines ?? [])
+      .map(c => disciplinesById[c.discipline_id])
+      .filter((d): d is { id: string; nombre: string; color: string; orden: number } => !!d)
+      .sort((a, b) => a.orden - b.orden)
+      .map(d => ({ id: d.id, nombre: d.nombre, color: d.color })),
   }))
 
   // Build unitPartnersMap: project_unit_id → partner_ids[]
@@ -287,31 +301,25 @@ export default async function FpeProjectDetailPage({
     .filter(([, pu]) => memoriaProjectUnitIds.has(pu.id))
     .map(([templateUnitId]) => templateUnitId)
 
-  // Compute scopedDisciplineIds: disciplines appearing on any line item in the project scope
-  const scopedTemplateLineItemDisciplines = new Set<string>()
-  for (const ch of (chapters ?? [])) {
-    for (const u of ch.units) {
-      if (!puByTemplateUnitId[u.id]) continue
-      for (const li of u.line_items) {
-        const disc = (li as unknown as { discipline_id: string | null }).discipline_id
-        if (disc) scopedTemplateLineItemDisciplines.add(disc)
-      }
-    }
-  }
-  const scopedDisciplineIds = Array.from(scopedTemplateLineItemDisciplines)
-
-  // Partners for TenderPanel (with telefono, without capabilities field)
+  // Partners for TenderPanel (with telefono + disciplines for filtering)
   const tendersPartners = ((partners ?? []) as unknown as PartnerRaw[]).map(p => ({
     id:             p.id,
     nombre:         p.nombre,
     email_contacto: p.email_contacto,
     telefono:       p.telefono,
+    disciplines: (p.partner_disciplines ?? [])
+      .map(c => disciplinesById[c.discipline_id])
+      .filter((d): d is { id: string; nombre: string; color: string; orden: number } => !!d)
+      .sort((a, b) => a.orden - b.orden)
+      .map(d => ({ id: d.id, nombre: d.nombre, color: d.color })),
   }))
 
   type ProjectExtended = typeof project & {
     tour_virtual_url: string | null
     fecha_inicio_obra: string | null
     duracion_obra_semanas: number | null
+    m2_construccion: number | null
+    duracion_factor: number | null
   }
   const projectExt = project as unknown as ProjectExtended
 
@@ -328,13 +336,14 @@ export default async function FpeProjectDetailPage({
       initialTender={(tender ?? null) as unknown as FpeTender | null}
       partners={tendersPartners}
       disciplines={(disciplines ?? []) as { id: string; nombre: string; color: string; orden: number }[]}
-      scopedDisciplineIds={scopedDisciplineIds}
       renderUrls={renderUrls}
       tourVirtualUrl={projectExt.tour_virtual_url ?? null}
       scheduleChapters={scheduleChapters}
       scheduleMilestones={(milestones ?? []) as ScheduleMilestone[]}
       initialFechaInicio={projectExt.fecha_inicio_obra ?? null}
-      initialDuracionSemanas={projectExt.duracion_obra_semanas ?? 0}
+      initialM2={projectExt.m2_construccion ?? null}
+      initialChapterDaysOverrides={chapterDaysOverrides}
+      initialDuracionFactor={projectExt.duracion_factor ?? 1.0}
       chapterSettingsMap={chapterSettingsMap}
       memoriaUnitIds={memoriaTemplateUnitIds}
     />
