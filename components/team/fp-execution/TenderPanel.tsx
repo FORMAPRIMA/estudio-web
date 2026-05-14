@@ -7,6 +7,7 @@ import {
   closeTender,
   revokeInvitation,
   createAndSendDisciplineInvitations,
+  upsertTenderFechaLimite,
 } from '@/app/actions/fpe-tenders'
 import BidComparison from '@/components/team/fp-execution/BidComparison'
 import QAPanel from '@/components/team/fp-execution/QAPanel'
@@ -605,11 +606,15 @@ function PartnerPaymentSummary({
   const [showRef, setShowRef]                = useState(false)
   const [creating, setCreating]              = useState(false)
   const [err, setErr]                        = useState<string | null>(null)
+  // Si "Personalizar plan" crea una invitación pending, guardamos su id
+  // localmente para poder abrir el modal sin esperar al refresh del padre.
+  const [pendingInvId, setPendingInvId]      = useState<string | null>(null)
+  const effectiveInvId = invitationId ?? pendingInvId
 
   const load = async () => {
     setLoading(true); setErr(null)
-    if (invitationId) {
-      const res = await getInvitationPaymentPlan(invitationId)
+    if (effectiveInvId) {
+      const res = await getInvitationPaymentPlan(effectiveInvId)
       setLoading(false)
       if ('error' in res) { setPersistedPlan([]); return }
       setPersistedPlan(res.plan)
@@ -643,7 +648,7 @@ function PartnerPaymentSummary({
     }
   }
 
-  useEffect(() => { void load() /* eslint-disable-next-line */ }, [invitationId, partnerId, projectId])
+  useEffect(() => { void load() /* eslint-disable-next-line */ }, [effectiveInvId, partnerId, projectId])
 
   const handlePersonalize = async () => {
     if (!fechaLimiteDefault) {
@@ -654,11 +659,12 @@ function PartnerPaymentSummary({
     const res = await createPendingInvitationForPartner(projectId, partnerId, fechaLimiteDefault)
     setCreating(false)
     if ('error' in res) { setErr(res.error); return }
+    setPendingInvId(res.invitation_id)
     onInvitationCreated(res.invitation_id)
     setOpenModal(true)
   }
 
-  const isPreview = !invitationId
+  const isPreview = !effectiveInvId
   const items: { nombre: string; pct: number; trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery'; milestone_id: string | null }[] =
     isPreview
       ? (previewPlan ?? [])
@@ -774,9 +780,9 @@ function PartnerPaymentSummary({
         {err && <div style={{ marginTop: 6, fontSize: 11, color: '#DC2626' }}>✗ {err}</div>}
       </div>
 
-      {openModal && invitationId && (
+      {openModal && effectiveInvId && (
         <PartnerPaymentPlanModal
-          invitationId={invitationId}
+          invitationId={effectiveInvId}
           partnerNombre={partnerNombre}
           onClose={() => setOpenModal(false)}
           onSaved={() => { void load() }}
@@ -817,7 +823,9 @@ export default function TenderPanel({
   const [unitPartnersMap, setUPM]         = useState<Record<string, string[]>>(initialUnitPartners)
   const [projectStatus, setProjStatus]     = useState(initialProjectStatus)
   const [view, setView]                   = useState<'by_unit' | 'by_partner'>('by_unit')
-  const [fechaLimite, setFechaLimite]     = useState('')
+  // Inicializa desde el tender existente; el autosave persiste cualquier cambio.
+  const [fechaLimite, setFechaLimite]     = useState(initialTender?.fecha_limite ?? '')
+  const [fechaStatus, setFechaStatus]     = useState<'idle' | 'saving' | 'saved' | 'err'>('idle')
   const [sending, setSending]             = useState(false)
   const [closing, setClosing]             = useState(false)
   const [contracting, setContracting]     = useState(false)
@@ -829,6 +837,23 @@ export default function TenderPanel({
     setMsg({ type, text })
     setTimeout(() => setMsg(null), 4500)
   }
+
+  // Autosave de la fecha límite (debounced 700ms). Reusa o crea tender draft.
+  const fechaTimer    = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isFirstFecha  = useRef(true)
+  useEffect(() => {
+    if (isFirstFecha.current) { isFirstFecha.current = false; return }
+    if (!fechaLimite) return
+    if (fechaTimer.current) clearTimeout(fechaTimer.current)
+    fechaTimer.current = setTimeout(async () => {
+      setFechaStatus('saving')
+      const res = await upsertTenderFechaLimite(projectId, fechaLimite)
+      if ('error' in res) { setFechaStatus('err'); return }
+      setFechaStatus('saved')
+      setTimeout(() => setFechaStatus('idle'), 2000)
+    }, 700)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fechaLimite])
 
   // ── Derived data ──────────────────────────────────────────────────────────
 
@@ -1029,7 +1054,17 @@ export default function TenderPanel({
       {(!isLaunched || canSendMore) && (
         <div style={{ background: '#fff', borderRadius: 10, border: '1px solid #E8E6E0', padding: '16px 20px', display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap', marginBottom: 16 }}>
           <div style={{ flex: 1, minWidth: 200, maxWidth: 240 }}>
-            <label style={S.label}>Fecha límite de ofertas *</label>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <span style={S.label}>Fecha límite de ofertas *</span>
+              {fechaStatus !== 'idle' && (
+                <span style={{
+                  fontSize: 10, fontWeight: 600,
+                  color: fechaStatus === 'err' ? '#DC2626' : fechaStatus === 'saved' ? '#059669' : '#888',
+                }}>
+                  {fechaStatus === 'saving' ? 'Guardando…' : fechaStatus === 'saved' ? '✓ Guardado' : '✗ Error'}
+                </span>
+              )}
+            </div>
             <input
               type="date"
               value={fechaLimite}

@@ -86,6 +86,47 @@ export async function updateTender(
   }
 }
 
+// Autosave de fecha límite desde el TenderPanel. Si no hay tender, crea uno
+// en estado 'draft' para persistir la fecha. Si hay tender activo (draft,
+// launched, closed), actualiza el campo. Cancelados se ignoran.
+export async function upsertTenderFechaLimite(
+  project_id: string,
+  fecha_limite: string,
+): Promise<{ success: true; tender_id: string } | { error: string }> {
+  try {
+    await requireManagerOrPartner()
+    const admin = createAdminClient()
+
+    const { data: existing } = await admin
+      .from('fpe_tenders')
+      .select('id')
+      .eq('project_id', project_id)
+      .not('status', 'in', '("cancelled")')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (existing) {
+      const { error } = await admin
+        .from('fpe_tenders')
+        .update({ fecha_limite, updated_at: new Date().toISOString() })
+        .eq('id', existing.id)
+      if (error) return { error: error.message }
+      return { success: true, tender_id: existing.id }
+    }
+
+    const { data: created, error: insErr } = await admin
+      .from('fpe_tenders')
+      .insert({ project_id, fecha_limite, status: 'draft' })
+      .select('id')
+      .single()
+    if (insErr || !created) return { error: insErr?.message ?? 'Error creando licitación.' }
+    return { success: true, tender_id: created.id }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
 export async function launchTender(
   tender_id: string,
   project_id: string
