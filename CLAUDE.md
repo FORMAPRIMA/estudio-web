@@ -5,6 +5,17 @@
 
 ---
 
+## 0. Estilo de respuesta preferido
+
+Respuestas **concisas y conversacionales**. Nada de muros de texto con especificaciones
+técnicas detalladas, mockups ASCII, listas exhaustivas de cambios en código o tablas
+comparativas largas en una primera vuelta. Prefiero ir desarrollando ideas pregunta
+a pregunta: tú das una respuesta breve con una recomendación o pregunta acotada,
+yo respondo, y vamos avanzando. Si el plan necesita detalle técnico, dame el titular
+y espera a que pida los detalles.
+
+---
+
 ## 1. Descripción general
 
 **Forma Prima** (`GEINEX GROUP, S.L.`) es un estudio de arquitectura y diseño.

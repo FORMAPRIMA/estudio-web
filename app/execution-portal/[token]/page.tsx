@@ -318,26 +318,43 @@ export default async function ExecutionPortalTokenPage({
   }
 
   // ── Payment schedule ────────────────────────────────────────────────────────
+  // Prioridad: plan materializado por invitación. Si no existe (caso legacy o
+  // invitación previa al plan), fallback a los hitos de la disciplina gobernante.
   const govDisciplineId = (inv.governing_discipline_id as string | null) ?? null
 
-  const { data: paymentMilestonesRaw } = govDisciplineId
-    ? await admin
-        .from('fpe_discipline_payment_milestones')
-        .select('id, nombre, pct, trigger_type, milestone_id, orden')
-        .eq('discipline_id', govDisciplineId)
-        .order('orden', { ascending: true })
-    : { data: [] as { id: string; nombre: string; pct: number; trigger_type: string; milestone_id: string | null; orden: number }[] }
+  const { data: invitationPlanRaw } = await admin
+    .from('fpe_invitation_payment_plan')
+    .select('id, nombre, pct, trigger_type, milestone_id, orden')
+    .eq('invitation_id', inv.id)
+    .order('orden', { ascending: true })
 
   const milestoneNameMap: Record<string, string> = {}
   for (const m of portalMilestones ?? []) milestoneNameMap[m.id] = m.nombre
 
-  const paymentScheduleForUI = (paymentMilestonesRaw ?? []).map(pm => ({
-    id:              pm.id,
-    nombre:          pm.nombre,
-    pct:             pm.pct,
-    trigger_type:    pm.trigger_type as 'contract_signed' | 'milestone_achieved' | 'delivery',
-    milestone_nombre: pm.milestone_id ? (milestoneNameMap[pm.milestone_id] ?? null) : null,
-  }))
+  let paymentScheduleForUI: { id: string; nombre: string; pct: number; trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery'; milestone_nombre: string | null }[] = []
+
+  if (invitationPlanRaw && invitationPlanRaw.length > 0) {
+    paymentScheduleForUI = invitationPlanRaw.map(p => ({
+      id:               p.id,
+      nombre:           p.nombre,
+      pct:              p.pct,
+      trigger_type:     p.trigger_type as 'contract_signed' | 'milestone_achieved' | 'delivery',
+      milestone_nombre: p.milestone_id ? (milestoneNameMap[p.milestone_id] ?? null) : null,
+    }))
+  } else if (govDisciplineId) {
+    const { data: paymentMilestonesRaw } = await admin
+      .from('fpe_discipline_payment_milestones')
+      .select('id, nombre, pct, trigger_type, milestone_id, orden')
+      .eq('discipline_id', govDisciplineId)
+      .order('orden', { ascending: true })
+    paymentScheduleForUI = (paymentMilestonesRaw ?? []).map(pm => ({
+      id:               pm.id,
+      nombre:           pm.nombre,
+      pct:              pm.pct,
+      trigger_type:     pm.trigger_type as 'contract_signed' | 'milestone_achieved' | 'delivery',
+      milestone_nombre: pm.milestone_id ? (milestoneNameMap[pm.milestone_id] ?? null) : null,
+    }))
+  }
 
   // Generate signed URLs for image docs (hero renders, max 8, 4-hour TTL)
   const IMAGE_EXTS = ['jpg','jpeg','png','webp','svg','gif']

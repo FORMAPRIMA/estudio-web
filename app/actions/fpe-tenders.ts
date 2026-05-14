@@ -364,6 +364,17 @@ export async function createAndSendDisciplineInvitations(
 
       if (invErr || !inv) continue
 
+      // Seed automático del plan de pago de esta invitación con estrategia
+      // "dominant" (disciplina con más UEs del partner). Fallo silencioso:
+      // si no hay hitos configurados para esa disciplina, la invitación queda
+      // sin plan y se podrá editar después desde el modal.
+      try {
+        const mod = await import('./fpe-payment')
+        await mod.regenerateInvitationPaymentPlan(inv.id, 'dominant')
+      } catch {
+        // ignorar
+      }
+
       const { data: partner } = await admin
         .from('fpe_partners')
         .select('nombre, email_notificaciones, email_contacto')

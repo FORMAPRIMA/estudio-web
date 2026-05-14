@@ -10,6 +10,9 @@ import {
 } from '@/app/actions/fpe-tenders'
 import BidComparison from '@/components/team/fp-execution/BidComparison'
 import QAPanel from '@/components/team/fp-execution/QAPanel'
+import PartnerPaymentPlanModal from '@/components/team/fp-execution/PartnerPaymentPlanModal'
+import { getInvitationPaymentPlan } from '@/app/actions/fpe-payment'
+import type { FpeInvitationPaymentPlanItem } from '@/lib/fp-execution/domain'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -497,6 +500,9 @@ function ByPartnerView({
                 ))}
               </div>
 
+              {/* Payment plan */}
+              {inv && <PartnerPaymentSummary invitationId={inv.id} partnerNombre={partner?.nombre ?? pid} />}
+
               {/* Invitation meta */}
               {inv && (
                 <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 11, color: '#888', paddingTop: 8, borderTop: '1px solid #F0EEE8' }}>
@@ -533,6 +539,80 @@ function ByPartnerView({
         )
       })}
     </div>
+  )
+}
+
+// ── Partner Payment Summary (resumen del plan en la card) ────────────────────
+
+const TRIGGER_SHORT: Record<'contract_signed' | 'milestone_achieved' | 'delivery', string> = {
+  contract_signed:    'Firma',
+  milestone_achieved: 'Hito ejec.',
+  delivery:           'Entrega',
+}
+
+function PartnerPaymentSummary({ invitationId, partnerNombre }: { invitationId: string; partnerNombre: string }) {
+  const [plan, setPlan] = useState<FpeInvitationPaymentPlanItem[] | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [open, setOpen] = useState(false)
+
+  const load = async () => {
+    setLoading(true)
+    const res = await getInvitationPaymentPlan(invitationId)
+    setLoading(false)
+    if ('error' in res) { setPlan([]); return }
+    setPlan(res.plan)
+  }
+
+  useEffect(() => { void load() /* eslint-disable-next-line */ }, [invitationId])
+
+  const total = (plan ?? []).reduce((s, p) => s + Number(p.pct), 0)
+  const totalOk = Math.abs(total - 100) < 0.01
+
+  return (
+    <>
+      <div style={{ paddingTop: 10, borderTop: '1px solid #F0EEE8' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={S.label}>Plan de pago propuesto</span>
+            {plan && plan.length > 0 && (
+              <span style={{ fontSize: 10, color: totalOk ? '#059669' : '#DC2626', fontWeight: 600 }}>
+                {plan.length} hito{plan.length !== 1 ? 's' : ''} · {total.toFixed(0)}%
+              </span>
+            )}
+          </div>
+          <button onClick={() => setOpen(true)} style={{ padding: '4px 10px', fontSize: 10, fontWeight: 600, background: '#fff', color: '#1A1A1A', border: '1px solid #E8E6E0', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit' }}>
+            Editar plan
+          </button>
+        </div>
+        {loading ? (
+          <span style={{ fontSize: 11, color: '#BBB', fontStyle: 'italic' }}>Cargando plan…</span>
+        ) : !plan || plan.length === 0 ? (
+          <span style={{ fontSize: 11, color: '#999', fontStyle: 'italic' }}>
+            Sin hitos de pago. Pulsa &quot;Editar plan&quot; para configurarlos.
+          </span>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {plan.map((p, i) => (
+              <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '24px 1fr 60px 100px', gap: 8, padding: '5px 8px', background: '#FAFAF8', borderRadius: 4, fontSize: 11, color: '#555', alignItems: 'center' }}>
+                <span style={{ color: '#999' }}>{i + 1}</span>
+                <span style={{ color: '#1A1A1A' }}>{p.nombre}</span>
+                <span style={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 600, color: '#1A1A1A' }}>{Number(p.pct).toFixed(2)}%</span>
+                <span style={{ fontSize: 10, color: '#888', textAlign: 'right' }}>{TRIGGER_SHORT[p.trigger_type]}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {open && (
+        <PartnerPaymentPlanModal
+          invitationId={invitationId}
+          partnerNombre={partnerNombre}
+          onClose={() => setOpen(false)}
+          onSaved={() => { void load() }}
+        />
+      )}
+    </>
   )
 }
 

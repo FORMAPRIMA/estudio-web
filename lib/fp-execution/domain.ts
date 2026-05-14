@@ -110,6 +110,22 @@ export interface FpeDisciplinePaymentMilestone {
   updated_at: string
 }
 
+export interface FpeInvitationPaymentPlanItem {
+  id: string
+  invitation_id: string
+  nombre: string
+  pct: number
+  trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery'
+  milestone_id: string | null
+  source_discipline_id: string | null
+  orden: number
+  notas: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type PaymentPlanSeedStrategy = 'dominant' | 'blended' | 'concatenated'
+
 export interface FpeContractPaymentSchedule {
   id: string
   contract_id: string
