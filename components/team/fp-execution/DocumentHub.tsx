@@ -610,6 +610,13 @@ function UeCard({
   const ptTimer  = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isFirstQty = useRef(true)
   const isFirstPt  = useRef(true)
+  const qtyDirty = useRef(false)
+  const ptDirty  = useRef(false)
+
+  // Snapshot del estado más reciente para que el flush en unmount lo lea
+  // (los closures de los useEffect podrían tener valores stale)
+  const stateRef = useRef({ quantities, includedItems, selectedPartners })
+  stateRef.current = { quantities, includedItems, selectedPartners }
 
   const toggleLineItem = (id: string) => {
     setIncludedItems(prev => {
@@ -619,43 +626,77 @@ function UeCard({
     })
   }
 
-  // Autosave: line items (cantidad + inclusión) — debounced 700ms tras última edición
+  // Save de cantidades. `silent` = no toca estado de UI (para usar en unmount).
+  const flushQty = useCallback(async (silent = false) => {
+    qtyDirty.current = false
+    const { quantities: q, includedItems: ii } = stateRef.current
+    const line_items = unit.line_items
+      .filter(li => ii.has(li.template_line_item_id))
+      .map(li => ({
+        template_line_item_id: li.template_line_item_id,
+        cantidad: q[li.template_line_item_id] ?? 0,
+      }))
+    if (!silent) setQtyStatus({ type: 'saving', text: 'Guardando…' })
+    const res = await saveUnitQuantities(projectId, unit.project_unit_id, line_items)
+      .catch(() => ({ error: 'Error de red' as const }))
+    if (silent) return
+    if ('error' in res) { setQtyStatus({ type: 'err', text: res.error }); return }
+    setQtyStatus({ type: 'ok', text: 'Guardado' })
+    setTimeout(() => setQtyStatus(null), 2000)
+    await onSaved()
+  }, [projectId, unit.project_unit_id, unit.line_items, onSaved])
+
+  // Save de partners. `silent` = no toca estado de UI (para usar en unmount).
+  const flushPt = useCallback(async (silent = false) => {
+    ptDirty.current = false
+    const partners = Array.from(stateRef.current.selectedPartners)
+    if (!silent) setPtStatus({ type: 'saving', text: 'Guardando…' })
+    const res = await saveUnitPartners(projectId, unit.project_unit_id, partners)
+      .catch(() => ({ error: 'Error de red' as const }))
+    if (silent) return
+    if ('error' in res) { setPtStatus({ type: 'err', text: res.error }); return }
+    setPtStatus({ type: 'ok', text: 'Guardado' })
+    setTimeout(() => setPtStatus(null), 2000)
+    await onSaved()
+  }, [projectId, unit.project_unit_id, onSaved])
+
+  // Refs estables para que el unmount handler use siempre la última versión
+  const flushQtyRef = useRef(flushQty)
+  const flushPtRef  = useRef(flushPt)
+  flushQtyRef.current = flushQty
+  flushPtRef.current  = flushPt
+
+  // Autosave: line items (cantidad + inclusión) — debounced 700ms tras última edición.
+  // Nota: NO devolvemos cleanup. El timer pendiente debe sobrevivir al unmount;
+  // si hay edición pendiente, la flusheamos en el useEffect dedicado de unmount.
   useEffect(() => {
     if (isFirstQty.current) { isFirstQty.current = false; return }
+    qtyDirty.current = true
     if (qtyTimer.current) clearTimeout(qtyTimer.current)
-    qtyTimer.current = setTimeout(async () => {
-      setQtyStatus({ type: 'saving', text: 'Guardando…' })
-      const line_items = unit.line_items
-        .filter(li => includedItems.has(li.template_line_item_id))
-        .map(li => ({
-          template_line_item_id: li.template_line_item_id,
-          cantidad: quantities[li.template_line_item_id] ?? 0,
-        }))
-      const res = await saveUnitQuantities(projectId, unit.project_unit_id, line_items)
-      if ('error' in res) { setQtyStatus({ type: 'err', text: res.error }); return }
-      setQtyStatus({ type: 'ok', text: 'Guardado' })
-      setTimeout(() => setQtyStatus(null), 2000)
-      await onSaved()
-    }, 700)
-    return () => { if (qtyTimer.current) clearTimeout(qtyTimer.current) }
+    qtyTimer.current = setTimeout(() => { void flushQtyRef.current() }, 700)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quantities, includedItems])
 
-  // Autosave: partners — debounced 500ms tras última edición
+  // Autosave: partners — debounced 500ms tras última edición. Mismo razonamiento que arriba.
   useEffect(() => {
     if (isFirstPt.current) { isFirstPt.current = false; return }
+    ptDirty.current = true
     if (ptTimer.current) clearTimeout(ptTimer.current)
-    ptTimer.current = setTimeout(async () => {
-      setPtStatus({ type: 'saving', text: 'Guardando…' })
-      const res = await saveUnitPartners(projectId, unit.project_unit_id, Array.from(selectedPartners))
-      if ('error' in res) { setPtStatus({ type: 'err', text: res.error }); return }
-      setPtStatus({ type: 'ok', text: 'Guardado' })
-      setTimeout(() => setPtStatus(null), 2000)
-      await onSaved()
-    }, 500)
-    return () => { if (ptTimer.current) clearTimeout(ptTimer.current) }
+    ptTimer.current = setTimeout(() => { void flushPtRef.current() }, 500)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPartners])
+
+  // Unmount: si hay un save pendiente (debounce todavía no expiró), lo disparamos
+  // en modo silent. El Server Action sigue ejecutándose aunque el componente se
+  // haya desmontado, así no se pierde trabajo al cambiar de tab o de capítulo.
+  useEffect(() => {
+    return () => {
+      if (qtyTimer.current) { clearTimeout(qtyTimer.current); qtyTimer.current = null }
+      if (ptTimer.current)  { clearTimeout(ptTimer.current);  ptTimer.current = null }
+      if (qtyDirty.current) void flushQtyRef.current(true)
+      if (ptDirty.current)  void flushPtRef.current(true)
+    }
+  }, [])
 
   const togglePartner = (id: string) => setSelectedPartners(prev => {
     const next = new Set(prev)
