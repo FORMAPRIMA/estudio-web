@@ -1,7 +1,9 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { getAdjudicationOverview, setDreamTeamObraStartDate, type FpeOverviewPartner } from '@/app/actions/fpe-tenders'
+import { startObraManagement } from '@/app/actions/fpe-obra'
 import PartnerContractCard from '@/components/team/fp-execution/dream-team/PartnerContractCard'
 import AwardedGantt       from '@/components/team/fp-execution/dream-team/AwardedGantt'
 import CashFlowChart      from '@/components/team/fp-execution/dream-team/CashFlowChart'
@@ -21,6 +23,8 @@ export default function DreamTeamPanel({
   m2,
   chapterDaysOverrides,
   duracionFactor,
+  obraStartedAt = null,
+  onObraStarted,
 }: {
   projectId:                string
   scheduleChapters:         ScheduleChapter[]
@@ -32,13 +36,37 @@ export default function DreamTeamPanel({
   m2:                       number | null
   chapterDaysOverrides:     Record<string, number | null>
   duracionFactor:           number
+  /** Si está set, la gestión de obra ya fue activada. */
+  obraStartedAt?:           string | null
+  /** Callback cuando el usuario activa la gestión de obra desde este panel. */
+  onObraStarted?:           () => void
 }) {
+  const router = useRouter()
   const [subTab, setSubTab]       = useState<SubTab>('partners')
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState<string | null>(null)
   const [partners, setPartners]   = useState<FpeOverviewPartner[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [refreshTick, setRefreshTick] = useState(0)
+
+  // Comenzar gestión de obra
+  const [showStartObraModal, setShowStartObraModal] = useState(false)
+  const [startingObra, setStartingObra] = useState(false)
+  const [startObraError, setStartObraError] = useState<string | null>(null)
+
+  const handleStartObra = async () => {
+    setStartingObra(true)
+    setStartObraError(null)
+    const res = await startObraManagement(projectId)
+    setStartingObra(false)
+    if ('error' in res) {
+      setStartObraError(res.error)
+      return
+    }
+    setShowStartObraModal(false)
+    onObraStarted?.()
+    router.refresh()
+  }
 
   // Obra start date override (Dream Team-level)
   const [override, setOverride]       = useState<string | null>(initialObraStartOverride)
@@ -161,6 +189,49 @@ export default function DreamTeamPanel({
           <KPI label="Recibidos" value={`${receivedCount}/${partners.length}`} />
         </div>
       </div>
+
+      {/* Comenzar gestión de obra — CTA o chip de activada */}
+      {obraStartedAt ? (
+        <div style={{
+          background: '#F0F7EE', border: '1px solid #C7E0BA', borderRadius: 8,
+          padding: '10px 16px', marginBottom: 18,
+          display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: '#3C6F2C',
+        }}>
+          <span style={{ fontSize: 14 }}>🏗️</span>
+          <span style={{ fontWeight: 600 }}>Gestión de obra activa</span>
+          <span style={{ color: '#6B8C5E' }}>
+            desde {new Date(obraStartedAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}
+          </span>
+        </div>
+      ) : (
+        <div style={{
+          background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 8,
+          padding: '14px 18px', marginBottom: 18,
+          display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
+        }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#9A3412' }}>
+              ¿Listo para comenzar la obra?
+            </div>
+            <div style={{ fontSize: 11, color: '#B45309', marginTop: 3 }}>
+              Activa la plataforma de gestión de obra: cronograma vivo, hitos, avance,
+              flujos de pago. Los datos actuales quedan congelados como histórico de licitación.
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowStartObraModal(true)}
+            style={{
+              background: '#D85A30', color: '#fff', border: 'none', borderRadius: 7,
+              padding: '10px 18px', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+              fontFamily: 'inherit', letterSpacing: '0.01em',
+              boxShadow: '0 1px 4px rgba(216,90,48,0.3)',
+            }}
+          >
+            Comenzar gestión de obra
+          </button>
+        </div>
+      )}
 
       {/* Sub-tabs */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 18, background: '#F0EEE8', borderRadius: 8, padding: 4, width: 'fit-content' }}>
@@ -361,6 +432,66 @@ export default function DreamTeamPanel({
           chapterDaysOverrides={chapterDaysOverrides}
           duracionFactor={duracionFactor}
         />
+      )}
+
+      {/* Modal: Comenzar gestión de obra */}
+      {showStartObraModal && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 10000,
+          background: 'rgba(0,0,0,0.4)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 24,
+        }}>
+          <div style={{
+            background: '#fff', borderRadius: 12, maxWidth: 520, width: '100%',
+            padding: '28px 28px 22px', boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+          }}>
+            <div style={{ fontSize: 24, marginBottom: 6 }}>🏗️</div>
+            <h2 style={{ margin: '0 0 8px', fontSize: 17, fontWeight: 700, color: '#1A1A1A' }}>
+              Comenzar gestión de obra
+            </h2>
+            <p style={{ margin: 0, fontSize: 13, color: '#666', lineHeight: 1.55 }}>
+              Esto activa la plataforma de gestión de obra para este proyecto. Pasarán las siguientes cosas:
+            </p>
+            <ul style={{ margin: '12px 0 16px', paddingLeft: 18, fontSize: 12, color: '#555', lineHeight: 1.7 }}>
+              <li>Se clonan partidas, partners adjudicados, planes de pago y documentos al espacio de obra.</li>
+              <li>Se materializa el cronograma vivo a partir del Gantt actual del Dream Team.</li>
+              <li>Se guarda un baseline inmutable que servirá de referencia (shadow) en el Gantt vivo.</li>
+              <li>Los datos de licitación quedan accesibles pero ya no afectan a la obra.</li>
+            </ul>
+            {startObraError && (
+              <div style={{
+                background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 6,
+                padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#DC2626',
+              }}>
+                {startObraError}
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }}>
+              <button
+                type="button"
+                onClick={() => { setShowStartObraModal(false); setStartObraError(null) }}
+                disabled={startingObra}
+                style={{
+                  background: 'none', border: '1px solid #E8E6E0', borderRadius: 6,
+                  padding: '8px 16px', fontSize: 12, fontWeight: 600, color: '#666',
+                  cursor: startingObra ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+                }}
+              >Cancelar</button>
+              <button
+                type="button"
+                onClick={handleStartObra}
+                disabled={startingObra}
+                style={{
+                  background: '#D85A30', color: '#fff', border: 'none', borderRadius: 6,
+                  padding: '8px 18px', fontSize: 12, fontWeight: 700,
+                  cursor: startingObra ? 'wait' : 'pointer', fontFamily: 'inherit',
+                  opacity: startingObra ? 0.7 : 1,
+                }}
+              >{startingObra ? 'Activando…' : 'Sí, comenzar obra'}</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

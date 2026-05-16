@@ -8,6 +8,8 @@ import TenderPanel, { type FpeTender, type FpePartnerSummary, type FpeDiscipline
 import BiddingPanel from '@/components/team/fp-execution/BiddingPanel'
 import DreamTeamPanel from '@/components/team/fp-execution/DreamTeamPanel'
 import ProjectDashboard from '@/components/team/fp-execution/ProjectDashboard'
+import ObraManagementPage from '@/components/team/fp-execution/obra/ObraManagementPage'
+import type { ObraBaselineSnapshot, ObraPhase, ObraMilestone } from '@/lib/fp-execution/obra'
 import { computeParametricSchedule, computeChapterDays, formatScheduleDate, type ScheduleChapter, type ScheduleMilestone, type PhaseScheduleMap } from '@/lib/fp-execution/schedule'
 import { addBusinessDays, snapToNextBusinessDay, calendarDaysBetween, isBusinessDay } from '@/lib/fp-execution/businessDays'
 
@@ -1726,6 +1728,10 @@ export default function ProjectScopePage({
   disciplines,
   chapterSettingsMap,
   memoriaUnitIds = [],
+  obraStartedAt = null,
+  obraBaselineSnapshot = null,
+  obraPhases = [],
+  obraMilestones = [],
 }: {
   project: Project
   chapters: TemplateChapter[]
@@ -1749,6 +1755,11 @@ export default function ProjectScopePage({
   disciplines: FpeDiscipline[]
   chapterSettingsMap: Record<string, string | null>
   memoriaUnitIds?: string[]
+  /** Si está set, la gestión de obra está activada. Habilita la 2ª top-tab. */
+  obraStartedAt?:        string | null
+  obraBaselineSnapshot?: ObraBaselineSnapshot | null
+  obraPhases?:           ObraPhase[]
+  obraMilestones?:       ObraMilestone[]
 }) {
   const [project, setProject] = useState<Project>(initialProject)
   const [scope, setScope] = useState<ScopeState>(() =>
@@ -1758,6 +1769,10 @@ export default function ProjectScopePage({
   const [saveMsg, setSaveMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
   const [editingProject, setEditingProject] = useState(false)
   const [activeTab, setActiveTab] = useState<'dashboard' | 'scope' | 'docs' | 'schedule' | 'invitations' | 'bidding' | 'dreamteam'>('dashboard')
+  // Top-level phase: 'licitacion' (los 7 tabs actuales) vs 'obra' (gestión de obra).
+  // Si la obra ya está activada, arrancamos directamente en ese modo.
+  const obraEnabled = !!obraStartedAt
+  const [topTab, setTopTab] = useState<'licitacion' | 'obra'>(obraEnabled ? 'obra' : 'licitacion')
   const [chapterDaysOverrides, setChapterDaysOverrides] = useState<Record<string, number | null>>(initialChapterDaysOverrides)
   const [duracionFactor, setDuracionFactor] = useState<number>(initialDuracionFactor)
 
@@ -1900,22 +1915,59 @@ export default function ProjectScopePage({
             </div>
           </div>
 
-          {/* Tabs */}
-          <div style={{ display: 'flex', gap: 0, marginTop: 16, borderBottom: '1px solid #E8E6E0', marginBottom: -1 }}>
-            <button style={tabStyle(activeTab === 'dashboard')} onClick={() => setActiveTab('dashboard')}>Dashboard</button>
-            <button style={tabStyle(activeTab === 'scope')} onClick={() => setActiveTab('scope')}>Scope</button>
-            <button style={tabStyle(activeTab === 'docs')} onClick={() => setActiveTab('docs')}>Documentos</button>
-            <button style={tabStyle(activeTab === 'schedule')} onClick={() => setActiveTab('schedule')}>Cronograma</button>
-            <button style={tabStyle(activeTab === 'invitations')} onClick={() => setActiveTab('invitations')}>Invitaciones</button>
-            <button style={tabStyle(activeTab === 'bidding')} onClick={() => setActiveTab('bidding')}>Licitación</button>
-            <button style={tabStyle(activeTab === 'dreamteam')} onClick={() => setActiveTab('dreamteam')}>Dream Team</button>
+          {/* Top-level phase tabs: Licitación de obra ↔ Gestión de obra */}
+          <div style={{
+            display: 'flex', gap: 6, marginTop: 18,
+            background: '#F0EEE8', borderRadius: 10, padding: 4,
+            width: 'fit-content',
+          }}>
+            <PhaseTabBtn
+              label="Licitación de obra"
+              active={topTab === 'licitacion'}
+              onClick={() => setTopTab('licitacion')}
+            />
+            <PhaseTabBtn
+              label="Gestión de obra"
+              active={topTab === 'obra'}
+              disabled={!obraEnabled}
+              tooltip={!obraEnabled ? 'Activa la gestión de obra desde Dream Team' : undefined}
+              onClick={() => obraEnabled && setTopTab('obra')}
+            />
           </div>
+
+          {/* Sub-tabs de licitación (solo si topTab === 'licitacion') */}
+          {topTab === 'licitacion' && (
+            <div style={{ display: 'flex', gap: 0, marginTop: 16, borderBottom: '1px solid #E8E6E0', marginBottom: -1 }}>
+              <button style={tabStyle(activeTab === 'dashboard')} onClick={() => setActiveTab('dashboard')}>Dashboard</button>
+              <button style={tabStyle(activeTab === 'scope')} onClick={() => setActiveTab('scope')}>Scope</button>
+              <button style={tabStyle(activeTab === 'docs')} onClick={() => setActiveTab('docs')}>Documentos</button>
+              <button style={tabStyle(activeTab === 'schedule')} onClick={() => setActiveTab('schedule')}>Cronograma</button>
+              <button style={tabStyle(activeTab === 'invitations')} onClick={() => setActiveTab('invitations')}>Invitaciones</button>
+              <button style={tabStyle(activeTab === 'bidding')} onClick={() => setActiveTab('bidding')}>Licitación</button>
+              <button style={tabStyle(activeTab === 'dreamteam')} onClick={() => setActiveTab('dreamteam')}>Dream Team</button>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Tab content */}
       <div style={{ maxWidth: 960, margin: '0 auto', padding: '28px 32px' }}>
 
+        {/* ── Gestión de obra (top-tab) ── */}
+        {topTab === 'obra' && obraEnabled && obraStartedAt && (
+          <ObraManagementPage
+            projectId={project.id}
+            obraStartedAt={obraStartedAt}
+            baselineSnapshot={obraBaselineSnapshot}
+            phases={obraPhases}
+            milestones={obraMilestones}
+            chapterNames={Object.fromEntries(chapters.map(ch => [ch.id, ch.nombre]))}
+          />
+        )}
+
+        {/* ── Licitación de obra (top-tab) — agrupa los 7 tabs actuales ── */}
+        {topTab === 'licitacion' && (
+        <>
         {/* ── Dashboard tab ── */}
         {activeTab === 'dashboard' && (
           <ProjectDashboard
@@ -2104,7 +2156,11 @@ export default function ProjectScopePage({
             m2={project.m2_construccion}
             chapterDaysOverrides={chapterDaysOverrides}
             duracionFactor={duracionFactor}
+            obraStartedAt={obraStartedAt}
+            onObraStarted={() => setTopTab('obra')}
           />
+        )}
+        </>
         )}
       </div>
 
@@ -2118,5 +2174,38 @@ export default function ProjectScopePage({
         />
       )}
     </div>
+  )
+}
+
+// ── Phase tab button (Licitación de obra / Gestión de obra) ───────────────────
+function PhaseTabBtn({
+  label, active, disabled, tooltip, onClick,
+}: {
+  label:    string
+  active:   boolean
+  disabled?: boolean
+  tooltip?:  string
+  onClick:   () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={tooltip}
+      style={{
+        padding: '8px 18px', fontSize: 12, fontWeight: 700,
+        letterSpacing: '0.02em',
+        borderRadius: 7, border: 'none',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        fontFamily: 'inherit',
+        background: active   ? '#1A1A1A' : 'transparent',
+        color:      active   ? '#fff'    : (disabled ? '#BBB' : '#666'),
+        opacity:    disabled ? 0.6       : 1,
+        boxShadow:  active   ? '0 1px 4px rgba(0,0,0,0.15)' : 'none',
+        transition: 'all 120ms ease',
+      }}
+    >
+      {label}
+    </button>
   )
 }

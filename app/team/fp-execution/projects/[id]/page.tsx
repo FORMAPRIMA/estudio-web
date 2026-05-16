@@ -6,6 +6,7 @@ import { computeAndSaveReadiness, ReadinessCheck } from '@/app/actions/fpe-docum
 import type { FpeTender } from '@/components/team/fp-execution/TenderPanel'
 import type { ScopedChapter, PartnerForDocs } from '@/components/team/fp-execution/DocumentHub'
 import type { ScheduleChapter, ScheduleMilestone } from '@/lib/fp-execution/schedule'
+import type { ObraBaselineSnapshot, ObraPhase, ObraMilestone } from '@/lib/fp-execution/obra'
 
 export default async function FpeProjectDetailPage({
   params,
@@ -32,6 +33,7 @@ export default async function FpeProjectDetailPage({
         linked_proyecto_id, status, readiness_score, created_at,
         tour_virtual_url, fecha_inicio_obra, obra_start_date_override, duracion_obra_semanas,
         m2_construccion, duracion_factor,
+        obra_management_started_at, obra_baseline_snapshot,
         project_units:fpe_project_units (
           id, template_unit_id, notas, orden,
           line_items:fpe_project_line_items (
@@ -321,8 +323,30 @@ export default async function FpeProjectDetailPage({
     duracion_obra_semanas: number | null
     m2_construccion: number | null
     duracion_factor: number | null
+    obra_management_started_at: string | null
+    obra_baseline_snapshot: ObraBaselineSnapshot | null
   }
   const projectExt = project as unknown as ProjectExtended
+
+  // ── Obra: cargar datos vivos si la gestión de obra está activada ───────────
+  const obraStartedAt = projectExt.obra_management_started_at
+  const [{ data: obraPhasesRaw }, { data: obraMilestonesRaw }] = obraStartedAt
+    ? await Promise.all([
+        admin
+          .from('fpe_obra_phases')
+          .select('id, project_id, template_phase_id, chapter_id, nombre, orden, duracion_pct, achieves, requires, partner_ids, planned_start_date, planned_end_date, planned_duration_dias, actual_start_date, actual_end_date, actual_duration_dias, pct_avance, status, notas')
+          .eq('project_id', params.id)
+          .order('orden', { ascending: true }),
+        admin
+          .from('fpe_obra_milestones')
+          .select('id, project_id, template_milestone_id, nombre, orden, es_hito_pago, planned_date, actual_date, achieved_at, achieved_by, notas')
+          .eq('project_id', params.id)
+          .order('orden', { ascending: true }),
+      ])
+    : [{ data: [] as ObraPhase[] }, { data: [] as ObraMilestone[] }]
+
+  const obraPhases     = (obraPhasesRaw     ?? []) as ObraPhase[]
+  const obraMilestones = (obraMilestonesRaw ?? []) as ObraMilestone[]
 
   return (
     <ProjectScopePage
@@ -348,6 +372,10 @@ export default async function FpeProjectDetailPage({
       initialDuracionFactor={projectExt.duracion_factor ?? 1.0}
       chapterSettingsMap={chapterSettingsMap}
       memoriaUnitIds={memoriaTemplateUnitIds}
+      obraStartedAt={obraStartedAt}
+      obraBaselineSnapshot={projectExt.obra_baseline_snapshot}
+      obraPhases={obraPhases}
+      obraMilestones={obraMilestones}
     />
   )
 }
