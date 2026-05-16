@@ -7,6 +7,7 @@ import type { FpeTender } from '@/components/team/fp-execution/TenderPanel'
 import type { ScopedChapter, PartnerForDocs } from '@/components/team/fp-execution/DocumentHub'
 import type { ScheduleChapter, ScheduleMilestone } from '@/lib/fp-execution/schedule'
 import type { ObraBaselineSnapshot, ObraPhase, ObraMilestone } from '@/lib/fp-execution/obra'
+import type { ObraChangeSession } from '@/lib/fp-execution/obra-presupuesto'
 
 export default async function FpeProjectDetailPage({
   params,
@@ -333,7 +334,15 @@ export default async function FpeProjectDetailPage({
 
   // ── Obra: cargar datos vivos si la gestión de obra está activada ───────────
   const obraStartedAt = projectExt.obra_management_started_at
-  const [{ data: obraPhasesRaw }, { data: obraMilestonesRaw }] = obraStartedAt
+  const [
+    { data: obraPhasesRaw },
+    { data: obraMilestonesRaw },
+    { data: obraUnitsRaw },
+    { data: obraLineItemsRaw },
+    { data: obraUnitPartnersRaw },
+    { data: obraSessionRaw },
+    { data: obraActasRaw },
+  ] = obraStartedAt
     ? await Promise.all([
         admin
           .from('fpe_obra_phases')
@@ -345,11 +354,59 @@ export default async function FpeProjectDetailPage({
           .select('id, project_id, template_milestone_id, nombre, orden, es_hito_pago, planned_date, actual_date, achieved_at, achieved_by, notas')
           .eq('project_id', params.id)
           .order('orden', { ascending: true }),
+        admin
+          .from('fpe_obra_units')
+          .select(`
+            id, project_id, source_project_unit_id, template_unit_id, chapter_id,
+            custom_nombre, custom_descripcion, notas, orden,
+            template_unit:fpe_template_units(id, nombre, chapter_id)
+          `)
+          .eq('project_id', params.id)
+          .order('orden', { ascending: true }),
+        admin
+          .from('fpe_obra_line_items')
+          .select(`
+            id, obra_unit_id, source_project_line_item_id, template_line_item_id,
+            custom_nombre, custom_unidad_medida, cantidad_inicial, cantidad,
+            precio_unitario_adjudicado, notas,
+            template_line_item:fpe_template_line_items(id, nombre, unidad_medida)
+          `)
+          .order('id', { ascending: true }),
+        admin
+          .from('fpe_obra_unit_partners')
+          .select('obra_unit_id, partner_id'),
+        admin
+          .from('fpe_obra_change_sessions')
+          .select(`
+            id, project_id, status, opened_at, opened_by, notas,
+            log:fpe_obra_change_log(
+              id, change_type, target_kind, target_id, parent_id,
+              old_value, new_value, categoria, sub_categoria, destino_acta,
+              razon, delta_monto, created_at, created_by
+            )
+          `)
+          .eq('project_id', params.id)
+          .eq('status', 'open')
+          .maybeSingle(),
+        admin
+          .from('fpe_obra_actas')
+          .select('id, kind, year, numero, codigo, total_delta_monto, status, generated_at, docusign_envelope_id, sent_at, signed_at, pdf_signed_path')
+          .eq('project_id', params.id)
+          .order('generated_at', { ascending: false }),
       ])
-    : [{ data: [] as ObraPhase[] }, { data: [] as ObraMilestone[] }]
+    : [
+        { data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] },
+        { data: null },
+        { data: [] },
+      ]
 
-  const obraPhases     = (obraPhasesRaw     ?? []) as ObraPhase[]
-  const obraMilestones = (obraMilestonesRaw ?? []) as ObraMilestone[]
+  const obraPhases       = (obraPhasesRaw     ?? []) as ObraPhase[]
+  const obraMilestones   = (obraMilestonesRaw ?? []) as ObraMilestone[]
+  const obraUnitsData    = (obraUnitsRaw      ?? []) as unknown[]
+  const obraLineItemsData = (obraLineItemsRaw ?? []) as unknown[]
+  const obraUnitPartners = (obraUnitPartnersRaw ?? []) as { obra_unit_id: string; partner_id: string }[]
+  const obraSession      = obraSessionRaw as unknown as ObraChangeSession | null
+  const obraActas        = (obraActasRaw ?? []) as unknown[]
 
   return (
     <ProjectScopePage
@@ -381,6 +438,11 @@ export default async function FpeProjectDetailPage({
       obraMilestones={obraMilestones}
       obraFechaInicio={projectExt.obra_fecha_inicio}
       obraIniciadaAt={projectExt.obra_iniciada_at}
+      obraUnits={obraUnitsData}
+      obraLineItems={obraLineItemsData}
+      obraUnitPartners={obraUnitPartners}
+      obraSession={obraSession}
+      obraActas={obraActas}
     />
   )
 }

@@ -10,6 +10,7 @@ import DreamTeamPanel from '@/components/team/fp-execution/DreamTeamPanel'
 import ProjectDashboard from '@/components/team/fp-execution/ProjectDashboard'
 import ObraManagementPage from '@/components/team/fp-execution/obra/ObraManagementPage'
 import type { ObraBaselineSnapshot, ObraPhase, ObraMilestone } from '@/lib/fp-execution/obra'
+import type { ObraChangeSession, ObraActaRow } from '@/lib/fp-execution/obra-presupuesto'
 import { computeParametricSchedule, computeChapterDays, formatScheduleDate, type ScheduleChapter, type ScheduleMilestone, type PhaseScheduleMap } from '@/lib/fp-execution/schedule'
 import { addBusinessDays, snapToNextBusinessDay, calendarDaysBetween, isBusinessDay } from '@/lib/fp-execution/businessDays'
 
@@ -1734,6 +1735,11 @@ export default function ProjectScopePage({
   obraMilestones = [],
   obraFechaInicio = null,
   obraIniciadaAt = null,
+  obraUnits = [],
+  obraLineItems = [],
+  obraUnitPartners = [],
+  obraSession = null,
+  obraActas = [],
 }: {
   project: Project
   chapters: TemplateChapter[]
@@ -1764,6 +1770,11 @@ export default function ProjectScopePage({
   obraMilestones?:       ObraMilestone[]
   obraFechaInicio?:      string | null
   obraIniciadaAt?:       string | null
+  obraUnits?:            unknown[]
+  obraLineItems?:        unknown[]
+  obraUnitPartners?:     { obra_unit_id: string; partner_id: string }[]
+  obraSession?:          ObraChangeSession | null
+  obraActas?:            unknown[]
 }) {
   const [project, setProject] = useState<Project>(initialProject)
   const [scope, setScope] = useState<ScopeState>(() =>
@@ -1969,6 +1980,13 @@ export default function ProjectScopePage({
             milestones={obraMilestones}
             chapterNames={Object.fromEntries(chapters.map(ch => [ch.id, ch.nombre]))}
             partnerNames={Object.fromEntries(partners.map(p => [p.id, p.nombre]))}
+            chapters={chapters.map(ch => ({ id: ch.id, nombre: ch.nombre, orden: ch.orden }))}
+            partnersList={partners.map(p => ({ id: p.id, nombre: p.nombre }))}
+            obraUnits={obraUnits}
+            obraLineItems={obraLineItems}
+            obraUnitPartners={obraUnitPartners}
+            obraSession={obraSession}
+            obraActas={obraActas}
           />
         )}
 

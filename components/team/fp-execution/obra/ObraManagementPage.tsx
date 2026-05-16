@@ -2,9 +2,11 @@
 
 import React, { useState } from 'react'
 import ObraDashboardTab from '@/components/team/fp-execution/obra/ObraDashboardTab'
+import ObraPresupuestoTab from '@/components/team/fp-execution/obra/presupuesto/ObraPresupuestoTab'
 import type { ObraBaselineSnapshot, ObraPhase, ObraMilestone } from '@/lib/fp-execution/obra'
+import type { ObraChangeSession } from '@/lib/fp-execution/obra-presupuesto'
 
-type SubTab = 'dashboard'
+type SubTab = 'dashboard' | 'presupuesto'
 
 export default function ObraManagementPage({
   projectId,
@@ -16,6 +18,13 @@ export default function ObraManagementPage({
   milestones,
   chapterNames,
   partnerNames,
+  chapters,
+  partnersList,
+  obraUnits,
+  obraLineItems,
+  obraUnitPartners,
+  obraSession,
+  obraActas,
 }: {
   projectId:        string
   obraStartedAt:    string
@@ -26,6 +35,13 @@ export default function ObraManagementPage({
   milestones:       ObraMilestone[]
   chapterNames:     Record<string, string>
   partnerNames:     Record<string, string>
+  chapters:         Array<{ id: string; nombre: string; orden: number }>
+  partnersList:     Array<{ id: string; nombre: string }>
+  obraUnits:        unknown[]
+  obraLineItems:    unknown[]
+  obraUnitPartners: { obra_unit_id: string; partner_id: string }[]
+  obraSession:      ObraChangeSession | null
+  obraActas:        unknown[]
 }) {
   const [subTab, setSubTab] = useState<SubTab>('dashboard')
 
@@ -37,7 +53,8 @@ export default function ObraManagementPage({
         background: '#F0EEE8', borderRadius: 8, padding: 4,
         width: 'fit-content',
       }}>
-        <SubTabBtn label="Dashboard" active={subTab === 'dashboard'} onClick={() => setSubTab('dashboard')} />
+        <SubTabBtn label="Dashboard"   active={subTab === 'dashboard'}   onClick={() => setSubTab('dashboard')} />
+        <SubTabBtn label="Presupuesto" active={subTab === 'presupuesto'} onClick={() => setSubTab('presupuesto')} />
       </div>
 
       {subTab === 'dashboard' && (
@@ -51,6 +68,20 @@ export default function ObraManagementPage({
           milestones={milestones}
           chapterNames={chapterNames}
           partnerNames={partnerNames}
+        />
+      )}
+
+      {subTab === 'presupuesto' && (
+        <ObraPresupuestoTab
+          projectId={projectId}
+          chapters={chapters}
+          partners={partnersList}
+          partnerNames={partnerNames}
+          obraUnits={obraUnits}
+          obraLineItems={obraLineItems}
+          obraUnitPartners={obraUnitPartners}
+          obraSession={obraSession}
+          obraActas={obraActas}
         />
       )}
     </div>

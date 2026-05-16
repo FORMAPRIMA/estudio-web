@@ -52,15 +52,51 @@ export async function POST(req: NextRequest) {
 
     const admin = createAdminClient()
 
-    // ── Look up contrato or fpe_contract by envelope ID ───────────────────────
-    const [{ data: contrato }, { data: fpeContract }] = await Promise.all([
+    // ── Look up contrato / fpe_contract / fpe_obra_acta by envelope ID ───────
+    const [{ data: contrato }, { data: fpeContract }, { data: obraActa }] = await Promise.all([
       admin.from('contratos').select('id, status, docusign_status').eq('docusign_envelope_id', envelopeId).maybeSingle(),
       admin.from('fpe_contracts').select('id, status').eq('docusign_envelope_id', envelopeId).maybeSingle(),
+      admin.from('fpe_obra_actas').select('id, status, project_id').eq('docusign_envelope_id', envelopeId).maybeSingle(),
     ])
 
-    if (!contrato && !fpeContract) {
+    if (!contrato && !fpeContract && !obraActa) {
       // Envelope not in our system — acknowledge anyway
       return NextResponse.json({ ok: true })
+    }
+
+    // ── Handle obra acta cliente ──────────────────────────────────────────────
+    if (obraActa) {
+      if (envelopeStatus === 'completed' && obraActa.status !== 'signed' && obraActa.status !== 'received') {
+        await admin.from('fpe_obra_actas').update({
+          status:    'signed',
+          signed_at: new Date().toISOString(),
+        }).eq('id', obraActa.id)
+
+        try {
+          const signedPdf   = await downloadCompletedDocument(envelopeId)
+          const storagePath = `obra-actas/${obraActa.project_id}/${obraActa.id}-${envelopeId}-signed.pdf`
+          const { error: upErr } = await admin.storage
+            .from('fpe-documents')
+            .upload(storagePath, signedPdf, { contentType: 'application/pdf', upsert: true })
+
+          if (upErr) {
+            console.error('[docusign/webhook] obra acta storage upload error:', upErr.message)
+          } else {
+            await admin.from('fpe_obra_actas').update({
+              status:          'received',
+              pdf_signed_path: storagePath,
+            }).eq('id', obraActa.id)
+          }
+        } catch (err) {
+          console.error('[docusign/webhook] obra acta pdf download error:', err)
+        }
+      } else if (envelopeStatus === 'declined' || envelopeStatus === 'voided') {
+        await admin.from('fpe_obra_actas').update({
+          status:        'anulada',
+          anulada_at:    new Date().toISOString(),
+          anulada_razon: `DocuSign ${envelopeStatus}`,
+        }).eq('id', obraActa.id)
+      }
     }
 
     // ── Handle FPE contract ───────────────────────────────────────────────────
