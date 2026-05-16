@@ -632,13 +632,13 @@ export async function revertirObraIniciada(
 // ══════════════════════════════════════════════════════════════════════════════
 
 export async function updateObraPhase(args: {
-  phase_id:              string
-  status?:               ObraPhaseStatus
-  pct_avance?:           number
-  actual_start_date?:    string | null
-  actual_end_date?:      string | null
-  actual_duration_dias?: number | null
-  notas?:                string | null
+  phase_id:               string
+  status?:                ObraPhaseStatus
+  pct_avance?:            number
+  actual_start_date?:     string | null
+  actual_end_date?:       string | null
+  planned_duration_dias?: number | null
+  notas?:                 string | null
 }): Promise<{ success: true } | { error: string }> {
   try {
     await requireManagerOrPartner()
@@ -654,18 +654,18 @@ export async function updateObraPhase(args: {
     if (args.pct_avance !== undefined && (args.pct_avance < 0 || args.pct_avance > 100)) {
       return { error: 'pct_avance fuera de rango [0, 100].' }
     }
-    if (args.actual_duration_dias !== undefined && args.actual_duration_dias !== null && args.actual_duration_dias < 0) {
-      return { error: 'Duración real no puede ser negativa.' }
+    if (args.planned_duration_dias !== undefined && args.planned_duration_dias !== null && args.planned_duration_dias < 0) {
+      return { error: 'Duración planificada no puede ser negativa.' }
     }
 
     // Build patch (only set keys that were passed)
     const patch: Record<string, unknown> = {}
-    if (args.status               !== undefined) patch.status               = args.status
-    if (args.pct_avance           !== undefined) patch.pct_avance           = args.pct_avance
-    if (args.actual_start_date    !== undefined) patch.actual_start_date    = args.actual_start_date
-    if (args.actual_end_date      !== undefined) patch.actual_end_date      = args.actual_end_date
-    if (args.actual_duration_dias !== undefined) patch.actual_duration_dias = args.actual_duration_dias
-    if (args.notas                !== undefined) patch.notas                = args.notas
+    if (args.status                !== undefined) patch.status                = args.status
+    if (args.pct_avance            !== undefined) patch.pct_avance            = args.pct_avance
+    if (args.actual_start_date     !== undefined) patch.actual_start_date     = args.actual_start_date
+    if (args.actual_end_date       !== undefined) patch.actual_end_date       = args.actual_end_date
+    if (args.planned_duration_dias !== undefined) patch.planned_duration_dias = args.planned_duration_dias
+    if (args.notas                 !== undefined) patch.notas                 = args.notas
 
     if (Object.keys(patch).length === 0) return { success: true }
 
@@ -680,9 +680,9 @@ export async function updateObraPhase(args: {
 
     // Si cambió algún input del cronograma, recomputar la cascada de planned_*.
     const affectsSchedule =
-      args.actual_start_date    !== undefined ||
-      args.actual_end_date      !== undefined ||
-      args.actual_duration_dias !== undefined
+      args.actual_start_date     !== undefined ||
+      args.actual_end_date       !== undefined ||
+      args.planned_duration_dias !== undefined
     if (affectsSchedule) {
       await recomputeObraSchedule(phaseRow.project_id)
     }
