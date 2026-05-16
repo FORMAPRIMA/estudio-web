@@ -12,6 +12,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { addBusinessDays, snapToNextBusinessDay } from '@/lib/fp-execution/businessDays'
 
 type Admin = ReturnType<typeof createAdminClient>
 
@@ -295,5 +296,208 @@ export async function cancelClienteChangesForActa(acta_id: string): Promise<{ ca
     return { cancelled: (updRaw ?? []).length }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error cancelando cambios.' }
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// recomputeObraSchedule
+//
+// Forward pass del CPM sobre fpe_obra_phases. Es la función que convierte el
+// cronograma vivo en una columna vertebral: cualquier cambio de duración o
+// fechas reales propaga a las fases dependientes (mismo capítulo por orden, +
+// cross-capítulo vía achieves/requires de hitos).
+//
+// Política de fechas:
+//   - actual_start_date / actual_end_date son inputs duros del usuario (hechos
+//     de obra). Si están set, prevalecen.
+//   - actual_duration_dias ?? planned_duration_dias = duración a usar.
+//   - planned_start_date / planned_end_date = OUTPUT de este recompute. Se
+//     reescriben con el plan actual considerando la realidad conocida.
+//   - obra_baseline_snapshot (en fpe_projects) se mantiene inmutable y es la
+//     "sombra" del Gantt vivo.
+// ══════════════════════════════════════════════════════════════════════════════
+
+export async function recomputeObraSchedule(
+  project_id: string,
+): Promise<{ updated: number } | { error: string }> {
+  try {
+    const admin = createAdminClient()
+
+    // 1. Anchor: obra_fecha_inicio del proyecto
+    const { data: project } = await admin
+      .from('fpe_projects')
+      .select('obra_fecha_inicio')
+      .eq('id', project_id)
+      .single()
+    if (!project?.obra_fecha_inicio) {
+      // Sin anchor no podemos calcular. No es un error grave — se queda como está.
+      return { updated: 0 }
+    }
+    const anchor = snapToNextBusinessDay(new Date(project.obra_fecha_inicio + 'T00:00:00Z'))
+
+    // 2. Load all phases of the project
+    const { data: phasesRaw } = await admin
+      .from('fpe_obra_phases')
+      .select(`
+        id, chapter_id, orden,
+        planned_start_date, planned_end_date, planned_duration_dias,
+        actual_start_date, actual_end_date, actual_duration_dias,
+        achieves, requires
+      `)
+      .eq('project_id', project_id)
+
+    type Phase = {
+      id: string; chapter_id: string | null; orden: number
+      planned_start_date: string | null; planned_end_date: string | null; planned_duration_dias: number | null
+      actual_start_date:  string | null; actual_end_date:  string | null; actual_duration_dias:  number | null
+      achieves: string[]; requires: string[]
+    }
+    const phases = (phasesRaw ?? []) as Phase[]
+    if (phases.length === 0) return { updated: 0 }
+
+    // 3. Build milestone → achievers map
+    const achieversOf: Record<string, string[]> = {}
+    for (const p of phases) {
+      for (const mid of p.achieves ?? []) {
+        if (!achieversOf[mid]) achieversOf[mid] = []
+        achieversOf[mid].push(p.id)
+      }
+    }
+
+    // 4. Build predecessor sets
+    const predecessors: Record<string, Set<string>> = {}
+    for (const p of phases) predecessors[p.id] = new Set()
+
+    // 4a. Within chapter: phase i depends on phase i-1 (by orden)
+    const byChapter: Record<string, Phase[]> = {}
+    for (const p of phases) {
+      if (!p.chapter_id) continue
+      if (!byChapter[p.chapter_id]) byChapter[p.chapter_id] = []
+      byChapter[p.chapter_id].push(p)
+    }
+    for (const arr of Object.values(byChapter)) {
+      arr.sort((a, b) => a.orden - b.orden)
+      for (let i = 1; i < arr.length; i++) {
+        predecessors[arr[i].id].add(arr[i - 1].id)
+      }
+    }
+
+    // 4b. Cross-chapter: requires milestone M → depends on achievers of M
+    for (const p of phases) {
+      for (const mid of p.requires ?? []) {
+        for (const achId of (achieversOf[mid] ?? [])) {
+          if (achId !== p.id) predecessors[p.id].add(achId)
+        }
+      }
+    }
+
+    // 5. Forward pass (iterative until convergence)
+    const computedStart: Record<string, Date> = {}
+    const computedEnd:   Record<string, Date> = {}
+
+    const durationOf = (p: Phase): number => {
+      const d = p.actual_duration_dias ?? p.planned_duration_dias
+      return Math.max(0, Number(d ?? 0))
+    }
+
+    const maxIter = phases.length * 2 + 10
+    let changed = true
+    let guard = 0
+    while (changed && guard++ < maxIter) {
+      changed = false
+      for (const p of phases) {
+        // Earliest start from predecessors
+        let earliestMs = anchor.getTime()
+        for (const predId of Array.from(predecessors[p.id])) {
+          const e = computedEnd[predId]
+          if (!e) continue
+          // Successor starts the next business day after predecessor end
+          const nextStart = addBusinessDays(e, 1).getTime()
+          if (nextStart > earliestMs) earliestMs = nextStart
+        }
+        // Honor explicit actual_start_date as hard anchor (real start)
+        let startDate: Date
+        if (p.actual_start_date) {
+          startDate = new Date(p.actual_start_date + 'T00:00:00Z')
+        } else {
+          startDate = snapToNextBusinessDay(new Date(earliestMs))
+        }
+
+        // End: actual_end takes precedence (real fact); else start + duration
+        let endDate: Date
+        if (p.actual_end_date) {
+          endDate = new Date(p.actual_end_date + 'T00:00:00Z')
+        } else {
+          const dur = durationOf(p)
+          // duration N días hábiles = end = addBusinessDays(start, N - 1) (incluye start)
+          // Para coherencia con el resto del sistema, end = addBusinessDays(start, N)
+          // (la fase ocupa N días hábiles, terminando al final del día N)
+          endDate = dur > 0 ? addBusinessDays(startDate, dur) : startDate
+        }
+
+        const prevStart = computedStart[p.id]?.getTime()
+        const prevEnd   = computedEnd[p.id]?.getTime()
+        if (prevStart !== startDate.getTime() || prevEnd !== endDate.getTime()) {
+          computedStart[p.id] = startDate
+          computedEnd[p.id]   = endDate
+          changed = true
+        }
+      }
+    }
+
+    // 6. Persist changes (only rows whose computed dates differ from stored)
+    let updated = 0
+    for (const p of phases) {
+      const s = computedStart[p.id]
+      const e = computedEnd[p.id]
+      if (!s || !e) continue
+      const newStartIso = s.toISOString().slice(0, 10)
+      const newEndIso   = e.toISOString().slice(0, 10)
+      if (newStartIso === p.planned_start_date && newEndIso === p.planned_end_date) continue
+      const { error } = await admin
+        .from('fpe_obra_phases')
+        .update({
+          planned_start_date: newStartIso,
+          planned_end_date:   newEndIso,
+        })
+        .eq('id', p.id)
+      if (error) {
+        console.error(`[recomputeObraSchedule] write error ph=${p.id}:`, error)
+      } else {
+        updated++
+      }
+    }
+
+    // 7. Recompute milestone planned_date (latest end of achievers, only if not yet achieved)
+    const { data: milestonesRaw } = await admin
+      .from('fpe_obra_milestones')
+      .select('id, template_milestone_id, planned_date, actual_date')
+      .eq('project_id', project_id)
+    type MsRow = { id: string; template_milestone_id: string | null; planned_date: string | null; actual_date: string | null }
+    const milestones = (milestonesRaw ?? []) as MsRow[]
+    for (const m of milestones) {
+      if (m.actual_date) continue   // milestone already achieved → planned_date no longer relevant
+      if (!m.template_milestone_id) continue
+      const achievers = achieversOf[m.template_milestone_id] ?? []
+      if (achievers.length === 0) continue
+      let latestMs = 0
+      for (const aId of achievers) {
+        const t = computedEnd[aId]?.getTime()
+        if (t && t > latestMs) latestMs = t
+      }
+      if (latestMs === 0) continue
+      const newMsIso = new Date(latestMs).toISOString().slice(0, 10)
+      if (newMsIso === m.planned_date) continue
+      const { error } = await admin
+        .from('fpe_obra_milestones')
+        .update({ planned_date: newMsIso })
+        .eq('id', m.id)
+      if (error) console.error(`[recomputeObraSchedule] milestone write error ${m.id}:`, error)
+    }
+
+    revalidatePath(`${PROJECT_PATH}/${project_id}`)
+    return { updated }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error recomputando cronograma.' }
   }
 }

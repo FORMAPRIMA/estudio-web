@@ -18,6 +18,7 @@ import {
   type ProjectUnitChapterMap,
 } from '@/lib/fp-execution/schedule'
 import type { ObraPhaseStatus } from '@/lib/fp-execution/obra'
+import { recomputeObraSchedule } from '@/lib/fp-execution/obra-apply'
 
 const PROJECT_PATH = '/team/fp-execution/projects'
 
@@ -534,14 +535,6 @@ function isoDateOnly(s: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(s)
 }
 
-function shiftIsoDate(iso: string | null, deltaDays: number): string | null {
-  if (!iso) return null
-  const d = new Date(iso + 'T00:00:00Z')
-  if (Number.isNaN(d.getTime())) return null
-  d.setUTCDate(d.getUTCDate() + deltaDays)
-  return d.toISOString().slice(0, 10)
-}
-
 export async function setObraFechaInicio(
   project_id: string,
   fecha:      string,
@@ -569,47 +562,17 @@ export async function setObraFechaInicio(
       return { success: true, deltaDays: 0 }
     }
 
-    // Shift planned dates of all phases
-    const { data: phases } = await admin
-      .from('fpe_obra_phases')
-      .select('id, planned_start_date, planned_end_date, actual_start_date, actual_end_date')
-      .eq('project_id', project_id)
-
-    type PhaseRow = { id: string; planned_start_date: string | null; planned_end_date: string | null; actual_start_date: string | null; actual_end_date: string | null }
-    for (const ph of (phases ?? []) as PhaseRow[]) {
-      const patch: Record<string, unknown> = {
-        planned_start_date: shiftIsoDate(ph.planned_start_date, deltaDays),
-        planned_end_date:   shiftIsoDate(ph.planned_end_date,   deltaDays),
-      }
-      // Solo desplazamos fechas REALES si no han sido tocadas manualmente todavía.
-      // Como aproximación: si actual_*_date == null, no hay nada que desplazar.
-      // Si están set, las dejamos como están — son hechos, no se mueven con un
-      // cambio de planning.
-      const { error } = await admin.from('fpe_obra_phases').update(patch).eq('id', ph.id)
-      if (error) return { error: `shift phase ${ph.id}: ${error.message}` }
-    }
-
-    // Shift planned dates of milestones
-    const { data: milestones } = await admin
-      .from('fpe_obra_milestones')
-      .select('id, planned_date')
-      .eq('project_id', project_id)
-    type MsRow = { id: string; planned_date: string | null }
-    for (const m of (milestones ?? []) as MsRow[]) {
-      if (!m.planned_date) continue
-      const { error } = await admin
-        .from('fpe_obra_milestones')
-        .update({ planned_date: shiftIsoDate(m.planned_date, deltaDays) })
-        .eq('id', m.id)
-      if (error) return { error: `shift milestone ${m.id}: ${error.message}` }
-    }
-
-    // Update project field
+    // Update anchor del proyecto
     const { error: updErr } = await admin
       .from('fpe_projects')
       .update({ obra_fecha_inicio: fecha, updated_at: new Date().toISOString() })
       .eq('id', project_id)
     if (updErr) return { error: updErr.message }
+
+    // Recomputar cronograma desde el nuevo anchor. Esto respeta actual_*_date
+    // (hechos) y propaga la nueva fecha de inicio a todas las planned_*_date.
+    const rec = await recomputeObraSchedule(project_id)
+    if ('error' in rec) return { error: rec.error }
 
     revalidatePath(`${PROJECT_PATH}/${project_id}`)
     return { success: true, deltaDays }
@@ -714,6 +677,16 @@ export async function updateObraPhase(args: {
       .single()
 
     if (selErr) return { error: selErr.message }
+
+    // Si cambió algún input del cronograma, recomputar la cascada de planned_*.
+    const affectsSchedule =
+      args.actual_start_date    !== undefined ||
+      args.actual_end_date      !== undefined ||
+      args.actual_duration_dias !== undefined
+    if (affectsSchedule) {
+      await recomputeObraSchedule(phaseRow.project_id)
+    }
+
     revalidatePath(`${PROJECT_PATH}/${phaseRow.project_id}`)
     return { success: true }
   } catch (err) {
@@ -1008,8 +981,9 @@ export async function updateObraPhaseDuration(args: {
 
     const patch: Record<string, unknown> = {}
     if (args.planned_duration_dias !== undefined) patch.planned_duration_dias = args.planned_duration_dias
-    if (args.planned_start_date    !== undefined) patch.planned_start_date    = args.planned_start_date
-    if (args.planned_end_date      !== undefined) patch.planned_end_date      = args.planned_end_date
+    // planned_start_date / planned_end_date son output del recompute; los
+    // ignoramos como inputs para evitar inconsistencias. La duración es el
+    // único input editable; las fechas se derivan del CPM.
 
     if (Object.keys(patch).length === 0) return { success: true }
 
@@ -1020,6 +994,10 @@ export async function updateObraPhaseDuration(args: {
       .select('project_id')
       .single()
     if (error) return { error: error.message }
+
+    // Recomputar siempre — cualquier cambio de planned_duration_dias cascadea.
+    await recomputeObraSchedule(phaseRow.project_id)
+
     revalidatePath(`${PROJECT_PATH}/${phaseRow.project_id}`)
     return { success: true }
   } catch (err) {
