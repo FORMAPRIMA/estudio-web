@@ -88,21 +88,23 @@ export interface UIPartida {
   precio_unitario:     number
   is_new:              boolean
   is_deleted:          boolean
+  is_pending_approval: boolean   // cambio cerrado en sesión cliente, en espera de firma DocuSign
   pending_log_id?:     string
   original?:           { cantidad: number; precio_unitario: number }
 }
 
 export interface UIUnit {
-  id:              string
-  chapter_id:      string
-  nombre:          string
-  descripcion:     string | null
-  partner_id:      string | null
-  partner_nombre:  string | null
-  is_new:          boolean
-  is_deleted:      boolean
-  pending_log_id?: string
-  partidas:        UIPartida[]
+  id:                  string
+  chapter_id:          string
+  nombre:              string
+  descripcion:         string | null
+  partner_id:          string | null
+  partner_nombre:      string | null
+  is_new:              boolean
+  is_deleted:          boolean
+  is_pending_approval: boolean
+  pending_log_id?:     string
+  partidas:            UIPartida[]
 }
 
 export interface UIChapter {
@@ -137,11 +139,15 @@ export interface BuildPresupuestoArgs {
   unitPartners:  Array<{ obra_unit_id: string; partner_id: string }>
   partnerNames:  Record<string, string>
   chapters:      Array<{ id: string; nombre: string; orden: number }>
-  pendingChanges: ObraChangeLogRow[]   // [] si no hay sesión abierta
+  /** Logs de la sesión abierta (si la hay). Renderizan como MODIFICADA/NUEVA/ELIMINAR. */
+  pendingChanges:    ObraChangeLogRow[]
+  /** Logs cliente de sesiones cerradas pendientes de firma DocuSign.
+   *  Renderizan como PENDIENTE APROBACIÓN. */
+  awaitingApproval?: ObraChangeLogRow[]
 }
 
 export function buildPresupuestoView(args: BuildPresupuestoArgs): UIChapter[] {
-  const { units, lineItems, unitPartners, partnerNames, chapters, pendingChanges } = args
+  const { units, lineItems, unitPartners, partnerNames, chapters, pendingChanges, awaitingApproval = [] } = args
 
   // ── Index committed data ────────────────────────────────────────────────
   const partnerByUnit: Record<string, string | null> = {}
@@ -153,14 +159,15 @@ export function buildPresupuestoView(args: BuildPresupuestoArgs): UIChapter[] {
   for (const li of lineItems) {
     const arr = liByUnit[li.obra_unit_id] ?? []
     arr.push({
-      id:              li.id,
-      obra_unit_id:    li.obra_unit_id,
-      nombre:          lineItemNombre(li),
-      unidad_medida:   lineItemUM(li),
-      cantidad:        Number(li.cantidad) || 0,
-      precio_unitario: Number(li.precio_unitario_adjudicado) || 0,
-      is_new:          false,
-      is_deleted:      false,
+      id:                  li.id,
+      obra_unit_id:        li.obra_unit_id,
+      nombre:              lineItemNombre(li),
+      unidad_medida:       lineItemUM(li),
+      cantidad:            Number(li.cantidad) || 0,
+      precio_unitario:     Number(li.precio_unitario_adjudicado) || 0,
+      is_new:              false,
+      is_deleted:          false,
+      is_pending_approval: false,
     })
     liByUnit[li.obra_unit_id] = arr
   }
@@ -171,22 +178,28 @@ export function buildPresupuestoView(args: BuildPresupuestoArgs): UIChapter[] {
     if (!chId) continue
     const partnerId = partnerByUnit[u.id] ?? null
     baseUnits[u.id] = {
-      id:             u.id,
-      chapter_id:     chId,
-      nombre:         unitNombre(u),
-      descripcion:    u.custom_descripcion ?? null,
-      partner_id:     partnerId,
-      partner_nombre: partnerId ? (partnerNames[partnerId] ?? null) : null,
-      is_new:         false,
-      is_deleted:     false,
-      partidas:       liByUnit[u.id] ?? [],
+      id:                  u.id,
+      chapter_id:          chId,
+      nombre:              unitNombre(u),
+      descripcion:         u.custom_descripcion ?? null,
+      partner_id:          partnerId,
+      partner_nombre:      partnerId ? (partnerNames[partnerId] ?? null) : null,
+      is_new:              false,
+      is_deleted:          false,
+      is_pending_approval: false,
+      partidas:            liByUnit[u.id] ?? [],
     }
   }
 
-  // ── Apply pending changes overlay ───────────────────────────────────────
-  for (const log of pendingChanges) {
+  // ── Apply overlay: pending changes (session open) + awaiting approval (closed cliente) ────
+  const overlayLogs: Array<{ log: ObraChangeLogRow; pending_approval: boolean }> = [
+    ...pendingChanges.map(l    => ({ log: l, pending_approval: false })),
+    ...awaitingApproval.map(l  => ({ log: l, pending_approval: true })),
+  ]
+  for (const entry of overlayLogs) {
+    const log = entry.log
+    const pendingApproval = entry.pending_approval
     if (log.change_type === 'edit_partida' && log.target_id) {
-      // Find partida and overlay new values
       for (const u of Object.values(baseUnits)) {
         const idx = u.partidas.findIndex(p => p.id === log.target_id)
         if (idx >= 0) {
@@ -194,10 +207,11 @@ export function buildPresupuestoView(args: BuildPresupuestoArgs): UIChapter[] {
           const nv = log.new_value as { cantidad: number; precio_unitario: number }
           u.partidas[idx] = {
             ...p,
-            pending_log_id:  log.id,
-            original:        { cantidad: p.cantidad, precio_unitario: p.precio_unitario },
-            cantidad:        nv.cantidad,
-            precio_unitario: nv.precio_unitario,
+            pending_log_id:      log.id,
+            original:            { cantidad: p.cantidad, precio_unitario: p.precio_unitario },
+            cantidad:            nv.cantidad,
+            precio_unitario:     nv.precio_unitario,
+            is_pending_approval: pendingApproval,
           }
           break
         }
@@ -208,38 +222,40 @@ export function buildPresupuestoView(args: BuildPresupuestoArgs): UIChapter[] {
       if (u) {
         const nv = log.new_value as { nombre: string; unidad_medida: string; cantidad: number; precio_unitario: number }
         u.partidas.push({
-          id:              `pending:${log.id}`,
-          obra_unit_id:    log.parent_id,
-          nombre:          nv.nombre,
-          unidad_medida:   nv.unidad_medida,
-          cantidad:        nv.cantidad,
-          precio_unitario: nv.precio_unitario,
-          is_new:          true,
-          is_deleted:      false,
-          pending_log_id:  log.id,
+          id:                  `pending:${log.id}`,
+          obra_unit_id:        log.parent_id,
+          nombre:              nv.nombre,
+          unidad_medida:       nv.unidad_medida,
+          cantidad:            nv.cantidad,
+          precio_unitario:     nv.precio_unitario,
+          is_new:              true,
+          is_deleted:          false,
+          is_pending_approval: pendingApproval,
+          pending_log_id:      log.id,
         })
       }
     }
     else if (log.change_type === 'new_unit' && log.parent_id) {
       const nv = log.new_value as { nombre: string; descripcion: string | null; chapter_id: string; partner_id: string }
       baseUnits[`pending:${log.id}`] = {
-        id:             `pending:${log.id}`,
-        chapter_id:     nv.chapter_id,
-        nombre:         nv.nombre,
-        descripcion:    nv.descripcion,
-        partner_id:     nv.partner_id,
-        partner_nombre: partnerNames[nv.partner_id] ?? null,
-        is_new:         true,
-        is_deleted:     false,
-        pending_log_id: log.id,
-        partidas:       [],
+        id:                  `pending:${log.id}`,
+        chapter_id:          nv.chapter_id,
+        nombre:              nv.nombre,
+        descripcion:         nv.descripcion,
+        partner_id:          nv.partner_id,
+        partner_nombre:      partnerNames[nv.partner_id] ?? null,
+        is_new:              true,
+        is_deleted:          false,
+        is_pending_approval: pendingApproval,
+        pending_log_id:      log.id,
+        partidas:            [],
       }
     }
     else if (log.change_type === 'delete_partida' && log.target_id) {
       for (const u of Object.values(baseUnits)) {
         const idx = u.partidas.findIndex(p => p.id === log.target_id)
         if (idx >= 0) {
-          u.partidas[idx] = { ...u.partidas[idx], is_deleted: true, pending_log_id: log.id }
+          u.partidas[idx] = { ...u.partidas[idx], is_deleted: true, is_pending_approval: pendingApproval, pending_log_id: log.id }
           break
         }
       }
@@ -248,6 +264,7 @@ export function buildPresupuestoView(args: BuildPresupuestoArgs): UIChapter[] {
       const u = baseUnits[log.target_id]
       if (u) {
         u.is_deleted = true
+        u.is_pending_approval = pendingApproval
         u.pending_log_id = log.id
       }
     }

@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { downloadCompletedDocument } from '@/lib/docusign/client'
 import { firmarContratoAdmin } from '@/app/actions/contratos'
+import { applyClienteChangesForActa, cancelClienteChangesForActa } from '@/lib/fp-execution/obra-apply'
 import crypto from 'node:crypto'
 
 export async function POST(req: NextRequest) {
@@ -72,6 +73,14 @@ export async function POST(req: NextRequest) {
           signed_at: new Date().toISOString(),
         }).eq('id', obraActa.id)
 
+        // Aplicar al presupuesto vivo los cambios cliente pendientes de esta acta.
+        const applyRes = await applyClienteChangesForActa(obraActa.id)
+        if ('error' in applyRes) {
+          console.error('[docusign/webhook] obra acta apply changes error:', applyRes.error)
+        } else {
+          console.log(`[docusign/webhook] applied ${applyRes.applied} cliente changes for acta ${obraActa.id}`)
+        }
+
         try {
           const signedPdf   = await downloadCompletedDocument(envelopeId)
           const storagePath = `obra-actas/${obraActa.project_id}/${obraActa.id}-${envelopeId}-signed.pdf`
@@ -96,6 +105,14 @@ export async function POST(req: NextRequest) {
           anulada_at:    new Date().toISOString(),
           anulada_razon: `DocuSign ${envelopeStatus}`,
         }).eq('id', obraActa.id)
+
+        // Cancelar (no aplicar nunca) los cambios cliente pendientes asociados.
+        const cancelRes = await cancelClienteChangesForActa(obraActa.id)
+        if ('error' in cancelRes) {
+          console.error('[docusign/webhook] obra acta cancel changes error:', cancelRes.error)
+        } else {
+          console.log(`[docusign/webhook] cancelled ${cancelRes.cancelled} cliente changes for acta ${obraActa.id}`)
+        }
       }
     }
 

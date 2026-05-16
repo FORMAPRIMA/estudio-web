@@ -408,6 +408,49 @@ export default async function FpeProjectDetailPage({
   const obraSession      = obraSessionRaw as unknown as ObraChangeSession | null
   const obraActas        = (obraActasRaw ?? []) as unknown[]
 
+  // Cliente vinculado al proyecto FPE (vía linked_proyecto_id → proyecto_clientes)
+  type ObraProjectClient = { nombre: string; nif: string | null; email: string | null }
+  let obraProjectClient: ObraProjectClient | null = null
+  if (projectExt.linked_proyecto_id) {
+    const { data: pcRaw } = await admin
+      .from('proyecto_clientes')
+      .select('cliente:clientes ( nombre, apellidos, razon_social, nif, email )')
+      .eq('proyecto_id', projectExt.linked_proyecto_id)
+      .limit(1)
+      .maybeSingle()
+    type ClienteRow = { nombre: string | null; apellidos: string | null; razon_social: string | null; nif: string | null; email: string | null }
+    const c = (pcRaw as unknown as { cliente: ClienteRow | null } | null)?.cliente
+    if (c) {
+      obraProjectClient = {
+        nombre: c.razon_social || `${c.nombre ?? ''} ${c.apellidos ?? ''}`.trim() || 'Cliente',
+        nif:    c.nif,
+        email:  c.email,
+      }
+    }
+  }
+
+  // Logs cliente de sesiones cerradas, pendientes de firma DocuSign.
+  const { data: obraAwaitingApprovalRaw } = obraStartedAt
+    ? await admin
+        .from('fpe_obra_change_log')
+        .select(`
+          id, session_id, project_id, change_type, target_kind, target_id, parent_id,
+          old_value, new_value, categoria, sub_categoria, destino_acta,
+          razon, delta_monto, created_at, created_by, applied_at, cancelled_at
+        `)
+        .eq('project_id', params.id)
+        .eq('destino_acta', 'cliente')
+        .is('applied_at', null)
+        .is('cancelled_at', null)
+        .order('created_at', { ascending: true })
+    : { data: [] }
+  // Filtrar a sólo los de sesiones cerradas (los abiertos ya llegan vía obraSession)
+  const openSessionId = obraSession?.id ?? null
+  const obraAwaitingApproval = ((obraAwaitingApprovalRaw ?? []) as unknown[]).filter((l: unknown) => {
+    const log = l as { session_id: string }
+    return log.session_id !== openSessionId
+  })
+
   return (
     <ProjectScopePage
       project={{ ...project, readiness_score: readiness.score }}
@@ -443,6 +486,8 @@ export default async function FpeProjectDetailPage({
       obraUnitPartners={obraUnitPartners}
       obraSession={obraSession}
       obraActas={obraActas}
+      obraAwaitingApproval={obraAwaitingApproval}
+      obraProjectClient={obraProjectClient}
     />
   )
 }

@@ -8,6 +8,7 @@ import {
   type ObraUnitRaw,
   type ObraLineItemRaw,
   type ObraChangeSession,
+  type ObraChangeLogRow,
   type ObraActaRow,
   type UIPartida,
   type UIUnit,
@@ -36,28 +37,33 @@ export default function ObraPresupuestoTab({
   obraUnitPartners,
   obraSession,
   obraActas,
+  obraAwaitingApproval,
+  obraProjectClient,
 }: {
-  projectId:        string
-  chapters:         Array<{ id: string; nombre: string; orden: number }>
-  partners:         Array<{ id: string; nombre: string }>
-  partnerNames:     Record<string, string>
-  obraUnits:        unknown[]
-  obraLineItems:    unknown[]
-  obraUnitPartners: { obra_unit_id: string; partner_id: string }[]
-  obraSession:      ObraChangeSession | null
-  obraActas:        unknown[]
+  projectId:            string
+  chapters:             Array<{ id: string; nombre: string; orden: number }>
+  partners:             Array<{ id: string; nombre: string }>
+  partnerNames:         Record<string, string>
+  obraUnits:            unknown[]
+  obraLineItems:        unknown[]
+  obraUnitPartners:     { obra_unit_id: string; partner_id: string }[]
+  obraSession:          ObraChangeSession | null
+  obraActas:            unknown[]
+  obraAwaitingApproval: unknown[]
+  obraProjectClient:    { nombre: string; nif: string | null; email: string | null } | null
 }) {
   const router = useRouter()
 
   // ── Construir vista efectiva ──────────────────────────────────────────────
   const view = useMemo(() => buildPresupuestoView({
-    units:          obraUnits as ObraUnitRaw[],
-    lineItems:      obraLineItems as ObraLineItemRaw[],
-    unitPartners:   obraUnitPartners,
+    units:            obraUnits as ObraUnitRaw[],
+    lineItems:        obraLineItems as ObraLineItemRaw[],
+    unitPartners:     obraUnitPartners,
     partnerNames,
     chapters,
-    pendingChanges: obraSession?.log ?? [],
-  }), [obraUnits, obraLineItems, obraUnitPartners, partnerNames, chapters, obraSession])
+    pendingChanges:   obraSession?.log ?? [],
+    awaitingApproval: obraAwaitingApproval as ObraChangeLogRow[],
+  }), [obraUnits, obraLineItems, obraUnitPartners, partnerNames, chapters, obraSession, obraAwaitingApproval])
 
   const { perChapter, grand } = useMemo(() => presupuestoTotals(view), [view])
 
@@ -277,6 +283,7 @@ export default function ObraPresupuestoTab({
         <CloseSessionModal
           sessionId={session.id}
           log={session.log}
+          projectClient={obraProjectClient}
           onClose={closeModal}
           onClosed={handleSessionClosed}
         />

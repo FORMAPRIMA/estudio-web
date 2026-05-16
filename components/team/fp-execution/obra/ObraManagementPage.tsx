@@ -25,23 +25,27 @@ export default function ObraManagementPage({
   obraUnitPartners,
   obraSession,
   obraActas,
+  obraAwaitingApproval,
+  obraProjectClient,
 }: {
-  projectId:        string
-  obraStartedAt:    string
-  obraFechaInicio:  string | null
-  obraIniciadaAt:   string | null
-  baselineSnapshot: ObraBaselineSnapshot | null
-  phases:           ObraPhase[]
-  milestones:       ObraMilestone[]
-  chapterNames:     Record<string, string>
-  partnerNames:     Record<string, string>
-  chapters:         Array<{ id: string; nombre: string; orden: number }>
-  partnersList:     Array<{ id: string; nombre: string }>
-  obraUnits:        unknown[]
-  obraLineItems:    unknown[]
-  obraUnitPartners: { obra_unit_id: string; partner_id: string }[]
-  obraSession:      ObraChangeSession | null
-  obraActas:        unknown[]
+  projectId:            string
+  obraStartedAt:        string
+  obraFechaInicio:      string | null
+  obraIniciadaAt:       string | null
+  baselineSnapshot:     ObraBaselineSnapshot | null
+  phases:               ObraPhase[]
+  milestones:           ObraMilestone[]
+  chapterNames:         Record<string, string>
+  partnerNames:         Record<string, string>
+  chapters:             Array<{ id: string; nombre: string; orden: number }>
+  partnersList:         Array<{ id: string; nombre: string }>
+  obraUnits:            unknown[]
+  obraLineItems:        unknown[]
+  obraUnitPartners:     { obra_unit_id: string; partner_id: string }[]
+  obraSession:          ObraChangeSession | null
+  obraActas:            unknown[]
+  obraAwaitingApproval: unknown[]
+  obraProjectClient:    { nombre: string; nif: string | null; email: string | null } | null
 }) {
   const [subTab, setSubTab] = useState<SubTab>('dashboard')
 
@@ -82,6 +86,8 @@ export default function ObraManagementPage({
           obraUnitPartners={obraUnitPartners}
           obraSession={obraSession}
           obraActas={obraActas}
+          obraAwaitingApproval={obraAwaitingApproval}
+          obraProjectClient={obraProjectClient}
         />
       )}
     </div>

@@ -15,6 +15,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { applyOneLog, buildLogsSnapshot, type LogRow } from '@/lib/fp-execution/obra-apply'
 
 const PROJECT_PATH = '/team/fp-execution/projects'
 
@@ -461,13 +462,17 @@ export async function removeChangeLog(
 
 // ══════════════════════════════════════════════════════════════════════════════
 // closeObraChangeSession
-// Aplica todos los logs en orden, genera 0/1/2 actas, marca sesión closed.
+//
+// Aplica SÓLO los logs interna; los cliente quedan pendientes hasta que el
+// cliente firme el acta (DocuSign webhook → applyClienteChangesAfterSign).
+// Genera 0/1/2 actas. La acta cliente nace en estado 'generada' y debe
+// enviarse a DocuSign explícitamente desde el botón "Cerrar y enviar a firma".
 // ══════════════════════════════════════════════════════════════════════════════
 
 export async function closeObraChangeSession(
   session_id: string,
 ): Promise<
-  | { success: true; acta_ids: string[]; acta_cliente_id: string | null; acta_interna_id: string | null }
+  | { success: true; acta_ids: string[]; acta_cliente_id: string | null; acta_interna_id: string | null; pending_cliente_changes: number }
   | { error: string }
 > {
   try {
@@ -481,116 +486,39 @@ export async function closeObraChangeSession(
       .eq('session_id', session_id)
       .order('created_at', { ascending: true })
 
-    type LogRow = {
-      id: string; change_type: string; target_kind: string
-      target_id: string | null; parent_id: string | null
-      old_value: Record<string, unknown> | null
-      new_value: Record<string, unknown> | null
-      categoria: string; sub_categoria: string | null; destino_acta: 'cliente' | 'interna'
-      razon: string; delta_monto: number
-      created_at: string; created_by: string | null
-    }
     const logs = (logsRaw ?? []) as LogRow[]
-
     if (logs.length === 0) {
       return { error: 'No hay cambios registrados. Cancela la sesión si no vas a aplicar nada.' }
     }
 
-    // ── Apply each change atomically ────────────────────────────────────────
-    // Strategy: apply sequentially. If any fails, roll back manually by
-    // reverting prior changes (best-effort). For now: stop at first error
-    // and surface; admin can re-open by hand.
-
-    type AppliedChange = LogRow & { applied_target_id: string | null }
-    const applied: AppliedChange[] = []
-
+    // ── Aplicar SÓLO interna; cliente quedan pendientes ─────────────────────
+    const nowIso = new Date().toISOString()
     for (const log of logs) {
+      if (log.destino_acta !== 'interna') continue
       try {
-        if (log.change_type === 'edit_partida' && log.target_id) {
-          const nv = log.new_value as { cantidad: number; precio_unitario: number }
-          const { error } = await admin
-            .from('fpe_obra_line_items')
-            .update({
-              cantidad:                   nv.cantidad,
-              precio_unitario_adjudicado: nv.precio_unitario,
-            })
-            .eq('id', log.target_id)
-          if (error) throw new Error(`edit_partida ${log.target_id}: ${error.message}`)
-          applied.push({ ...log, applied_target_id: log.target_id })
-        }
-        else if (log.change_type === 'new_partida') {
-          const nv = log.new_value as {
-            nombre: string; unidad_medida: string; cantidad: number; precio_unitario: number; obra_unit_id: string
-          }
-          const { data: inserted, error } = await admin
-            .from('fpe_obra_line_items')
-            .insert({
-              obra_unit_id:                nv.obra_unit_id,
-              custom_nombre:               nv.nombre,
-              custom_unidad_medida:        nv.unidad_medida,
-              cantidad_inicial:            nv.cantidad,
-              cantidad:                    nv.cantidad,
-              precio_unitario_adjudicado:  nv.precio_unitario,
-              created_in_session_id:       session_id,
-            })
-            .select('id')
-            .single()
-          if (error) throw new Error(`new_partida: ${error.message}`)
-          // Update target_id in log
-          await admin.from('fpe_obra_change_log').update({ target_id: inserted.id }).eq('id', log.id)
-          applied.push({ ...log, applied_target_id: inserted.id })
-        }
-        else if (log.change_type === 'new_unit') {
-          const nv = log.new_value as { nombre: string; descripcion: string | null; chapter_id: string; partner_id: string }
-          const { data: inserted, error: e1 } = await admin
-            .from('fpe_obra_units')
-            .insert({
-              project_id:            session.project_id,
-              custom_nombre:         nv.nombre,
-              custom_descripcion:    nv.descripcion,
-              chapter_id:            nv.chapter_id,
-              orden:                 9999,
-              created_in_session_id: session_id,
-            })
-            .select('id')
-            .single()
-          if (e1) throw new Error(`new_unit: ${e1.message}`)
-          // Insert partner assignment
-          const { error: e2 } = await admin
-            .from('fpe_obra_unit_partners')
-            .insert({
-              obra_unit_id: inserted.id,
-              partner_id:   nv.partner_id,
-            })
-          if (e2) throw new Error(`new_unit partner: ${e2.message}`)
-          await admin.from('fpe_obra_change_log').update({ target_id: inserted.id }).eq('id', log.id)
-          applied.push({ ...log, applied_target_id: inserted.id })
-        }
-        else if (log.change_type === 'delete_partida' && log.target_id) {
-          const { error } = await admin.from('fpe_obra_line_items').delete().eq('id', log.target_id)
-          if (error) throw new Error(`delete_partida: ${error.message}`)
-          applied.push({ ...log, applied_target_id: log.target_id })
-        }
-        else if (log.change_type === 'delete_unit' && log.target_id) {
-          const { error } = await admin.from('fpe_obra_units').delete().eq('id', log.target_id)
-          if (error) throw new Error(`delete_unit: ${error.message}`)
-          applied.push({ ...log, applied_target_id: log.target_id })
-        }
+        await applyOneLog(admin, log, session.project_id, session_id)
+        await admin.from('fpe_obra_change_log').update({ applied_at: nowIso }).eq('id', log.id)
       } catch (err) {
-        return { error: err instanceof Error ? err.message : 'Error aplicando cambio.' }
+        return { error: err instanceof Error ? err.message : 'Error aplicando cambio interno.' }
       }
     }
 
-    // ── Group by destino ────────────────────────────────────────────────────
-    const clienteLogs = applied.filter(l => l.destino_acta === 'cliente')
-    const internaLogs = applied.filter(l => l.destino_acta === 'interna')
+    // ── Refetch logs para tener target_id actualizados de new_* aplicados ───
+    const { data: refreshedLogsRaw } = await admin
+      .from('fpe_obra_change_log')
+      .select('*')
+      .eq('session_id', session_id)
+      .order('created_at', { ascending: true })
+    const refreshedLogs = (refreshedLogsRaw ?? []) as LogRow[]
+
+    const clienteLogs = refreshedLogs.filter(l => l.destino_acta === 'cliente')
+    const internaLogs = refreshedLogs.filter(l => l.destino_acta === 'interna')
 
     const year = new Date().getUTCFullYear()
     const createdActaIds: string[] = []
     let actaClienteId: string | null = null
     let actaInternaId: string | null = null
 
-    // Helper: next numero per (project, kind, year)
     const nextNumero = async (kind: 'cliente' | 'interna'): Promise<number> => {
       const { data: maxRow } = await admin
         .from('fpe_obra_actas')
@@ -604,132 +532,26 @@ export async function closeObraChangeSession(
       return ((maxRow?.numero as number | undefined) ?? 0) + 1
     }
 
-    const buildSnapshot = async (group: AppliedChange[]) => {
-      // Capítulos / partners por contexto: pre-fetch
-      const partidaIds = group.filter(l => l.target_kind === 'partida' && l.applied_target_id).map(l => l.applied_target_id as string)
-      const unitIds    = Array.from(new Set([
-        ...group.filter(l => l.target_kind === 'unit' && l.applied_target_id).map(l => l.applied_target_id as string),
-        ...group.filter(l => l.target_kind === 'partida' && l.parent_id).map(l => l.parent_id as string),
-      ]))
-      type LiInfo = { id: string; obra_unit_id: string; custom_nombre: string | null; template_line_item_id: string | null; custom_unidad_medida: string | null }
-      const { data: lisRaw } = partidaIds.length > 0
-        ? await admin.from('fpe_obra_line_items')
-            .select('id, obra_unit_id, custom_nombre, template_line_item_id, custom_unidad_medida')
-            .in('id', partidaIds)
-        : { data: [] as LiInfo[] }
-      const liInfoById: Record<string, LiInfo> = {}
-      for (const li of (lisRaw ?? []) as LiInfo[]) liInfoById[li.id] = li
-
-      // Resolve template names for partidas (those without custom_nombre)
-      const tplLiIds = ((lisRaw ?? []) as LiInfo[]).map(l => l.template_line_item_id).filter((x): x is string => !!x)
-      type TplLi = { id: string; nombre: string; unidad_medida: string }
-      const { data: tplLisRaw } = tplLiIds.length > 0
-        ? await admin.from('fpe_template_line_items').select('id, nombre, unidad_medida').in('id', tplLiIds)
-        : { data: [] as TplLi[] }
-      const tplLiById: Record<string, TplLi> = {}
-      for (const t of (tplLisRaw ?? []) as TplLi[]) tplLiById[t.id] = t
-
-      type UnitInfo = { id: string; chapter_id: string | null; custom_nombre: string | null; template_unit_id: string | null }
-      const { data: unitsRaw } = unitIds.length > 0
-        ? await admin.from('fpe_obra_units')
-            .select('id, chapter_id, custom_nombre, template_unit_id')
-            .in('id', unitIds)
-        : { data: [] as UnitInfo[] }
-      const unitInfoById: Record<string, UnitInfo> = {}
-      for (const u of (unitsRaw ?? []) as UnitInfo[]) unitInfoById[u.id] = u
-
-      const tplUnitIds = ((unitsRaw ?? []) as UnitInfo[]).map(u => u.template_unit_id).filter((x): x is string => !!x)
-      type TplU = { id: string; nombre: string }
-      const { data: tplUsRaw } = tplUnitIds.length > 0
-        ? await admin.from('fpe_template_units').select('id, nombre').in('id', tplUnitIds)
-        : { data: [] as TplU[] }
-      const tplUnitById: Record<string, TplU> = {}
-      for (const t of (tplUsRaw ?? []) as TplU[]) tplUnitById[t.id] = t
-
-      const chapterIds = Array.from(new Set(((unitsRaw ?? []) as UnitInfo[]).map(u => u.chapter_id).filter((x): x is string => !!x)))
-      type Ch = { id: string; nombre: string }
-      const { data: chsRaw } = chapterIds.length > 0
-        ? await admin.from('fpe_template_chapters').select('id, nombre').in('id', chapterIds)
-        : { data: [] as Ch[] }
-      const chByIdLocal: Record<string, Ch> = {}
-      for (const c of (chsRaw ?? []) as Ch[]) chByIdLocal[c.id] = c
-
-      const resolveUnitNombre = (uid: string | null): string => {
-        if (!uid) return '—'
-        const u = unitInfoById[uid]
-        if (!u) return '—'
-        if (u.custom_nombre) return u.custom_nombre
-        if (u.template_unit_id) return tplUnitById[u.template_unit_id]?.nombre ?? '—'
-        return '—'
-      }
-      const resolveChapterNombre = (chid: string | null): string => {
-        if (!chid) return '—'
-        return chByIdLocal[chid]?.nombre ?? '—'
-      }
-      const resolvePartidaNombre = (lid: string | null): { nombre: string; unidad_medida: string } => {
-        if (!lid) return { nombre: '—', unidad_medida: '—' }
-        const li = liInfoById[lid]
-        if (!li) return { nombre: '—', unidad_medida: '—' }
-        if (li.custom_nombre) return { nombre: li.custom_nombre, unidad_medida: li.custom_unidad_medida ?? '—' }
-        if (li.template_line_item_id) {
-          const t = tplLiById[li.template_line_item_id]
-          return { nombre: t?.nombre ?? '—', unidad_medida: t?.unidad_medida ?? '—' }
-        }
-        return { nombre: '—', unidad_medida: '—' }
-      }
-
-      return group.map(l => {
-        const unitId   = l.target_kind === 'unit' ? l.applied_target_id : l.parent_id
-        const partidaId = l.target_kind === 'partida' ? l.applied_target_id : null
-        const u  = unitId ? unitInfoById[unitId] : null
-        const p  = partidaId ? resolvePartidaNombre(partidaId) : null
-        return {
-          id:             l.id,
-          change_type:    l.change_type,
-          categoria:      l.categoria,
-          sub_categoria:  l.sub_categoria,
-          razon:          l.razon,
-          delta_monto:    Number(l.delta_monto),
-          created_at:     l.created_at,
-          old_value:      l.old_value,
-          new_value:      l.new_value,
-          capitulo_nombre: resolveChapterNombre(u?.chapter_id ?? null),
-          unidad_nombre:   resolveUnitNombre(unitId),
-          partida_nombre:  p?.nombre ?? null,
-          unidad_medida:   p?.unidad_medida ?? null,
-        }
-      })
-    }
-
     if (clienteLogs.length > 0) {
       const numero  = await nextNumero('cliente')
       const codigo  = `AC-${year}-${String(numero).padStart(3, '0')}`
       const total   = clienteLogs.reduce((a, l) => a + Number(l.delta_monto), 0)
-      const detalle = await buildSnapshot(clienteLogs)
+      const detalle = await buildLogsSnapshot(admin, clienteLogs)
       const snapshot = {
         kind: 'cliente' as const,
-        codigo,
-        year,
-        numero,
+        codigo, year, numero,
         generated_at: new Date().toISOString(),
-        total_delta: total,
-        changes: detalle,
+        total_delta:  total,
+        changes:      detalle,
       }
       const { data: acta, error } = await admin
         .from('fpe_obra_actas')
         .insert({
-          project_id:        session.project_id,
-          session_id,
-          kind:              'cliente',
-          year,
-          numero,
-          codigo,
-          snapshot,
-          total_delta_monto: total,
-          generated_by:      user.id,
+          project_id: session.project_id, session_id,
+          kind: 'cliente', year, numero, codigo,
+          snapshot, total_delta_monto: total, generated_by: user.id,
         })
-        .select('id')
-        .single()
+        .select('id').single()
       if (error) return { error: `acta cliente: ${error.message}` }
       actaClienteId = acta.id
       createdActaIds.push(acta.id)
@@ -739,37 +561,27 @@ export async function closeObraChangeSession(
       const numero  = await nextNumero('interna')
       const codigo  = `AI-${year}-${String(numero).padStart(3, '0')}`
       const total   = internaLogs.reduce((a, l) => a + Number(l.delta_monto), 0)
-      const detalle = await buildSnapshot(internaLogs)
+      const detalle = await buildLogsSnapshot(admin, internaLogs)
       const snapshot = {
         kind: 'interna' as const,
-        codigo,
-        year,
-        numero,
+        codigo, year, numero,
         generated_at: new Date().toISOString(),
-        total_delta: total,
-        changes: detalle,
+        total_delta:  total,
+        changes:      detalle,
       }
       const { data: acta, error } = await admin
         .from('fpe_obra_actas')
         .insert({
-          project_id:        session.project_id,
-          session_id,
-          kind:              'interna',
-          year,
-          numero,
-          codigo,
-          snapshot,
-          total_delta_monto: total,
-          generated_by:      user.id,
+          project_id: session.project_id, session_id,
+          kind: 'interna', year, numero, codigo,
+          snapshot, total_delta_monto: total, generated_by: user.id,
         })
-        .select('id')
-        .single()
+        .select('id').single()
       if (error) return { error: `acta interna: ${error.message}` }
       actaInternaId = acta.id
       createdActaIds.push(acta.id)
     }
 
-    // ── Mark session closed ─────────────────────────────────────────────────
     const { error: closeErr } = await admin
       .from('fpe_obra_change_sessions')
       .update({
@@ -781,8 +593,15 @@ export async function closeObraChangeSession(
     if (closeErr) return { error: closeErr.message }
 
     revalidatePath(`${PROJECT_PATH}/${session.project_id}`)
-    return { success: true, acta_ids: createdActaIds, acta_cliente_id: actaClienteId, acta_interna_id: actaInternaId }
+    return {
+      success: true,
+      acta_ids: createdActaIds,
+      acta_cliente_id: actaClienteId,
+      acta_interna_id: actaInternaId,
+      pending_cliente_changes: clienteLogs.length,
+    }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
   }
 }
+

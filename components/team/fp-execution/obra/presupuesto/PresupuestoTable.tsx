@@ -140,7 +140,14 @@ export default function PresupuestoTable({
                           · {u.partner_nombre}
                         </span>
                       )}
-                      {u.is_new && (
+                      {u.is_pending_approval && (
+                        <span style={{
+                          marginLeft: 8, fontSize: 9, fontWeight: 700,
+                          background: '#DBEAFE', color: '#1E40AF',
+                          padding: '2px 6px', borderRadius: 3,
+                        }}>PENDIENTE APROBACIÓN</span>
+                      )}
+                      {u.is_new && !u.is_pending_approval && (
                         <span style={{
                           marginLeft: 8, fontSize: 9, fontWeight: 700,
                           background: '#86EFAC', color: '#065F46',
@@ -197,7 +204,10 @@ export default function PresupuestoTable({
                           gap: 10, padding: '7px 16px 7px 50px',
                           borderTop: '1px solid #F8F7F4',
                           alignItems: 'center',
-                          background: p.is_deleted ? '#FEF2F2' : (p.is_new ? '#F0F7EE' : (hasEditPending ? '#FFF7ED' : '#fff')),
+                          background: p.is_pending_approval ? '#EFF6FF'
+                            : p.is_deleted ? '#FEF2F2'
+                            : p.is_new ? '#F0F7EE'
+                            : hasEditPending ? '#FFF7ED' : '#fff',
                           textDecoration: p.is_deleted ? 'line-through' : 'none',
                           opacity: p.is_deleted ? 0.6 : 1,
                         }}
@@ -205,13 +215,16 @@ export default function PresupuestoTable({
                         <div style={{ fontSize: 11.5, color: labelColor, display: 'flex', alignItems: 'center', gap: 6 }}>
                           <span style={{
                             width: 4, height: 4, borderRadius: '50%',
-                            background: hasEditPending ? '#D85A30' : (p.is_new ? '#059669' : '#CCC'),
+                            background: p.is_pending_approval ? '#1E40AF' : (hasEditPending ? '#D85A30' : (p.is_new ? '#059669' : '#CCC')),
                           }} />
                           {p.nombre}
-                          {p.is_new && (
+                          {p.is_pending_approval && (
+                            <span style={{ fontSize: 8, fontWeight: 700, background: '#DBEAFE', color: '#1E40AF', padding: '1px 5px', borderRadius: 2 }}>PENDIENTE APROBACIÓN</span>
+                          )}
+                          {p.is_new && !p.is_pending_approval && (
                             <span style={{ fontSize: 8, fontWeight: 700, background: '#86EFAC', color: '#065F46', padding: '1px 5px', borderRadius: 2 }}>NUEVA</span>
                           )}
-                          {hasEditPending && (
+                          {hasEditPending && !p.is_pending_approval && (
                             <span style={{ fontSize: 8, fontWeight: 700, background: '#FED7AA', color: '#9A3412', padding: '1px 5px', borderRadius: 2 }}>MODIFICADA</span>
                           )}
                         </div>

@@ -1740,6 +1740,8 @@ export default function ProjectScopePage({
   obraUnitPartners = [],
   obraSession = null,
   obraActas = [],
+  obraAwaitingApproval = [],
+  obraProjectClient = null,
 }: {
   project: Project
   chapters: TemplateChapter[]
@@ -1775,6 +1777,8 @@ export default function ProjectScopePage({
   obraUnitPartners?:     { obra_unit_id: string; partner_id: string }[]
   obraSession?:          ObraChangeSession | null
   obraActas?:            unknown[]
+  obraAwaitingApproval?: unknown[]
+  obraProjectClient?:    { nombre: string; nif: string | null; email: string | null } | null
 }) {
   const [project, setProject] = useState<Project>(initialProject)
   const [scope, setScope] = useState<ScopeState>(() =>
@@ -1987,6 +1991,8 @@ export default function ProjectScopePage({
             obraUnitPartners={obraUnitPartners}
             obraSession={obraSession}
             obraActas={obraActas}
+            obraAwaitingApproval={obraAwaitingApproval}
+            obraProjectClient={obraProjectClient}
           />
         )}
 
