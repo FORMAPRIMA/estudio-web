@@ -406,13 +406,16 @@ export async function recomputeObraSchedule(
     while (changed && guard++ < maxIter) {
       changed = false
       for (const p of phases) {
-        // Earliest start from predecessors
+        // Earliest start from predecessors.
+        // Convención del CPM (coherente con computeAwardedSchedule/Parametric):
+        //   endDate es EXCLUSIVE — representa el inicio del siguiente día
+        //   laborable después de la fase. Por tanto la fase sucesora arranca
+        //   en endDate del predecesor, NO al día siguiente.
         let earliestMs = anchor.getTime()
         for (const predId of Array.from(predecessors[p.id])) {
           const e = computedEnd[predId]
           if (!e) continue
-          // Successor starts the next business day after predecessor end
-          const nextStart = addBusinessDays(e, 1).getTime()
+          const nextStart = e.getTime()
           if (nextStart > earliestMs) earliestMs = nextStart
         }
         // Honor explicit actual_start_date as hard anchor (real start)
