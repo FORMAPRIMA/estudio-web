@@ -1,7 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  serverExternalPackages: ['@react-pdf/renderer'],
   experimental: {
+    // Next.js 14.x key. Renamed to `serverExternalPackages` (root) in v15.
+    // Keeps @react-pdf/renderer external on the server bundle so its
+    // top-level await ESM entry is not parsed by webpack/Terser.
+    serverComponentsExternalPackages: ['@react-pdf/renderer'],
     serverActions: {
       bodySizeLimit: '20mb',
     },
