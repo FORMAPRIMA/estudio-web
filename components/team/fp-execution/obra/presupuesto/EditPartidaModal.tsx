@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react'
 import CategorizationFields, { emptyCategorization, categorizationReady, type CategorizationValue } from './CategorizationFields'
+import ChangeExtras, { emptyExtras, type ExtrasValue } from './ChangeExtras'
 import { logEditPartida } from '@/app/actions/fpe-obra-presupuesto'
 import type { UIPartida } from '@/lib/fp-execution/obra-presupuesto'
 
@@ -10,6 +11,7 @@ export default function EditPartidaModal({
   partida,
   unidadNombre,
   capituloNombre,
+  partnerNombre,
   onClose,
   onSaved,
 }: {
@@ -17,6 +19,7 @@ export default function EditPartidaModal({
   partida:        UIPartida
   unidadNombre:   string
   capituloNombre: string
+  partnerNombre:  string | null
   onClose:        () => void
   onSaved:        () => void
 }) {
@@ -27,6 +30,7 @@ export default function EditPartidaModal({
   const [cantidad, setCantidad] = useState<string>(String(partida.cantidad))
   const [precio,   setPrecio]   = useState<string>(String(partida.precio_unitario))
   const [cat, setCat] = useState<CategorizationValue>(emptyCategorization)
+  const [extras, setExtras] = useState<ExtrasValue>(emptyExtras)
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
@@ -47,13 +51,14 @@ export default function EditPartidaModal({
   const handleConfirm = async () => {
     setSaving(true); setErr(null)
     const res = await logEditPartida({
-      session_id:    sessionId,
-      partida_id:    partida.id,
-      new_cantidad:  newCantidad,
-      new_precio:    newPrecio,
-      categoria:     cat.categoria!,
-      sub_categoria: cat.sub_categoria,
-      razon:         cat.razon.trim(),
+      session_id:         sessionId,
+      partida_id:         partida.id,
+      new_cantidad:       newCantidad,
+      new_precio:         newPrecio,
+      categoria:          cat.categoria!,
+      sub_categoria:      cat.sub_categoria,
+      razon:              cat.razon.trim(),
+      reflect_to_partner: extras.reflectToPartner,
     })
     setSaving(false)
     if ('error' in res) { setErr(res.error); return }
@@ -97,6 +102,12 @@ export default function EditPartidaModal({
       </div>
 
       <CategorizationFields value={cat} onChange={setCat} contextForAI={ctx} />
+
+      <ChangeExtras
+        value={extras}
+        onChange={setExtras}
+        partnerNombre={partnerNombre}
+      />
 
       <Actions
         err={err}

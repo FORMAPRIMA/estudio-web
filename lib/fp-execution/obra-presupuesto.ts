@@ -36,20 +36,23 @@ export interface ObraLineItemRaw {
 }
 
 export interface ObraChangeLogRow {
-  id:             string
-  change_type:    ChangeType
-  target_kind:    'partida' | 'unit'
-  target_id:      string | null
-  parent_id:      string | null
-  old_value:      Record<string, unknown> | null
-  new_value:      Record<string, unknown> | null
-  categoria:      ChangeCategoria
-  sub_categoria:  ChangeSubCategoria
-  destino_acta:   DestinoActa
-  razon:          string
-  delta_monto:    number
-  created_at:     string
-  created_by:     string | null
+  id:                    string
+  change_type:           ChangeType
+  target_kind:           'partida' | 'unit'
+  target_id:             string | null
+  parent_id:             string | null
+  old_value:             Record<string, unknown> | null
+  new_value:             Record<string, unknown> | null
+  categoria:             ChangeCategoria
+  sub_categoria:         ChangeSubCategoria
+  destino_acta:          DestinoActa
+  razon:                 string
+  delta_monto:           number
+  created_at:            string
+  created_by:            string | null
+  reflect_to_partner?:   boolean | null
+  effective_partner_id?: string | null
+  add_to_template?:      boolean | null
 }
 
 export interface ObraChangeSession {
@@ -90,6 +93,7 @@ export interface UIPartida {
   is_deleted:          boolean
   is_pending_approval: boolean   // cambio cerrado en sesión cliente, en espera de firma DocuSign
   pending_log_id?:     string
+  pending_reflects_to_partner?: string | null  // partner_id si el log refleja al EP
   original?:           { cantidad: number; precio_unitario: number }
 }
 
@@ -104,6 +108,7 @@ export interface UIUnit {
   is_deleted:          boolean
   is_pending_approval: boolean
   pending_log_id?:     string
+  pending_reflects_to_partner?: string | null
   partidas:            UIPartida[]
 }
 
@@ -199,6 +204,7 @@ export function buildPresupuestoView(args: BuildPresupuestoArgs): UIChapter[] {
   for (const entry of overlayLogs) {
     const log = entry.log
     const pendingApproval = entry.pending_approval
+    const reflectsToPartner = log.reflect_to_partner ? (log.effective_partner_id ?? null) : null
     if (log.change_type === 'edit_partida' && log.target_id) {
       for (const u of Object.values(baseUnits)) {
         const idx = u.partidas.findIndex(p => p.id === log.target_id)
@@ -207,11 +213,12 @@ export function buildPresupuestoView(args: BuildPresupuestoArgs): UIChapter[] {
           const nv = log.new_value as { cantidad: number; precio_unitario: number }
           u.partidas[idx] = {
             ...p,
-            pending_log_id:      log.id,
-            original:            { cantidad: p.cantidad, precio_unitario: p.precio_unitario },
-            cantidad:            nv.cantidad,
-            precio_unitario:     nv.precio_unitario,
-            is_pending_approval: pendingApproval,
+            pending_log_id:              log.id,
+            original:                    { cantidad: p.cantidad, precio_unitario: p.precio_unitario },
+            cantidad:                    nv.cantidad,
+            precio_unitario:             nv.precio_unitario,
+            is_pending_approval:         pendingApproval,
+            pending_reflects_to_partner: reflectsToPartner,
           }
           break
         }
@@ -222,33 +229,35 @@ export function buildPresupuestoView(args: BuildPresupuestoArgs): UIChapter[] {
       if (u) {
         const nv = log.new_value as { nombre: string; unidad_medida: string; cantidad: number; precio_unitario: number }
         u.partidas.push({
-          id:                  `pending:${log.id}`,
-          obra_unit_id:        log.parent_id,
-          nombre:              nv.nombre,
-          unidad_medida:       nv.unidad_medida,
-          cantidad:            nv.cantidad,
-          precio_unitario:     nv.precio_unitario,
-          is_new:              true,
-          is_deleted:          false,
-          is_pending_approval: pendingApproval,
-          pending_log_id:      log.id,
+          id:                          `pending:${log.id}`,
+          obra_unit_id:                log.parent_id,
+          nombre:                      nv.nombre,
+          unidad_medida:               nv.unidad_medida,
+          cantidad:                    nv.cantidad,
+          precio_unitario:             nv.precio_unitario,
+          is_new:                      true,
+          is_deleted:                  false,
+          is_pending_approval:         pendingApproval,
+          pending_log_id:              log.id,
+          pending_reflects_to_partner: reflectsToPartner,
         })
       }
     }
     else if (log.change_type === 'new_unit' && log.parent_id) {
       const nv = log.new_value as { nombre: string; descripcion: string | null; chapter_id: string; partner_id: string }
       baseUnits[`pending:${log.id}`] = {
-        id:                  `pending:${log.id}`,
-        chapter_id:          nv.chapter_id,
-        nombre:              nv.nombre,
-        descripcion:         nv.descripcion,
-        partner_id:          nv.partner_id,
-        partner_nombre:      partnerNames[nv.partner_id] ?? null,
-        is_new:              true,
-        is_deleted:          false,
-        is_pending_approval: pendingApproval,
-        pending_log_id:      log.id,
-        partidas:            [],
+        id:                          `pending:${log.id}`,
+        chapter_id:                  nv.chapter_id,
+        nombre:                      nv.nombre,
+        descripcion:                 nv.descripcion,
+        partner_id:                  nv.partner_id,
+        partner_nombre:              partnerNames[nv.partner_id] ?? null,
+        is_new:                      true,
+        is_deleted:                  false,
+        is_pending_approval:         pendingApproval,
+        pending_log_id:              log.id,
+        pending_reflects_to_partner: reflectsToPartner,
+        partidas:                    [],
       }
     }
     else if (log.change_type === 'delete_partida' && log.target_id) {

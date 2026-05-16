@@ -359,7 +359,7 @@ export default async function FpeProjectDetailPage({
           .select(`
             id, project_id, source_project_unit_id, template_unit_id, chapter_id,
             custom_nombre, custom_descripcion, notas, orden,
-            template_unit:fpe_template_units(id, nombre, chapter_id)
+            template_unit:fpe_template_units(id, nombre, chapter_id, principal_discipline_id)
           `)
           .eq('project_id', params.id)
           .order('orden', { ascending: true }),
@@ -382,7 +382,8 @@ export default async function FpeProjectDetailPage({
             log:fpe_obra_change_log(
               id, change_type, target_kind, target_id, parent_id,
               old_value, new_value, categoria, sub_categoria, destino_acta,
-              razon, delta_monto, created_at, created_by
+              razon, delta_monto, created_at, created_by,
+              reflect_to_partner, effective_partner_id, add_to_template
             )
           `)
           .eq('project_id', params.id)
@@ -428,6 +429,27 @@ export default async function FpeProjectDetailPage({
       }
     }
   }
+
+  // EP payments (kind=original + kind=modification) para la sección EPCardsList
+  const { data: obraEpPaymentsRaw } = obraStartedAt
+    ? await admin
+        .from('fpe_obra_payment_schedule')
+        .select(`
+          id, project_id, contract_id, obra_milestone_id, partner_id,
+          nombre, pct, monto, status, fecha_estimada, fecha_facturado, fecha_pago,
+          orden, notas, kind, source_change_log_id, created_at,
+          milestone:fpe_obra_milestones(id, nombre),
+          source_log:fpe_obra_change_log(
+            id, parent_id, target_id, change_type, destino_acta, razon,
+            session_id, applied_at, cancelled_at,
+            acta:fpe_obra_actas!session_id(id, codigo, kind)
+          )
+        `)
+        .eq('project_id', params.id)
+        .order('partner_id', { ascending: true })
+        .order('orden', { ascending: true })
+    : { data: [] }
+  const obraEpPayments = (obraEpPaymentsRaw ?? []) as unknown[]
 
   // Logs cliente de sesiones cerradas, pendientes de firma DocuSign.
   const { data: obraAwaitingApprovalRaw } = obraStartedAt
@@ -488,6 +510,7 @@ export default async function FpeProjectDetailPage({
       obraActas={obraActas}
       obraAwaitingApproval={obraAwaitingApproval}
       obraProjectClient={obraProjectClient}
+      obraEpPayments={obraEpPayments}
     />
   )
 }

@@ -15,7 +15,13 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import { applyOneLog, buildLogsSnapshot, type LogRow } from '@/lib/fp-execution/obra-apply'
+import {
+  applyOneLog,
+  applyReflectToPartner,
+  buildLogsSnapshot,
+  recomputeObraSchedule,
+  type LogRow,
+} from '@/lib/fp-execution/obra-apply'
 
 const PROJECT_PATH = '/team/fp-execution/projects'
 
@@ -147,12 +153,28 @@ async function ensureSessionOpen(admin: ReturnType<typeof createAdminClient>, se
   return s as { id: string; project_id: string; status: string }
 }
 
+// Resuelve el partner adjudicado a una UE. Si la UE no tiene partner asignado,
+// devuelve null (ej. UEs custom recién creadas en otra sesión sin completarse).
+async function partnerOfUnit(
+  admin: ReturnType<typeof createAdminClient>,
+  obra_unit_id: string,
+): Promise<string | null> {
+  const { data } = await admin
+    .from('fpe_obra_unit_partners')
+    .select('partner_id')
+    .eq('obra_unit_id', obra_unit_id)
+    .limit(1)
+    .maybeSingle()
+  return (data?.partner_id as string | undefined) ?? null
+}
+
 // ── edit_partida ────────────────────────────────────────────────────────────
 
 export async function logEditPartida(args: BaseChangeArgs & {
-  partida_id:  string
-  new_cantidad: number
-  new_precio:   number
+  partida_id:          string
+  new_cantidad:        number
+  new_precio:          number
+  reflect_to_partner?: boolean
 }): Promise<{ log_id: string } | { error: string }> {
   try {
     const user = await requireManagerOrPartner()
@@ -181,24 +203,29 @@ export async function logEditPartida(args: BaseChangeArgs & {
       return { error: 'No hay cambios respecto al valor actual.' }
     }
 
-    const destino = computeDestino(args.categoria, args.sub_categoria)
+    const destino  = computeDestino(args.categoria, args.sub_categoria)
+    const partner  = await partnerOfUnit(admin, part.obra_unit_id)
+    const reflect  = !!args.reflect_to_partner && !!partner
+
     const { data: log, error } = await admin
       .from('fpe_obra_change_log')
       .insert({
-        session_id:    args.session_id,
-        project_id:    session.project_id,
-        change_type:   'edit_partida',
-        target_kind:   'partida',
-        target_id:     args.partida_id,
-        parent_id:     part.obra_unit_id,
-        old_value:     { cantidad: part.cantidad, precio_unitario: part.precio_unitario_adjudicado },
-        new_value:     { cantidad: args.new_cantidad, precio_unitario: args.new_precio },
-        categoria:     args.categoria,
-        sub_categoria: args.sub_categoria,
-        destino_acta:  destino,
-        razon:         args.razon,
-        delta_monto:   delta,
-        created_by:    user.id,
+        session_id:           args.session_id,
+        project_id:           session.project_id,
+        change_type:          'edit_partida',
+        target_kind:          'partida',
+        target_id:            args.partida_id,
+        parent_id:            part.obra_unit_id,
+        old_value:            { cantidad: part.cantidad, precio_unitario: part.precio_unitario_adjudicado },
+        new_value:            { cantidad: args.new_cantidad, precio_unitario: args.new_precio },
+        categoria:            args.categoria,
+        sub_categoria:        args.sub_categoria,
+        destino_acta:         destino,
+        razon:                args.razon,
+        delta_monto:          delta,
+        reflect_to_partner:   reflect,
+        effective_partner_id: partner,
+        created_by:           user.id,
       })
       .select('id')
       .single()
@@ -213,11 +240,15 @@ export async function logEditPartida(args: BaseChangeArgs & {
 // ── new_partida (en UE existente) ───────────────────────────────────────────
 
 export async function logNewPartida(args: BaseChangeArgs & {
-  obra_unit_id:   string
-  nombre:         string
-  unidad_medida:  string
-  cantidad:       number
-  precio:         number
+  obra_unit_id:        string
+  nombre:              string
+  unidad_medida:       string
+  cantidad:            number
+  precio:              number
+  reflect_to_partner?: boolean
+  add_to_template?:    boolean
+  descripcion?:        string | null
+  discipline_id?:      string | null
 }): Promise<{ log_id: string } | { error: string }> {
   try {
     const user = await requireManagerOrPartner()
@@ -234,35 +265,47 @@ export async function logNewPartida(args: BaseChangeArgs & {
     if (!Number.isFinite(args.precio)   || args.precio   < 0) return { error: 'Precio inválido.' }
 
     const { data: unit } = await admin
-      .from('fpe_obra_units').select('id, project_id').eq('id', args.obra_unit_id).single()
+      .from('fpe_obra_units').select('id, project_id, template_unit_id').eq('id', args.obra_unit_id).single()
     if (!unit) return { error: 'UE no encontrada.' }
     if (unit.project_id !== session.project_id) return { error: 'UE no pertenece al proyecto.' }
 
+    if (args.add_to_template && !unit.template_unit_id) {
+      return { error: 'No se puede promover esta partida al template porque la UE parent es custom. Promueve antes la UE al template.' }
+    }
+
     const destino = computeDestino(args.categoria, args.sub_categoria)
     const delta   = args.cantidad * args.precio
+    const partner = await partnerOfUnit(admin, args.obra_unit_id)
+    const reflect = !!args.reflect_to_partner && !!partner
+
     const { data: log, error } = await admin
       .from('fpe_obra_change_log')
       .insert({
-        session_id:    args.session_id,
-        project_id:    session.project_id,
-        change_type:   'new_partida',
-        target_kind:   'partida',
-        target_id:     null,
-        parent_id:     args.obra_unit_id,
-        old_value:     null,
-        new_value:     {
+        session_id:           args.session_id,
+        project_id:           session.project_id,
+        change_type:          'new_partida',
+        target_kind:          'partida',
+        target_id:            null,
+        parent_id:            args.obra_unit_id,
+        old_value:            null,
+        new_value:            {
           nombre:         args.nombre.trim(),
           unidad_medida:  args.unidad_medida.trim(),
           cantidad:       args.cantidad,
           precio_unitario: args.precio,
           obra_unit_id:   args.obra_unit_id,
+          descripcion:    args.descripcion?.trim() || null,
+          discipline_id:  args.discipline_id ?? null,
         },
-        categoria:     args.categoria,
-        sub_categoria: args.sub_categoria,
-        destino_acta:  destino,
-        razon:         args.razon,
-        delta_monto:   delta,
-        created_by:    user.id,
+        categoria:            args.categoria,
+        sub_categoria:        args.sub_categoria,
+        destino_acta:         destino,
+        razon:                args.razon,
+        delta_monto:          delta,
+        reflect_to_partner:   reflect,
+        effective_partner_id: partner,
+        add_to_template:      !!args.add_to_template,
+        created_by:           user.id,
       })
       .select('id')
       .single()
@@ -277,10 +320,13 @@ export async function logNewPartida(args: BaseChangeArgs & {
 // ── new_unit (UE en capítulo existente) ─────────────────────────────────────
 
 export async function logNewUnit(args: BaseChangeArgs & {
-  chapter_id:  string
-  nombre:      string
-  descripcion: string | null
-  partner_id:  string
+  chapter_id:              string
+  nombre:                  string
+  descripcion:             string | null
+  partner_id:              string
+  reflect_to_partner?:     boolean
+  add_to_template?:        boolean
+  principal_discipline_id?: string | null
 }): Promise<{ log_id: string } | { error: string }> {
   try {
     const user = await requireManagerOrPartner()
@@ -296,28 +342,33 @@ export async function logNewUnit(args: BaseChangeArgs & {
     if (!args.partner_id) return { error: 'Falta partner adjudicado.' }
 
     const destino = computeDestino(args.categoria, args.sub_categoria)
+    const reflect = !!args.reflect_to_partner
     const { data: log, error } = await admin
       .from('fpe_obra_change_log')
       .insert({
-        session_id:    args.session_id,
-        project_id:    session.project_id,
-        change_type:   'new_unit',
-        target_kind:   'unit',
-        target_id:     null,
-        parent_id:     args.chapter_id,
-        old_value:     null,
-        new_value:     {
-          nombre:      args.nombre.trim(),
-          descripcion: args.descripcion?.trim() ?? null,
-          chapter_id:  args.chapter_id,
-          partner_id:  args.partner_id,
+        session_id:           args.session_id,
+        project_id:           session.project_id,
+        change_type:          'new_unit',
+        target_kind:          'unit',
+        target_id:            null,
+        parent_id:            args.chapter_id,
+        old_value:            null,
+        new_value:            {
+          nombre:                  args.nombre.trim(),
+          descripcion:             args.descripcion?.trim() ?? null,
+          chapter_id:              args.chapter_id,
+          partner_id:              args.partner_id,
+          principal_discipline_id: args.principal_discipline_id ?? null,
         },
-        categoria:     args.categoria,
-        sub_categoria: args.sub_categoria,
-        destino_acta:  destino,
-        razon:         args.razon,
-        delta_monto:   0,
-        created_by:    user.id,
+        categoria:            args.categoria,
+        sub_categoria:        args.sub_categoria,
+        destino_acta:         destino,
+        razon:                args.razon,
+        delta_monto:          0,
+        reflect_to_partner:   reflect,
+        effective_partner_id: args.partner_id,
+        add_to_template:      !!args.add_to_template,
+        created_by:           user.id,
       })
       .select('id')
       .single()
@@ -351,23 +402,25 @@ export async function logDeletePartida(args: {
     if (!part) return { error: 'Partida no encontrada.' }
 
     const delta = -((Number(part.cantidad) || 0) * (Number(part.precio_unitario_adjudicado) || 0))
+    const partner = await partnerOfUnit(admin, part.obra_unit_id)
     const { data: log, error } = await admin
       .from('fpe_obra_change_log')
       .insert({
-        session_id:    args.session_id,
-        project_id:    session.project_id,
-        change_type:   'delete_partida',
-        target_kind:   'partida',
-        target_id:     args.partida_id,
-        parent_id:     part.obra_unit_id,
-        old_value:     part as unknown,
-        new_value:     null,
-        categoria:     'ajuste',
-        sub_categoria: 'costo_empresa',
-        destino_acta:  'interna',
-        razon:         args.razon,
-        delta_monto:   delta,
-        created_by:    user.id,
+        session_id:           args.session_id,
+        project_id:           session.project_id,
+        change_type:          'delete_partida',
+        target_kind:          'partida',
+        target_id:            args.partida_id,
+        parent_id:            part.obra_unit_id,
+        old_value:            part as unknown,
+        new_value:            null,
+        categoria:            'ajuste',
+        sub_categoria:        'costo_empresa',
+        destino_acta:         'interna',
+        razon:                args.razon,
+        delta_monto:          delta,
+        effective_partner_id: partner,
+        created_by:           user.id,
       })
       .select('id')
       .single()
@@ -406,23 +459,25 @@ export async function logDeleteUnit(args: {
     const total = (lis ?? []).reduce((a, li: LI) =>
       a + (Number(li.cantidad) || 0) * (Number(li.precio_unitario_adjudicado) || 0), 0)
 
+    const partner = await partnerOfUnit(admin, args.unit_id)
     const { data: log, error } = await admin
       .from('fpe_obra_change_log')
       .insert({
-        session_id:    args.session_id,
-        project_id:    session.project_id,
-        change_type:   'delete_unit',
-        target_kind:   'unit',
-        target_id:     args.unit_id,
-        parent_id:     unit.chapter_id,
-        old_value:     unit as unknown,
-        new_value:     null,
-        categoria:     'ajuste',
-        sub_categoria: 'costo_empresa',
-        destino_acta:  'interna',
-        razon:         args.razon,
-        delta_monto:   -total,
-        created_by:    user.id,
+        session_id:           args.session_id,
+        project_id:           session.project_id,
+        change_type:          'delete_unit',
+        target_kind:          'unit',
+        target_id:            args.unit_id,
+        parent_id:            unit.chapter_id,
+        old_value:            unit as unknown,
+        new_value:            null,
+        categoria:            'ajuste',
+        sub_categoria:        'costo_empresa',
+        destino_acta:         'interna',
+        razon:                args.razon,
+        delta_monto:          -total,
+        effective_partner_id: partner,
+        created_by:           user.id,
       })
       .select('id')
       .single()
@@ -469,8 +524,14 @@ export async function removeChangeLog(
 // enviarse a DocuSign explícitamente desde el botón "Cerrar y enviar a firma".
 // ══════════════════════════════════════════════════════════════════════════════
 
+export interface PhaseImpactInput {
+  obra_phase_id: string
+  extra_dias:    number
+}
+
 export async function closeObraChangeSession(
   session_id: string,
+  phase_impacts: PhaseImpactInput[] = [],
 ): Promise<
   | { success: true; acta_ids: string[]; acta_cliente_id: string | null; acta_interna_id: string | null; pending_cliente_changes: number }
   | { error: string }
@@ -582,6 +643,35 @@ export async function closeObraChangeSession(
       createdActaIds.push(acta.id)
     }
 
+    // ── Reflejar al EP los logs marcados reflect_to_partner=true ────────────
+    // (Tanto cliente como interna: cliente queda pending_aprobacion hasta firma)
+    for (const log of refreshedLogs) {
+      if (!log.reflect_to_partner) continue
+      try {
+        await applyReflectToPartner(admin, log, session.project_id)
+      } catch (err) {
+        console.error('[closeObraChangeSession] applyReflectToPartner:', err)
+      }
+    }
+
+    // ── Persistir phase_impacts vinculados al acta correspondiente ──────────
+    // Si hay acta cliente → impactos cuelgan de ella (esperan firma).
+    // Si solo interna   → impactos cuelgan de la interna (aplican inmediato).
+    const impactsTargetActaId = actaClienteId ?? actaInternaId
+    const cleanImpacts = phase_impacts.filter(im =>
+      !!im.obra_phase_id && Number.isFinite(im.extra_dias) && im.extra_dias !== 0,
+    )
+    if (impactsTargetActaId && cleanImpacts.length > 0) {
+      const { error: impErr } = await admin
+        .from('fpe_obra_acta_phase_impacts')
+        .insert(cleanImpacts.map(im => ({
+          acta_id:       impactsTargetActaId,
+          obra_phase_id: im.obra_phase_id,
+          extra_dias:    Math.trunc(im.extra_dias),
+        })))
+      if (impErr) console.error('[closeObraChangeSession] phase_impacts insert:', impErr)
+    }
+
     const { error: closeErr } = await admin
       .from('fpe_obra_change_sessions')
       .update({
@@ -591,6 +681,26 @@ export async function closeObraChangeSession(
       })
       .eq('id', session_id)
     if (closeErr) return { error: closeErr.message }
+
+    // Si la sesión es SOLO interna (sin acta cliente), aplicar phase_impacts
+    // ya mismo al cronograma vivo y recomputar.
+    if (!actaClienteId && actaInternaId && cleanImpacts.length > 0) {
+      for (const im of cleanImpacts) {
+        const { data: phase } = await admin
+          .from('fpe_obra_phases')
+          .select('id, planned_duration_dias')
+          .eq('id', im.obra_phase_id)
+          .single()
+        if (!phase) continue
+        const current = Number(phase.planned_duration_dias ?? 0)
+        const next    = Math.max(0, current + Math.trunc(im.extra_dias))
+        await admin
+          .from('fpe_obra_phases')
+          .update({ planned_duration_dias: next })
+          .eq('id', phase.id)
+      }
+      await recomputeObraSchedule(session.project_id)
+    }
 
     revalidatePath(`${PROJECT_PATH}/${session.project_id}`)
     return {

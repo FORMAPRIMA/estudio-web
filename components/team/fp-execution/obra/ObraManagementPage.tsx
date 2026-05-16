@@ -19,6 +19,8 @@ export default function ObraManagementPage({
   chapterNames,
   partnerNames,
   chapters,
+  chapterDisciplines,
+  disciplines,
   partnersList,
   obraUnits,
   obraLineItems,
@@ -27,6 +29,7 @@ export default function ObraManagementPage({
   obraActas,
   obraAwaitingApproval,
   obraProjectClient,
+  obraEpPayments = [],
 }: {
   projectId:            string
   obraStartedAt:        string
@@ -38,7 +41,9 @@ export default function ObraManagementPage({
   chapterNames:         Record<string, string>
   partnerNames:         Record<string, string>
   chapters:             Array<{ id: string; nombre: string; orden: number }>
-  partnersList:         Array<{ id: string; nombre: string }>
+  chapterDisciplines:   Record<string, string | null>
+  disciplines:          Array<{ id: string; nombre: string }>
+  partnersList:         Array<{ id: string; nombre: string; email_contacto?: string | null; telefono?: string | null }>
   obraUnits:            unknown[]
   obraLineItems:        unknown[]
   obraUnitPartners:     { obra_unit_id: string; partner_id: string }[]
@@ -46,6 +51,7 @@ export default function ObraManagementPage({
   obraActas:            unknown[]
   obraAwaitingApproval: unknown[]
   obraProjectClient:    { nombre: string; nif: string | null; email: string | null } | null
+  obraEpPayments?:      unknown[]
 }) {
   const [subTab, setSubTab] = useState<SubTab>('dashboard')
 
@@ -79,6 +85,8 @@ export default function ObraManagementPage({
         <ObraPresupuestoTab
           projectId={projectId}
           chapters={chapters}
+          chapterDisciplines={chapterDisciplines}
+          disciplines={disciplines}
           partners={partnersList}
           partnerNames={partnerNames}
           obraUnits={obraUnits}
@@ -88,6 +96,9 @@ export default function ObraManagementPage({
           obraActas={obraActas}
           obraAwaitingApproval={obraAwaitingApproval}
           obraProjectClient={obraProjectClient}
+          obraPhases={phases}
+          chapterNames={chapterNames}
+          obraEpPayments={obraEpPayments}
         />
       )}
     </div>

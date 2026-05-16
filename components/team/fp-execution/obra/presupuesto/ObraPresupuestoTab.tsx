@@ -27,9 +27,15 @@ import DeleteModal from './DeleteModal'
 import CloseSessionModal from './CloseSessionModal'
 import ActasList from './ActasList'
 
+import type { ObraPhase } from '@/lib/fp-execution/obra'
+import EPCardsList from './EPCardsList'
+
 export default function ObraPresupuestoTab({
   projectId,
   chapters,
+  chapterDisciplines,
+  chapterNames,
+  disciplines,
   partners,
   partnerNames,
   obraUnits,
@@ -39,10 +45,15 @@ export default function ObraPresupuestoTab({
   obraActas,
   obraAwaitingApproval,
   obraProjectClient,
+  obraPhases,
+  obraEpPayments,
 }: {
   projectId:            string
   chapters:             Array<{ id: string; nombre: string; orden: number }>
-  partners:             Array<{ id: string; nombre: string }>
+  chapterDisciplines:   Record<string, string | null>
+  chapterNames:         Record<string, string>
+  disciplines:          Array<{ id: string; nombre: string }>
+  partners:             Array<{ id: string; nombre: string; email_contacto?: string | null; telefono?: string | null }>
   partnerNames:         Record<string, string>
   obraUnits:            unknown[]
   obraLineItems:        unknown[]
@@ -51,6 +62,8 @@ export default function ObraPresupuestoTab({
   obraActas:            unknown[]
   obraAwaitingApproval: unknown[]
   obraProjectClient:    { nombre: string; nif: string | null; email: string | null } | null
+  obraPhases:           ObraPhase[]
+  obraEpPayments:       unknown[]
 }) {
   const router = useRouter()
 
@@ -66,6 +79,24 @@ export default function ObraPresupuestoTab({
   }), [obraUnits, obraLineItems, obraUnitPartners, partnerNames, chapters, obraSession, obraAwaitingApproval])
 
   const { perChapter, grand } = useMemo(() => presupuestoTotals(view), [view])
+
+  // Maps derivados de las UEs raw para los modales:
+  // - unitIsTemplateMap: ¿la UE tiene template_unit_id? (gate de promoción de partidas)
+  // - unitDisciplineMap: principal_discipline_id del template_unit (fallback al chapter)
+  type ObraUnitRawLite = {
+    id: string
+    template_unit_id: string | null
+    template_unit: { id: string; principal_discipline_id?: string | null } | null
+  }
+  const { unitIsTemplateMap, unitDisciplineMap } = useMemo(() => {
+    const tmpl: Record<string, boolean> = {}
+    const disc: Record<string, string | null> = {}
+    for (const raw of (obraUnits as ObraUnitRawLite[])) {
+      tmpl[raw.id] = !!raw.template_unit_id
+      disc[raw.id] = raw.template_unit?.principal_discipline_id ?? null
+    }
+    return { unitIsTemplateMap: tmpl, unitDisciplineMap: disc }
+  }, [obraUnits])
 
   const session  = obraSession
   const editable = !!(session && session.status === 'open')
@@ -211,6 +242,7 @@ export default function ObraPresupuestoTab({
         perChapter={perChapter}
         grand={grand}
         editable={editable}
+        partnerNames={partnerNames}
         onEditPartida={(p, u, ch) => setModal({ kind: 'edit_partida', p, u, ch })}
         onAddPartida={(u, ch)     => setModal({ kind: 'new_partida', u, ch })}
         onAddUnit={(ch)           => setModal({ kind: 'new_unit', ch })}
@@ -237,6 +269,13 @@ export default function ObraPresupuestoTab({
         highlightedActaIds={highlightedActaIds}
       />
 
+      {/* Execution Partners */}
+      <EPCardsList
+        payments={obraEpPayments as Parameters<typeof EPCardsList>[0]['payments']}
+        partners={partners}
+        view={view}
+      />
+
       {/* Modals */}
       {modal?.kind === 'edit_partida' && session && (
         <EditPartidaModal
@@ -244,6 +283,7 @@ export default function ObraPresupuestoTab({
           partida={modal.p}
           unidadNombre={modal.u.nombre}
           capituloNombre={modal.ch.nombre}
+          partnerNombre={modal.u.partner_nombre}
           onClose={closeModal}
           onSaved={onSaved}
         />
@@ -254,6 +294,10 @@ export default function ObraPresupuestoTab({
           obraUnitId={modal.u.id}
           unidadNombre={modal.u.nombre}
           capituloNombre={modal.ch.nombre}
+          partnerNombre={modal.u.partner_nombre}
+          disciplines={disciplines}
+          defaultDisciplineId={unitDisciplineMap[modal.u.id] ?? chapterDisciplines[modal.ch.id] ?? null}
+          parentIsTemplate={unitIsTemplateMap[modal.u.id] ?? false}
           onClose={closeModal}
           onSaved={onSaved}
         />
@@ -264,6 +308,8 @@ export default function ObraPresupuestoTab({
           chapterId={modal.ch.id}
           chapterNombre={modal.ch.nombre}
           partners={partners}
+          disciplines={disciplines}
+          defaultDisciplineId={chapterDisciplines[modal.ch.id] ?? null}
           onClose={closeModal}
           onSaved={onSaved}
         />
@@ -284,6 +330,8 @@ export default function ObraPresupuestoTab({
           sessionId={session.id}
           log={session.log}
           projectClient={obraProjectClient}
+          obraPhases={obraPhases}
+          chapterNames={chapterNames}
           onClose={closeModal}
           onClosed={handleSessionClosed}
         />

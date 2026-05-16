@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createAndSendEnvelope } from '@/lib/docusign/client'
-import type { ObraActaChange, ObraActaPDFData } from '@/components/pdfs/ObraActaPDF'
+import type { ObraActaChange, ObraActaPDFData, ObraActaPhaseImpact } from '@/components/pdfs/ObraActaPDF'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -80,6 +80,35 @@ export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
       generated_at: string; total_delta: number; changes: ObraActaChange[]
     }
     const snap = acta.snapshot as Snapshot
+
+    // Phase impacts asociados al acta
+    const { data: impactsRaw } = await admin
+      .from('fpe_obra_acta_phase_impacts')
+      .select(`
+        extra_dias,
+        phase:fpe_obra_phases(id, nombre, planned_duration_dias, chapter_id)
+      `)
+      .eq('acta_id', ctx.params.id)
+    type ImpactRow = {
+      extra_dias: number
+      phase: { id: string; nombre: string; planned_duration_dias: number | null; chapter_id: string | null } | null
+    }
+    const impactsRows = (impactsRaw ?? []) as unknown as ImpactRow[]
+    const chapterIds = Array.from(new Set(impactsRows.map(r => r.phase?.chapter_id).filter((x): x is string => !!x)))
+    const { data: chsRaw } = chapterIds.length > 0
+      ? await admin.from('fpe_template_chapters').select('id, nombre').in('id', chapterIds)
+      : { data: [] as Array<{ id: string; nombre: string }> }
+    const chById: Record<string, string> = {}
+    for (const ch of (chsRaw ?? [])) chById[ch.id] = ch.nombre
+    const phaseImpacts: ObraActaPhaseImpact[] = impactsRows
+      .filter(r => !!r.phase)
+      .map(r => ({
+        phase_nombre:        r.phase!.nombre,
+        chapter_nombre:      r.phase!.chapter_id ? (chById[r.phase!.chapter_id] ?? null) : null,
+        duracion_antes_dias: Number(r.phase!.planned_duration_dias ?? 0),
+        extra_dias:          Number(r.extra_dias),
+      }))
+
     const data: ObraActaPDFData = {
       kind:              'cliente',
       codigo:            acta.codigo,
@@ -95,7 +124,8 @@ export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
         nif:       c.nif,
         direccion: c.direccion,
       },
-      changes: snap.changes ?? [],
+      changes:       snap.changes ?? [],
+      phase_impacts: phaseImpacts,
     }
 
     const { generateObraActaPDF } = await import('@/components/pdfs/ObraActaPDF')

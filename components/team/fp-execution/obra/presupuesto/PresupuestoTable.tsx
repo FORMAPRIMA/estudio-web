@@ -14,6 +14,7 @@ export default function PresupuestoTable({
   perChapter,
   grand,
   editable,
+  partnerNames = {},
   onEditPartida,
   onDeletePartida,
   onAddPartida,
@@ -25,6 +26,7 @@ export default function PresupuestoTable({
   perChapter:    Record<string, number>
   grand:         number
   editable:      boolean
+  partnerNames?: Record<string, string>
   onEditPartida: (p: UIPartida, u: UIUnit, ch: UIChapter) => void
   onDeletePartida: (p: UIPartida, u: UIUnit, ch: UIChapter) => void
   onAddPartida:  (u: UIUnit, ch: UIChapter) => void
@@ -161,6 +163,16 @@ export default function PresupuestoTable({
                           padding: '2px 6px', borderRadius: 3,
                         }}>ELIMINAR</span>
                       )}
+                      {u.pending_reflects_to_partner && (
+                        <span
+                          title={`Se reflejará al partner ${partnerNames[u.pending_reflects_to_partner] ?? '—'}.`}
+                          style={{
+                            marginLeft: 6, fontSize: 9, fontWeight: 700,
+                            background: '#FEF3C7', color: '#92400E',
+                            padding: '2px 6px', borderRadius: 3, cursor: 'help',
+                          }}
+                        >→ EP</span>
+                      )}
                     </span>
                     <span style={{ fontSize: 11, color: subColor, fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
                       {euros(ueTotal)}
@@ -226,6 +238,12 @@ export default function PresupuestoTable({
                           )}
                           {hasEditPending && !p.is_pending_approval && (
                             <span style={{ fontSize: 8, fontWeight: 700, background: '#FED7AA', color: '#9A3412', padding: '1px 5px', borderRadius: 2 }}>MODIFICADA</span>
+                          )}
+                          {p.pending_reflects_to_partner && (
+                            <span
+                              title={`Se reflejará al partner ${partnerNames[p.pending_reflects_to_partner] ?? '—'}.`}
+                              style={{ fontSize: 8, fontWeight: 700, background: '#FEF3C7', color: '#92400E', padding: '1px 5px', borderRadius: 2, cursor: 'help' }}
+                            >→ EP</span>
                           )}
                         </div>
                         <div style={{ fontSize: 11, color: numColor, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>

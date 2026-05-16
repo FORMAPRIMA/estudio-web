@@ -31,6 +31,9 @@ export type LogRow = {
   cancelled_at?: string | null
   session_id?:   string
   project_id?:   string
+  reflect_to_partner?:   boolean | null
+  effective_partner_id?: string | null
+  add_to_template?:      boolean | null
 }
 
 // ── Apply a single log entry to the live presupuesto ────────────────────────
@@ -54,18 +57,67 @@ export async function applyOneLog(
     return log.target_id
   }
   if (log.change_type === 'new_partida') {
-    const nv = log.new_value as { nombre: string; unidad_medida: string; cantidad: number; precio_unitario: number; obra_unit_id: string }
+    const nv = log.new_value as {
+      nombre: string; unidad_medida: string; cantidad: number; precio_unitario: number;
+      obra_unit_id: string; descripcion?: string | null; discipline_id?: string | null
+    }
+
+    // Si add_to_template=true, intentamos insertar en fpe_template_line_items
+    // bajo el template_unit_id de la UE parent. Si la UE es custom (sin
+    // template_unit_id) no podemos promover — se loguea y seguimos.
+    let templateLineItemId: string | null = null
+    if (log.add_to_template) {
+      try {
+        const { data: parentUnit } = await admin
+          .from('fpe_obra_units')
+          .select('template_unit_id')
+          .eq('id', nv.obra_unit_id)
+          .single()
+        const tplUnitId = parentUnit?.template_unit_id as string | undefined
+        if (tplUnitId) {
+          const { data: maxOrd } = await admin
+            .from('fpe_template_line_items')
+            .select('orden')
+            .eq('unit_id', tplUnitId)
+            .order('orden', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+          const orden = ((maxOrd?.orden as number | undefined) ?? 0) + 10
+          const { data: tplLi, error: tplErr } = await admin
+            .from('fpe_template_line_items')
+            .insert({
+              unit_id:       tplUnitId,
+              nombre:        nv.nombre,
+              descripcion:   nv.descripcion ?? null,
+              unidad_medida: nv.unidad_medida,
+              orden,
+              activo:        true,
+              discipline_id: nv.discipline_id ?? null,
+            })
+            .select('id')
+            .single()
+          if (tplErr) throw new Error(tplErr.message)
+          templateLineItemId = tplLi.id
+        }
+      } catch (err) {
+        console.error('[applyOneLog] template promotion (new_partida) failed:', err)
+      }
+    }
+
+    const insertPayload: Record<string, unknown> = {
+      obra_unit_id:                nv.obra_unit_id,
+      custom_nombre:               nv.nombre,
+      custom_unidad_medida:        nv.unidad_medida,
+      cantidad_inicial:            nv.cantidad,
+      cantidad:                    nv.cantidad,
+      precio_unitario_adjudicado:  nv.precio_unitario,
+      created_in_session_id:       session_id,
+    }
+    if (templateLineItemId) insertPayload.template_line_item_id = templateLineItemId
+
     const { data: inserted, error } = await admin
       .from('fpe_obra_line_items')
-      .insert({
-        obra_unit_id:                nv.obra_unit_id,
-        custom_nombre:               nv.nombre,
-        custom_unidad_medida:        nv.unidad_medida,
-        cantidad_inicial:            nv.cantidad,
-        cantidad:                    nv.cantidad,
-        precio_unitario_adjudicado:  nv.precio_unitario,
-        created_in_session_id:       session_id,
-      })
+      .insert(insertPayload)
       .select('id')
       .single()
     if (error) throw new Error(`new_partida: ${error.message}`)
@@ -73,17 +125,56 @@ export async function applyOneLog(
     return inserted.id
   }
   if (log.change_type === 'new_unit') {
-    const nv = log.new_value as { nombre: string; descripcion: string | null; chapter_id: string; partner_id: string }
+    const nv = log.new_value as {
+      nombre: string; descripcion: string | null; chapter_id: string; partner_id: string
+      principal_discipline_id?: string | null
+    }
+    // Si add_to_template=true, primero creamos la UE en el template y la
+    // referenciamos desde obra_units (así futuras partidas pueden promoverse).
+    let templateUnitId: string | null = null
+    if (log.add_to_template) {
+      try {
+        // siguiente orden disponible dentro del chapter
+        const { data: maxOrd } = await admin
+          .from('fpe_template_units')
+          .select('orden')
+          .eq('chapter_id', nv.chapter_id)
+          .order('orden', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        const orden = ((maxOrd?.orden as number | undefined) ?? 0) + 10
+        const { data: tplU, error: tplErr } = await admin
+          .from('fpe_template_units')
+          .insert({
+            chapter_id:              nv.chapter_id,
+            nombre:                  nv.nombre,
+            descripcion:             nv.descripcion,
+            orden,
+            activo:                  true,
+            principal_discipline_id: nv.principal_discipline_id ?? null,
+          })
+          .select('id')
+          .single()
+        if (tplErr) throw new Error(tplErr.message)
+        templateUnitId = tplU.id
+      } catch (err) {
+        console.error('[applyOneLog] template promotion (new_unit) failed:', err)
+      }
+    }
+
+    const insertPayload: Record<string, unknown> = {
+      project_id,
+      custom_nombre:         nv.nombre,
+      custom_descripcion:    nv.descripcion,
+      chapter_id:            nv.chapter_id,
+      orden:                 9999,
+      created_in_session_id: session_id,
+    }
+    if (templateUnitId) insertPayload.template_unit_id = templateUnitId
+
     const { data: inserted, error: e1 } = await admin
       .from('fpe_obra_units')
-      .insert({
-        project_id,
-        custom_nombre:         nv.nombre,
-        custom_descripcion:    nv.descripcion,
-        chapter_id:            nv.chapter_id,
-        orden:                 9999,
-        created_in_session_id: session_id,
-      })
+      .insert(insertPayload)
       .select('id')
       .single()
     if (e1) throw new Error(`new_unit: ${e1.message}`)
@@ -105,6 +196,118 @@ export async function applyOneLog(
     return log.target_id
   }
   throw new Error(`Tipo de cambio no soportado o target_id ausente: ${log.change_type}`)
+}
+
+// ── Reflect a log's delta as a modification payment to the EP ───────────────
+// Crea una fila kind='modification' en fpe_obra_payment_schedule colgada del
+// último hito de pago del partner. Si el partner no tiene aún schedule, crea
+// un milestone sintético "Pendiente antes de cierre" como ancla.
+//
+// status:
+//   - destino_acta='cliente' → 'pending_aprobacion'
+//   - destino_acta='interna' → 'pendiente'
+//
+// Devuelve el id de la nueva fila, o null si no se reflejó (sin partner /
+// sin contrato resoluble / monto 0).
+export async function applyReflectToPartner(
+  admin: Admin,
+  log: LogRow,
+  project_id: string,
+): Promise<string | null> {
+  if (!log.reflect_to_partner) return null
+  const partnerId = log.effective_partner_id
+  if (!partnerId) return null
+  const monto = Number(log.delta_monto) || 0
+  if (monto === 0) return null
+
+  // 1. Último payment_schedule kind='original' del partner en este proyecto.
+  type Ps = { id: string; contract_id: string; obra_milestone_id: string | null; orden: number | null }
+  const { data: lastPs } = await admin
+    .from('fpe_obra_payment_schedule')
+    .select('id, contract_id, obra_milestone_id, orden')
+    .eq('project_id', project_id)
+    .eq('partner_id', partnerId)
+    .eq('kind', 'original')
+    .order('orden', { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle() as { data: Ps | null }
+
+  let anchorContractId: string | null = lastPs?.contract_id ?? null
+  let anchorMilestoneId: string | null = lastPs?.obra_milestone_id ?? null
+  let anchorOrden: number = lastPs?.orden ?? 0
+
+  // 2. Si no hay schedule todavía, resolver contract_id por award y crear un
+  //    "milestone sintético" (payment_schedule row kind='original' monto=0)
+  //    para anclar las modificaciones.
+  if (!lastPs) {
+    const { data: contractRow } = await admin
+      .from('fpe_contracts')
+      .select('id, award:fpe_awards(partner_id, tender:fpe_tenders(project_id))')
+      .eq('award.partner_id', partnerId)
+      .eq('award.tender.project_id', project_id)
+      .limit(1)
+      .maybeSingle()
+    type ContractAward = { award: { partner_id: string; tender: { project_id: string } } | null }
+    const cr = contractRow as (ContractAward & { id: string }) | null
+    if (!cr?.id || !cr.award) {
+      console.warn(`[applyReflectToPartner] no contract found for partner ${partnerId} in project ${project_id}`)
+      return null
+    }
+    anchorContractId = cr.id
+
+    const { data: synth, error: synthErr } = await admin
+      .from('fpe_obra_payment_schedule')
+      .insert({
+        project_id,
+        contract_id: anchorContractId,
+        partner_id:  partnerId,
+        nombre:      'Pendiente antes de cierre',
+        pct:         0,
+        monto:       0,
+        status:      'pendiente',
+        kind:        'original',
+        orden:       9999,
+      })
+      .select('id, orden')
+      .single()
+    if (synthErr) {
+      console.error('[applyReflectToPartner] synth original create failed:', synthErr)
+      return null
+    }
+    anchorMilestoneId = null
+    anchorOrden       = (synth.orden as number | null) ?? 9999
+  }
+  if (!anchorContractId) return null
+
+  // 3. Insertar la fila kind='modification'.
+  const status = log.destino_acta === 'cliente' ? 'pending_aprobacion' : 'pendiente'
+
+  // Descripción legible: codigo de acta lo añade applyClienteChangesForActa al
+  // promoverla. Aquí dejamos un nombre genérico (delta + log id corto).
+  const nombre = `Modificación obra · ${log.id.slice(0, 8)}`
+
+  const { data: inserted, error } = await admin
+    .from('fpe_obra_payment_schedule')
+    .insert({
+      project_id,
+      contract_id:          anchorContractId,
+      obra_milestone_id:    anchorMilestoneId,
+      partner_id:           partnerId,
+      nombre,
+      pct:                  0,
+      monto,
+      status,
+      kind:                 'modification',
+      source_change_log_id: log.id,
+      orden:                anchorOrden + 1,
+    })
+    .select('id')
+    .single()
+  if (error) {
+    console.error('[applyReflectToPartner] insert modification failed:', error)
+    return null
+  }
+  return inserted.id as string
 }
 
 // ── Build snapshot (UI + acta) for a group of logs ──────────────────────────
@@ -234,7 +437,7 @@ export async function applyClienteChangesForActa(acta_id: string): Promise<{ app
     const admin = createAdminClient()
     const { data: acta } = await admin
       .from('fpe_obra_actas')
-      .select('id, project_id, session_id, kind')
+      .select('id, project_id, session_id, kind, codigo')
       .eq('id', acta_id)
       .single()
     if (!acta) return { error: 'Acta no encontrada.' }
@@ -250,7 +453,11 @@ export async function applyClienteChangesForActa(acta_id: string): Promise<{ app
       .order('created_at', { ascending: true })
 
     const logs = (logsRaw ?? []) as LogRow[]
-    if (logs.length === 0) return { applied: 0 }
+    if (logs.length === 0) {
+      // Aun sin logs, los phase_impacts se aplican si los hay.
+      await applyPhaseImpactsForActa(admin, acta_id, acta.project_id)
+      return { applied: 0 }
+    }
 
     const nowIso = new Date().toISOString()
     let count = 0
@@ -264,11 +471,54 @@ export async function applyClienteChangesForActa(acta_id: string): Promise<{ app
       }
     }
 
+    // Promote payment_schedule rows: pending_aprobacion → pendiente
+    const reflectingLogIds = logs.filter(l => l.reflect_to_partner).map(l => l.id)
+    if (reflectingLogIds.length > 0) {
+      const { error: promErr } = await admin
+        .from('fpe_obra_payment_schedule')
+        .update({ status: 'pendiente' })
+        .in('source_change_log_id', reflectingLogIds)
+        .eq('status', 'pending_aprobacion')
+      if (promErr) console.error('[applyClienteChangesForActa] payment promotion:', promErr)
+    }
+
+    // Apply phase impacts attached to this acta, then recompute schedule.
+    await applyPhaseImpactsForActa(admin, acta_id, acta.project_id)
+
     revalidatePath(`${PROJECT_PATH}/${acta.project_id}`)
     return { applied: count }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error aplicando cambios cliente.' }
   }
+}
+
+// ── Aplica los phase_impacts de un acta (suma extra_dias a planned_duration) ──
+async function applyPhaseImpactsForActa(admin: Admin, acta_id: string, project_id: string) {
+  const { data: impactsRaw } = await admin
+    .from('fpe_obra_acta_phase_impacts')
+    .select('obra_phase_id, extra_dias')
+    .eq('acta_id', acta_id)
+  type Impact = { obra_phase_id: string; extra_dias: number }
+  const impacts = (impactsRaw ?? []) as Impact[]
+  if (impacts.length === 0) return
+
+  for (const im of impacts) {
+    const { data: phase } = await admin
+      .from('fpe_obra_phases')
+      .select('id, planned_duration_dias')
+      .eq('id', im.obra_phase_id)
+      .single()
+    if (!phase) continue
+    const current = Number(phase.planned_duration_dias ?? 0)
+    const next    = Math.max(0, current + Number(im.extra_dias))
+    const { error } = await admin
+      .from('fpe_obra_phases')
+      .update({ planned_duration_dias: next })
+      .eq('id', phase.id)
+    if (error) console.error(`[applyPhaseImpactsForActa] phase ${phase.id}:`, error)
+  }
+
+  await recomputeObraSchedule(project_id)
 }
 
 export async function cancelClienteChangesForActa(acta_id: string): Promise<{ cancelled: number } | { error: string }> {
@@ -291,6 +541,20 @@ export async function cancelClienteChangesForActa(acta_id: string): Promise<{ ca
       .is('cancelled_at', null)
       .select('id')
     if (error) return { error: error.message }
+
+    // Marcar payment_schedule rows asociadas como cancelado_cliente.
+    const cancelledIds = (updRaw ?? []).map((r: { id: string }) => r.id)
+    if (cancelledIds.length > 0) {
+      const { error: psErr } = await admin
+        .from('fpe_obra_payment_schedule')
+        .update({ status: 'cancelado_cliente' })
+        .in('source_change_log_id', cancelledIds)
+        .eq('status', 'pending_aprobacion')
+      if (psErr) console.error('[cancelClienteChangesForActa] payment cancel:', psErr)
+    }
+
+    // Los phase_impacts NO se aplican (no se tocan obra_phases). Se mantienen en
+    // BD para consulta histórica del acta cancelada.
 
     revalidatePath(`${PROJECT_PATH}/${acta.project_id}`)
     return { cancelled: (updRaw ?? []).length }

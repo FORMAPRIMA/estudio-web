@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import type { ObraActaPDFData, ObraActaChange } from '@/components/pdfs/ObraActaPDF'
+import type { ObraActaPDFData, ObraActaChange, ObraActaPhaseImpact } from '@/components/pdfs/ObraActaPDF'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -71,6 +71,38 @@ export async function GET(_req: NextRequest, ctx: { params: { id: string } }) {
     }
     const snap = acta.snapshot as Snapshot
 
+    // Carga phase_impacts asociados al acta (sólo se renderizan en cliente).
+    let phaseImpacts: ObraActaPhaseImpact[] = []
+    if (acta.kind === 'cliente') {
+      const { data: impactsRaw } = await admin
+        .from('fpe_obra_acta_phase_impacts')
+        .select(`
+          extra_dias,
+          phase:fpe_obra_phases(id, nombre, planned_duration_dias, chapter_id)
+        `)
+        .eq('acta_id', ctx.params.id)
+      type ImpactRow = {
+        extra_dias: number
+        phase: { id: string; nombre: string; planned_duration_dias: number | null; chapter_id: string | null } | null
+      }
+      const rows = (impactsRaw ?? []) as unknown as ImpactRow[]
+      const chapterIds = Array.from(new Set(rows.map(r => r.phase?.chapter_id).filter((x): x is string => !!x)))
+      const { data: chsRaw } = chapterIds.length > 0
+        ? await admin.from('fpe_template_chapters').select('id, nombre').in('id', chapterIds)
+        : { data: [] as Array<{ id: string; nombre: string }> }
+      const chById: Record<string, string> = {}
+      for (const c of (chsRaw ?? [])) chById[c.id] = c.nombre
+
+      phaseImpacts = rows
+        .filter(r => !!r.phase)
+        .map(r => ({
+          phase_nombre:        r.phase!.nombre,
+          chapter_nombre:      r.phase!.chapter_id ? (chById[r.phase!.chapter_id] ?? null) : null,
+          duracion_antes_dias: Number(r.phase!.planned_duration_dias ?? 0),
+          extra_dias:          Number(r.extra_dias),
+        }))
+    }
+
     const data: ObraActaPDFData = {
       kind:              acta.kind as 'cliente' | 'interna',
       codigo:            acta.codigo,
@@ -81,8 +113,9 @@ export async function GET(_req: NextRequest, ctx: { params: { id: string } }) {
         direccion: project.direccion,
         ciudad:    project.ciudad,
       },
-      client:  clientInfo,
-      changes: snap.changes ?? [],
+      client:        clientInfo,
+      changes:       snap.changes ?? [],
+      phase_impacts: phaseImpacts,
     }
 
     const { generateObraActaPDF } = await import('@/components/pdfs/ObraActaPDF')

@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react'
 import CategorizationFields, { emptyCategorization, categorizationReady, type CategorizationValue } from './CategorizationFields'
+import ChangeExtras, { emptyExtras, type ExtrasValue } from './ChangeExtras'
 import { logNewPartida } from '@/app/actions/fpe-obra-presupuesto'
 import { ModalShell, Label, Small, Stat, inputStyle, Actions } from './EditPartidaModal'
 
@@ -10,21 +11,32 @@ export default function NewPartidaModal({
   obraUnitId,
   unidadNombre,
   capituloNombre,
+  partnerNombre,
+  disciplines,
+  defaultDisciplineId,
+  parentIsTemplate,
   onClose,
   onSaved,
 }: {
-  sessionId:      string
-  obraUnitId:     string
-  unidadNombre:   string
-  capituloNombre: string
-  onClose:        () => void
-  onSaved:        () => void
+  sessionId:           string
+  obraUnitId:          string
+  unidadNombre:        string
+  capituloNombre:      string
+  partnerNombre:       string | null
+  disciplines:         Array<{ id: string; nombre: string }>
+  defaultDisciplineId: string | null
+  parentIsTemplate:    boolean
+  onClose:             () => void
+  onSaved:             () => void
 }) {
   const [nombre,        setNombre]        = useState('')
+  const [descripcion,   setDescripcion]   = useState('')
   const [unidadMedida,  setUnidadMedida]  = useState('')
   const [cantidad,      setCantidad]      = useState('')
   const [precio,        setPrecio]        = useState('')
-  const [cat, setCat] = useState<CategorizationValue>(emptyCategorization)
+  const [disciplineId,  setDisciplineId]  = useState<string>(defaultDisciplineId ?? '')
+  const [cat, setCat]       = useState<CategorizationValue>(emptyCategorization)
+  const [extras, setExtras] = useState<ExtrasValue>(emptyExtras)
   const [saving, setSaving] = useState(false)
   const [err, setErr]       = useState<string | null>(null)
 
@@ -45,15 +57,19 @@ export default function NewPartidaModal({
   const handleConfirm = async () => {
     setSaving(true); setErr(null)
     const res = await logNewPartida({
-      session_id:     sessionId,
-      obra_unit_id:   obraUnitId,
-      nombre:         nombre.trim(),
-      unidad_medida:  unidadMedida.trim(),
-      cantidad:       cantidadN,
-      precio:         precioN,
-      categoria:      cat.categoria!,
-      sub_categoria:  cat.sub_categoria,
-      razon:          cat.razon.trim(),
+      session_id:         sessionId,
+      obra_unit_id:       obraUnitId,
+      nombre:             nombre.trim(),
+      unidad_medida:      unidadMedida.trim(),
+      cantidad:           cantidadN,
+      precio:             precioN,
+      categoria:          cat.categoria!,
+      sub_categoria:      cat.sub_categoria,
+      razon:              cat.razon.trim(),
+      reflect_to_partner: extras.reflectToPartner,
+      add_to_template:    extras.addToTemplate,
+      descripcion:        descripcion.trim() || null,
+      discipline_id:      disciplineId || null,
     })
     setSaving(false)
     if ('error' in res) { setErr(res.error); return }
@@ -87,6 +103,29 @@ export default function NewPartidaModal({
             onChange={e => setPrecio(e.target.value)} style={inputStyle} />
         </div>
       </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12, marginBottom: 14 }}>
+        <div>
+          <Label>Descripción (opcional)</Label>
+          <textarea
+            value={descripcion} onChange={e => setDescripcion(e.target.value)}
+            rows={2}
+            placeholder="Detalle del alcance de la partida."
+            style={{ ...inputStyle, resize: 'vertical', minHeight: 50 }}
+          />
+        </div>
+        <div>
+          <Label>Disciplina</Label>
+          <select
+            value={disciplineId} onChange={e => setDisciplineId(e.target.value)}
+            style={{ ...inputStyle, background: '#fff' }}
+          >
+            <option value="">— Selecciona —</option>
+            {disciplines.map(d => (
+              <option key={d.id} value={d.id}>{d.nombre}</option>
+            ))}
+          </select>
+        </div>
+      </div>
       <div style={{
         background: '#F8F7F4', borderRadius: 7, padding: '10px 14px', marginBottom: 16,
       }}>
@@ -95,6 +134,16 @@ export default function NewPartidaModal({
       </div>
 
       <CategorizationFields value={cat} onChange={setCat} contextForAI={ctx} />
+
+      <ChangeExtras
+        value={extras}
+        onChange={setExtras}
+        partnerNombre={partnerNombre}
+        showAddToTemplate
+        templateBlocked={!parentIsTemplate}
+        templateBlockedReason="La UE parent es custom y no está en el template. Promueve antes la UE al template para poder añadir esta partida también."
+        templateLabel="También añadir esta partida al template de proyectos"
+      />
 
       <Actions
         err={err}

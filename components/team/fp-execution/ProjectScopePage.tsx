@@ -1742,6 +1742,7 @@ export default function ProjectScopePage({
   obraActas = [],
   obraAwaitingApproval = [],
   obraProjectClient = null,
+  obraEpPayments = [],
 }: {
   project: Project
   chapters: TemplateChapter[]
@@ -1779,6 +1780,7 @@ export default function ProjectScopePage({
   obraActas?:            unknown[]
   obraAwaitingApproval?: unknown[]
   obraProjectClient?:    { nombre: string; nif: string | null; email: string | null } | null
+  obraEpPayments?:       unknown[]
 }) {
   const [project, setProject] = useState<Project>(initialProject)
   const [scope, setScope] = useState<ScopeState>(() =>
@@ -1985,7 +1987,15 @@ export default function ProjectScopePage({
             chapterNames={Object.fromEntries(chapters.map(ch => [ch.id, ch.nombre]))}
             partnerNames={Object.fromEntries(partners.map(p => [p.id, p.nombre]))}
             chapters={chapters.map(ch => ({ id: ch.id, nombre: ch.nombre, orden: ch.orden }))}
-            partnersList={partners.map(p => ({ id: p.id, nombre: p.nombre }))}
+            chapterDisciplines={Object.fromEntries(
+              chapters.map(ch => [ch.id, (ch as unknown as { principal_discipline_id?: string | null }).principal_discipline_id ?? null]),
+            )}
+            disciplines={disciplines.map(d => ({ id: d.id, nombre: d.nombre }))}
+            partnersList={partners.map(p => ({
+              id: p.id, nombre: p.nombre,
+              email_contacto: (p as unknown as { email_contacto?: string | null }).email_contacto ?? null,
+              telefono:       (p as unknown as { telefono?: string | null }).telefono ?? null,
+            }))}
             obraUnits={obraUnits}
             obraLineItems={obraLineItems}
             obraUnitPartners={obraUnitPartners}
@@ -1993,6 +2003,7 @@ export default function ProjectScopePage({
             obraActas={obraActas}
             obraAwaitingApproval={obraAwaitingApproval}
             obraProjectClient={obraProjectClient}
+            obraEpPayments={obraEpPayments}
           />
         )}
 

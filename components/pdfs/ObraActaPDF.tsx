@@ -47,6 +47,13 @@ export interface ObraActaChange {
   new_value:       Record<string, unknown> | null
 }
 
+export interface ObraActaPhaseImpact {
+  phase_nombre:        string
+  chapter_nombre:      string | null
+  duracion_antes_dias: number
+  extra_dias:          number   // positivo amplía, negativo adelanta
+}
+
 export interface ObraActaPDFData {
   kind:                'cliente' | 'interna'
   codigo:              string
@@ -62,7 +69,8 @@ export interface ObraActaPDFData {
     nif:       string | null
     direccion: string | null
   }
-  changes: ObraActaChange[]
+  changes:        ObraActaChange[]
+  phase_impacts?: ObraActaPhaseImpact[]
 }
 
 const euros = (n: number) =>
@@ -311,6 +319,56 @@ export async function generateObraActaPDF(data: ObraActaPDFData): Promise<Buffer
               </View>
             )
           })}
+
+          {/* Impacto en plazos (sólo cliente, sólo si hay impactos) */}
+          {isCliente && (data.phase_impacts ?? []).length > 0 && (
+            <View wrap={false}>
+              <Text style={s.sectionTitle}>Impacto en plazos</Text>
+              <Text style={s.intro}>
+                La firma de esta acta supone aceptación de las modificaciones de plazos planificados detalladas a continuación.
+              </Text>
+              {(data.phase_impacts ?? []).map((ph, idx) => {
+                const after  = Math.max(0, ph.duracion_antes_dias + ph.extra_dias)
+                const sign   = ph.extra_dias > 0 ? '+' : ph.extra_dias < 0 ? '−' : ''
+                const absExt = Math.abs(ph.extra_dias)
+                const deltaColor = ph.extra_dias > 0 ? C.brand : ph.extra_dias < 0 ? C.positive : C.mid
+                return (
+                  <View key={idx} style={s.changeCard}>
+                    <View style={s.changeHeader}>
+                      <Text style={s.changeType}>
+                        {ph.chapter_nombre ? `${ph.chapter_nombre} · ` : ''}{ph.phase_nombre}
+                      </Text>
+                      <Text style={[s.changeDelta, { color: deltaColor }]}>
+                        {sign}{absExt} días háb.
+                      </Text>
+                    </View>
+                    <View style={s.changeRow}>
+                      <Text style={s.changeLabel}>Duración antes</Text>
+                      <Text style={s.changeValue}>{ph.duracion_antes_dias} días háb.</Text>
+                    </View>
+                    <View style={s.changeRow}>
+                      <Text style={s.changeLabel}>Duración nueva</Text>
+                      <Text style={s.changeValue}>{after} días háb.</Text>
+                    </View>
+                  </View>
+                )
+              })}
+              {(() => {
+                const totalDelta = (data.phase_impacts ?? []).reduce((a, ph) => a + ph.extra_dias, 0)
+                const sign  = totalDelta > 0 ? '+' : totalDelta < 0 ? '−' : ''
+                const abs   = Math.abs(totalDelta)
+                const color = totalDelta > 0 ? C.brand : totalDelta < 0 ? C.positive : C.mid
+                return (
+                  <View style={s.totalBand}>
+                    <Text style={s.totalBandLabel}>Días totales añadidos</Text>
+                    <Text style={[s.totalBandValue, { color }]}>
+                      {sign}{abs} días háb.
+                    </Text>
+                  </View>
+                )
+              })()}
+            </View>
+          )}
 
           {/* Firma (sólo cliente) */}
           {isCliente && (
