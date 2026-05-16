@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     // ── Verify token ──────────────────────────────────────────────────────────
     const { data: inv, error: invErr } = await admin
       .from('fpe_tender_invitations')
-      .select('id, status, token_expires_at, tender_id')
+      .select('id, status, token_expires_at, tender_id, scope_unit_ids')
       .eq('token', body.token)
       .single()
 
@@ -41,6 +41,24 @@ export async function POST(req: NextRequest) {
     }
     if (new Date(tender.fecha_limite) < new Date()) {
       return NextResponse.json({ error: 'El plazo de presentación de ofertas ha finalizado.' }, { status: 403 })
+    }
+
+    // ── Scope check: rechazar líneas fuera del scope de la invitación ────────
+    const scopeUnitIds: string[] = (inv.scope_unit_ids as string[] | null) ?? []
+    if (body.line_items.length > 0) {
+      const lineItemIds = body.line_items.map(li => li.project_line_item_id)
+      const { data: pliRows } = await admin
+        .from('fpe_project_line_items')
+        .select('id, project_unit_id')
+        .in('id', lineItemIds)
+      const inScope = new Set(scopeUnitIds)
+      const offending = (pliRows ?? []).filter(r => !inScope.has(r.project_unit_id))
+      if (offending.length > 0 || (pliRows?.length ?? 0) !== lineItemIds.length) {
+        return NextResponse.json(
+          { error: 'Algunas partidas no pertenecen al alcance de tu invitación.' },
+          { status: 403 },
+        )
+      }
     }
 
     // ── Upsert bid ────────────────────────────────────────────────────────────

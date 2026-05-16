@@ -4,13 +4,25 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { sendEmail, wrapEmail } from '@/lib/email'
+import { buildContractData, fetchTechnicalDocsForContract } from '@/lib/fp-execution/contractData'
+import { loadProjectScheduleInputs, computePartnerChapterDates } from '@/lib/fp-execution/loadProjectSchedule'
 
 // ── Shared types (used by BidComparison client component) ─────────────────────
 
 export interface ScopeUnitRow {
-  unit_id:   string
-  unit_nombre: string
+  unit_id:        string
+  unit_nombre:    string
+  chapter_id:     string
+  chapter_nombre: string
+  chapter_orden:  number
   line_items: { id: string; nombre: string; cantidad: number; unidad_medida: string }[]
+}
+
+export interface BidPhaseDay {
+  phase_id:     string
+  phase_nombre: string
+  phase_orden:  number
+  dias:         number
 }
 
 export interface TenderBidRow {
@@ -22,7 +34,9 @@ export interface TenderBidRow {
   notas:           string | null
   status:          string
   prices:          Record<string, number>   // fpe_project_line_items.id → precio_unitario
-  totalDaysByUnit: Record<string, number>   // project_unit_id → total días laborales propuestos
+  // chapter_id → desglose de fases con días (las fases viven a nivel capítulo
+  // desde fpe_chapter_phases.sql)
+  phasesByChapter: Record<string, BidPhaseDay[]>
 }
 
 const LIST_PATH = '/team/fp-execution/projects'
@@ -38,6 +52,36 @@ async function requireManagerOrPartner() {
   if (!profile || !['fp_partner', 'fp_manager'].includes(profile.rol))
     throw new Error('Sin permisos.')
   return user
+}
+
+// ── Dream Team — obra start date override ───────────────────────────────────
+// Sets / clears fpe_projects.obra_start_date_override. Pass null to clear and
+// fall back to fecha_inicio_obra (the parametric Cronograma value).
+
+export async function setDreamTeamObraStartDate(
+  project_id: string,
+  date: string | null,
+): Promise<{ success: true } | { error: string }> {
+  try {
+    await requireManagerOrPartner()
+    const admin = createAdminClient()
+
+    // Validate ISO date if provided
+    if (date !== null && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return { error: 'Formato de fecha inválido. Esperado YYYY-MM-DD.' }
+    }
+
+    const { error } = await admin
+      .from('fpe_projects')
+      .update({ obra_start_date_override: date, updated_at: new Date().toISOString() })
+      .eq('id', project_id)
+
+    if (error) return { error: error.message }
+    revalidatePath(`${LIST_PATH}/${project_id}`)
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
 }
 
 // ── Tenders ───────────────────────────────────────────────────────────────────
@@ -203,7 +247,10 @@ export async function getTenderBids(
         .from('fpe_project_units')
         .select(`
           id, orden,
-          template_unit:fpe_template_units ( nombre ),
+          template_unit:fpe_template_units (
+            nombre, chapter_id,
+            chapter:fpe_template_chapters ( nombre, orden )
+          ),
           line_items:fpe_project_line_items (
             id, cantidad,
             template_line_item:fpe_template_line_items ( nombre, unidad_medida )
@@ -231,39 +278,78 @@ export async function getTenderBids(
           .in('invitation_id', invIds)
       : { data: [] as { id: string; invitation_id: string; notas: string | null; status: string; submitted_at: string; line_items: unknown[] }[] }
 
-    // Fetch phase durations for all bids
+    // Fetch phase durations for all bids (las fases son a nivel capítulo desde
+    // fpe_chapter_phases.sql — project_unit_id es legacy/null, el chapter_id
+    // viene de fpe_template_phases).
     const bidIds = (rawBids ?? []).map(b => b.id)
     const { data: phaseDurData } = bidIds.length > 0
       ? await admin
           .from('fpe_bid_phase_durations')
-          .select('bid_id, project_unit_id, duracion_dias')
+          .select(`
+            bid_id, duracion_dias, template_phase_id,
+            phase:fpe_template_phases ( nombre, orden, chapter_id )
+          `)
           .in('bid_id', bidIds)
-      : { data: [] as { bid_id: string; project_unit_id: string; duracion_dias: number }[] }
+      : { data: [] as RawPhaseDur[] }
 
-    // Group: bid_id → unit_id → total days
-    const daysByBidUnit: Record<string, Record<string, number>> = {}
-    for (const pd of (phaseDurData ?? [])) {
-      if (!daysByBidUnit[pd.bid_id]) daysByBidUnit[pd.bid_id] = {}
-      daysByBidUnit[pd.bid_id][pd.project_unit_id] =
-        (daysByBidUnit[pd.bid_id][pd.project_unit_id] ?? 0) + pd.duracion_dias
+    type RawPhaseDur = {
+      bid_id:            string
+      duracion_dias:     number
+      template_phase_id: string
+      phase: { nombre: string; orden: number; chapter_id: string | null } | null
     }
 
-    // Build scope
+    // Build scope (con info de capítulo)
     type RawUnit = {
       id: string; orden: number
-      template_unit: { nombre: string } | null
+      template_unit: {
+        nombre: string
+        chapter_id: string | null
+        chapter: { nombre: string; orden: number } | null
+      } | null
       line_items: { id: string; cantidad: number; template_line_item: { nombre: string; unidad_medida: string } | null }[]
     }
-    const scope: ScopeUnitRow[] = ((projectUnits ?? []) as unknown as RawUnit[]).map(pu => ({
-      unit_id:     pu.id,
-      unit_nombre: pu.template_unit?.nombre ?? '—',
-      line_items:  pu.line_items.map(li => ({
-        id:            li.id,
-        nombre:        li.template_line_item?.nombre ?? '—',
-        cantidad:      li.cantidad,
-        unidad_medida: li.template_line_item?.unidad_medida ?? '',
-      })),
-    }))
+    const scope: ScopeUnitRow[] = ((projectUnits ?? []) as unknown as RawUnit[])
+      .map(pu => ({
+        unit_id:        pu.id,
+        unit_nombre:    pu.template_unit?.nombre ?? '—',
+        chapter_id:     pu.template_unit?.chapter_id ?? '',
+        chapter_nombre: pu.template_unit?.chapter?.nombre ?? 'Sin capítulo',
+        chapter_orden:  pu.template_unit?.chapter?.orden ?? 9999,
+        line_items: pu.line_items.map(li => ({
+          id:            li.id,
+          nombre:        li.template_line_item?.nombre ?? '—',
+          cantidad:      li.cantidad,
+          unidad_medida: li.template_line_item?.unidad_medida ?? '',
+        })),
+      }))
+      // Orden estable: capítulo primero, luego orden interno de la UE
+      .sort((a, b) => a.chapter_orden - b.chapter_orden)
+
+    // Group: bid_id → chapter_id → phase_id → { nombre, orden, dias }
+    // El capítulo se deriva directamente de fpe_template_phases.chapter_id, no
+    // del UE: tras la migración a fases por capítulo, project_unit_id es nulo.
+    const phasesByBidChapter: Record<string, Record<string, Record<string, BidPhaseDay>>> = {}
+
+    for (const pd of ((phaseDurData ?? []) as unknown as RawPhaseDur[])) {
+      const chapterId = pd.phase?.chapter_id
+      if (!chapterId) continue
+
+      if (!phasesByBidChapter[pd.bid_id]) phasesByBidChapter[pd.bid_id] = {}
+      if (!phasesByBidChapter[pd.bid_id][chapterId]) phasesByBidChapter[pd.bid_id][chapterId] = {}
+
+      const existing = phasesByBidChapter[pd.bid_id][chapterId][pd.template_phase_id]
+      if (existing) {
+        existing.dias += pd.duracion_dias
+      } else {
+        phasesByBidChapter[pd.bid_id][chapterId][pd.template_phase_id] = {
+          phase_id:     pd.template_phase_id,
+          phase_nombre: pd.phase?.nombre ?? '—',
+          phase_orden:  pd.phase?.orden ?? 9999,
+          dias:         pd.duracion_dias,
+        }
+      }
+    }
 
     // Index invitations by id → partner info
     type RawInv = { id: string; partner: { nombre: string; email_contacto: string | null } | null }
@@ -281,12 +367,20 @@ export async function getTenderBids(
       const partner = invMap[bid.invitation_id] ?? { nombre: '?', email_contacto: null }
       const prices: Record<string, number> = {}
       for (const li of bid.line_items) prices[li.project_line_item_id] = li.precio_unitario
-      const totalDaysByUnit = daysByBidUnit[bid.id] ?? {}
+
+      // Aplana phasesByBidChapter[bid.id] → phasesByChapter ordenado por phase_orden
+      const phasesByChapter: Record<string, BidPhaseDay[]> = {}
+      const bucketsForBid = phasesByBidChapter[bid.id] ?? {}
+      for (const [chapterId, phaseMap] of Object.entries(bucketsForBid)) {
+        phasesByChapter[chapterId] = Object.values(phaseMap)
+          .sort((a, b) => a.phase_orden - b.phase_orden)
+      }
+
       return {
         id: bid.id, invitation_id: bid.invitation_id,
         partner_nombre: partner.nombre, partner_email: partner.email_contacto,
         submitted_at: bid.submitted_at, notas: bid.notas, status: bid.status,
-        prices, totalDaysByUnit,
+        prices, phasesByChapter,
       }
     })
 
@@ -354,13 +448,29 @@ export async function createAndSendDisciplineInvitations(
       tenderId = newTender.id
     }
 
-    // 3. Fetch all project unit IDs (scope_unit_ids = all units of the project)
+    // 3. Fetch project unit IDs + per-partner assignments.
+    //    scope_unit_ids debe ser el subset que el manager asignó a CADA partner
+    //    en fpe_project_unit_partners. Si dos partners comparten una UE, ambos
+    //    deben tener esa UE en su scope (compiten por las mismas partidas).
     const { data: projectUnits } = await admin
       .from('fpe_project_units')
       .select('id')
       .eq('project_id', project_id)
 
-    const allUnitIds = (projectUnits ?? []).map(u => u.id)
+    const projectUnitIds = (projectUnits ?? []).map(u => u.id)
+
+    const { data: unitPartnersRaw } = projectUnitIds.length > 0
+      ? await admin
+          .from('fpe_project_unit_partners')
+          .select('project_unit_id, partner_id')
+          .in('project_unit_id', projectUnitIds)
+      : { data: [] as { project_unit_id: string; partner_id: string }[] }
+
+    const unitIdsByPartner: Record<string, string[]> = {}
+    for (const row of unitPartnersRaw ?? []) {
+      if (!unitIdsByPartner[row.partner_id]) unitIdsByPartner[row.partner_id] = []
+      unitIdsByPartner[row.partner_id].push(row.project_unit_id)
+    }
 
     // 4. Carga invitaciones ya existentes (incluye las 'pending' creadas desde
     //    "Personalizar plan" antes de lanzar). Mapeamos por partner_id para
@@ -402,6 +512,8 @@ export async function createAndSendDisciplineInvitations(
       if (alreadySent.has(partnerId)) continue
 
       const disciplineIds = partnerDisciplines[partnerId]
+      const partnerUnitIds = unitIdsByPartner[partnerId] ?? []
+      if (partnerUnitIds.length === 0) continue   // sin UEs asignadas → skip
 
       // Reusa invitación pending pre-creada desde "Personalizar plan" (su plan
       // ya fue sembrado y posiblemente editado). Si no existe, créala ahora.
@@ -414,7 +526,7 @@ export async function createAndSendDisciplineInvitations(
         await admin
           .from('fpe_tender_invitations')
           .update({
-            scope_unit_ids:   allUnitIds,
+            scope_unit_ids:   partnerUnitIds,
             discipline_ids:   disciplineIds,
             token_expires_at: expires,
           })
@@ -426,7 +538,7 @@ export async function createAndSendDisciplineInvitations(
           .insert({
             tender_id:        tenderId,
             partner_id:       partnerId,
-            scope_unit_ids:   allUnitIds,
+            scope_unit_ids:   partnerUnitIds,
             discipline_ids:   disciplineIds,
             token_expires_at: expires,
             status:           'pending',
@@ -593,6 +705,119 @@ export async function revertUnitAward(data: {
   }
 }
 
+// Adjudica todo un capítulo (todas sus UEs) al mismo bid en una sola operación.
+// Valida que el bid cubra todas las partidas de todas las UEs del capítulo
+// antes de escribir nada.
+export async function awardChapter(data: {
+  project_id: string
+  chapter_id: string
+  bid_id:     string
+}): Promise<{ success: true; awarded: number } | { error: string }> {
+  try {
+    const user = await requireManagerOrPartner()
+    const admin = createAdminClient()
+
+    // 1. Partner detrás del bid
+    const { data: bid, error: bidErr } = await admin
+      .from('fpe_bids')
+      .select('id, invitation:fpe_tender_invitations(partner_id), line_items:fpe_bid_line_items(project_line_item_id)')
+      .eq('id', data.bid_id)
+      .single()
+    if (bidErr || !bid) return { error: bidErr?.message ?? 'Oferta no encontrada.' }
+
+    type RawBid = {
+      id: string
+      invitation: { partner_id: string } | null
+      line_items: { project_line_item_id: string }[]
+    }
+    const rawBid    = bid as unknown as RawBid
+    const partnerId = rawBid.invitation?.partner_id
+    if (!partnerId) return { error: 'No se pudo derivar el partner del bid.' }
+
+    const pricedItemIds = new Set(rawBid.line_items.map(li => li.project_line_item_id))
+
+    // 2. UEs del capítulo en este proyecto + sus partidas
+    const { data: unitsRaw } = await admin
+      .from('fpe_project_units')
+      .select(`
+        id,
+        template_unit:fpe_template_units!inner ( chapter_id ),
+        line_items:fpe_project_line_items ( id )
+      `)
+      .eq('project_id', data.project_id)
+      .eq('template_unit.chapter_id', data.chapter_id)
+
+    type RawChapUnit = {
+      id: string
+      template_unit: { chapter_id: string } | null
+      line_items: { id: string }[]
+    }
+    const units = (unitsRaw ?? []) as unknown as RawChapUnit[]
+    if (units.length === 0) return { error: 'El capítulo no tiene UEs en este proyecto.' }
+
+    // 3. Validar cobertura total
+    for (const u of units) {
+      for (const li of u.line_items) {
+        if (!pricedItemIds.has(li.id)) {
+          return { error: 'El partner no cubre todas las partidas del capítulo.' }
+        }
+      }
+    }
+
+    // 4. Upsert por cada UE
+    const rows = units.map(u => ({
+      project_id:      data.project_id,
+      project_unit_id: u.id,
+      bid_id:          data.bid_id,
+      partner_id:      partnerId,
+      awarded_by:      user.id,
+      awarded_at:      new Date().toISOString(),
+    }))
+
+    const { error } = await admin
+      .from('fpe_project_unit_awards')
+      .upsert(rows, { onConflict: 'project_id,project_unit_id' })
+    if (error) return { error: error.message }
+
+    revalidatePath(`${LIST_PATH}/${data.project_id}`)
+    return { success: true, awarded: rows.length }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
+export async function revertChapterAward(data: {
+  project_id: string
+  chapter_id: string
+}): Promise<{ success: true; reverted: number } | { error: string }> {
+  try {
+    await requireManagerOrPartner()
+    const admin = createAdminClient()
+
+    const { data: unitsRaw } = await admin
+      .from('fpe_project_units')
+      .select('id, template_unit:fpe_template_units!inner ( chapter_id )')
+      .eq('project_id', data.project_id)
+      .eq('template_unit.chapter_id', data.chapter_id)
+
+    type RawChapUnit = { id: string; template_unit: { chapter_id: string } | null }
+    const unitIds = ((unitsRaw ?? []) as unknown as RawChapUnit[]).map(u => u.id)
+    if (unitIds.length === 0) return { success: true, reverted: 0 }
+
+    const { error, count } = await admin
+      .from('fpe_project_unit_awards')
+      .delete({ count: 'exact' })
+      .eq('project_id', data.project_id)
+      .in('project_unit_id', unitIds)
+    if (error) return { error: error.message }
+
+    revalidatePath(`${LIST_PATH}/${data.project_id}`)
+    return { success: true, reverted: count ?? 0 }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
 export async function getProjectAwards(
   project_id: string
 ): Promise<{ awards: FpeProjectUnitAwardRow[] } | { error: string }> {
@@ -635,7 +860,8 @@ export async function getProjectAwards(
 // dominant (governing) discipline of each pack.
 
 export async function generateContractsFromAwards(
-  project_id: string
+  project_id: string,
+  partner_id?: string,
 ): Promise<{ success: true; created: number; sent_to_docusign: number } | { error: string }> {
   try {
     const user = await requireManagerOrPartner()
@@ -646,6 +872,12 @@ export async function generateContractsFromAwards(
     if ('error' in overview) return { error: overview.error }
     if (overview.partners.length === 0) return { error: 'No hay UEs adjudicadas todavía.' }
 
+    // If partner_id is provided, restrict the loop to that partner only.
+    const partnersToProcess = partner_id
+      ? overview.partners.filter(p => p.partner_id === partner_id)
+      : overview.partners
+    if (partnersToProcess.length === 0) return { error: 'Partner sin UEs adjudicadas.' }
+
     // ── Project info for contract body ──────────────────────────────────────
     const { data: project } = await admin
       .from('fpe_projects')
@@ -653,6 +885,11 @@ export async function generateContractsFromAwards(
       .eq('id', project_id)
       .single()
     if (!project) return { error: 'Proyecto no encontrado.' }
+
+    // ── Load schedule inputs once for the whole project ─────────────────────
+    // Used by every partner pack to derive Anexo III dates from the Dream Team
+    // Gantt (effective obra start date = override ?? parametric).
+    const scheduleInputs = await loadProjectScheduleInputs(admin, project_id)
 
     // ── Active tender for award linking (one fpe_award per partner expected) ─
     const { data: activeTender } = await admin
@@ -671,7 +908,7 @@ export async function generateContractsFromAwards(
     let sentToDocusign = 0
 
     // Process each partner pack
-    for (const pkg of overview.partners) {
+    for (const pkg of partnersToProcess) {
       // 1. Find the bid_id for this partner (any UE will do — they share the same bid)
       const { data: anyAward } = await admin
         .from('fpe_project_unit_awards')
@@ -709,48 +946,38 @@ export async function generateContractsFromAwards(
         awardId = newAward.id
       }
 
-      // 3. Build contenido_json from pkg
-      //    line_items[] is the flattened list (PDF expects this);
-      //    chapters[] keeps the structured pack for UI / future PDF richer rendering.
-      const flatLineItems = pkg.chapters.flatMap(ch =>
-        ch.units.flatMap(u =>
-          u.line_items.map(li => ({
-            nombre:          li.nombre,
-            unidad:          li.unidad_medida,
-            cantidad:        li.cantidad,
-            precio_unitario: li.precio_unitario,
-            total:           li.total,
-            unit_nombre:     u.unit_nombre,
-          }))
-        )
-      )
+      // 3. Build contract data (used both for persistence and PDF generation).
+      //    The full FpeContractData shape is stored in contenido_json so the
+      //    downstream webhook + signed-pdf flow can read partner/scope details
+      //    without re-querying.
+      const scope_unit_ids = pkg.chapters.flatMap(ch => ch.units.map(u => u.project_unit_id))
 
-      const contenido = {
+      const [{ data: partnerRow }, technical_docs] = await Promise.all([
+        admin
+          .from('fpe_partners')
+          .select('id, nombre, razon_social, nif_cif, contacto_nombre, email_contacto, telefono, direccion, ciudad, codigo_postal')
+          .eq('id', pkg.partner_id)
+          .single(),
+        fetchTechnicalDocsForContract({ admin, project_id, scope_unit_ids }),
+      ])
+
+      const chapter_dates = scheduleInputs
+        ? (computePartnerChapterDates({ inputs: scheduleInputs, pkg }) ?? undefined)
+        : undefined
+
+      const contenido = buildContractData({
         project: {
           id:        project.id,
           nombre:    project.nombre,
-          ciudad:    project.ciudad ?? '',
-          direccion: project.direccion ?? '',
+          direccion: project.direccion ?? null,
+          ciudad:    project.ciudad ?? null,
         },
-        partner: {
-          id:     pkg.partner_id,
-          nombre: pkg.partner_nombre,
-          email:  pkg.partner_email ?? '',
-        },
-        awarded_at:                  new Date().toISOString(),
-        governing_discipline:        pkg.governing_discipline_nombre,
-        total:                       pkg.total,
-        line_items:                  flatLineItems,
-        chapters: pkg.chapters.map(ch => ({
-          chapter_nombre: ch.chapter_nombre,
-          units: ch.units.map(u => ({
-            unit_nombre: u.unit_nombre,
-            total:       u.total,
-            days:        u.days,
-            line_items:  u.line_items,
-          })),
-        })),
-      }
+        partner:    partnerRow ?? null,
+        pkg,
+        awarded_at: new Date().toISOString(),
+        technical_docs,
+        chapter_dates,
+      })
 
       // 4. Insert / update fpe_contract (one per award)
       const { data: existingContract } = await admin
@@ -811,15 +1038,21 @@ export async function generateContractsFromAwards(
         const webhookUrl = `${SITE_URL}/api/webhooks/docusign`
 
         if (pkg.partner_email) {
+          const safeProject = project.nombre.replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 40)
+          const safePartner = pkg.partner_nombre.replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 40)
+          const docNumero   = `FPE-${safeProject}-${safePartner}`
+
           const { envelopeId } = await createAndSendEnvelope({
-            contratoId: contractId,
-            numero:     `FPE-${project.nombre}-${pkg.partner_nombre}`,
+            contratoId:   contractId,
+            numero:       docNumero,
             pdfBuffer,
             signers: {
               cliente: { email: pkg.partner_email, name: pkg.partner_nombre },
               estudio: { email: 'contacto@formaprima.es', name: 'Forma Prima' },
             },
             webhookUrl,
+            emailSubject: `Orden de Ejecución de Obra · ${project.nombre} — FP execution`,
+            documentName: `Orden-Ejecucion-${safePartner}`,
           })
 
           await admin
@@ -877,10 +1110,11 @@ export interface FpeOverviewChapter {
 }
 
 export interface FpeOverviewDiscipline {
-  id:     string
-  nombre: string
-  color:  string
-  count:  number
+  id:               string
+  nombre:           string
+  color:            string
+  count:            number
+  warranty_months:  number
 }
 
 export interface FpeOverviewPaymentMilestone {
@@ -888,18 +1122,45 @@ export interface FpeOverviewPaymentMilestone {
   pct:          number
   monto:        number
   trigger_type: string
+  milestone_id: string | null
+}
+
+export type FpeOverviewContractStatus =
+  | 'pendiente'       // No contract row yet
+  | 'draft'           // Contract row created, not sent to DocuSign
+  | 'sent_to_sign'    // Sent to DocuSign, awaiting signatures
+  | 'signed'          // DocuSign reportó completed pero aún no descargamos el PDF
+  | 'received'        // PDF firmado descargado y guardado en Storage
+  | 'cancelled'
+
+export interface FpeOverviewContract {
+  id:                    string
+  status:                FpeOverviewContractStatus
+  sent_at:               string | null
+  signed_at:             string | null
+  docusign_envelope_id:  string | null
+  pdf_signed_path:       string | null
+}
+
+export interface FpeOverviewPhaseDuration {
+  template_phase_id: string
+  chapter_id:        string | null
+  duracion_dias:     number
 }
 
 export interface FpeOverviewPartner {
   partner_id:              string
   partner_nombre:          string
   partner_email:           string | null
+  bid_id:                  string                       // primary bid (for previews + schedule rebuild)
   total:                   number
   governing_discipline_id: string | null
   governing_discipline_nombre: string | null
   disciplines:             FpeOverviewDiscipline[]
   chapters:                FpeOverviewChapter[]
   payment_milestones:      FpeOverviewPaymentMilestone[]
+  phase_durations:         FpeOverviewPhaseDuration[]
+  contract:                FpeOverviewContract | null
 }
 
 export async function getAdjudicationOverview(
@@ -938,15 +1199,74 @@ export async function getAdjudicationOverview(
     type BidLI = { bid_id: string; project_line_item_id: string; precio_unitario: number }
     const bidLineItems = (bidLineItemsRaw ?? []) as BidLI[]
 
-    // 3. Phase durations (days) for awarded bids + units
+    // 3. Phase durations (days) — ahora a nivel capítulo. Tras la migración a
+    // fases por capítulo, project_unit_id es NULL en los nuevos bids; el chapter
+    // se deriva de fpe_template_phases.chapter_id.
     const { data: phaseDurRaw } = await admin
       .from('fpe_bid_phase_durations')
-      .select('bid_id, project_unit_id, duracion_dias')
+      .select(`
+        bid_id, template_phase_id, duracion_dias,
+        phase:fpe_template_phases ( chapter_id )
+      `)
       .in('bid_id', bidIds)
-      .in('project_unit_id', awardedUnitIds)
 
-    type PhaseDur = { bid_id: string; project_unit_id: string; duracion_dias: number }
-    const phaseDurs = (phaseDurRaw ?? []) as PhaseDur[]
+    type PhaseDur = {
+      bid_id:            string
+      template_phase_id: string
+      duracion_dias:     number
+      phase:             { chapter_id: string | null } | null
+    }
+    const phaseDurs = (phaseDurRaw ?? []) as unknown as PhaseDur[]
+
+    // ── 3b. Contracts for this project (joined via fpe_awards → tender) ─────
+    const partnerIds = Array.from(new Set(awards.map(a => a.partner_id)))
+    const { data: activeTendersRaw } = await admin
+      .from('fpe_tenders')
+      .select('id')
+      .eq('project_id', project_id)
+    const activeTenderIds = (activeTendersRaw ?? []).map(t => t.id)
+
+    const { data: contractsRaw } = activeTenderIds.length > 0
+      ? await admin
+          .from('fpe_awards')
+          .select(`
+            id, partner_id, bid_id, tender_id,
+            contract:fpe_contracts (
+              id, status, sent_at, signed_at, docusign_envelope_id, contenido_json
+            )
+          `)
+          .in('tender_id', activeTenderIds)
+          .in('partner_id', partnerIds)
+      : { data: [] as never[] }
+
+    type AwardWithContract = {
+      id:         string
+      partner_id: string
+      bid_id:     string
+      tender_id:  string
+      contract: {
+        id:                    string
+        status:                FpeOverviewContractStatus
+        sent_at:               string | null
+        signed_at:             string | null
+        docusign_envelope_id:  string | null
+        contenido_json:        Record<string, unknown> | null
+      } | null
+    }
+    const awardsWithContracts = (contractsRaw ?? []) as unknown as AwardWithContract[]
+    const contractByPartner: Record<string, FpeOverviewContract> = {}
+    for (const a of awardsWithContracts) {
+      if (!a.contract) continue
+      const cj = a.contract.contenido_json ?? {}
+      contractByPartner[a.partner_id] = {
+        id:                   a.contract.id,
+        status:               a.contract.status,
+        sent_at:              a.contract.sent_at,
+        signed_at:            a.contract.signed_at,
+        docusign_envelope_id: a.contract.docusign_envelope_id,
+        pdf_signed_path:      (cj['pdf_signed_path'] as string | undefined) ?? null,
+      }
+    }
 
     // 4. Project units (for chapter mapping + line items)
     const { data: unitsRaw } = await admin
@@ -977,18 +1297,21 @@ export async function getAdjudicationOverview(
     // 5. Disciplines master + payment milestones
     const { data: discsRaw } = await admin
       .from('fpe_disciplines')
-      .select('id, nombre, color')
+      .select('id, nombre, color, warranty_months')
       .eq('activo', true)
 
-    const discById: Record<string, { id: string; nombre: string; color: string }> = {}
-    for (const d of (discsRaw ?? [])) discById[d.id] = d
+    type DiscRow = { id: string; nombre: string; color: string; warranty_months: number | null }
+    const discById: Record<string, { id: string; nombre: string; color: string; warranty_months: number }> = {}
+    for (const d of ((discsRaw ?? []) as DiscRow[])) {
+      discById[d.id] = { id: d.id, nombre: d.nombre, color: d.color, warranty_months: d.warranty_months ?? 12 }
+    }
 
     const { data: milestonesRaw } = await admin
       .from('fpe_discipline_payment_milestones')
-      .select('discipline_id, nombre, pct, trigger_type, orden')
+      .select('discipline_id, milestone_id, nombre, pct, trigger_type, orden')
       .order('orden', { ascending: true })
 
-    type Milestone = { discipline_id: string; nombre: string; pct: number; trigger_type: string; orden: number }
+    type Milestone = { discipline_id: string; milestone_id: string | null; nombre: string; pct: number; trigger_type: string; orden: number }
     const milestones = (milestonesRaw ?? []) as Milestone[]
 
     // ── Aggregation ──────────────────────────────────────────────────────────
@@ -997,22 +1320,46 @@ export async function getAdjudicationOverview(
     const priceByBidLi: Record<string, number> = {}
     for (const bli of bidLineItems) priceByBidLi[`${bli.bid_id}:${bli.project_line_item_id}`] = bli.precio_unitario
 
-    // Index days by (bid_id, project_unit_id)
-    const daysByBidUnit: Record<string, number> = {}
+    // Index days by (bid_id, chapter_id). El total del capítulo se reparte
+    // uniformemente entre sus UEs adjudicadas para producir un proxy por-UE,
+    // necesario para el JSON de contrato y el Gantt del Dream Team mientras
+    // las fases sigan a nivel capítulo.
+    const daysByBidChapter: Record<string, number> = {}
     for (const pd of phaseDurs) {
-      const k = `${pd.bid_id}:${pd.project_unit_id}`
-      daysByBidUnit[k] = (daysByBidUnit[k] ?? 0) + pd.duracion_dias
+      const chapterId = pd.phase?.chapter_id
+      if (!chapterId) continue
+      const k = `${pd.bid_id}:${chapterId}`
+      daysByBidChapter[k] = (daysByBidChapter[k] ?? 0) + pd.duracion_dias
     }
 
     // Index units
     const unitById: Record<string, UnitRaw> = {}
     for (const u of units) unitById[u.id] = u
 
+    // Cuántas UEs adjudicadas tiene cada (bid, capítulo) — para repartir
+    // los días del capítulo proporcionalmente entre sus UEs.
+    const awardedUnitsByBidChapter: Record<string, number> = {}
+    for (const aw of awards) {
+      const u = unitById[aw.project_unit_id]
+      const chapterId = u?.template_unit?.chapter_id
+      if (!chapterId) continue
+      const k = `${aw.bid_id}:${chapterId}`
+      awardedUnitsByBidChapter[k] = (awardedUnitsByBidChapter[k] ?? 0) + 1
+    }
+    const perUnitDays = (bidId: string, chapterId: string): number | null => {
+      const k = `${bidId}:${chapterId}`
+      const total = daysByBidChapter[k]
+      const count = awardedUnitsByBidChapter[k]
+      if (!total || !count) return null
+      return Math.round((total / count) * 10) / 10
+    }
+
     // Group awards by partner
     type PartnerBucket = {
       partner_id: string
       partner_nombre: string
       partner_email: string | null
+      bid_id: string
       total: number
       disciplines: Map<string, FpeOverviewDiscipline>
       // chapter_id → bucket
@@ -1041,6 +1388,7 @@ export async function getAdjudicationOverview(
           partner_id:     aw.partner_id,
           partner_nombre: aw.partner?.nombre ?? '?',
           partner_email:  aw.partner?.email_contacto ?? aw.partner?.email_notificaciones ?? null,
+          bid_id:         aw.bid_id,
           total:          0,
           disciplines:    new Map(),
           chapters:       new Map(),
@@ -1072,7 +1420,7 @@ export async function getAdjudicationOverview(
         if (d) {
           const prev = bucket.disciplines.get(d.id)
           if (prev) prev.count++
-          else bucket.disciplines.set(d.id, { id: d.id, nombre: d.nombre, color: d.color, count: 1 })
+          else bucket.disciplines.set(d.id, { id: d.id, nombre: d.nombre, color: d.color, count: 1, warranty_months: d.warranty_months })
         }
       }
 
@@ -1086,7 +1434,7 @@ export async function getAdjudicationOverview(
         project_unit_id: aw.project_unit_id,
         unit_nombre:     u.template_unit.nombre,
         total:           unitTotal,
-        days:            daysByBidUnit[`${aw.bid_id}:${aw.project_unit_id}`] ?? null,
+        days:            perUnitDays(aw.bid_id, u.template_unit.chapter_id ?? ''),
         line_items:      lineItems,
       })
     }
@@ -1111,7 +1459,17 @@ export async function getAdjudicationOverview(
         pct:          m.pct,
         monto:        Math.round(bucket.total * m.pct) / 100,
         trigger_type: m.trigger_type,
+        milestone_id: m.milestone_id,
       }))
+
+      // Phase durations for this partner's bid (a nivel capítulo)
+      const partnerPhaseDurs: FpeOverviewPhaseDuration[] = phaseDurs
+        .filter(pd => pd.bid_id === bucket.bid_id)
+        .map(pd => ({
+          template_phase_id: pd.template_phase_id,
+          chapter_id:        pd.phase?.chapter_id ?? null,
+          duracion_dias:     pd.duracion_dias,
+        }))
 
       type ChapterBucket = { chapter_id: string; chapter_nombre: string; chapter_orden: number; units: FpeOverviewUnit[] }
       const chapterList = (Array.from(bucket.chapters.values()) as ChapterBucket[])
@@ -1126,12 +1484,15 @@ export async function getAdjudicationOverview(
         partner_id:                  bucket.partner_id,
         partner_nombre:              bucket.partner_nombre,
         partner_email:               bucket.partner_email,
+        bid_id:                      bucket.bid_id,
         total:                       bucket.total,
         governing_discipline_id:     governingId,
         governing_discipline_nombre: governingNombre,
         disciplines:                 discList,
         chapters:                    chapterList,
         payment_milestones:          paymentMilestones,
+        phase_durations:             partnerPhaseDurs,
+        contract:                    contractByPartner[bucket.partner_id] ?? null,
       })
     }
 

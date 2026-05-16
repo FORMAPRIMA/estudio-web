@@ -24,6 +24,9 @@ export interface CreateEnvelopeOptions {
     estudio: DocuSignSigner
   }
   webhookUrl:  string
+  /** Optional override for the envelope email subject and document filename. */
+  emailSubject?: string
+  documentName?: string
 }
 
 /**
@@ -40,10 +43,10 @@ export async function createAndSendEnvelope(
   const token = await getDocuSignToken()
 
   const body = {
-    emailSubject: `Contrato de servicios ${opts.numero} — Forma Prima`,
+    emailSubject: opts.emailSubject ?? `Contrato de servicios ${opts.numero} — Forma Prima`,
     documents: [{
       documentBase64: opts.pdfBuffer.toString('base64'),
-      name:           `Contrato-${opts.numero}.pdf`,
+      name:           `${opts.documentName ?? `Contrato-${opts.numero}`}.pdf`,
       fileExtension:  'pdf',
       documentId:     '1',
     }],

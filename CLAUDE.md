@@ -225,8 +225,13 @@ Sistema de gestión de licitaciones y subcontratación. Es un módulo independie
 
 - Tablas con prefijo `fpe_*`: `fpe_projects`, `fpe_partners`, `fpe_tenders`, `fpe_invitations`, `fpe_bids`, `fpe_contracts`, `fpe_documents`
 - Portal externo para partners: `/execution-portal/[token]` (`components/fp-execution-portal/PortalPage.tsx`)
-- PDF de contrato FPE: `components/pdfs/FpeContractPDF.tsx`
+- PDF de contrato FPE (Orden de Ejecución de Obra): `components/pdfs/FpeContractPDF.tsx`
 - Tipos en `lib/fp-execution/domain.ts` (prefijo `Fpe*`)
+
+**Convenciones FPE — no negociables:**
+- **Unidad temporal: días hábiles.** Toda duración dentro de FP execution (oferta del EP, cronograma, plazos contractuales como el de pago) se expresa en días hábiles, no naturales. Única excepción explícita: el preaviso de activación de fase (5 días naturales) y similares cuando el contrato así lo indique. Cuando renderices duraciones, etiqueta siempre "días háb." o "días hábiles".
+- **Plazo de pago al EP:** 10 días hábiles desde que concurren acumulativamente (a) cumplimiento del hito de organización de obra que activa el pago y (b) certificación de ejecución correcta del EP por FP execution. La sola formalización del hito de organización no activa el plazo.
+- **Trigger de inicio de fase:** FP execution intenta avisar 5 días naturales antes. Si la fecha real coincide con la prevista → el EP entra en la prevista. Si difiere → 2 días hábiles de margen desde la activación efectiva.
 
 ### 5.7 Área Interna (`/team/area-interna`)
 Panel de gestión interna: avisos, mejoras/bugs, datos personales del equipo.

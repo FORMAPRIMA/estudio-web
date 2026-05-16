@@ -45,6 +45,7 @@ interface Discipline {
   color: string
   orden: number
   activo: boolean
+  warranty_months: number
 }
 
 interface Milestone {
@@ -59,7 +60,7 @@ interface DisciplinePaymentMilestone {
   id: string
   discipline_id: string
   milestone_id: string | null
-  trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery'
+  trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery' | 'pre_start' | 'pre_project_start'
   nombre: string
   pct: number
   orden: number
@@ -1376,6 +1377,7 @@ function DisciplineModal({
   const [descripcion, setDescripcion] = useState(initial?.descripcion ?? '')
   const [color, setColor] = useState(initial?.color ?? '#378ADD')
   const [orden, setOrden] = useState(String(initial?.orden ?? 0))
+  const [warrantyMonths, setWarrantyMonths] = useState(String(initial?.warranty_months ?? 12))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -1384,16 +1386,26 @@ function DisciplineModal({
     if (!nombre.trim()) { setError('El nombre es obligatorio.'); return }
     setSaving(true); setError(null)
 
+    const parsedOrden    = parseInt(orden) || 0
+    const parsedWarranty = Math.max(0, parseInt(warrantyMonths) || 0)
+    const payload = {
+      nombre:          nombre.trim(),
+      descripcion:     descripcion.trim() || null,
+      color,
+      orden:           parsedOrden,
+      warranty_months: parsedWarranty,
+    }
+
     if (initial) {
-      const res = await updateDiscipline(initial.id, { nombre: nombre.trim(), descripcion: descripcion.trim() || null, color, orden: parseInt(orden) || 0 })
+      const res = await updateDiscipline(initial.id, payload)
       setSaving(false)
       if ('error' in res) { setError(res.error); return }
-      onSaved({ ...initial, nombre: nombre.trim(), descripcion: descripcion.trim() || null, color, orden: parseInt(orden) || 0 })
+      onSaved({ ...initial, ...payload })
     } else {
-      const res = await createDiscipline({ nombre: nombre.trim(), descripcion: descripcion.trim() || null, color, orden: parseInt(orden) || 0 })
+      const res = await createDiscipline(payload)
       setSaving(false)
       if ('error' in res) { setError(res.error); return }
-      onSaved({ id: res.id, nombre: nombre.trim(), descripcion: descripcion.trim() || null, color, orden: parseInt(orden) || 0, activo: true })
+      onSaved({ id: res.id, ...payload, activo: true })
     }
   }
 
@@ -1431,6 +1443,20 @@ function DisciplineModal({
                 <label style={S.label}>Orden</label>
                 <input type="number" value={orden} onChange={e => setOrden(e.target.value)} style={S.input} />
               </div>
+            </div>
+            <div>
+              <label style={S.label}>Meses de garantía</label>
+              <input
+                type="number"
+                min={0}
+                value={warrantyMonths}
+                onChange={e => setWarrantyMonths(e.target.value)}
+                style={S.input}
+                placeholder="12"
+              />
+              <p style={{ margin: '4px 0 0', fontSize: 10, color: '#999' }}>
+                Periodo de garantía que el Execution Partner ofrece para trabajos de esta disciplina (Cláusula 11 de la Orden de Ejecución).
+              </p>
             </div>
             {error && <ErrorBanner msg={error} />}
           </div>
@@ -1498,6 +1524,12 @@ function DisciplinesSection({
                     <span style={{ fontSize: 12, fontWeight: 600, color: '#1A1A1A' }}>{d.nombre}</span>
                     {d.descripcion && <span style={{ fontSize: 11, color: '#AAA', marginLeft: 8 }}>{d.descripcion}</span>}
                   </div>
+                  <span
+                    title="Meses de garantía para Orden de Ejecución (Cláusula 11)"
+                    style={{ fontSize: 10, fontWeight: 600, color: '#1A5CA8', background: '#EBF5FF', padding: '2px 8px', borderRadius: 10, flexShrink: 0 }}
+                  >
+                    {d.warranty_months}m garantía
+                  </span>
                   {!d.activo && <span style={{ fontSize: 9, fontWeight: 700, color: '#9CA3AF', letterSpacing: '0.08em' }}>INACTIVA</span>}
                   <button onClick={() => setModal({ mode: 'edit', d })} style={{ ...S.btnSm(), fontSize: 11 }}>Editar</button>
                   <button onClick={() => setDeleting(d)} style={{ ...S.btnSm('#DC2626'), color: '#fff', fontSize: 11 }}>×</button>
@@ -1548,7 +1580,7 @@ function DisciplinePaymentMilestoneModal({
   onSaved: (m: DisciplinePaymentMilestone) => void
 }) {
   const [nombre, setNombre] = useState(initial?.nombre ?? '')
-  const [triggerType, setTriggerType] = useState<'contract_signed' | 'milestone_achieved' | 'delivery'>(initial?.trigger_type ?? 'milestone_achieved')
+  const [triggerType, setTriggerType] = useState<'contract_signed' | 'milestone_achieved' | 'delivery' | 'pre_start' | 'pre_project_start'>(initial?.trigger_type ?? 'milestone_achieved')
   const [milestoneId, setMilestoneId] = useState<string>(initial?.milestone_id ?? '')
   const [pct, setPct] = useState(String(initial?.pct ?? ''))
   const [orden, setOrden] = useState(String(initial?.orden ?? 0))
@@ -1618,6 +1650,8 @@ function DisciplinePaymentMilestoneModal({
               <label style={S.label}>Trigger</label>
               <select value={triggerType} onChange={e => setTriggerType(e.target.value as typeof triggerType)} style={S.select}>
                 <option value="contract_signed">Firma de contrato</option>
+                <option value="pre_project_start">Pre-inicio de la obra (10 días hábiles antes del día 1 del proyecto)</option>
+                <option value="pre_start">Pre-inicio del partner (10 días hábiles antes de su entrada)</option>
                 <option value="milestone_achieved">Al alcanzar un hito de obra</option>
                 <option value="delivery">Entrega final</option>
               </select>
@@ -1688,10 +1722,62 @@ function PaymentMilestonesSection({
   const milestoneMap: Record<string, Milestone> = {}
   for (const m of milestones) milestoneMap[m.id] = m
 
-  const triggerLabel = (pm: DisciplinePaymentMilestone): string => {
-    if (pm.trigger_type === 'contract_signed') return 'Firma contrato'
-    if (pm.trigger_type === 'delivery') return 'Entrega final'
-    return pm.milestone_id ? (milestoneMap[pm.milestone_id]?.nombre ?? 'Hito de obra') : 'Hito de obra'
+  // Renderiza la celda "Trigger" con etiqueta explícita + descriptor.
+  // Cada tipo tiene su pareja (título / explicación) para que el equipo entienda
+  // de un vistazo cuándo se desencadena cada hito de pago.
+  const renderTriggerCell = (pm: DisciplinePaymentMilestone) => {
+    let title    = ''
+    let sub      = ''
+    let bg       = '#F3F4F6'
+    let fg       = '#374151'
+    let subColor = '#6B7280'
+    switch (pm.trigger_type) {
+      case 'contract_signed':
+        title    = 'Al firmar contrato'
+        sub      = 'mismo día de la firma'
+        bg       = '#EFF6FF'
+        fg       = '#1E40AF'
+        subColor = '#3B82F6'
+        break
+      case 'pre_start':
+        title    = 'Pre-inicio partner'
+        sub      = '10 días háb. antes de que entre a obra'
+        bg       = '#FFF8F4'
+        fg       = '#9A3F1B'
+        subColor = '#D85A30'
+        break
+      case 'pre_project_start':
+        title    = 'Pre-inicio obra'
+        sub      = '10 días háb. antes del día 1 del proyecto'
+        bg       = '#FEF7E6'
+        fg       = '#92580E'
+        subColor = '#B45309'
+        break
+      case 'milestone_achieved':
+        title    = 'Al alcanzar hito de obra'
+        sub      = 'según cronograma del proyecto'
+        bg       = '#F5F3FF'
+        fg       = '#5B21B6'
+        subColor = '#8B5CF6'
+        break
+      case 'delivery':
+        title    = 'A la entrega final'
+        sub      = 'fin de obra del proyecto'
+        bg       = '#ECFDF5'
+        fg       = '#065F46'
+        subColor = '#059669'
+        break
+    }
+    return (
+      <div style={{
+        display: 'inline-flex', flexDirection: 'column', gap: 1,
+        padding: '4px 8px', borderRadius: 5, background: bg,
+        lineHeight: 1.25,
+      }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: fg }}>{title}</span>
+        <span style={{ fontSize: 10, color: subColor, fontWeight: 500 }}>{sub}</span>
+      </div>
+    )
   }
 
   const totalCount = paymentMilestones.length
@@ -1754,8 +1840,8 @@ function PaymentMilestonesSection({
                           {discPms.map((pm, i) => (
                             <tr key={pm.id} style={{ background: i % 2 === 0 ? '#fff' : '#F0FDF4' }}>
                               <td style={{ padding: '7px 10px', fontSize: 12, color: '#1A1A1A', borderBottom: '1px solid #D1FAE5' }}>{pm.nombre}</td>
-                              <td style={{ padding: '7px 10px', fontSize: 11, color: '#555', borderBottom: '1px solid #D1FAE5', whiteSpace: 'nowrap' }}>
-                                {pm.trigger_type === 'contract_signed' ? 'Firma contrato' : pm.trigger_type === 'delivery' ? 'Entrega final' : 'Hito de obra'}
+                              <td style={{ padding: '6px 10px', borderBottom: '1px solid #D1FAE5', whiteSpace: 'nowrap' }}>
+                                {renderTriggerCell(pm)}
                               </td>
                               <td style={{ padding: '7px 10px', fontSize: 11, color: '#555', borderBottom: '1px solid #D1FAE5' }}>
                                 {pm.milestone_id && milestoneMap[pm.milestone_id]

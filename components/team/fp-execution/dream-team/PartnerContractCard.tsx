@@ -1,14 +1,8 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import {
-  getAdjudicationOverview,
-  generateContractsFromAwards,
-  type FpeOverviewPartner,
-} from '@/app/actions/fpe-tenders'
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
+import { generateContractsFromAwards, type FpeOverviewPartner, type FpeOverviewContract } from '@/app/actions/fpe-tenders'
 
 const euros = (n: number) =>
   n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'
@@ -19,27 +13,144 @@ const TRIGGER_LABEL: Record<string, string> = {
   delivery:           'A entrega',
 }
 
-// ── Partner card ──────────────────────────────────────────────────────────────
+// ── Status bar (4 estados) ────────────────────────────────────────────────────
 
-function PartnerOverviewCard({
+type ContractStage = 'pendiente' | 'enviado' | 'firmado' | 'recibido' | 'cancelled'
+
+function deriveStage(c: FpeOverviewContract | null): ContractStage {
+  if (!c) return 'pendiente'
+  switch (c.status) {
+    case 'sent_to_sign': return 'enviado'
+    case 'signed':       return 'firmado'
+    case 'received':     return 'recibido'
+    case 'cancelled':    return 'cancelled'
+    default:             return 'pendiente'  // 'draft' or 'pendiente'
+  }
+}
+
+const STAGES: { id: ContractStage; label: string }[] = [
+  { id: 'pendiente', label: 'Pendiente' },
+  { id: 'enviado',   label: 'Enviado'   },
+  { id: 'firmado',   label: 'Firmado'   },
+  { id: 'recibido',  label: 'Recibido'  },
+]
+
+function StatusBar({ stage }: { stage: ContractStage }) {
+  const stageIdx = STAGES.findIndex(s => s.id === stage)
+  const cancelled = stage === 'cancelled'
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 0, flexWrap: 'wrap' }}>
+      {STAGES.map((s, i) => {
+        const reached = !cancelled && i <= stageIdx
+        const active  = !cancelled && i === stageIdx
+        return (
+          <React.Fragment key={s.id}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <div style={{
+                width: 22, height: 22, borderRadius: '50%',
+                background: cancelled ? '#FEE2E2' : reached ? (active ? '#059669' : '#10B981') : '#F0EEE8',
+                color:      cancelled ? '#DC2626' : reached ? '#fff' : '#BBB',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 10, fontWeight: 700,
+                border: active ? '2px solid #059669' : 'none',
+              }}>
+                {cancelled ? '×' : reached ? '✓' : (i + 1)}
+              </div>
+              <span style={{
+                fontSize: 10, fontWeight: active ? 700 : 600, letterSpacing: '0.04em',
+                color: cancelled ? '#DC2626' : reached ? '#1A1A1A' : '#999',
+                textTransform: 'uppercase',
+              }}>
+                {s.label}
+              </span>
+            </div>
+            {i < STAGES.length - 1 && (
+              <div style={{
+                flex: 1, minWidth: 18, height: 2, margin: '0 8px',
+                background: !cancelled && i < stageIdx ? '#10B981' : '#F0EEE8',
+              }} />
+            )}
+          </React.Fragment>
+        )
+      })}
+      {cancelled && (
+        <span style={{
+          marginLeft: 12, fontSize: 9, fontWeight: 700, letterSpacing: '0.06em',
+          padding: '3px 8px', borderRadius: 4, background: '#FEE2E2', color: '#DC2626',
+        }}>
+          CANCELADO
+        </span>
+      )}
+    </div>
+  )
+}
+
+// ── Card ─────────────────────────────────────────────────────────────────────
+
+export default function PartnerContractCard({
   partner,
+  projectId,
   expanded,
   onToggleExpanded,
+  onChange,
 }: {
   partner: FpeOverviewPartner
+  projectId: string
   expanded: boolean
   onToggleExpanded: () => void
+  onChange?: () => void
 }) {
+  const router = useRouter()
+  const stage = deriveStage(partner.contract)
+  const [sending, setSending] = useState(false)
+  const [error, setError]     = useState<string | null>(null)
+
   const totalUnits = partner.chapters.reduce((a, ch) => a + ch.units.length, 0)
-  const chCount   = partner.chapters.length
-  const totalDays = partner.chapters.reduce(
+  const chCount    = partner.chapters.length
+  const totalDays  = partner.chapters.reduce(
     (a, ch) => a + ch.units.reduce((aa, u) => aa + (u.days ?? 0), 0), 0
   )
+
+  const handlePreviewPDF = async () => {
+    try {
+      const res = await fetch('/api/fpe-contracts/preview-pdf', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ project_id: projectId, partner_id: partner.partner_id }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => null)
+        setError(j?.error ?? 'No se pudo generar el preview.')
+        return
+      }
+      const blob = await res.blob()
+      const url  = URL.createObjectURL(blob)
+      window.open(url, '_blank')
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error inesperado.')
+    }
+  }
+
+  const handleSendContract = async () => {
+    if (!confirm(`Se generará el contrato de ${partner.partner_nombre} y se enviará a DocuSign para firma. ¿Continuar?`)) return
+    setSending(true); setError(null)
+    const res = await generateContractsFromAwards(projectId, partner.partner_id)
+    setSending(false)
+    if ('error' in res) { setError(res.error); return }
+    if (onChange) onChange()
+    router.refresh()
+  }
+
+  const handleViewSignedPDF = () => {
+    if (!partner.contract?.id) return
+    window.open(`/api/fpe-contracts/${partner.contract.id}/signed-pdf`, '_blank')
+  }
 
   return (
     <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #E8E6E0', overflow: 'hidden' }}>
 
-      {/* Card header */}
+      {/* Header (dark) */}
       <div style={{ background: '#1A1A1A', padding: '16px 22px' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -68,7 +179,6 @@ function PartnerOverviewCard({
           </div>
         </div>
 
-        {/* Discipline distribution */}
         {partner.disciplines.length > 0 && (
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 12 }}>
             {partner.disciplines.map(d => (
@@ -81,10 +191,81 @@ function PartnerOverviewCard({
         )}
       </div>
 
-      {/* Card body */}
+      {/* Status bar */}
+      <div style={{ padding: '14px 22px', background: '#FAFAF8', borderBottom: '1px solid #F0EEE8' }}>
+        <StatusBar stage={stage} />
+        {partner.contract?.sent_at && (
+          <div style={{ marginTop: 8, fontSize: 10, color: '#888' }}>
+            Enviado: {new Date(partner.contract.sent_at).toLocaleString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+            {partner.contract.signed_at && (
+              <> · Firmado: {new Date(partner.contract.signed_at).toLocaleString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Actions */}
+      <div style={{ padding: '14px 22px', display: 'flex', gap: 8, flexWrap: 'wrap', borderBottom: '1px solid #F0EEE8' }}>
+        <button
+          onClick={handlePreviewPDF}
+          style={{ padding: '8px 14px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: '1px solid #E8E6E0', background: '#fff', color: '#555', cursor: 'pointer', fontFamily: 'inherit' }}
+        >
+          Ver borrador (PDF)
+        </button>
+
+        {(stage === 'pendiente' || stage === 'cancelled') && (
+          <button
+            onClick={handleSendContract}
+            disabled={sending || !partner.partner_email}
+            title={!partner.partner_email ? 'El partner no tiene email de contacto.' : ''}
+            style={{
+              padding: '8px 16px', fontSize: 12, fontWeight: 700, borderRadius: 6, border: 'none',
+              background: '#D85A30', color: '#fff', cursor: sending || !partner.partner_email ? 'not-allowed' : 'pointer',
+              fontFamily: 'inherit', opacity: sending || !partner.partner_email ? 0.5 : 1,
+            }}
+          >
+            {sending ? 'Enviando…' : 'Enviar contrato a firma →'}
+          </button>
+        )}
+
+        {stage === 'enviado' && (
+          <span style={{
+            padding: '8px 14px', fontSize: 11, fontWeight: 600, borderRadius: 6,
+            background: '#FEF3C7', color: '#92400E', display: 'inline-block',
+          }}>
+            Esperando firmas en DocuSign…
+          </span>
+        )}
+
+        {stage === 'firmado' && (
+          <span style={{
+            padding: '8px 14px', fontSize: 11, fontWeight: 600, borderRadius: 6,
+            background: '#FEF3C7', color: '#92400E', display: 'inline-block',
+          }}>
+            Firmado · esperando descarga del PDF firmado…
+          </span>
+        )}
+
+        {stage === 'recibido' && (
+          <button
+            onClick={handleViewSignedPDF}
+            style={{ padding: '8px 16px', fontSize: 12, fontWeight: 700, borderRadius: 6, border: 'none', background: '#059669', color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}
+          >
+            Ver PDF firmado ↓
+          </button>
+        )}
+      </div>
+
+      {error && (
+        <div style={{ padding: '10px 22px', background: '#FEF2F2', color: '#DC2626', fontSize: 12, borderBottom: '1px solid #FECACA' }}>
+          {error}
+        </div>
+      )}
+
+      {/* Body */}
       <div style={{ padding: '16px 22px' }}>
 
-        {/* Governing discipline + payments */}
+        {/* Payment milestones */}
         {partner.governing_discipline_id ? (
           <div style={{ marginBottom: 14, padding: '12px 14px', background: '#F8F7F4', borderRadius: 8, border: '1px solid #E8E6E0' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
@@ -123,7 +304,7 @@ function PartnerOverviewCard({
           </div>
         )}
 
-        {/* Expand to see chapters + UEs */}
+        {/* Expandable detail */}
         <button
           onClick={onToggleExpanded}
           style={{
@@ -133,7 +314,7 @@ function PartnerOverviewCard({
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           }}
         >
-          <span>{expanded ? 'Ocultar detalle del pack' : 'Ver detalle del pack'}</span>
+          <span>{expanded ? 'Ocultar UEs y partidas' : 'Ver UEs y partidas adjudicadas'}</span>
           <span style={{ fontSize: 10, color: '#AAA' }}>{expanded ? '▲' : '▼'}</span>
         </button>
 
@@ -184,136 +365,6 @@ function PartnerOverviewCard({
             ))}
           </div>
         )}
-      </div>
-    </div>
-  )
-}
-
-// ── Main ──────────────────────────────────────────────────────────────────────
-
-export default function AdjudicationOverview({
-  projectId,
-  onContractsGenerated,
-}: {
-  projectId: string
-  onContractsGenerated?: () => void
-}) {
-  const router = useRouter()
-  const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState<string | null>(null)
-  const [partners, setPartners] = useState<FpeOverviewPartner[]>([])
-  const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [generating, setGenerating] = useState(false)
-  const [flashMsg, setFlash] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
-
-  useEffect(() => {
-    getAdjudicationOverview(projectId).then(res => {
-      setLoading(false)
-      if ('error' in res) { setError(res.error); return }
-      setPartners(res.partners)
-    })
-  }, [projectId])
-
-  const flash = (type: 'ok' | 'err', text: string) => {
-    setFlash({ type, text })
-    setTimeout(() => setFlash(null), 5000)
-  }
-
-  const handleGenerate = async () => {
-    if (!confirm(`Se crearán ${partners.length} contrato(s) y se enviarán a firma vía DocuSign. ¿Continuar?`)) return
-    setGenerating(true)
-    const res = await generateContractsFromAwards(projectId)
-    setGenerating(false)
-    if ('error' in res) { flash('err', res.error); return }
-    flash('ok', `${res.created} contrato(s) generados. ${res.sent_to_docusign} enviados a firma.`)
-    if (onContractsGenerated) onContractsGenerated()
-    router.refresh()
-  }
-
-  if (loading) return (
-    <div style={{ padding: '60px 20px', textAlign: 'center', color: '#AAA', fontSize: 13 }}>
-      Cargando overview de adjudicaciones…
-    </div>
-  )
-
-  if (error) return (
-    <div style={{ padding: '14px 16px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, fontSize: 13, color: '#DC2626' }}>
-      Error: {error}
-    </div>
-  )
-
-  if (partners.length === 0) return (
-    <div style={{ padding: '60px 20px', textAlign: 'center', background: '#fff', borderRadius: 10, border: '1px solid #E8E6E0' }}>
-      <p style={{ margin: 0, fontSize: 13, color: '#888' }}>
-        No hay UEs adjudicadas todavía.
-      </p>
-      <p style={{ margin: '6px 0 0', fontSize: 12, color: '#AAA' }}>
-        Vuelve a la comparativa de ofertas y adjudica las UEs antes de generar contratos.
-      </p>
-    </div>
-  )
-
-  const grandTotal = partners.reduce((a, p) => a + p.total, 0)
-
-  return (
-    <div>
-      <div style={{ marginBottom: 20 }}>
-        <h2 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 600, color: '#1A1A1A' }}>
-          Overview de adjudicaciones
-        </h2>
-        <p style={{ margin: 0, fontSize: 12, color: '#888' }}>
-          Revisión final antes de generar contratos. Cada partner ganador recibirá un único contrato que cubre todas las UEs adjudicadas a su nombre.
-        </p>
-      </div>
-
-      {flashMsg && (
-        <div style={{
-          marginBottom: 16, padding: '10px 16px', borderRadius: 8, fontSize: 13, fontWeight: 500,
-          background: flashMsg.type === 'ok' ? '#ECFDF5' : '#FEF2F2',
-          border: `1px solid ${flashMsg.type === 'ok' ? '#6EE7B7' : '#FECACA'}`,
-          color:  flashMsg.type === 'ok' ? '#059669' : '#DC2626',
-        }}>
-          {flashMsg.text}
-        </div>
-      )}
-
-      {/* Summary bar */}
-      <div style={{ background: '#fff', borderRadius: 10, border: '1px solid #E8E6E0', padding: '14px 22px', marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap' }}>
-          <div>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA' }}>Contratos a generar</div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: '#1A1A1A', fontFamily: 'monospace' }}>{partners.length}</div>
-          </div>
-          <div>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA' }}>Suma de contratos</div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: '#1A1A1A', fontFamily: 'monospace' }}>{euros(grandTotal)}</div>
-          </div>
-        </div>
-
-        <button
-          onClick={handleGenerate}
-          disabled={generating}
-          style={{
-            padding: '11px 22px', fontSize: 13, fontWeight: 700, letterSpacing: '0.02em',
-            borderRadius: 6, border: 'none', cursor: generating ? 'wait' : 'pointer',
-            fontFamily: 'inherit', background: '#059669', color: '#fff',
-            opacity: generating ? 0.6 : 1,
-          }}
-        >
-          {generating ? 'Generando contratos…' : 'Generar contratos y enviar a firma →'}
-        </button>
-      </div>
-
-      {/* Partner cards */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {partners.map(p => (
-          <PartnerOverviewCard
-            key={p.partner_id}
-            partner={p}
-            expanded={expandedId === p.partner_id}
-            onToggleExpanded={() => setExpandedId(prev => prev === p.partner_id ? null : p.partner_id)}
-          />
-        ))}
       </div>
     </div>
   )

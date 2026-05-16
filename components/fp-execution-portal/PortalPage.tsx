@@ -74,8 +74,15 @@ interface ProjectUnit {
     id: string
     nombre: string
     descripcion: string | null
+    chapter_nombre: string | null
   } | null
   line_items: ProjectLineItem[]
+}
+
+function unitLabel(pu: { template_unit: { nombre: string; chapter_nombre: string | null } | null }): string {
+  const tu = pu.template_unit
+  if (!tu) return '—'
+  return tu.chapter_nombre ? `${tu.chapter_nombre} — ${tu.nombre}` : tu.nombre
 }
 
 interface PortalDoc {
@@ -87,6 +94,7 @@ interface PortalDoc {
   discipline_tags: string[]
   created_at: string
   project_unit_id: string | null
+  chapter_id: string | null
 }
 
 interface BidLineItem {
@@ -113,6 +121,8 @@ interface PortalQuestion {
   asked_at:         string
   answered_at:      string | null
   answered_by_name: string | null
+  project_unit_id:  string | null
+  invitation_id:    string | null
 }
 
 type ActiveTab = 'overview' | 'docs' | 'bid' | 'qa'
@@ -121,7 +131,7 @@ interface PaymentScheduleItem {
   id: string
   nombre: string
   pct: number
-  trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery'
+  trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery' | 'pre_start' | 'pre_project_start'
   milestone_nombre: string | null
 }
 
@@ -684,6 +694,8 @@ export default function PortalPage({
   isPrincipalForChapterIds = [],
   portalChapters = [],
   paymentSchedule = [],
+  scopeUnitIds = [],
+  invitationId,
 }: {
   token: string
   partner: Partner
@@ -700,6 +712,8 @@ export default function PortalPage({
   isPrincipalForChapterIds?: string[]            // chapter IDs where this partner proposes phase durations
   portalChapters?: PortalChapter[]               // chapters with phases for phase duration input
   paymentSchedule?: PaymentScheduleItem[]
+  scopeUnitIds?: string[]
+  invitationId: string
 }) {
   // ── Tab + scroll ──────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview')
@@ -744,10 +758,11 @@ export default function PortalPage({
   const [submitError, setSubmitError] = useState<string | null>(null)
 
   // ── Q&A state ─────────────────────────────────────────────────────────────
-  const [questions, setQuestions] = useState<PortalQuestion[]>(initialQuestions)
-  const [newQuestion, setNewQ]    = useState('')
-  const [askingQ, setAskingQ]     = useState(false)
-  const [askError, setAskError]   = useState<string | null>(null)
+  const [questions, setQuestions]     = useState<PortalQuestion[]>(initialQuestions)
+  const [newQuestion, setNewQ]        = useState('')
+  const [newQUnitId, setNewQUnitId]   = useState<string>('')  // '' = pregunta general
+  const [askingQ, setAskingQ]         = useState(false)
+  const [askError, setAskError]       = useState<string | null>(null)
 
   // ── Computed ──────────────────────────────────────────────────────────────
   const total = useMemo(() => {
@@ -758,8 +773,10 @@ export default function PortalPage({
     return sum
   }, [prices, projectUnits])
 
-  const generalDocs = documents.filter(d => !d.project_unit_id)
-  const unitDocs    = documents.filter(d => !!d.project_unit_id)
+  // Planimetría general: ni capítulo ni unidad asignada → siempre visible.
+  // Resto: docs específicos del scope del partner (capítulo o unidad).
+  const generalDocs = documents.filter(d => !d.chapter_id && !d.project_unit_id)
+  const unitDocs    = documents.filter(d => !!d.chapter_id || !!d.project_unit_id)
 
   // Partition general docs by type
   const videoDocs = generalDocs.filter(d => isVideo(d.mime_type, d.nombre))
@@ -910,7 +927,7 @@ export default function PortalPage({
                   {projectUnits.map(unit => (
                     <div key={unit.id} style={{ borderRadius: 10, border: '1px solid #E8E6E0', overflow: 'hidden', background: '#fff' }}>
                       <div style={{ background: '#1A1A1A', padding: '12px 16px' }}>
-                        <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#fff' }}>{unit.template_unit?.nombre ?? 'Unidad'}</p>
+                        <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#fff' }}>{unitLabel(unit)}</p>
                         {unit.template_unit?.descripcion && (
                           <p style={{ margin: '3px 0 0', fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>{unit.template_unit.descripcion}</p>
                         )}
@@ -1048,7 +1065,7 @@ export default function PortalPage({
                 <p style={sectionLabel}>Detalle de la oferta</p>
                 {projectUnits.map(unit => (
                   <div key={unit.id} style={{ marginBottom: 20 }}>
-                    <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 600, color: '#555' }}>{unit.template_unit?.nombre}</p>
+                    <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 600, color: '#555' }}>{unitLabel(unit)}</p>
                     <table style={{ width: '100%', borderCollapse: 'collapse', borderRadius: 8, overflow: 'hidden', border: '1px solid #E8E6E0' }}>
                       <thead>
                         <tr style={{ background: '#F8F7F4' }}>
@@ -1112,7 +1129,15 @@ export default function PortalPage({
                           <span style={{ width: 22, height: 22, borderRadius: '50%', background: '#059669', color: '#fff', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</span>
                           <span style={{ flex: 1, fontSize: 12, color: '#1A1A1A' }}>{item.nombre}</span>
                           <span style={{ fontSize: 11, color: '#6B7280' }}>
-                            {item.trigger_type === 'contract_signed' ? 'Al firmar' : item.trigger_type === 'delivery' ? 'A la entrega' : item.milestone_nombre ?? 'Hito de obra'}
+                            {item.trigger_type === 'contract_signed'
+                              ? 'Al firmar'
+                              : item.trigger_type === 'pre_project_start'
+                                ? '10 días antes del inicio de la obra'
+                                : item.trigger_type === 'pre_start'
+                                  ? '10 días antes de tu entrada en obra'
+                                  : item.trigger_type === 'delivery'
+                                    ? 'A la entrega'
+                                    : item.milestone_nombre ?? 'Hito de obra'}
                           </span>
                           <span style={{ fontSize: 13, fontWeight: 700, color: '#059669', fontFamily: 'monospace', flexShrink: 0 }}>{item.pct}%</span>
                         </div>
@@ -1132,7 +1157,7 @@ export default function PortalPage({
                 {projectUnits.map(unit => (
                   <div key={unit.id} style={{ marginBottom: 24 }}>
                     <div style={{ background: '#1A1A1A', padding: '10px 16px', borderRadius: '8px 8px 0 0' }}>
-                      <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#fff' }}>{unit.template_unit?.nombre}</p>
+                      <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#fff' }}>{unitLabel(unit)}</p>
                     </div>
                     <div style={{ border: '1px solid #E8E6E0', borderTop: 'none', borderRadius: '0 0 8px 8px', overflow: 'hidden' }}>
                       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -1186,7 +1211,15 @@ export default function PortalPage({
                           <span style={{ width: 22, height: 22, borderRadius: '50%', background: '#059669', color: '#fff', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</span>
                           <span style={{ flex: 1, fontSize: 12, color: '#1A1A1A' }}>{item.nombre}</span>
                           <span style={{ fontSize: 11, color: '#6B7280' }}>
-                            {item.trigger_type === 'contract_signed' ? 'Al firmar' : item.trigger_type === 'delivery' ? 'A la entrega' : item.milestone_nombre ?? 'Hito de obra'}
+                            {item.trigger_type === 'contract_signed'
+                              ? 'Al firmar'
+                              : item.trigger_type === 'pre_project_start'
+                                ? '10 días antes del inicio de la obra'
+                                : item.trigger_type === 'pre_start'
+                                  ? '10 días antes de tu entrada en obra'
+                                  : item.trigger_type === 'delivery'
+                                    ? 'A la entrega'
+                                    : item.milestone_nombre ?? 'Hito de obra'}
                           </span>
                           <span style={{ fontSize: 13, fontWeight: 700, color: '#059669', fontFamily: 'monospace', flexShrink: 0 }}>{item.pct}%</span>
                         </div>
@@ -1253,40 +1286,82 @@ export default function PortalPage({
         )}
 
         {/* ────────────────────────── PREGUNTAS TAB ───────────────────────── */}
-        {activeTab === 'qa' && (
+        {activeTab === 'qa' && (() => {
+          // Mapa de project_unit_id → label "Capítulo — Unidad", para etiquetar
+          // preguntas y options del select.
+          const unitNameById: Record<string, string> = {}
+          for (const pu of projectUnits) {
+            if (pu.template_unit?.nombre) unitNameById[pu.id] = unitLabel(pu)
+          }
+          return (
           <div>
             <TabIntro>
               ¿Tienes dudas sobre el alcance, los planos o cualquier aspecto de la licitación? Mándanos tu consulta y nuestro equipo te responderá
-              lo antes posible. Las respuestas son visibles para todos los participantes, así que también puedes revisar si alguien ya ha preguntado algo similar.
+              lo antes posible. Cuando respondamos, la pregunta y la respuesta se comparten — siempre de forma anónima — con los demás
+              participantes que estén presupuestando esa misma unidad, por si a ellos también les sirve.
             </TabIntro>
             {questions.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 28 }}>
-                {questions.map(q => (
-                  <div key={q.id} style={{ background: '#fff', border: '1px solid #E8E6E0', borderRadius: 10, overflow: 'hidden' }}>
-                    <div style={{ padding: '14px 16px', background: '#F8F7F4' }}>
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: '#555' }}>Participante</span>
-                        <span style={{ fontSize: 10, color: '#BBB' }}>{new Date(q.asked_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}</span>
+                {questions.map(q => {
+                  const isOwn = !!invitationId && q.invitation_id === invitationId
+                  const unitLabel = q.project_unit_id ? unitNameById[q.project_unit_id] ?? null : null
+                  return (
+                    <div key={q.id} style={{ background: '#fff', border: '1px solid #E8E6E0', borderRadius: 10, overflow: 'hidden' }}>
+                      <div style={{ padding: '14px 16px', background: '#F8F7F4' }}>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: isOwn ? '#D85A30' : '#555' }}>
+                            {isOwn ? 'Tu consulta' : 'Participante'}
+                          </span>
+                          {unitLabel ? (
+                            <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 4, background: '#1A1A1A', color: '#fff', letterSpacing: '0.02em' }}>
+                              {unitLabel}
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: 10, fontWeight: 500, padding: '2px 7px', borderRadius: 4, background: '#E8E6E0', color: '#555' }}>
+                              Pregunta general
+                            </span>
+                          )}
+                          <span style={{ fontSize: 10, color: '#BBB' }}>{new Date(q.asked_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}</span>
+                        </div>
+                        <p style={{ margin: 0, fontSize: 13, color: '#1A1A1A', lineHeight: 1.5 }}>{q.pregunta}</p>
                       </div>
-                      <p style={{ margin: 0, fontSize: 13, color: '#1A1A1A', lineHeight: 1.5 }}>{q.pregunta}</p>
+                      {q.respuesta ? (
+                        <div style={{ padding: '12px 16px', borderTop: '1px solid #E8E6E0' }}>
+                          <p style={{ margin: '0 0 4px', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#AAA' }}>Respuesta · Forma Prima</p>
+                          <p style={{ margin: 0, fontSize: 13, color: '#333', lineHeight: 1.5 }}>{q.respuesta}</p>
+                        </div>
+                      ) : (
+                        <div style={{ padding: '10px 16px', background: '#FFFBEB', borderTop: '1px solid #FDE68A' }}>
+                          <span style={{ fontSize: 11, color: '#92400E' }}>Pendiente de respuesta…</span>
+                        </div>
+                      )}
                     </div>
-                    {q.respuesta ? (
-                      <div style={{ padding: '12px 16px', borderTop: '1px solid #E8E6E0' }}>
-                        <p style={{ margin: '0 0 4px', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#AAA' }}>Respuesta · Forma Prima</p>
-                        <p style={{ margin: 0, fontSize: 13, color: '#333', lineHeight: 1.5 }}>{q.respuesta}</p>
-                      </div>
-                    ) : (
-                      <div style={{ padding: '10px 16px', background: '#FFFBEB', borderTop: '1px solid #FDE68A' }}>
-                        <span style={{ fontSize: 11, color: '#92400E' }}>Pendiente de respuesta…</span>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
             {!isReadOnly && (
               <div style={{ background: '#fff', border: '1px solid #E8E6E0', borderRadius: 10, padding: '20px 22px' }}>
                 <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: '#1A1A1A' }}>Enviar una consulta</p>
+
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#555', margin: '0 0 6px' }}>
+                  ¿Sobre qué unidad?
+                </label>
+                <select
+                  value={newQUnitId}
+                  onChange={e => setNewQUnitId(e.target.value)}
+                  style={{ ...inputStyle, marginBottom: 12 }}
+                >
+                  <option value="">Sobre el proyecto en general</option>
+                  {projectUnits
+                    .filter(pu => scopeUnitIds.length === 0 || scopeUnitIds.includes(pu.id))
+                    .map(pu => (
+                      <option key={pu.id} value={pu.id}>
+                        {unitLabel(pu)}
+                      </option>
+                    ))}
+                </select>
+
                 <textarea rows={3} value={newQuestion} onChange={e => setNewQ(e.target.value)} placeholder="Escribe tu pregunta sobre el proyecto o la licitación…" style={{ ...textareaStyle, marginBottom: 12 }} />
                 {askError && <p style={{ margin: '0 0 10px', fontSize: 12, color: '#DC2626' }}>{askError}</p>}
                 <button
@@ -1294,12 +1369,17 @@ export default function PortalPage({
                     const text = newQuestion.trim()
                     if (!text) return
                     setAskingQ(true); setAskError(null)
-                    const res  = await fetch('/api/fpe-portal/question', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, pregunta: text }) })
+                    const res  = await fetch('/api/fpe-portal/question', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ token, pregunta: text, project_unit_id: newQUnitId || null }),
+                    })
                     const json = await res.json()
                     setAskingQ(false)
                     if (!res.ok || json.error) { setAskError(json.error ?? 'Error enviando la pregunta.'); return }
                     setQuestions(prev => [...prev, json.question])
                     setNewQ('')
+                    setNewQUnitId('')
                   }}
                   disabled={!newQuestion.trim() || askingQ}
                   style={{ padding: '10px 20px', fontSize: 13, fontWeight: 600, border: 'none', borderRadius: 6, cursor: 'pointer', background: '#1A1A1A', color: '#fff', fontFamily: 'inherit', opacity: !newQuestion.trim() ? 0.4 : 1 }}
@@ -1312,7 +1392,8 @@ export default function PortalPage({
               <p style={{ fontSize: 13, color: '#AAA', textAlign: 'center', padding: '48px 0' }}>No hay preguntas en esta licitación.</p>
             )}
           </div>
-        )}
+          )
+        })()}
       </div>
     </div>
   )

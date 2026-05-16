@@ -30,7 +30,7 @@ export default async function FpeProjectDetailPage({
       .select(`
         id, nombre, descripcion, direccion, ciudad,
         linked_proyecto_id, status, readiness_score, created_at,
-        tour_virtual_url, fecha_inicio_obra, duracion_obra_semanas,
+        tour_virtual_url, fecha_inicio_obra, obra_start_date_override, duracion_obra_semanas,
         m2_construccion, duracion_factor,
         project_units:fpe_project_units (
           id, template_unit_id, notas, orden,
@@ -317,6 +317,7 @@ export default async function FpeProjectDetailPage({
   type ProjectExtended = typeof project & {
     tour_virtual_url: string | null
     fecha_inicio_obra: string | null
+    obra_start_date_override: string | null
     duracion_obra_semanas: number | null
     m2_construccion: number | null
     duracion_factor: number | null
@@ -341,6 +342,7 @@ export default async function FpeProjectDetailPage({
       scheduleChapters={scheduleChapters}
       scheduleMilestones={(milestones ?? []) as ScheduleMilestone[]}
       initialFechaInicio={projectExt.fecha_inicio_obra ?? null}
+      initialObraStartOverride={projectExt.obra_start_date_override ?? null}
       initialM2={projectExt.m2_construccion ?? null}
       initialChapterDaysOverrides={chapterDaysOverrides}
       initialDuracionFactor={projectExt.duracion_factor ?? 1.0}

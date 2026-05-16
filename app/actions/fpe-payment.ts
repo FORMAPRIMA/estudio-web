@@ -300,7 +300,7 @@ export async function previewPaymentPlanForPartner(
   project_id: string,
   partner_id: string,
 ): Promise<{
-  preview: { nombre: string; pct: number; trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery'; milestone_id: string | null; source_discipline_id: string | null; orden: number }[]
+  preview: { nombre: string; pct: number; trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery' | 'pre_start' | 'pre_project_start'; milestone_id: string | null; source_discipline_id: string | null; orden: number }[]
   disciplines: { id: string; nombre: string; color: string; weight: number }[]
   reference: { discipline_id: string; nombre: string; color: string; milestones: FpeDisciplinePaymentMilestone[] }[]
   availableMilestones: { id: string; nombre: string }[]
@@ -352,31 +352,56 @@ export async function createPendingInvitationForPartner(
     await requireManagerOrPartner()
     const admin = createAdminClient()
 
-    // Disciplinas del partner que entran en el pack
+    // Disciplinas del partner que entran en el pack.
+    // Resuelve principal_discipline_id con fallback: UE → capítulo (override de
+    // proyecto si existe, si no template). Misma lógica que el launch path en
+    // fpe-tenders.ts para que ambos caminos produzcan disciplinas consistentes.
     const { data: unitsRaw } = await admin
       .from('fpe_project_units')
       .select(`
         id,
-        template_unit:fpe_template_units ( principal_discipline_id ),
+        template_unit:fpe_template_units ( principal_discipline_id, chapter:fpe_template_chapters ( id, principal_discipline_id ) ),
         partners:fpe_project_unit_partners ( partner_id )
       `)
       .eq('project_id', project_id)
 
     type UnitRow = {
       id: string
-      template_unit: { principal_discipline_id: string | null } | null
+      template_unit: {
+        principal_discipline_id: string | null
+        chapter: { id: string; principal_discipline_id: string | null } | null
+      } | null
       partners: { partner_id: string }[] | null
     }
     const units = (unitsRaw ?? []) as unknown as UnitRow[]
 
+    // Cargar overrides de capítulo a nivel proyecto para resolución correcta
+    const { data: chapterSettingsRaw } = await admin
+      .from('fpe_project_chapter_settings')
+      .select('chapter_id, principal_discipline_id')
+      .eq('project_id', project_id)
+    const chapterOverride: Record<string, string | null> = {}
+    for (const cs of chapterSettingsRaw ?? []) chapterOverride[cs.chapter_id] = cs.principal_discipline_id
+
+    const resolveUnitDiscipline = (u: UnitRow): string | null => {
+      const unitDisc = u.template_unit?.principal_discipline_id ?? null
+      if (unitDisc) return unitDisc
+      const chId = u.template_unit?.chapter?.id ?? null
+      if (chId && chapterOverride[chId] !== undefined) return chapterOverride[chId]
+      return u.template_unit?.chapter?.principal_discipline_id ?? null
+    }
+
+    const partnerUnits = units.filter(u => (u.partners ?? []).some(p => p.partner_id === partner_id))
     const disciplineIds = Array.from(new Set(
-      units
-        .filter(u => (u.partners ?? []).some(p => p.partner_id === partner_id))
-        .map(u => u.template_unit?.principal_discipline_id)
+      partnerUnits
+        .map(u => resolveUnitDiscipline(u))
         .filter((d): d is string => !!d)
     ))
 
-    const allUnitIds = units.map(u => u.id)
+    // scope_unit_ids = solo las UEs asignadas a ESTE partner (compite por sus
+    // partidas; no debe ver otras UEs del proyecto).
+    const partnerUnitIds = partnerUnits.map(u => u.id)
+    if (partnerUnitIds.length === 0) return { error: 'El partner no tiene UEs asignadas.' }
 
     // Tender: reusa draft o crea uno
     const { data: existingTender } = await admin
@@ -421,7 +446,7 @@ export async function createPendingInvitationForPartner(
       .insert({
         tender_id:        tenderId,
         partner_id,
-        scope_unit_ids:   allUnitIds,
+        scope_unit_ids:   partnerUnitIds,
         discipline_ids:   disciplineIds,
         token_expires_at: expires,
         status:           'pending',  // sin email todavía
@@ -504,7 +529,7 @@ export async function updateInvitationPaymentPlan(
   items: {
     nombre: string
     pct: number
-    trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery'
+    trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery' | 'pre_start' | 'pre_project_start'
     milestone_id?: string | null
     source_discipline_id?: string | null
     notas?: string | null

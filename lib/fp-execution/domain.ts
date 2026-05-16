@@ -102,7 +102,7 @@ export interface FpeDisciplinePaymentMilestone {
   id: string
   discipline_id: string
   milestone_id: string | null
-  trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery'
+  trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery' | 'pre_start' | 'pre_project_start'
   nombre: string
   pct: number
   orden: number
@@ -115,7 +115,7 @@ export interface FpeInvitationPaymentPlanItem {
   invitation_id: string
   nombre: string
   pct: number
-  trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery'
+  trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery' | 'pre_start' | 'pre_project_start'
   milestone_id: string | null
   source_discipline_id: string | null
   orden: number

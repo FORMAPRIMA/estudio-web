@@ -8,7 +8,7 @@ import type { FpeDisciplinePaymentMilestone, PaymentPlanSeedStrategy } from './d
 export interface PaymentPlanSeedItem {
   nombre: string
   pct: number
-  trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery'
+  trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery' | 'pre_start' | 'pre_project_start'
   milestone_id: string | null
   source_discipline_id: string | null
   orden: number
@@ -47,7 +47,7 @@ function seedBlended(disciplines: DisciplineWeight[]): PaymentPlanSeedItem[] {
   if (disciplines.length === 0) return []
   const totalWeight = disciplines.reduce((s, d) => s + d.weight, 0) || 1
 
-  type Bucket = { key: string; nombre: string; trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery'; milestone_id: string | null; pctSum: number; sources: Set<string>; minOrden: number }
+  type Bucket = { key: string; nombre: string; trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery' | 'pre_start' | 'pre_project_start'; milestone_id: string | null; pctSum: number; sources: Set<string>; minOrden: number }
   const buckets = new Map<string, Bucket>()
 
   for (const d of disciplines) {

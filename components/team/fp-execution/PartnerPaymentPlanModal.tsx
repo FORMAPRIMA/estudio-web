@@ -12,7 +12,7 @@ import type { PaymentPlanSeedStrategy } from '@/lib/fp-execution/domain'
 interface PlanRow {
   nombre: string
   pct: number
-  trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery'
+  trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery' | 'pre_start' | 'pre_project_start'
   milestone_id: string | null
   source_discipline_id: string | null
 }
@@ -26,6 +26,8 @@ const TRIGGER_LABEL: Record<PlanRow['trigger_type'], string> = {
   contract_signed:    'Firma',
   milestone_achieved: 'Hito ejec.',
   delivery:           'Entrega',
+  pre_start:          'Pre-inicio partner',
+  pre_project_start:  'Pre-inicio obra',
 }
 
 export default function PartnerPaymentPlanModal({
@@ -214,6 +216,8 @@ export default function PartnerPaymentPlanModal({
                         style={{ padding: '6px 8px', fontSize: 12, border: '1px solid #E8E6E0', borderRadius: 4, fontFamily: 'inherit', outline: 'none', background: '#fff' }}
                       >
                         <option value="contract_signed">Firma</option>
+                        <option value="pre_project_start">Pre-inicio obra (10 d. háb.)</option>
+                        <option value="pre_start">Pre-inicio partner (10 d. háb.)</option>
                         <option value="milestone_achieved">Hito ejec.</option>
                         <option value="delivery">Entrega</option>
                       </select>
@@ -235,7 +239,13 @@ export default function PartnerPaymentPlanModal({
                         </select>
                       ) : (
                         <span style={{ fontSize: 11, color: '#CCC', fontStyle: 'italic' }}>
-                          {r.trigger_type === 'contract_signed' ? 'No aplica (firma)' : 'No aplica (entrega)'}
+                          {r.trigger_type === 'contract_signed'
+                            ? 'No aplica (firma)'
+                            : r.trigger_type === 'pre_start'
+                              ? 'No aplica (pre-inicio partner)'
+                              : r.trigger_type === 'pre_project_start'
+                                ? 'No aplica (pre-inicio obra)'
+                                : 'No aplica (entrega)'}
                         </span>
                       )}
                       <div style={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>

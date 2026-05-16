@@ -384,13 +384,20 @@ export async function createDiscipline(data: {
   descripcion?: string | null
   color?: string
   orden?: number
+  warranty_months?: number
 }): Promise<{ id: string } | { error: string }> {
   try {
     await requireManagerOrPartner()
     const admin = createAdminClient()
     const { data: row, error } = await admin
       .from('fpe_disciplines')
-      .insert({ nombre: data.nombre, descripcion: data.descripcion ?? null, color: data.color ?? '#378ADD', orden: data.orden ?? 0 })
+      .insert({
+        nombre:          data.nombre,
+        descripcion:     data.descripcion ?? null,
+        color:           data.color ?? '#378ADD',
+        orden:           data.orden ?? 0,
+        warranty_months: Math.max(0, Math.round(data.warranty_months ?? 12)),
+      })
       .select('id')
       .single()
     if (error) return { error: error.message }
@@ -403,14 +410,25 @@ export async function createDiscipline(data: {
 
 export async function updateDiscipline(
   id: string,
-  data: { nombre?: string; descripcion?: string | null; color?: string; orden?: number; activo?: boolean }
+  data: {
+    nombre?: string
+    descripcion?: string | null
+    color?: string
+    orden?: number
+    activo?: boolean
+    warranty_months?: number
+  }
 ): Promise<{ success: true } | { error: string }> {
   try {
     await requireManagerOrPartner()
     const admin = createAdminClient()
+    const payload: Record<string, unknown> = { ...data, updated_at: new Date().toISOString() }
+    if (typeof data.warranty_months === 'number') {
+      payload.warranty_months = Math.max(0, Math.round(data.warranty_months))
+    }
     const { error } = await admin
       .from('fpe_disciplines')
-      .update({ ...data, updated_at: new Date().toISOString() })
+      .update(payload)
       .eq('id', id)
     if (error) return { error: error.message }
     revalidatePath(PATH)

@@ -9,8 +9,6 @@ import {
   createAndSendDisciplineInvitations,
   upsertTenderFechaLimite,
 } from '@/app/actions/fpe-tenders'
-import BidComparison from '@/components/team/fp-execution/BidComparison'
-import QAPanel from '@/components/team/fp-execution/QAPanel'
 import PartnerPaymentPlanModal from '@/components/team/fp-execution/PartnerPaymentPlanModal'
 import {
   getInvitationPaymentPlan,
@@ -455,7 +453,10 @@ function ByPartnerView({
         }
         const discList = Object.values(discCount).sort((a, b) => b.count - a.count)
 
-        const canRevoke = inv && !editingDisabled && ['pending', 'sent', 'viewed'].includes(inv.status)
+        // Revocar siempre disponible para invitaciones activas (incluso tras
+        // lanzar): el caso de uso principal es retirar una invitación ya
+        // enviada que ya no aplica.
+        const canRevoke = inv && ['pending', 'sent', 'viewed'].includes(inv.status)
 
         return (
           <div key={pid} style={{ background: '#fff', border: '1px solid #E8E6E0', borderRadius: 10, overflow: 'hidden' }}>
@@ -561,16 +562,18 @@ function ByPartnerView({
 
 // ── Partner Payment Summary (resumen del plan en la card) ────────────────────
 
-const TRIGGER_SHORT: Record<'contract_signed' | 'milestone_achieved' | 'delivery', string> = {
+const TRIGGER_SHORT: Record<'contract_signed' | 'milestone_achieved' | 'delivery' | 'pre_start' | 'pre_project_start', string> = {
   contract_signed:    'Firma',
   milestone_achieved: 'Hito ejec.',
   delivery:           'Entrega',
+  pre_start:          'Pre-inicio partner',
+  pre_project_start:  'Pre-inicio obra',
 }
 
 interface PreviewItem {
   nombre: string
   pct: number
-  trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery'
+  trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery' | 'pre_start' | 'pre_project_start'
   milestone_id: string | null
 }
 
@@ -665,7 +668,7 @@ function PartnerPaymentSummary({
   }
 
   const isPreview = !effectiveInvId
-  const items: { nombre: string; pct: number; trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery'; milestone_id: string | null }[] =
+  const items: { nombre: string; pct: number; trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery' | 'pre_start' | 'pre_project_start'; milestone_id: string | null }[] =
     isPreview
       ? (previewPlan ?? [])
       : (persistedPlan ?? []).map(p => ({ nombre: p.nombre, pct: Number(p.pct), trigger_type: p.trigger_type, milestone_id: p.milestone_id }))
@@ -807,7 +810,7 @@ export default function TenderPanel({
   initialTender,
   partners,
   initialProjectStatus,
-  onNavigateToAdjudication,
+  onNavigateToBidding,
 }: {
   projectId:            string
   projectUnits:         TenderProjectUnit[]
@@ -815,14 +818,14 @@ export default function TenderPanel({
   initialTender:        FpeTender | null
   partners:             FpePartnerSummary[]
   initialProjectStatus: string
-  onNavigateToAdjudication?: () => void
+  onNavigateToBidding?: () => void
 }) {
   const router = useRouter()
 
   const [tender, setTender]               = useState<FpeTender | null>(initialTender)
   const [unitPartnersMap, setUPM]         = useState<Record<string, string[]>>(initialUnitPartners)
   const [projectStatus, setProjStatus]     = useState(initialProjectStatus)
-  const [view, setView]                   = useState<'by_unit' | 'by_partner'>('by_unit')
+  const [view, setView]                   = useState<'by_unit' | 'by_partner'>('by_partner')
   // Inicializa desde el tender existente; el autosave persiste cualquier cambio.
   // fpe_tenders.fecha_limite es timestamptz → llega como ISO con tz; <input type="date">
   // necesita YYYY-MM-DD exacto o se queda vacío.
@@ -831,8 +834,6 @@ export default function TenderPanel({
   const [sending, setSending]             = useState(false)
   const [closing, setClosing]             = useState(false)
   const [contracting, setContracting]     = useState(false)
-  const [showComparison, setShowComp]      = useState(false)
-  const [showQA, setShowQA]               = useState(false)
   const [msg, setMsg]                     = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
 
   const flash = (type: 'ok' | 'err', text: string) => {
@@ -1156,40 +1157,31 @@ export default function TenderPanel({
         />
       )}
 
-      {/* Bid comparison */}
-      {tender && submittedCount > 0 && (
-        <div style={{ marginTop: 24 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-            <div>
-              <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#1A1A1A' }}>Comparativa de ofertas</h3>
-              <p style={{ margin: '3px 0 0', fontSize: 12, color: '#888' }}>
-                {submittedCount} oferta{submittedCount !== 1 ? 's' : ''} recibida{submittedCount !== 1 ? 's' : ''}
-              </p>
+      {/* CTA to bidding tab when offers start arriving */}
+      {tender && submittedCount > 0 && onNavigateToBidding && (
+        <div style={{
+          marginTop: 24, padding: '14px 18px', borderRadius: 10,
+          background: '#ECFDF5', border: '1px solid #6EE7B7',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
+        }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#059669' }}>
+              {submittedCount} oferta{submittedCount !== 1 ? 's' : ''} recibida{submittedCount !== 1 ? 's' : ''}
             </div>
-            <button onClick={() => setShowComp(v => !v)} style={{ ...S.btn(true), padding: '7px 16px' }}>
-              {showComparison ? 'Ocultar' : 'Ver comparativa'}
-            </button>
+            <div style={{ fontSize: 11, color: '#047857', marginTop: 3 }}>
+              Compara precios, plazos y adjudica desde la pestaña de Licitación.
+            </div>
           </div>
-          {showComparison && (
-            <BidComparison
-              tenderId={tender.id}
-              projectId={projectId}
-              onAllUnitsAwarded={onNavigateToAdjudication}
-            />
-          )}
-        </div>
-      )}
-
-      {/* Q&A */}
-      {tender && tender.status !== 'draft' && (
-        <div style={{ marginTop: 24 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#1A1A1A' }}>Preguntas y respuestas</h3>
-            <button onClick={() => setShowQA(v => !v)} style={{ ...S.btn(), padding: '7px 14px' }}>
-              {showQA ? 'Ocultar' : 'Ver Q&A'}
-            </button>
-          </div>
-          {showQA && <QAPanel tenderId={tender.id} projectId={projectId} />}
+          <button
+            onClick={onNavigateToBidding}
+            style={{
+              padding: '9px 18px', fontSize: 12, fontWeight: 600, borderRadius: 6,
+              border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+              background: '#059669', color: '#fff',
+            }}
+          >
+            Ir a Licitación →
+          </button>
         </div>
       )}
     </div>

@@ -5,8 +5,10 @@ const BUCKET = 'fpe-documents'
 
 // Returns a signed download URL for a document.
 // Auth: validated via invitation token — no Supabase session required.
-// The token must be active and the document must belong to the same project.
-
+// El doc debe encajar en el scope de la invitación:
+//   · general (chapter_id NULL AND project_unit_id NULL) → libre
+//   · de capítulo → chapter_id debe estar en los chapters del scope del partner
+//   · de unidad   → project_unit_id ∈ scope_unit_ids
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
   const token        = searchParams.get('token')
@@ -17,10 +19,10 @@ export async function GET(req: NextRequest) {
 
   const admin = createAdminClient()
 
-  // Validate token — must be active (not revoked/expired) and tender must be active
+  // Validate token
   const { data: inv } = await admin
     .from('fpe_tender_invitations')
-    .select('id, token_expires_at, status, tender:fpe_tenders(project_id, status)')
+    .select('id, token_expires_at, status, scope_unit_ids, tender:fpe_tenders(project_id, status)')
     .eq('token', token)
     .single()
 
@@ -29,16 +31,41 @@ export async function GET(req: NextRequest) {
   if (new Date(inv.token_expires_at) < new Date()) return NextResponse.json({ error: 'Enlace expirado.' }, { status: 403 })
 
   const tender = inv.tender as unknown as { project_id: string; status: string }
+  const scopeUnitIds: string[] = (inv.scope_unit_ids as string[] | null) ?? []
 
-  // Verify the document belongs to this project
+  // Doc must belong to project + carry scope metadata so we can authorize
   const { data: doc } = await admin
     .from('fpe_documents')
-    .select('id')
+    .select('id, chapter_id, project_unit_id')
     .eq('storage_path', storage_path)
     .eq('project_id', tender.project_id)
     .single()
 
   if (!doc) return NextResponse.json({ error: 'Documento no encontrado.' }, { status: 404 })
+
+  // ── Scope check ───────────────────────────────────────────────────────────
+  let allowed = false
+  if (!doc.chapter_id && !doc.project_unit_id) {
+    allowed = true
+  } else if (doc.project_unit_id && scopeUnitIds.includes(doc.project_unit_id)) {
+    allowed = true
+  } else if (doc.chapter_id && scopeUnitIds.length > 0) {
+    const { data: scopedUnits } = await admin
+      .from('fpe_template_units')
+      .select('chapter_id')
+      .in('id', (
+        await admin
+          .from('fpe_project_units')
+          .select('template_unit_id')
+          .in('id', scopeUnitIds)
+      ).data?.map(r => r.template_unit_id) ?? [])
+    const scopedChapterIds = new Set((scopedUnits ?? []).map(r => r.chapter_id).filter(Boolean) as string[])
+    allowed = scopedChapterIds.has(doc.chapter_id)
+  }
+
+  if (!allowed) {
+    return NextResponse.json({ error: 'Documento fuera del alcance de la invitación.' }, { status: 403 })
+  }
 
   // Generate signed URL (1 hour)
   const { data, error } = await admin.storage

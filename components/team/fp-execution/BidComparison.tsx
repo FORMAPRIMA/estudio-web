@@ -1,11 +1,13 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   getTenderBids,
   awardUnit,
   revertUnitAward,
+  awardChapter,
+  revertChapterAward,
   getProjectAwards,
   type ScopeUnitRow,
   type TenderBidRow,
@@ -17,11 +19,28 @@ import {
 const euros = (n: number) =>
   n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'
 
-function minBidIds(values: Record<string, number>): string[] {
-  const entries = Object.entries(values).filter(([, v]) => v > 0)
-  if (entries.length === 0) return []
-  const min = Math.min(...entries.map(([, v]) => v))
-  return entries.filter(([, v]) => v === min).map(([k]) => k)
+interface ChapterGroup {
+  chapter_id:     string
+  chapter_nombre: string
+  chapter_orden:  number
+  units:          ScopeUnitRow[]
+}
+
+function groupByChapter(scope: ScopeUnitRow[]): ChapterGroup[] {
+  const map = new Map<string, ChapterGroup>()
+  for (const u of scope) {
+    const k = u.chapter_id || '__sin__'
+    if (!map.has(k)) {
+      map.set(k, {
+        chapter_id:     u.chapter_id,
+        chapter_nombre: u.chapter_nombre,
+        chapter_orden:  u.chapter_orden,
+        units:          [],
+      })
+    }
+    map.get(k)!.units.push(u)
+  }
+  return Array.from(map.values()).sort((a, b) => a.chapter_orden - b.chapter_orden)
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -33,19 +52,19 @@ export default function BidComparison({
 }: {
   tenderId:           string
   projectId:          string
-  onAllUnitsAwarded?: () => void   // optional: notify parent (e.g., switch to Overview)
+  onAllUnitsAwarded?: () => void
 }) {
   const router = useRouter()
 
-  const [loading, setLoading]   = useState(true)
-  const [error, setError]       = useState<string | null>(null)
-  const [scope, setScope]       = useState<ScopeUnitRow[]>([])
-  const [bids, setBids]         = useState<TenderBidRow[]>([])
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
-  // unit_id → bid_id (which bid won that UE)
-  const [awards, setAwards]     = useState<Record<string, string>>({})
-  const [awardingUnit, setAwardingUnit] = useState<string | null>(null)
-  const [flashMsg, setFlash]    = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState<string | null>(null)
+  const [scope, setScope]     = useState<ScopeUnitRow[]>([])
+  const [bids, setBids]       = useState<TenderBidRow[]>([])
+  const [showPhases, setShowPhases] = useState(false)
+
+  const [awards, setAwards]   = useState<Record<string, string>>({})   // unit_id → bid_id
+  const [busy, setBusy]       = useState<string | null>(null)
+  const [flashMsg, setFlash]  = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
 
   useEffect(() => {
     Promise.all([
@@ -66,21 +85,19 @@ export default function BidComparison({
     })
   }, [tenderId, projectId])
 
-  const toggleExpanded = (unitId: string) =>
-    setExpanded(prev => ({ ...prev, [unitId]: !prev[unitId] }))
+  const chapters = useMemo(() => groupByChapter(scope), [scope])
 
   const flash = (type: 'ok' | 'err', text: string) => {
     setFlash({ type, text })
     setTimeout(() => setFlash(null), 3500)
   }
 
-  // ── Per-UE adjudication ──────────────────────────────────────────────────
-
+  // ── Adjudication handlers ────────────────────────────────────────────────
   const handleAwardUnit = async (unitId: string, bidId: string, partnerName: string) => {
     if (!confirm(`¿Adjudicar esta UE a ${partnerName}?`)) return
-    setAwardingUnit(unitId)
+    setBusy(unitId)
     const res = await awardUnit({ project_id: projectId, project_unit_id: unitId, bid_id: bidId })
-    setAwardingUnit(null)
+    setBusy(null)
     if ('error' in res) { flash('err', res.error); return }
     setAwards(prev => ({ ...prev, [unitId]: bidId }))
     flash('ok', `UE adjudicada a ${partnerName}.`)
@@ -89,9 +106,9 @@ export default function BidComparison({
 
   const handleRevertUnit = async (unitId: string) => {
     if (!confirm('¿Deshacer la adjudicación de esta UE?')) return
-    setAwardingUnit(unitId)
+    setBusy(unitId)
     const res = await revertUnitAward({ project_id: projectId, project_unit_id: unitId })
-    setAwardingUnit(null)
+    setBusy(null)
     if ('error' in res) { flash('err', res.error); return }
     setAwards(prev => {
       const next = { ...prev }
@@ -102,30 +119,59 @@ export default function BidComparison({
     router.refresh()
   }
 
-  // ── CSV export ────────────────────────────────────────────────────────────
+  const handleAwardChapter = async (chapterId: string, bidId: string, partnerName: string, unitIds: string[]) => {
+    if (!confirm(`¿Adjudicar todo el capítulo a ${partnerName}? (${unitIds.length} UE${unitIds.length !== 1 ? 's' : ''})`)) return
+    setBusy(chapterId)
+    const res = await awardChapter({ project_id: projectId, chapter_id: chapterId, bid_id: bidId })
+    setBusy(null)
+    if ('error' in res) { flash('err', res.error); return }
+    setAwards(prev => {
+      const next = { ...prev }
+      for (const uid of unitIds) next[uid] = bidId
+      return next
+    })
+    flash('ok', `Capítulo adjudicado a ${partnerName} (${res.awarded} UEs).`)
+    router.refresh()
+  }
 
+  const handleRevertChapter = async (chapterId: string, unitIds: string[]) => {
+    if (!confirm('¿Deshacer la adjudicación del capítulo entero?')) return
+    setBusy(chapterId)
+    const res = await revertChapterAward({ project_id: projectId, chapter_id: chapterId })
+    setBusy(null)
+    if ('error' in res) { flash('err', res.error); return }
+    setAwards(prev => {
+      const next = { ...prev }
+      for (const uid of unitIds) delete next[uid]
+      return next
+    })
+    flash('ok', `Adjudicación deshecha (${res.reverted} UEs).`)
+    router.refresh()
+  }
+
+  // ── CSV export ───────────────────────────────────────────────────────────
   const handleExportCSV = () => {
     const q = (s: string) => `"${s.replace(/"/g, '""')}"`
     const rows: string[] = []
-
     rows.push([
-      q('Partida'), q('Ud.'), q('Cantidad'),
+      q('Capítulo'), q('UE'), q('Partida'), q('Ud.'), q('Cantidad'),
       ...bids.flatMap(b => [q(`${b.partner_nombre} — P/Ud`), q(`${b.partner_nombre} — Importe`)]),
     ].join(','))
-
-    for (const unit of scope) {
-      rows.push([q(unit.unit_nombre), '', '', ...bids.flatMap(() => ['', ''])].join(','))
-      for (const li of unit.line_items) {
-        rows.push([
-          q(li.nombre), q(li.unidad_medida), String(li.cantidad),
-          ...bids.flatMap(b => {
-            const p = b.prices[li.id]
-            return p !== undefined ? [p.toFixed(2), (p * li.cantidad).toFixed(2)] : ['', '']
-          }),
-        ].join(','))
+    for (const ch of chapters) {
+      for (const unit of ch.units) {
+        rows.push([q(ch.chapter_nombre), q(unit.unit_nombre), '', '', '', ...bids.flatMap(() => ['', ''])].join(','))
+        for (const li of unit.line_items) {
+          rows.push([
+            q(ch.chapter_nombre), q(unit.unit_nombre), q(li.nombre),
+            q(li.unidad_medida), String(li.cantidad),
+            ...bids.flatMap(b => {
+              const p = b.prices[li.id]
+              return p !== undefined ? [p.toFixed(2), (p * li.cantidad).toFixed(2)] : ['', '']
+            }),
+          ].join(','))
+        }
       }
     }
-
     const csv  = '﻿' + rows.join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const url  = URL.createObjectURL(blob)
@@ -134,292 +180,107 @@ export default function BidComparison({
     URL.revokeObjectURL(url)
   }
 
-  // ── Loading / error states ────────────────────────────────────────────────
-
+  // ── States ───────────────────────────────────────────────────────────────
   if (loading) return (
     <div style={{ padding: '40px 20px', textAlign: 'center', color: '#AAA', fontSize: 13 }}>
       Cargando comparativa…
     </div>
   )
-
   if (error) return (
     <div style={{ padding: '14px 16px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, fontSize: 13, color: '#DC2626' }}>
       Error: {error}
     </div>
   )
-
   if (bids.length === 0) return (
     <div style={{ padding: '60px 20px', textAlign: 'center', color: '#888', fontSize: 13 }}>
       No hay ofertas enviadas todavía.
     </div>
   )
 
-  // ── Progress ──────────────────────────────────────────────────────────────
-
-  // Adjudicable UEs = UEs that have at least one bid covering all its line items at any price
+  // Global progress
   const adjudicableUnits = scope.filter(u =>
     bids.some(b => u.line_items.every(li => b.prices[li.id] !== undefined))
   )
   const awardedCount = adjudicableUnits.filter(u => awards[u.unit_id]).length
   const allAwarded   = awardedCount === adjudicableUnits.length && adjudicableUnits.length > 0
 
-  const COL_W = 200
-
-  // ── Render ────────────────────────────────────────────────────────────────
-
   return (
     <div>
       {/* Top bar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 12, flexWrap: 'wrap' }}>
-        <div>
-          <p style={{ margin: 0, fontSize: 12, color: '#555' }}>
-            <strong>{awardedCount}</strong> de <strong>{adjudicableUnits.length}</strong> UEs adjudicadas
-            {adjudicableUnits.length < scope.length && (
-              <span style={{ color: '#999' }}> · {scope.length - adjudicableUnits.length} UE(s) sin oferta completa</span>
-            )}
-          </p>
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        marginBottom: 18, gap: 12, flexWrap: 'wrap',
+      }}>
+        <p style={{ margin: 0, fontSize: 12, color: '#666' }}>
+          <strong style={{ color: '#1A1A1A' }}>{awardedCount}</strong> de <strong style={{ color: '#1A1A1A' }}>{adjudicableUnits.length}</strong> UEs adjudicadas
+          {adjudicableUnits.length < scope.length && (
+            <span style={{ color: '#AAA' }}> · {scope.length - adjudicableUnits.length} UE(s) sin oferta completa</span>
+          )}
+        </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11, color: '#555', cursor: 'pointer', userSelect: 'none' }}>
+            <input
+              type="checkbox"
+              checked={showPhases}
+              onChange={e => setShowPhases(e.target.checked)}
+              style={{ accentColor: '#D85A30', cursor: 'pointer' }}
+            />
+            Mostrar fases de ejecución
+          </label>
+          <button
+            onClick={handleExportCSV}
+            style={{
+              padding: '7px 14px', fontSize: 11, borderRadius: 6,
+              border: '1px solid #E8E6E0', cursor: 'pointer',
+              fontFamily: 'inherit', fontWeight: 500,
+              background: '#fff', color: '#555',
+            }}
+          >
+            Exportar CSV
+          </button>
         </div>
-        <button
-          onClick={handleExportCSV}
-          style={{ padding: '6px 14px', fontSize: 11, borderRadius: 5, border: '1px solid #E8E6E0', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500, background: '#fff', color: '#555' }}
-        >
-          Exportar CSV
-        </button>
       </div>
 
       {flashMsg && (
         <div style={{
-          padding: '10px 16px', borderRadius: 8, fontSize: 13, fontWeight: 500, marginBottom: 12,
-          background: flashMsg.type === 'ok' ? '#ECFDF5' : '#FEF2F2',
-          border: `1px solid ${flashMsg.type === 'ok' ? '#6EE7B7' : '#FECACA'}`,
-          color:  flashMsg.type === 'ok' ? '#059669' : '#DC2626',
+          padding: '10px 16px', borderRadius: 8, fontSize: 13, fontWeight: 500, marginBottom: 14,
+          background: flashMsg.type === 'ok' ? '#FFF8F4' : '#FEF2F2',
+          border: `1px solid ${flashMsg.type === 'ok' ? '#F4C9A8' : '#FECACA'}`,
+          color:  flashMsg.type === 'ok' ? '#9A3F1B' : '#DC2626',
         }}>
           {flashMsg.text}
         </div>
       )}
 
-      {/* Legend */}
-      <div style={{ display: 'flex', gap: 16, marginBottom: 10, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 10, color: '#888', display: 'flex', alignItems: 'center', gap: 5 }}>
-          <span style={{ width: 10, height: 10, borderRadius: 2, background: '#ECFDF5', border: '1px solid #6EE7B7', display: 'inline-block' }} />
-          Oferta más baja
-        </span>
-        <span style={{ fontSize: 10, color: '#888', display: 'flex', alignItems: 'center', gap: 5 }}>
-          <span style={{ width: 10, height: 10, borderRadius: 2, background: '#FEF3C7', border: '1px solid #FBBF24', display: 'inline-block' }} />
-          UE adjudicada
-        </span>
-        <span style={{ fontSize: 10, color: '#888' }}>· Click en la UE para ver sus partidas</span>
+      {/* Chapter cards */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {chapters.map(ch => (
+          <ChapterCard
+            key={ch.chapter_id || '__sin__'}
+            chapter={ch}
+            bids={bids}
+            awards={awards}
+            showPhases={showPhases}
+            busy={busy}
+            onAwardUnit={handleAwardUnit}
+            onRevertUnit={handleRevertUnit}
+            onAwardChapter={handleAwardChapter}
+            onRevertChapter={handleRevertChapter}
+          />
+        ))}
       </div>
 
-      <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid #E8E6E0' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 460 + bids.length * COL_W }}>
-          <thead>
-            <tr style={{ background: '#1A1A1A' }}>
-              <th style={{ padding: '14px 16px', textAlign: 'left', color: '#fff', fontSize: 11, fontWeight: 600, letterSpacing: '0.04em', width: 280 }}>
-                Unidad / Partida
-              </th>
-              <th style={{ padding: '14px 10px', textAlign: 'center', color: 'rgba(255,255,255,0.45)', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', width: 55 }}>
-                UD.
-              </th>
-              <th style={{ padding: '14px 10px', textAlign: 'right', color: 'rgba(255,255,255,0.45)', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', width: 75 }}>
-                CANT.
-              </th>
-              {bids.map(bid => (
-                <th key={bid.id} style={{ padding: '14px 16px', textAlign: 'right', color: '#fff', fontSize: 12, fontWeight: 600, width: COL_W, borderLeft: '1px solid rgba(255,255,255,0.08)' }}>
-                  {bid.partner_nombre}
-                </th>
-              ))}
-            </tr>
-          </thead>
-
-          <tbody>
-            {scope.map(unit => {
-              const isExpanded = !!expanded[unit.unit_id]
-              const awardedBidId = awards[unit.unit_id]
-
-              // Unit totals per bid + check if bid covers all items in this UE
-              const unitTotalValues: Record<string, number> = {}
-              const bidCoversUnit:   Record<string, boolean> = {}
-              for (const bid of bids) {
-                let sub = 0; let allCovered = unit.line_items.length > 0
-                for (const li of unit.line_items) {
-                  const p = bid.prices[li.id]
-                  if (p !== undefined) sub += p * li.cantidad
-                  else allCovered = false
-                }
-                unitTotalValues[bid.id] = sub
-                bidCoversUnit[bid.id]   = allCovered
-              }
-              const minUnitTotalIds = minBidIds(
-                Object.fromEntries(Object.entries(unitTotalValues).filter(([id]) => bidCoversUnit[id]))
-              )
-
-              const unitDaysValues: Record<string, number> = {}
-              for (const bid of bids) {
-                const d = bid.totalDaysByUnit[unit.unit_id]
-                if (d) unitDaysValues[bid.id] = d
-              }
-
-              return (
-                <React.Fragment key={unit.unit_id}>
-                  {/* Unit row (clickable to expand line items) */}
-                  <tr
-                    style={{
-                      background: awardedBidId ? '#FEF3C7' : '#F5F4F0',
-                      borderTop: '2px solid #E8E6E0',
-                    }}
-                  >
-                    <td
-                      colSpan={3}
-                      onClick={() => toggleExpanded(unit.unit_id)}
-                      style={{ padding: '10px 16px', fontSize: 11, fontWeight: 700, color: '#333', letterSpacing: '0.02em', textTransform: 'uppercase', cursor: 'pointer' }}
-                    >
-                      <span style={{ marginRight: 8, fontSize: 10, color: '#AAA' }}>
-                        {isExpanded ? '▼' : '▶'}
-                      </span>
-                      {unit.unit_nombre}
-                      <span style={{ fontSize: 9, color: '#BBB', marginLeft: 8, fontWeight: 400, letterSpacing: 0, textTransform: 'none' }}>
-                        {unit.line_items.length} partida{unit.line_items.length !== 1 ? 's' : ''}
-                      </span>
-                      {awardedBidId && (
-                        <span style={{ marginLeft: 12, fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: '#D97706', color: '#fff', letterSpacing: '0.04em', textTransform: 'none' }}>
-                          ADJUDICADA · {bids.find(b => b.id === awardedBidId)?.partner_nombre ?? '?'}
-                        </span>
-                      )}
-                    </td>
-
-                    {bids.map(bid => {
-                      const val      = unitTotalValues[bid.id] ?? 0
-                      const days     = unitDaysValues[bid.id]
-                      const covers   = bidCoversUnit[bid.id]
-                      const isCheap  = minUnitTotalIds.includes(bid.id) && val > 0
-                      const isAwarded = awardedBidId === bid.id
-                      const isLoading = awardingUnit === unit.unit_id
-
-                      return (
-                        <td key={bid.id} style={{
-                          padding: '8px 12px', textAlign: 'right', fontSize: 12, fontWeight: 700,
-                          borderLeft: '1px solid #E8E6E0',
-                          background: isAwarded ? '#FDE68A' : isCheap ? '#ECFDF5' : 'transparent',
-                          verticalAlign: 'top',
-                        }}>
-                          {covers ? (
-                            <>
-                              <div style={{ color: isAwarded ? '#92400E' : isCheap ? '#059669' : '#555' }}>
-                                {euros(val)}
-                              </div>
-                              {days != null && (
-                                <div style={{ marginTop: 2, fontSize: 10, color: '#888', fontWeight: 600 }}>
-                                  {days}d
-                                </div>
-                              )}
-                              <div style={{ marginTop: 6 }}>
-                                {isAwarded ? (
-                                  <button
-                                    onClick={() => handleRevertUnit(unit.unit_id)}
-                                    disabled={isLoading}
-                                    style={{
-                                      padding: '4px 8px', fontSize: 10, fontWeight: 600,
-                                      borderRadius: 4, border: '1px solid #D97706',
-                                      background: '#fff', color: '#D97706', cursor: 'pointer',
-                                      fontFamily: 'inherit',
-                                    }}
-                                  >
-                                    Deshacer
-                                  </button>
-                                ) : (
-                                  <button
-                                    onClick={() => handleAwardUnit(unit.unit_id, bid.id, bid.partner_nombre)}
-                                    disabled={isLoading || !!awardedBidId}
-                                    style={{
-                                      padding: '4px 10px', fontSize: 10, fontWeight: 700,
-                                      borderRadius: 4, border: 'none',
-                                      background: awardedBidId ? '#E8E6E0' : '#D85A30',
-                                      color: awardedBidId ? '#999' : '#fff',
-                                      cursor: awardedBidId ? 'not-allowed' : 'pointer',
-                                      fontFamily: 'inherit', letterSpacing: '0.04em',
-                                      opacity: isLoading ? 0.5 : 1,
-                                    }}
-                                  >
-                                    {isLoading ? '…' : 'Adjudicar'}
-                                  </button>
-                                )}
-                              </div>
-                            </>
-                          ) : (
-                            <span style={{ fontSize: 11, color: '#CCC', fontStyle: 'italic' }}>sin oferta</span>
-                          )}
-                        </td>
-                      )
-                    })}
-                  </tr>
-
-                  {/* Expanded line items */}
-                  {isExpanded && unit.line_items.map((li, idx) => {
-                    const liPriceValues: Record<string, number> = {}
-                    for (const bid of bids) {
-                      const p = bid.prices[li.id]
-                      if (p !== undefined) liPriceValues[bid.id] = p * li.cantidad
-                    }
-                    const minLiIds = minBidIds(liPriceValues)
-
-                    return (
-                      <tr key={li.id} style={{ borderBottom: '1px solid #F0EEE8', background: idx % 2 === 0 ? '#fff' : '#FAFAF8' }}>
-                        <td style={{ padding: '9px 16px 9px 36px', fontSize: 12, color: '#333' }}>
-                          {li.nombre}
-                        </td>
-                        <td style={{ padding: '9px 10px', textAlign: 'center', fontSize: 11, color: '#999', fontWeight: 600 }}>
-                          {li.unidad_medida}
-                        </td>
-                        <td style={{ padding: '9px 10px', textAlign: 'right', fontSize: 12, color: '#555', fontFamily: 'monospace' }}>
-                          {li.cantidad.toLocaleString('es-ES')}
-                        </td>
-                        {bids.map(bid => {
-                          const price   = bid.prices[li.id]
-                          const importe = price !== undefined ? price * li.cantidad : null
-                          const isCheap = minLiIds.includes(bid.id) && importe != null
-                          return (
-                            <td key={bid.id} style={{
-                              padding: '9px 16px', textAlign: 'right',
-                              borderLeft: '1px solid #F0EEE8',
-                              background: isCheap ? '#ECFDF5' : 'transparent',
-                            }}>
-                              {price !== undefined ? (
-                                <>
-                                  <div style={{ fontSize: 10, color: '#BBB', marginBottom: 1 }}>
-                                    {euros(price)}/{li.unidad_medida}
-                                  </div>
-                                  <div style={{ fontSize: 12, fontWeight: 600, color: isCheap ? '#059669' : '#1A1A1A', fontFamily: 'monospace' }}>
-                                    {euros(importe!)}
-                                  </div>
-                                </>
-                              ) : (
-                                <span style={{ fontSize: 12, color: '#DDD' }}>—</span>
-                              )}
-                            </td>
-                          )
-                        })}
-                      </tr>
-                    )
-                  })}
-                </React.Fragment>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Sticky footer with progress */}
+      {/* Footer */}
       <div style={{
-        marginTop: 16, padding: '14px 18px', borderRadius: 10,
-        background: allAwarded ? '#ECFDF5' : '#FAFAF8',
-        border: `1px solid ${allAwarded ? '#6EE7B7' : '#E8E6E0'}`,
+        marginTop: 18, padding: '14px 18px', borderRadius: 12,
+        background: allAwarded ? '#FFF8F4' : '#FAFAF8',
+        border: `1px solid ${allAwarded ? '#F4C9A8' : '#F0EEE8'}`,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
       }}>
         <div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: allAwarded ? '#059669' : '#333' }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: allAwarded ? '#9A3F1B' : '#1A1A1A' }}>
             {allAwarded
-              ? '✓ Todas las UEs adjudicables están adjudicadas'
+              ? 'Todas las UEs adjudicables están adjudicadas'
               : `${awardedCount} de ${adjudicableUnits.length} UEs adjudicadas`}
           </div>
           <div style={{ fontSize: 11, color: '#888', marginTop: 3 }}>
@@ -431,24 +292,667 @@ export default function BidComparison({
         {allAwarded && onAllUnitsAwarded && (
           <button
             onClick={onAllUnitsAwarded}
-            style={{ padding: '9px 18px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: 'none', cursor: 'pointer', fontFamily: 'inherit', background: '#059669', color: '#fff' }}
+            style={{ padding: '9px 18px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: 'none', cursor: 'pointer', fontFamily: 'inherit', background: '#D85A30', color: '#fff' }}
           >
             Ir al Overview de adjudicaciones →
           </button>
         )}
       </div>
 
-      {/* Notes per bid */}
+      {/* Notas por bid */}
       {bids.some(b => b.notas) && (
         <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
           {bids.filter(b => b.notas).map(bid => (
-            <div key={bid.id} style={{ padding: '10px 14px', background: '#F8F7F4', borderRadius: 8, border: '1px solid #E8E6E0', fontSize: 12 }}>
-              <span style={{ fontWeight: 600, color: '#555' }}>{bid.partner_nombre}: </span>
-              <span style={{ color: '#777' }}>{bid.notas}</span>
+            <div key={bid.id} style={{
+              padding: '10px 14px', background: '#FAFAF8', borderRadius: 8,
+              border: '1px solid #F0EEE8', fontSize: 12,
+            }}>
+              <span style={{ fontWeight: 600, color: '#1A1A1A' }}>{bid.partner_nombre}: </span>
+              <span style={{ color: '#666' }}>{bid.notas}</span>
             </div>
           ))}
         </div>
       )}
     </div>
+  )
+}
+
+// ── ChapterCard ──────────────────────────────────────────────────────────────
+
+interface Participant {
+  bid:         TenderBidRow
+  total:       number
+  days:        number
+  allCovered:  boolean
+}
+
+function ChapterCard({
+  chapter, bids, awards, showPhases, busy,
+  onAwardUnit, onRevertUnit, onAwardChapter, onRevertChapter,
+}: {
+  chapter:         ChapterGroup
+  bids:            TenderBidRow[]
+  awards:          Record<string, string>
+  showPhases:      boolean
+  busy:            string | null
+  onAwardUnit:     (unitId: string, bidId: string, partnerName: string) => void
+  onRevertUnit:    (unitId: string) => void
+  onAwardChapter:  (chapterId: string, bidId: string, partnerName: string, unitIds: string[]) => void
+  onRevertChapter: (chapterId: string, unitIds: string[]) => void
+}) {
+  const [expanded, setExpanded]            = useState(false)
+  const [expandedUnits, setExpandedUnits]  = useState<Record<string, boolean>>({})
+
+  const toggleUnit = (id: string) => setExpandedUnits(prev => ({ ...prev, [id]: !prev[id] }))
+
+  // ── Compute participating partners (any priced line item in this chapter)
+  const participants: Participant[] = useMemo(() => {
+    return bids
+      .map(bid => {
+        let total = 0
+        let priced = 0
+        let totalItems = 0
+        for (const u of chapter.units) {
+          for (const li of u.line_items) {
+            totalItems++
+            const p = bid.prices[li.id]
+            if (p !== undefined) {
+              total  += p * li.cantidad
+              priced++
+            }
+          }
+        }
+        if (priced === 0) return null
+        const days = (bid.phasesByChapter[chapter.chapter_id] ?? []).reduce((s, p) => s + p.dias, 0)
+        return {
+          bid,
+          total,
+          days,
+          allCovered: priced === totalItems && totalItems > 0,
+        }
+      })
+      .filter((p): p is Participant => p !== null)
+      .sort((a, b) => a.total - b.total)
+  }, [bids, chapter])
+
+  // ── Cheapest & fastest across full-coverage participants
+  const fullCovered = participants.filter(p => p.allCovered)
+  const minTotal    = fullCovered.length > 0 ? Math.min(...fullCovered.map(p => p.total)) : null
+  const minDays     = fullCovered.filter(p => p.days > 0).length > 0
+    ? Math.min(...fullCovered.filter(p => p.days > 0).map(p => p.days))
+    : null
+
+  // ── Award state at chapter level
+  const unitIds       = chapter.units.map(u => u.unit_id)
+  const awardedBidIds = new Set(unitIds.map(uid => awards[uid]).filter(Boolean))
+  const allAwarded    = unitIds.every(uid => awards[uid]) && unitIds.length > 0
+  const fullyAwardedTo = allAwarded && awardedBidIds.size === 1 ? Array.from(awardedBidIds)[0] : null
+  const isMixed        = awardedBidIds.size >= 2
+
+  const isChapterBusy = busy === chapter.chapter_id
+
+  // ── Phase order across all participants
+  const phaseOrder: { phase_id: string; phase_nombre: string; phase_orden: number }[] = useMemo(() => {
+    const seen = new Map<string, { phase_id: string; phase_nombre: string; phase_orden: number }>()
+    for (const p of participants) {
+      for (const ph of p.bid.phasesByChapter[chapter.chapter_id] ?? []) {
+        if (!seen.has(ph.phase_id)) {
+          seen.set(ph.phase_id, { phase_id: ph.phase_id, phase_nombre: ph.phase_nombre, phase_orden: ph.phase_orden })
+        }
+      }
+    }
+    return Array.from(seen.values()).sort((a, b) => a.phase_orden - b.phase_orden)
+  }, [participants, chapter])
+
+  const partidaCount = chapter.units.reduce((s, u) => s + u.line_items.length, 0)
+
+  // ── Empty: no participant for this chapter at all
+  if (participants.length === 0) {
+    return (
+      <section style={{
+        background: '#fff', border: '1px solid #F0EEE8', borderRadius: 12,
+        padding: '18px 22px',
+      }}>
+        <header style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+          <h3 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#1A1A1A', letterSpacing: '0.02em' }}>
+            {chapter.chapter_nombre}
+          </h3>
+          <span style={{ fontSize: 11, color: '#AAA' }}>
+            {chapter.units.length} UE{chapter.units.length !== 1 ? 's' : ''} · {partidaCount} partida{partidaCount !== 1 ? 's' : ''}
+          </span>
+        </header>
+        <p style={{ margin: '8px 0 0', fontSize: 12, color: '#999' }}>
+          Sin ofertas para este capítulo todavía.
+        </p>
+      </section>
+    )
+  }
+
+  return (
+    <section style={{
+      background: '#fff',
+      border: '1px solid #F0EEE8',
+      borderRadius: 12,
+      borderLeft: fullyAwardedTo ? '4px solid #D85A30' : '1px solid #F0EEE8',
+      overflow: 'hidden',
+    }}>
+      {/* Header */}
+      <header
+        onClick={() => setExpanded(e => !e)}
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '16px 22px', cursor: 'pointer',
+          borderBottom: '1px solid #F5F4F0',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+          <h3 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#1A1A1A', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+            {chapter.chapter_nombre}
+          </h3>
+          <span style={{ fontSize: 11, color: '#AAA', fontWeight: 500 }}>
+            {chapter.units.length} UE{chapter.units.length !== 1 ? 's' : ''} · {partidaCount} partida{partidaCount !== 1 ? 's' : ''}
+          </span>
+          {fullyAwardedTo && (
+            <span style={{
+              fontSize: 9, fontWeight: 700, padding: '3px 9px', borderRadius: 11,
+              background: '#D85A30', color: '#fff', letterSpacing: '0.06em',
+            }}>
+              ADJUDICADO · {bids.find(b => b.id === fullyAwardedTo)?.partner_nombre ?? '?'}
+            </span>
+          )}
+          {isMixed && (
+            <span style={{
+              fontSize: 9, fontWeight: 700, padding: '3px 9px', borderRadius: 11,
+              background: '#F0EEE8', color: '#666', letterSpacing: '0.06em',
+            }}>
+              ADJUDICACIÓN MIXTA · {awardedBidIds.size} partners
+            </span>
+          )}
+        </div>
+        <span style={{ fontSize: 11, color: '#BBB' }}>{expanded ? '▼' : '▶'}</span>
+      </header>
+
+      {/* Partner blocks (always visible) */}
+      <div style={{
+        padding: '18px 22px',
+        display: 'grid',
+        gridTemplateColumns: `repeat(${participants.length}, minmax(180px, 1fr))`,
+        gap: 14,
+        background: '#fff',
+      }}>
+        {participants.map(p => {
+          const isAwarded = fullyAwardedTo === p.bid.id
+          const isCheapest = minTotal != null && p.total === minTotal && p.allCovered
+          const isFastest  = minDays != null && p.days === minDays && p.allCovered
+          return (
+            <PartnerBlock
+              key={p.bid.id}
+              participant={p}
+              isAwarded={isAwarded}
+              isCheapest={isCheapest}
+              isFastest={isFastest}
+              chapterUnitIds={unitIds}
+              chapterId={chapter.chapter_id}
+              canAward={!isMixed && !fullyAwardedTo && p.allCovered}
+              disableReason={
+                isMixed ? 'Hay UEs adjudicadas a distintos partners — deshaz alguna primero'
+                : !p.allCovered ? 'No cubre todas las partidas del capítulo'
+                : ''
+              }
+              busy={isChapterBusy}
+              onAwardChapter={onAwardChapter}
+              onRevertChapter={onRevertChapter}
+            />
+          )
+        })}
+      </div>
+
+      {/* Expanded content */}
+      {expanded && (
+        <div style={{ borderTop: '1px solid #F5F4F0', background: '#FAFAF8' }}>
+          {/* Phase strip */}
+          {showPhases && phaseOrder.length > 0 && (
+            <PhaseStrip
+              chapterId={chapter.chapter_id}
+              participants={participants}
+              phaseOrder={phaseOrder}
+            />
+          )}
+
+          {/* UE list */}
+          <UnitTable
+            chapterId={chapter.chapter_id}
+            units={chapter.units}
+            participants={participants}
+            awards={awards}
+            expandedUnits={expandedUnits}
+            onToggleUnit={toggleUnit}
+            chapterAwarded={!!fullyAwardedTo}
+            isMixed={isMixed}
+            busy={busy}
+            onAwardUnit={onAwardUnit}
+            onRevertUnit={onRevertUnit}
+          />
+        </div>
+      )}
+    </section>
+  )
+}
+
+// ── PartnerBlock ─────────────────────────────────────────────────────────────
+
+function PartnerBlock({
+  participant, isAwarded, isCheapest, isFastest,
+  chapterId, chapterUnitIds, canAward, disableReason, busy,
+  onAwardChapter, onRevertChapter,
+}: {
+  participant:      Participant
+  isAwarded:        boolean
+  isCheapest:       boolean
+  isFastest:        boolean
+  chapterId:        string
+  chapterUnitIds:   string[]
+  canAward:         boolean
+  disableReason:    string
+  busy:             boolean
+  onAwardChapter:   (chapterId: string, bidId: string, partnerName: string, unitIds: string[]) => void
+  onRevertChapter:  (chapterId: string, unitIds: string[]) => void
+}) {
+  const { bid, total, days, allCovered } = participant
+
+  return (
+    <div
+      onClick={e => e.stopPropagation()}
+      style={{
+        padding: '14px 16px',
+        background: isAwarded ? '#FFF8F4' : '#FAFAF8',
+        border: `1px solid ${isAwarded ? '#F4C9A8' : '#F0EEE8'}`,
+        borderRadius: 10,
+        display: 'flex', flexDirection: 'column', gap: 8,
+      }}
+    >
+      <div style={{ fontSize: 13, fontWeight: 600, color: '#1A1A1A', lineHeight: 1.3 }}>
+        {bid.partner_nombre}
+      </div>
+
+      <div>
+        <div style={{
+          fontSize: 22, fontWeight: 700, color: isCheapest ? '#D85A30' : '#1A1A1A',
+          fontVariantNumeric: 'tabular-nums', lineHeight: 1,
+        }}>
+          {euros(total)}
+        </div>
+        {isCheapest && (
+          <div style={{ fontSize: 9, fontWeight: 700, color: '#D85A30', letterSpacing: '0.08em', marginTop: 3, textTransform: 'uppercase' }}>
+            ↓ Más bajo
+          </div>
+        )}
+        {!allCovered && (
+          <div style={{ fontSize: 9, fontWeight: 600, color: '#999', letterSpacing: '0.06em', marginTop: 3, textTransform: 'uppercase' }}>
+            Cobertura parcial
+          </div>
+        )}
+      </div>
+
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: '#1A1A1A', fontVariantNumeric: 'tabular-nums' }}>
+          {days > 0 ? `${days} días laborables` : <span style={{ color: '#BBB' }}>— días</span>}
+        </div>
+        {isFastest && days > 0 && (
+          <div style={{ fontSize: 9, fontWeight: 700, color: '#D85A30', letterSpacing: '0.08em', marginTop: 2, textTransform: 'uppercase' }}>
+            ↓ Más rápido
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginTop: 'auto', paddingTop: 4 }}>
+        {isAwarded ? (
+          <button
+            onClick={() => onRevertChapter(chapterId, chapterUnitIds)}
+            disabled={busy}
+            style={{
+              width: '100%', padding: '8px 12px', fontSize: 11, fontWeight: 600,
+              borderRadius: 6, border: '1px solid #D85A30',
+              background: '#fff', color: '#D85A30', cursor: 'pointer',
+              fontFamily: 'inherit',
+            }}
+          >
+            Deshacer capítulo
+          </button>
+        ) : (
+          <button
+            onClick={() => onAwardChapter(chapterId, bid.id, bid.partner_nombre, chapterUnitIds)}
+            disabled={!canAward || busy}
+            title={!canAward ? disableReason : ''}
+            style={{
+              width: '100%', padding: '8px 12px', fontSize: 11, fontWeight: 600,
+              borderRadius: 6, border: 'none',
+              background: !canAward ? '#E8E6E0' : '#1A1A1A',
+              color: !canAward ? '#999' : '#fff',
+              cursor: !canAward ? 'not-allowed' : 'pointer',
+              fontFamily: 'inherit',
+              opacity: busy ? 0.5 : 1,
+            }}
+          >
+            {busy ? '…' : 'Adjudicar capítulo'}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── PhaseStrip ───────────────────────────────────────────────────────────────
+
+function PhaseStrip({
+  chapterId, participants, phaseOrder,
+}: {
+  chapterId:    string
+  participants: Participant[]
+  phaseOrder:   { phase_id: string; phase_nombre: string; phase_orden: number }[]
+}) {
+  return (
+    <div style={{ padding: '14px 22px', borderBottom: '1px solid #F0EEE8' }}>
+      <div style={{ fontSize: 9, fontWeight: 700, color: '#999', letterSpacing: '0.10em', textTransform: 'uppercase', marginBottom: 10 }}>
+        Fases de ejecución · días laborables
+      </div>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: `200px repeat(${participants.length}, minmax(100px, 1fr))`,
+        gap: '6px 14px',
+        alignItems: 'baseline',
+      }}>
+        <div />
+        {participants.map(p => (
+          <div key={p.bid.id} style={{ fontSize: 10, fontWeight: 600, color: '#888', letterSpacing: '0.04em' }}>
+            {p.bid.partner_nombre}
+          </div>
+        ))}
+        {phaseOrder.map(ph => {
+          // days per participant for this phase
+          const daysByPart: Record<string, number> = {}
+          for (const p of participants) {
+            const found = (p.bid.phasesByChapter[chapterId] ?? []).find(x => x.phase_id === ph.phase_id)
+            if (found) daysByPart[p.bid.id] = found.dias
+          }
+          const min = Object.values(daysByPart).filter(v => v > 0).length > 0
+            ? Math.min(...Object.values(daysByPart).filter(v => v > 0))
+            : null
+          return (
+            <React.Fragment key={ph.phase_id}>
+              <div style={{ fontSize: 12, color: '#555' }}>{ph.phase_nombre}</div>
+              {participants.map(p => {
+                const d = daysByPart[p.bid.id]
+                const isMin = min != null && d === min
+                return (
+                  <div key={p.bid.id} style={{
+                    fontSize: 12,
+                    fontWeight: isMin ? 700 : 500,
+                    color: isMin ? '#D85A30' : '#555',
+                    fontVariantNumeric: 'tabular-nums',
+                  }}>
+                    {d != null ? `${d}d` : <span style={{ color: '#DDD' }}>—</span>}
+                  </div>
+                )
+              })}
+            </React.Fragment>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── UnitTable ────────────────────────────────────────────────────────────────
+
+function UnitTable({
+  chapterId, units, participants, awards, expandedUnits,
+  onToggleUnit, chapterAwarded, isMixed, busy,
+  onAwardUnit, onRevertUnit,
+}: {
+  chapterId:      string
+  units:          ScopeUnitRow[]
+  participants:   Participant[]
+  awards:         Record<string, string>
+  expandedUnits:  Record<string, boolean>
+  onToggleUnit:   (id: string) => void
+  chapterAwarded: boolean
+  isMixed:        boolean
+  busy:           string | null
+  onAwardUnit:    (unitId: string, bidId: string, partnerName: string) => void
+  onRevertUnit:   (unitId: string) => void
+}) {
+  return (
+    <div style={{ padding: '14px 22px 18px' }}>
+      <div style={{ fontSize: 9, fontWeight: 700, color: '#999', letterSpacing: '0.10em', textTransform: 'uppercase', marginBottom: 10 }}>
+        Unidades de ejecución
+      </div>
+      <table style={{ width: '100%', borderCollapse: 'collapse', background: '#fff', border: '1px solid #F0EEE8', borderRadius: 8, overflow: 'hidden' }}>
+        <thead>
+          <tr>
+            <th style={{
+              padding: '10px 14px', textAlign: 'left',
+              fontSize: 9, fontWeight: 700, color: '#888', letterSpacing: '0.06em',
+              textTransform: 'uppercase', borderBottom: '1px solid #F0EEE8',
+              minWidth: 220,
+            }}>
+              Unidad
+            </th>
+            {participants.map(p => (
+              <th key={p.bid.id} style={{
+                padding: '10px 14px', textAlign: 'right',
+                fontSize: 10, fontWeight: 600, color: '#1A1A1A',
+                borderBottom: '1px solid #F0EEE8', borderLeft: '1px solid #F0EEE8',
+                minWidth: 140,
+              }}>
+                {p.bid.partner_nombre}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {units.map(u => (
+            <UnitRow
+              key={u.unit_id}
+              unit={u}
+              participants={participants}
+              awardedBidId={awards[u.unit_id]}
+              expanded={!!expandedUnits[u.unit_id]}
+              onToggle={() => onToggleUnit(u.unit_id)}
+              chapterAwarded={chapterAwarded}
+              isMixed={isMixed}
+              busy={busy}
+              onAwardUnit={onAwardUnit}
+              onRevertUnit={onRevertUnit}
+            />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// ── UnitRow ──────────────────────────────────────────────────────────────────
+
+function UnitRow({
+  unit, participants, awardedBidId, expanded, onToggle,
+  chapterAwarded, isMixed, busy,
+  onAwardUnit, onRevertUnit,
+}: {
+  unit:           ScopeUnitRow
+  participants:   Participant[]
+  awardedBidId?:  string
+  expanded:       boolean
+  onToggle:       () => void
+  chapterAwarded: boolean
+  isMixed:        boolean
+  busy:           string | null
+  onAwardUnit:    (unitId: string, bidId: string, partnerName: string) => void
+  onRevertUnit:   (unitId: string) => void
+}) {
+  // Each participant: does it fully cover this UE? what's the total?
+  // Nota: los días son a nivel capítulo (no per-UE), por eso no se muestran aquí.
+  const cellByPart: Record<string, { total: number; covered: boolean; participates: boolean }> = {}
+  for (const p of participants) {
+    let total = 0; let priced = 0
+    for (const li of unit.line_items) {
+      const pr = p.bid.prices[li.id]
+      if (pr !== undefined) { total += pr * li.cantidad; priced++ }
+    }
+    cellByPart[p.bid.id] = {
+      total,
+      covered:      priced === unit.line_items.length && unit.line_items.length > 0,
+      participates: priced > 0,
+    }
+  }
+
+  const covered = participants.filter(p => cellByPart[p.bid.id].covered)
+  const minTotal = covered.length > 0 ? Math.min(...covered.map(p => cellByPart[p.bid.id].total)) : null
+
+  const isUnitBusy = busy === unit.unit_id
+
+  return (
+    <>
+      <tr
+        onClick={onToggle}
+        style={{
+          cursor: 'pointer',
+          background: awardedBidId ? '#FFF8F4' : '#fff',
+          borderTop: '1px solid #F5F4F0',
+        }}
+      >
+        <td style={{ padding: '12px 14px', fontSize: 12, color: '#1A1A1A', fontWeight: 500 }}>
+          <span style={{ fontSize: 10, color: '#BBB', marginRight: 8 }}>{expanded ? '▼' : '▶'}</span>
+          {unit.unit_nombre}
+          <span style={{ fontSize: 10, color: '#BBB', marginLeft: 8, fontWeight: 400 }}>
+            {unit.line_items.length} part.
+          </span>
+          {awardedBidId && (
+            <span style={{ marginLeft: 10, fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: '#D85A30', color: '#fff', letterSpacing: '0.06em' }}>
+              UE · {participants.find(p => p.bid.id === awardedBidId)?.bid.partner_nombre ?? '?'}
+            </span>
+          )}
+        </td>
+        {participants.map(p => {
+          const c       = cellByPart[p.bid.id]
+          const isAward = awardedBidId === p.bid.id
+          const isCheap = minTotal != null && c.total === minTotal && c.covered
+
+          if (!c.participates) {
+            return (
+              <td key={p.bid.id} style={{ padding: '12px 14px', textAlign: 'right', borderLeft: '1px solid #F5F4F0', verticalAlign: 'top' }}>
+                <span style={{ fontSize: 10, fontWeight: 600, color: '#CCC', letterSpacing: '0.08em' }}>NA</span>
+                <div style={{ fontSize: 9, color: '#CCC', marginTop: 2 }}>No participa</div>
+              </td>
+            )
+          }
+
+          return (
+            <td
+              key={p.bid.id}
+              onClick={e => e.stopPropagation()}
+              style={{
+                padding: '12px 14px', textAlign: 'right',
+                borderLeft: '1px solid #F5F4F0',
+                background: isAward ? '#FFF8F4' : 'transparent',
+                verticalAlign: 'top',
+              }}
+            >
+              {c.covered ? (
+                <>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: isCheap ? '#D85A30' : '#1A1A1A', fontVariantNumeric: 'tabular-nums' }}>
+                    {euros(c.total)}
+                  </div>
+                  <div style={{ marginTop: 6 }}>
+                    {isAward ? (
+                      <button
+                        onClick={() => onRevertUnit(unit.unit_id)}
+                        disabled={isUnitBusy}
+                        style={{
+                          padding: '4px 10px', fontSize: 10, fontWeight: 600,
+                          borderRadius: 4, border: '1px solid #D85A30',
+                          background: '#fff', color: '#D85A30', cursor: 'pointer',
+                          fontFamily: 'inherit',
+                        }}
+                      >
+                        Deshacer UE
+                      </button>
+                    ) : chapterAwarded ? (
+                      null
+                    ) : (
+                      <button
+                        onClick={() => onAwardUnit(unit.unit_id, p.bid.id, p.bid.partner_nombre)}
+                        disabled={isUnitBusy || !!awardedBidId}
+                        style={{
+                          padding: '4px 10px', fontSize: 10, fontWeight: 600,
+                          borderRadius: 4, border: 'none',
+                          background: awardedBidId ? '#E8E6E0' : '#1A1A1A',
+                          color: awardedBidId ? '#999' : '#fff',
+                          cursor: awardedBidId ? 'not-allowed' : 'pointer',
+                          fontFamily: 'inherit',
+                          opacity: isUnitBusy ? 0.5 : 1,
+                        }}
+                      >
+                        {isUnitBusy ? '…' : 'Adjudicar UE'}
+                      </button>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <span style={{ fontSize: 10, color: '#BBB', fontStyle: 'italic' }}>cobertura parcial</span>
+              )}
+            </td>
+          )
+        })}
+      </tr>
+
+      {/* Partidas (when UE expanded) */}
+      {expanded && unit.line_items.map((li, idx) => {
+        const priceByPart: Record<string, number | undefined> = {}
+        for (const p of participants) priceByPart[p.bid.id] = p.bid.prices[li.id]
+        const importes: number[] = []
+        for (const p of participants) {
+          const pr = priceByPart[p.bid.id]
+          if (pr !== undefined) importes.push(pr * li.cantidad)
+        }
+        const minImporte = importes.length > 0 ? Math.min(...importes) : null
+
+        return (
+          <tr key={li.id} style={{ background: idx % 2 === 0 ? '#FAFAF8' : '#fff' }}>
+            <td style={{ padding: '8px 14px 8px 38px', fontSize: 12, color: '#555' }}>
+              <span style={{ color: '#BBB', marginRight: 6 }}>·</span>
+              {li.nombre}
+              <span style={{ marginLeft: 8, fontSize: 10, color: '#AAA' }}>
+                {li.cantidad.toLocaleString('es-ES')} {li.unidad_medida}
+              </span>
+            </td>
+            {participants.map(p => {
+              const pr      = priceByPart[p.bid.id]
+              const importe = pr !== undefined ? pr * li.cantidad : null
+              const isCheap = minImporte != null && importe != null && importe === minImporte
+              return (
+                <td key={p.bid.id} style={{
+                  padding: '8px 14px', textAlign: 'right',
+                  borderLeft: '1px solid #F5F4F0',
+                }}>
+                  {pr !== undefined ? (
+                    <>
+                      <div style={{ fontSize: 10, color: '#AAA', marginBottom: 1 }}>
+                        {euros(pr)}/{li.unidad_medida}
+                      </div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: isCheap ? '#D85A30' : '#1A1A1A', fontVariantNumeric: 'tabular-nums' }}>
+                        {euros(importe!)}
+                      </div>
+                    </>
+                  ) : (
+                    <span style={{ fontSize: 11, color: '#DDD' }}>—</span>
+                  )}
+                </td>
+              )
+            })}
+          </tr>
+        )
+      })}
+    </>
   )
 }

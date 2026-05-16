@@ -65,28 +65,40 @@ export async function POST(req: NextRequest) {
 
     // ── Handle FPE contract ───────────────────────────────────────────────────
     if (fpeContract) {
-      if (envelopeStatus === 'completed' && fpeContract.status !== 'signed') {
+      if (envelopeStatus === 'completed' && fpeContract.status !== 'signed' && fpeContract.status !== 'received') {
+        // Paso 1: marcar como 'signed' inmediatamente. Si la descarga del PDF
+        // falla podemos reintentar más tarde sin perder el hecho de que DocuSign
+        // ya cerró el envelope.
+        await admin.from('fpe_contracts').update({
+          status:    'signed',
+          signed_at: new Date().toISOString(),
+        }).eq('id', fpeContract.id)
+
+        // Paso 2: descargar PDF firmado y subirlo a Storage. Si esto termina
+        // bien, avanzar el estado a 'received'.
         try {
           const signedPdf   = await downloadCompletedDocument(envelopeId)
           const storagePath = `contracts/${fpeContract.id}/${envelopeId}-signed.pdf`
-          await admin.storage
+          const { error: upErr } = await admin.storage
             .from('fpe-documents')
             .upload(storagePath, signedPdf, { contentType: 'application/pdf', upsert: true })
 
-          // Fetch existing contenido_json so we can merge the signed path
-          const { data: existing } = await admin
-            .from('fpe_contracts')
-            .select('contenido_json')
-            .eq('id', fpeContract.id)
-            .single()
+          if (upErr) {
+            console.error('[docusign/webhook] fpe storage upload error:', upErr.message)
+          } else {
+            const { data: existing } = await admin
+              .from('fpe_contracts')
+              .select('contenido_json')
+              .eq('id', fpeContract.id)
+              .single()
 
-          await admin.from('fpe_contracts').update({
-            status:        'signed',
-            signed_at:     new Date().toISOString(),
-            contenido_json: { ...(existing?.contenido_json as object ?? {}), pdf_signed_path: storagePath },
-          }).eq('id', fpeContract.id)
+            await admin.from('fpe_contracts').update({
+              status:         'received',
+              contenido_json: { ...(existing?.contenido_json as object ?? {}), pdf_signed_path: storagePath },
+            }).eq('id', fpeContract.id)
+          }
         } catch (err) {
-          console.error('[docusign/webhook] fpe_contract complete error:', err)
+          console.error('[docusign/webhook] fpe_contract pdf download error:', err)
         }
       } else if (envelopeStatus === 'declined' || envelopeStatus === 'voided') {
         await admin.from('fpe_contracts').update({ status: 'cancelled' }).eq('id', fpeContract.id)

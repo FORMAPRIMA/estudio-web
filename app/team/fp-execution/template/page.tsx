@@ -48,7 +48,7 @@ export default async function FpeTemplatePage() {
     // Disciplines
     supabase
       .from('fpe_disciplines')
-      .select('id, nombre, descripcion, color, orden, activo')
+      .select('id, nombre, descripcion, color, orden, activo, warranty_months')
       .order('orden', { ascending: true }),
 
     // Phase ↔ line item links

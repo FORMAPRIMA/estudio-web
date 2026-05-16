@@ -204,3 +204,179 @@ export function computeParametricSchedule(
 export function formatScheduleDate(date: Date): string {
   return date.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
 }
+
+// ── Awarded Schedule (Gantt con duraciones reales de partners adjudicados) ─────
+//
+// Igual que computeParametricSchedule pero, para cada fase, sustituye la
+// duración paramétrica (duracion_pct × chapterDays) por la duración propuesta
+// por los partners adjudicados. Si una fase tiene durations de varios partners
+// para distintas UEs del mismo capítulo, tomamos el MAX (asumimos ejecución
+// concurrente entre partners dentro del mismo capítulo).
+// Las fases sin ningún partner adjudicado mantienen la duración paramétrica.
+
+export interface AwardedPhaseDuration {
+  template_phase_id: string
+  project_unit_id:   string
+  partner_id:        string
+  duracion_dias:     number
+}
+
+export interface ProjectUnitChapterMap {
+  project_unit_id: string
+  chapter_id:      string
+}
+
+export interface AwardedScheduleResult extends ScheduleResult {
+  phasePartners: Record<string, string[]>                          // phase_id → partner_ids[]
+  phaseSource:   Record<string, 'awarded' | 'parametric'>
+  milestoneDates: Record<string, Date>                             // milestone_id → fecha real (última fase achiever)
+}
+
+export function computeAwardedSchedule(
+  chapters: ScheduleChapter[],
+  fechaInicio: Date,
+  m2: number | null,
+  chapterDaysOverrides: Record<string, number | null> = {},
+  factor: number = 1.0,
+  awardedDurations: AwardedPhaseDuration[] = [],
+  unitChapters: ProjectUnitChapterMap[] = [],
+): AwardedScheduleResult {
+  const result: PhaseScheduleMap = {}
+  const chapterDays: Record<string, number> = {}
+  const phasePartners: Record<string, string[]> = {}
+  const phaseSource:   Record<string, 'awarded' | 'parametric'> = {}
+  const milestoneDates: Record<string, Date> = {}
+
+  if (chapters.length === 0) {
+    return { phases: result, totalDays: 0, chapterDays, phasePartners, phaseSource, milestoneDates }
+  }
+
+  const sorted = [...chapters].sort((a, b) => a.orden - b.orden)
+
+  // chapter_id → set of project_unit_ids
+  const unitsByChapter: Record<string, Set<string>> = {}
+  for (const uc of unitChapters) {
+    if (!unitsByChapter[uc.chapter_id]) unitsByChapter[uc.chapter_id] = new Set()
+    unitsByChapter[uc.chapter_id].add(uc.project_unit_id)
+  }
+
+  // (phase_id, project_unit_id) → array of {partner_id, duracion_dias}
+  const durByPhaseUnit: Record<string, { partner_id: string; duracion_dias: number }[]> = {}
+  for (const ad of awardedDurations) {
+    const k = `${ad.template_phase_id}:${ad.project_unit_id}`
+    if (!durByPhaseUnit[k]) durByPhaseUnit[k] = []
+    durByPhaseUnit[k].push({ partner_id: ad.partner_id, duracion_dias: ad.duracion_dias })
+  }
+
+  // ── Step 1: chapter days + phase durations (con override de partners) ─────
+  const phaseDuration: Record<string, number> = {}
+  for (const ch of sorted) {
+    const chDays = computeChapterDays(ch, m2, chapterDaysOverrides[ch.id] ?? null, factor)
+    chapterDays[ch.id] = chDays
+    const chUnitIds = Array.from(unitsByChapter[ch.id] ?? [])
+
+    for (const ph of ch.phases) {
+      const parametric = ((ph.duracion_pct || 0) / 100) * chDays
+      const partnersForPhase = new Set<string>()
+      let bestDur = 0
+      let hasAwarded = false
+      for (const uid of chUnitIds) {
+        const entries = durByPhaseUnit[`${ph.id}:${uid}`] ?? []
+        for (const e of entries) {
+          hasAwarded = true
+          partnersForPhase.add(e.partner_id)
+          if (e.duracion_dias > bestDur) bestDur = e.duracion_dias
+        }
+      }
+      phaseDuration[ph.id] = hasAwarded ? bestDur : parametric
+      phaseSource[ph.id]   = hasAwarded ? 'awarded' : 'parametric'
+      phasePartners[ph.id] = Array.from(partnersForPhase)
+    }
+  }
+
+  // ── Step 2: milestone → achievers ─────────────────────────────────────────
+  const milestoneAchievers: Record<string, string[]> = {}
+  for (const ch of sorted) {
+    for (const ph of ch.phases) {
+      for (const mid of ph.achieves) {
+        milestoneAchievers[mid] = [...(milestoneAchievers[mid] ?? []), ph.id]
+      }
+    }
+  }
+
+  // ── Step 3: predecessor sets ──────────────────────────────────────────────
+  const allPhases: SchedulePhase[] = sorted.flatMap(ch =>
+    [...ch.phases].sort((a, b) => a.orden - b.orden)
+  )
+  const allPhaseIds = new Set(allPhases.map(p => p.id))
+  const predecessors: Record<string, Set<string>> = {}
+  for (const ph of allPhases) predecessors[ph.id] = new Set()
+
+  for (const ch of sorted) {
+    const phases = [...ch.phases].sort((a, b) => a.orden - b.orden)
+    for (let i = 1; i < phases.length; i++) {
+      predecessors[phases[i].id].add(phases[i - 1].id)
+    }
+  }
+
+  for (const ph of allPhases) {
+    for (const mid of ph.requires) {
+      for (const achieverId of (milestoneAchievers[mid] ?? [])) {
+        if (achieverId !== ph.id && allPhaseIds.has(achieverId)) {
+          predecessors[ph.id].add(achieverId)
+        }
+      }
+    }
+  }
+
+  // ── Step 4: forward pass ──────────────────────────────────────────────────
+  const earliestStart: Record<string, number> = {}
+  for (const ph of allPhases) earliestStart[ph.id] = 0
+
+  let changed = true
+  let guard = 0
+  const maxIterations = allPhases.length + 10
+  while (changed && guard++ < maxIterations) {
+    changed = false
+    for (const ph of allPhases) {
+      let minStart = 0
+      for (const predId of Array.from(predecessors[ph.id])) {
+        const predEnd = (earliestStart[predId] ?? 0) + (phaseDuration[predId] ?? 0)
+        if (predEnd > minStart) minStart = predEnd
+      }
+      if (minStart > (earliestStart[ph.id] ?? 0)) {
+        earliestStart[ph.id] = minStart
+        changed = true
+      }
+    }
+  }
+
+  // ── Step 5: build result ──────────────────────────────────────────────────
+  const startAnchor = snapToNextBusinessDay(fechaInicio)
+  let totalDays = 0
+  for (const ph of allPhases) {
+    const start = earliestStart[ph.id] ?? 0
+    const dur   = phaseDuration[ph.id] ?? 0
+    const end   = start + dur
+    if (end > totalDays) totalDays = end
+    result[ph.id] = {
+      startDate:    addBusinessDays(startAnchor, start),
+      endDate:      addBusinessDays(startAnchor, end),
+      durationDays: dur,
+    }
+  }
+
+  // ── Step 6: milestone dates (último fin entre las fases que lo logran) ────
+  for (const [mid, phaseIds] of Object.entries(milestoneAchievers)) {
+    const ends: Date[] = []
+    for (const pid of phaseIds) {
+      const e = result[pid]
+      if (e) ends.push(e.endDate)
+    }
+    if (ends.length > 0) {
+      milestoneDates[mid] = new Date(Math.max(...ends.map(d => d.getTime())))
+    }
+  }
+
+  return { phases: result, totalDays, chapterDays, phasePartners, phaseSource, milestoneDates }
+}

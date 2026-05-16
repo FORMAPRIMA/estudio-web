@@ -5,7 +5,8 @@ import Link from 'next/link'
 import { updateProject, saveProjectScope, saveProjectSchedule, saveChapterDaysOverride, saveDuracionFactor, resetProjectSchedule } from '@/app/actions/fpe-projects'
 import DocumentHub, { FpeDoc, ReadinessCheck, ScopedChapter, PartnerForDocs } from '@/components/team/fp-execution/DocumentHub'
 import TenderPanel, { type FpeTender, type FpePartnerSummary, type FpeDiscipline } from '@/components/team/fp-execution/TenderPanel'
-import AdjudicationOverview from '@/components/team/fp-execution/AdjudicationOverview'
+import BiddingPanel from '@/components/team/fp-execution/BiddingPanel'
+import DreamTeamPanel from '@/components/team/fp-execution/DreamTeamPanel'
 import ProjectDashboard from '@/components/team/fp-execution/ProjectDashboard'
 import { computeParametricSchedule, computeChapterDays, formatScheduleDate, type ScheduleChapter, type ScheduleMilestone, type PhaseScheduleMap } from '@/lib/fp-execution/schedule'
 import { addBusinessDays, snapToNextBusinessDay, calendarDaysBetween, isBusinessDay } from '@/lib/fp-execution/businessDays'
@@ -1718,6 +1719,7 @@ export default function ProjectScopePage({
   scheduleChapters,
   scheduleMilestones,
   initialFechaInicio,
+  initialObraStartOverride = null,
   initialM2,
   initialChapterDaysOverrides,
   initialDuracionFactor = 1.0,
@@ -1740,6 +1742,7 @@ export default function ProjectScopePage({
   scheduleChapters: ScheduleChapter[]
   scheduleMilestones: ScheduleMilestone[]
   initialFechaInicio: string | null
+  initialObraStartOverride?: string | null
   initialM2: number | null
   initialChapterDaysOverrides: Record<string, number | null>
   initialDuracionFactor?: number
@@ -1754,7 +1757,7 @@ export default function ProjectScopePage({
   const [saving, setSaving] = useState(false)
   const [saveMsg, setSaveMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
   const [editingProject, setEditingProject] = useState(false)
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'scope' | 'docs' | 'tender' | 'schedule' | 'adjudication'>('dashboard')
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'scope' | 'docs' | 'schedule' | 'invitations' | 'bidding' | 'dreamteam'>('dashboard')
   const [chapterDaysOverrides, setChapterDaysOverrides] = useState<Record<string, number | null>>(initialChapterDaysOverrides)
   const [duracionFactor, setDuracionFactor] = useState<number>(initialDuracionFactor)
 
@@ -1893,18 +1896,6 @@ export default function ProjectScopePage({
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              {(project.status === 'awarded' || project.status === 'contracted') && (
-                <Link
-                  href={`/team/fp-execution/projects/${project.id}/dream-team`}
-                  style={{
-                    padding: '8px 14px', fontSize: 12, borderRadius: 6, border: 'none',
-                    background: '#D85A30', color: '#fff', fontFamily: 'inherit',
-                    fontWeight: 600, textDecoration: 'none', display: 'inline-block',
-                  }}
-                >
-                  Dream Team
-                </Link>
-              )}
               <button onClick={() => setEditingProject(true)} style={S.btn()}>Editar proyecto</button>
             </div>
           </div>
@@ -1915,10 +1906,9 @@ export default function ProjectScopePage({
             <button style={tabStyle(activeTab === 'scope')} onClick={() => setActiveTab('scope')}>Scope</button>
             <button style={tabStyle(activeTab === 'docs')} onClick={() => setActiveTab('docs')}>Documentos</button>
             <button style={tabStyle(activeTab === 'schedule')} onClick={() => setActiveTab('schedule')}>Cronograma</button>
-            <button style={tabStyle(activeTab === 'tender')} onClick={() => setActiveTab('tender')}>Licitación</button>
-            {(project.status === 'tender_launched' || project.status === 'awarded' || project.status === 'contracted') && (
-              <button style={tabStyle(activeTab === 'adjudication')} onClick={() => setActiveTab('adjudication')}>Adjudicación</button>
-            )}
+            <button style={tabStyle(activeTab === 'invitations')} onClick={() => setActiveTab('invitations')}>Invitaciones</button>
+            <button style={tabStyle(activeTab === 'bidding')} onClick={() => setActiveTab('bidding')}>Licitación</button>
+            <button style={tabStyle(activeTab === 'dreamteam')} onClick={() => setActiveTab('dreamteam')}>Dream Team</button>
           </div>
         </div>
       </div>
@@ -2080,8 +2070,8 @@ export default function ProjectScopePage({
           />
         )}
 
-        {/* ── Tender tab ── */}
-        {activeTab === 'tender' && (
+        {/* ── Invitations tab (formerly "Licitación") ── */}
+        {activeTab === 'invitations' && (
           <TenderPanel
             projectId={project.id}
             projectUnits={enrichedProjectUnits}
@@ -2089,14 +2079,31 @@ export default function ProjectScopePage({
             initialTender={initialTender}
             partners={partners}
             initialProjectStatus={project.status}
-            onNavigateToAdjudication={() => setActiveTab('adjudication')}
+            onNavigateToBidding={() => setActiveTab('bidding')}
           />
         )}
 
-        {/* ── Adjudication tab ── */}
-        {activeTab === 'adjudication' && (
-          <AdjudicationOverview
+        {/* ── Bidding tab (new "Licitación" — comparativa + Q&A) ── */}
+        {activeTab === 'bidding' && (
+          <BiddingPanel
             projectId={project.id}
+            tender={initialTender}
+            onGoToInvitations={() => setActiveTab('invitations')}
+            onGoToDreamTeam={() => setActiveTab('dreamteam')}
+          />
+        )}
+
+        {/* ── Dream Team tab (formerly "Adjudicación") ── */}
+        {activeTab === 'dreamteam' && (
+          <DreamTeamPanel
+            projectId={project.id}
+            scheduleChapters={scheduleChapters}
+            scheduleMilestones={scheduleMilestones}
+            fechaInicioParametrica={initialFechaInicio}
+            initialObraStartOverride={initialObraStartOverride}
+            m2={project.m2_construccion}
+            chapterDaysOverrides={chapterDaysOverrides}
+            duracionFactor={duracionFactor}
           />
         )}
       </div>

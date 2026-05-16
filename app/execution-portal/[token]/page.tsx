@@ -89,16 +89,12 @@ export default async function ExecutionPortalTokenPage({
       .in('id', scopeUnitIds.length > 0 ? scopeUnitIds : ['00000000-0000-0000-0000-000000000000'])
       .order('orden', { ascending: true }),
 
-    // General docs + docs for scope units
+    // Todos los docs del proyecto — el filtro fino por scope se aplica abajo
+    // en JS (necesitamos conocer scopedChapterIds primero).
     admin
       .from('fpe_documents')
-      .select('id, nombre, storage_path, mime_type, size_bytes, discipline_tags, created_at, project_unit_id')
+      .select('id, nombre, storage_path, mime_type, size_bytes, discipline_tags, created_at, project_unit_id, chapter_id')
       .eq('project_id', tender.project.id)
-      .or(
-        scopeUnitIds.length > 0
-          ? `project_unit_id.is.null,project_unit_id.in.(${scopeUnitIds.join(',')})`
-          : 'project_unit_id.is.null'
-      )
       .order('created_at', { ascending: false }),
 
     // Existing bid (if any)
@@ -116,10 +112,10 @@ export default async function ExecutionPortalTokenPage({
       .eq('invitation_id', inv.id)
       .maybeSingle(),
 
-    // Q&A for this tender
+    // Q&A for this tender (todas; el filtro de visibilidad se aplica abajo en JS)
     admin
       .from('fpe_tender_questions')
-      .select('id, partner_nombre, pregunta, respuesta, asked_at, answered_at, answered_by_name')
+      .select('id, partner_nombre, pregunta, respuesta, asked_at, answered_at, answered_by_name, project_unit_id, invitation_id')
       .eq('tender_id', tender.id)
       .order('asked_at', { ascending: true }),
   ])
@@ -149,22 +145,26 @@ export default async function ExecutionPortalTokenPage({
     }[]
   }
 
-  const filteredProjectUnits: RawPU[] = ((projectUnits ?? []) as unknown as RawPU[]).map(pu => {
-    if (invDisciplineIds.length === 0) return pu
-    return {
-      ...pu,
-      template_unit: {
-        ...pu.template_unit,
-        line_items: pu.template_unit.line_items.filter(li =>
-          li.discipline_id === null || invDisciplineIds.includes(li.discipline_id)
+  const filteredProjectUnits: RawPU[] = ((projectUnits ?? []) as unknown as RawPU[])
+    .map(pu => {
+      if (invDisciplineIds.length === 0) return pu
+      return {
+        ...pu,
+        template_unit: {
+          ...pu.template_unit,
+          line_items: pu.template_unit.line_items.filter(li =>
+            li.discipline_id === null || invDisciplineIds.includes(li.discipline_id)
+          ),
+        },
+        line_items: pu.line_items.filter(pli =>
+          pli.template_line_item.discipline_id === null ||
+          invDisciplineIds.includes(pli.template_line_item.discipline_id)
         ),
-      },
-      line_items: pu.line_items.filter(pli =>
-        pli.template_line_item.discipline_id === null ||
-        invDisciplineIds.includes(pli.template_line_item.discipline_id)
-      ),
-    }
-  })
+      }
+    })
+    // Ocultar unidades sin partidas para este partner — limpia "Mi oferta",
+    // el dropdown de Q&A y la visibilidad de chapters/docs derivada.
+    .filter(pu => pu.line_items.length > 0)
 
   // ── Chapter-level schedule + principal discipline ────────────────────────────
   const scopedTemplateUnitIds  = filteredProjectUnits.map(pu => pu.template_unit_id)
@@ -212,6 +212,22 @@ export default async function ExecutionPortalTokenPage({
       ? projectChapterSettings[ch.id]
       : (ch as unknown as { principal_discipline_id: string | null }).principal_discipline_id,
   }))
+
+  // Mapa chapter_id → nombre para inyectarlo en cada unidad y poder mostrar
+  // "Capítulo - Unidad" en el portal.
+  const chapterIdToName: Record<string, string> = {}
+  for (const ch of portalChaptersRaw ?? []) chapterIdToName[ch.id] = ch.nombre
+
+  const enrichedProjectUnits = filteredProjectUnits.map(pu => {
+    const chapterId = unitToChapterId[pu.template_unit_id] ?? null
+    return {
+      ...pu,
+      template_unit: {
+        ...pu.template_unit,
+        chapter_nombre: chapterId ? (chapterIdToName[chapterId] ?? null) : null,
+      },
+    }
+  })
 
   // isPrincipalForChapterIds: chapter IDs where this partner's disciplines include the effective principal
   const isPrincipalForChapterIds: string[] = invDisciplineIds.length > 0
@@ -274,13 +290,20 @@ export default async function ExecutionPortalTokenPage({
         .in('phase_id', scopedPhaseIds)
     : { data: [] as { phase_id: string; line_item_id: string }[] }
 
-  // anyConfigExists: if no rows exist for these phases → feature not configured yet → show all phases
-  const anyConfigExists = (phaseLineItemLinks ?? []).length > 0
-  const relevantPhaseIds = new Set(
-    (phaseLineItemLinks ?? [])
-      .filter(r => scopedTemplateLineItemIds.includes(r.line_item_id))
-      .map(r => r.phase_id)
-  )
+  // Filtro per-fase: una fase SIN links configurados se asume aplicable a todo
+  // el capítulo (se muestra). Una fase CON links sólo se muestra si alguno de
+  // sus links apunta a una partida del scope del partner.
+  const linksByPhase: Record<string, string[]> = {}
+  for (const r of phaseLineItemLinks ?? []) {
+    if (!linksByPhase[r.phase_id]) linksByPhase[r.phase_id] = []
+    linksByPhase[r.phase_id].push(r.line_item_id)
+  }
+  const scopedLineItemSet = new Set(scopedTemplateLineItemIds)
+  const isPhaseVisible = (phaseId: string): boolean => {
+    const links = linksByPhase[phaseId]
+    if (!links || links.length === 0) return true                // no config → aplica a todo
+    return links.some(lid => scopedLineItemSet.has(lid))
+  }
 
   // Portal chapters to pass down (with phases + lead_time_days for phase duration inputs)
   const portalChaptersForUI = chaptersWithPrincipal.map(ch => ({
@@ -289,7 +312,7 @@ export default async function ExecutionPortalTokenPage({
     isPrincipal: isPrincipalForChapterIds.includes(ch.id),
     phases: (portalPhasesByChapter[ch.id] ?? [])
       .sort((a, b) => a.orden - b.orden)
-      .filter(ph => !anyConfigExists || relevantPhaseIds.has(ph.id))
+      .filter(ph => isPhaseVisible(ph.id))
       .map(ph => ({
         id:                ph.id,
         nombre:            ph.nombre,
@@ -331,14 +354,16 @@ export default async function ExecutionPortalTokenPage({
   const milestoneNameMap: Record<string, string> = {}
   for (const m of portalMilestones ?? []) milestoneNameMap[m.id] = m.nombre
 
-  let paymentScheduleForUI: { id: string; nombre: string; pct: number; trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery'; milestone_nombre: string | null }[] = []
+  let paymentScheduleForUI: { id: string; nombre: string; pct: number; trigger_type: 'contract_signed' | 'milestone_achieved' | 'delivery' | 'pre_start' | 'pre_project_start'; milestone_nombre: string | null }[] = []
 
-  if (invitationPlanRaw && invitationPlanRaw.length > 0) {
+  const invitationPlanHasPct = (invitationPlanRaw ?? []).some(p => Number(p.pct) > 0)
+
+  if (invitationPlanRaw && invitationPlanRaw.length > 0 && invitationPlanHasPct) {
     paymentScheduleForUI = invitationPlanRaw.map(p => ({
       id:               p.id,
       nombre:           p.nombre,
       pct:              p.pct,
-      trigger_type:     p.trigger_type as 'contract_signed' | 'milestone_achieved' | 'delivery',
+      trigger_type:     p.trigger_type as 'contract_signed' | 'milestone_achieved' | 'delivery' | 'pre_start' | 'pre_project_start',
       milestone_nombre: p.milestone_id ? (milestoneNameMap[p.milestone_id] ?? null) : null,
     }))
   } else if (govDisciplineId) {
@@ -351,14 +376,50 @@ export default async function ExecutionPortalTokenPage({
       id:               pm.id,
       nombre:           pm.nombre,
       pct:              pm.pct,
-      trigger_type:     pm.trigger_type as 'contract_signed' | 'milestone_achieved' | 'delivery',
+      trigger_type:     pm.trigger_type as 'contract_signed' | 'milestone_achieved' | 'delivery' | 'pre_start' | 'pre_project_start',
       milestone_nombre: pm.milestone_id ? (milestoneNameMap[pm.milestone_id] ?? null) : null,
     }))
   }
 
+  // ── Document scope filter ───────────────────────────────────────────────────
+  // Visibilidad para el partner:
+  //  · Planimetría general (sin chapter ni unit) → siempre
+  //  · Doc de capítulo → sólo si el capítulo entra en su scope
+  //  · Doc de unidad   → sólo si la unidad entra en su scope
+  type RawDoc = {
+    id: string; nombre: string; storage_path: string; mime_type: string | null
+    size_bytes: number | null; discipline_tags: string[] | null; created_at: string
+    project_unit_id: string | null; chapter_id: string | null
+  }
+  const allDocs = ((documents ?? []) as RawDoc[])
+    .filter(d => {
+      if (!d.chapter_id && !d.project_unit_id) return true
+      if (d.chapter_id)      return scopedChapterIds.includes(d.chapter_id)
+      if (d.project_unit_id) return scopeUnitIds.includes(d.project_unit_id)
+      return false
+    })
+    .map(d => ({ ...d, discipline_tags: d.discipline_tags ?? [] }))
+
+  // ── Q&A scope filter ────────────────────────────────────────────────────────
+  // Propias: siempre (respondidas o no, para poder consultar el estado).
+  // De otros: sólo respondidas, y sólo si la pregunta toca una unidad de mi
+  // scope (o es una pregunta general → todos los partners la ven al ser
+  // respondida).
+  type RawQ = {
+    id: string; partner_nombre: string; pregunta: string; respuesta: string | null
+    asked_at: string; answered_at: string | null; answered_by_name: string | null
+    project_unit_id: string | null; invitation_id: string | null
+  }
+  const visibleQuestions: RawQ[] = ((questions ?? []) as RawQ[]).filter(q => {
+    const isOwn = q.invitation_id === inv.id
+    if (isOwn) return true
+    if (!q.respuesta) return false
+    if (!q.project_unit_id) return true
+    return scopeUnitIds.includes(q.project_unit_id)
+  })
+
   // Generate signed URLs for image docs (hero renders, max 8, 4-hour TTL)
   const IMAGE_EXTS = ['jpg','jpeg','png','webp','svg','gif']
-  const allDocs = documents ?? []
   const imageDocs = allDocs.filter(d =>
     d.mime_type?.startsWith('image/') ||
     IMAGE_EXTS.some(ext => d.nombre.toLowerCase().endsWith(`.${ext}`))
@@ -378,11 +439,13 @@ export default async function ExecutionPortalTokenPage({
       project={tender.project}
       tender={{ id: tender.id, descripcion: tender.descripcion, fecha_limite: tender.fecha_limite, status: tender.status }}
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      projectUnits={filteredProjectUnits as any}
+      projectUnits={enrichedProjectUnits as any}
       documents={allDocs}
       existingBid={existingBid ?? null}
       isReadOnly={tenderClosed || deadlinePassed || inv.status === 'bid_submitted'}
-      initialQuestions={(questions ?? []) as Parameters<typeof PortalPage>[0]['initialQuestions']}
+      initialQuestions={visibleQuestions as Parameters<typeof PortalPage>[0]['initialQuestions']}
+      scopeUnitIds={scopeUnitIds}
+      invitationId={inv.id}
       renderUrls={renderUrls}
       tourVirtualUrl={tender.project.tour_virtual_url ?? null}
       phaseStartDates={phaseStartDates}
