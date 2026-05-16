@@ -523,6 +523,146 @@ export async function startObraManagement(
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// Ciclo de vida de la obra
+// - setObraFechaInicio: cambia la fecha planificada de inicio de obra. Aplica
+//   un shift de calendario al planned_*_date de TODAS las fases y al
+//   planned_date de TODOS los hitos para que el cronograma se desplace en bloque.
+// - marcarObraIniciada / revertirObraIniciada: marca el arranque físico.
+// ══════════════════════════════════════════════════════════════════════════════
+
+function isoDateOnly(s: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(s)
+}
+
+function shiftIsoDate(iso: string | null, deltaDays: number): string | null {
+  if (!iso) return null
+  const d = new Date(iso + 'T00:00:00Z')
+  if (Number.isNaN(d.getTime())) return null
+  d.setUTCDate(d.getUTCDate() + deltaDays)
+  return d.toISOString().slice(0, 10)
+}
+
+export async function setObraFechaInicio(
+  project_id: string,
+  fecha:      string,
+): Promise<{ success: true; deltaDays: number } | { error: string }> {
+  try {
+    await requireManagerOrPartner()
+    const admin = createAdminClient()
+
+    if (!isoDateOnly(fecha)) return { error: 'Formato de fecha inválido. Esperado YYYY-MM-DD.' }
+
+    const { data: project, error: pErr } = await admin
+      .from('fpe_projects')
+      .select('id, obra_fecha_inicio, obra_management_started_at')
+      .eq('id', project_id)
+      .single()
+    if (pErr || !project) return { error: 'Proyecto no encontrado.' }
+    if (!project.obra_management_started_at) return { error: 'La gestión de obra no está activada.' }
+    if (!project.obra_fecha_inicio)         return { error: 'No hay fecha base; reinicia la activación de obra.' }
+
+    const oldDate = new Date(project.obra_fecha_inicio + 'T00:00:00Z')
+    const newDate = new Date(fecha + 'T00:00:00Z')
+    const deltaDays = Math.round((newDate.getTime() - oldDate.getTime()) / 86400000)
+
+    if (deltaDays === 0) {
+      return { success: true, deltaDays: 0 }
+    }
+
+    // Shift planned dates of all phases
+    const { data: phases } = await admin
+      .from('fpe_obra_phases')
+      .select('id, planned_start_date, planned_end_date, actual_start_date, actual_end_date')
+      .eq('project_id', project_id)
+
+    type PhaseRow = { id: string; planned_start_date: string | null; planned_end_date: string | null; actual_start_date: string | null; actual_end_date: string | null }
+    for (const ph of (phases ?? []) as PhaseRow[]) {
+      const patch: Record<string, unknown> = {
+        planned_start_date: shiftIsoDate(ph.planned_start_date, deltaDays),
+        planned_end_date:   shiftIsoDate(ph.planned_end_date,   deltaDays),
+      }
+      // Solo desplazamos fechas REALES si no han sido tocadas manualmente todavía.
+      // Como aproximación: si actual_*_date == null, no hay nada que desplazar.
+      // Si están set, las dejamos como están — son hechos, no se mueven con un
+      // cambio de planning.
+      const { error } = await admin.from('fpe_obra_phases').update(patch).eq('id', ph.id)
+      if (error) return { error: `shift phase ${ph.id}: ${error.message}` }
+    }
+
+    // Shift planned dates of milestones
+    const { data: milestones } = await admin
+      .from('fpe_obra_milestones')
+      .select('id, planned_date')
+      .eq('project_id', project_id)
+    type MsRow = { id: string; planned_date: string | null }
+    for (const m of (milestones ?? []) as MsRow[]) {
+      if (!m.planned_date) continue
+      const { error } = await admin
+        .from('fpe_obra_milestones')
+        .update({ planned_date: shiftIsoDate(m.planned_date, deltaDays) })
+        .eq('id', m.id)
+      if (error) return { error: `shift milestone ${m.id}: ${error.message}` }
+    }
+
+    // Update project field
+    const { error: updErr } = await admin
+      .from('fpe_projects')
+      .update({ obra_fecha_inicio: fecha, updated_at: new Date().toISOString() })
+      .eq('id', project_id)
+    if (updErr) return { error: updErr.message }
+
+    revalidatePath(`${PROJECT_PATH}/${project_id}`)
+    return { success: true, deltaDays }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
+export async function marcarObraIniciada(
+  project_id: string,
+): Promise<{ success: true } | { error: string }> {
+  try {
+    const user = await requireManagerOrPartner()
+    const admin = createAdminClient()
+    const { error } = await admin
+      .from('fpe_projects')
+      .update({
+        obra_iniciada_at: new Date().toISOString(),
+        obra_iniciada_by: user.id,
+        updated_at:       new Date().toISOString(),
+      })
+      .eq('id', project_id)
+    if (error) return { error: error.message }
+    revalidatePath(`${PROJECT_PATH}/${project_id}`)
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
+export async function revertirObraIniciada(
+  project_id: string,
+): Promise<{ success: true } | { error: string }> {
+  try {
+    await requireManagerOrPartner()
+    const admin = createAdminClient()
+    const { error } = await admin
+      .from('fpe_projects')
+      .update({
+        obra_iniciada_at: null,
+        obra_iniciada_by: null,
+        updated_at:       new Date().toISOString(),
+      })
+      .eq('id', project_id)
+    if (error) return { error: error.message }
+    revalidatePath(`${PROJECT_PATH}/${project_id}`)
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // Mutaciones del Gantt vivo
 // Cada action edita una sola fila de fpe_obra_phases o fpe_obra_milestones.
 // Solo escriben en tablas fpe_obra_*, nunca en las de licitación.

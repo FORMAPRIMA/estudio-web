@@ -9,17 +9,23 @@ type SubTab = 'dashboard'
 export default function ObraManagementPage({
   projectId,
   obraStartedAt,
+  obraFechaInicio,
+  obraIniciadaAt,
   baselineSnapshot,
   phases,
   milestones,
   chapterNames,
+  partnerNames,
 }: {
   projectId:        string
   obraStartedAt:    string
+  obraFechaInicio:  string | null
+  obraIniciadaAt:   string | null
   baselineSnapshot: ObraBaselineSnapshot | null
   phases:           ObraPhase[]
   milestones:       ObraMilestone[]
   chapterNames:     Record<string, string>
+  partnerNames:     Record<string, string>
 }) {
   const [subTab, setSubTab] = useState<SubTab>('dashboard')
 
@@ -38,10 +44,13 @@ export default function ObraManagementPage({
         <ObraDashboardTab
           projectId={projectId}
           obraStartedAt={obraStartedAt}
+          obraFechaInicio={obraFechaInicio}
+          obraIniciadaAt={obraIniciadaAt}
           baselineSnapshot={baselineSnapshot}
           phases={phases}
           milestones={milestones}
           chapterNames={chapterNames}
+          partnerNames={partnerNames}
         />
       )}
     </div>

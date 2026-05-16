@@ -41,6 +41,7 @@ export default function ObraGantt({
   phases,
   milestones,
   chapterNames,
+  partnerNames,
   baselineSnapshot,
   shadowVisible,
   dayPx = 6,
@@ -51,6 +52,7 @@ export default function ObraGantt({
   phases:           ObraPhase[]
   milestones:       ObraMilestone[]
   chapterNames:     Record<string, string>
+  partnerNames:     Record<string, string>
   baselineSnapshot: ObraBaselineSnapshot | null
   shadowVisible:    boolean
   dayPx?:           number
@@ -421,6 +423,38 @@ export default function ObraGantt({
               const baselineOff = baseline ? calOffset(baseline.start) : null
               const baselineWidth = baseline ? Math.max(0.5, calOffset(baseline.end) - calOffset(baseline.start)) : null
 
+              // ── Build rich tooltip lines ───────────────────────────────────
+              const chapterLabel = ph.chapter_id ? (chapterNames[ph.chapter_id] ?? '—') : '—'
+              const partnersLabel = ph.partner_ids.length > 0
+                ? ph.partner_ids.map(pid => partnerNames[pid] ?? pid.slice(0, 8)).join(', ')
+                : '— sin asignar'
+              const plannedStart = parseISODate(ph.planned_start_date)
+              const plannedEnd   = parseISODate(ph.planned_end_date)
+              const actualStart  = parseISODate(ph.actual_start_date)
+              const actualEnd    = parseISODate(ph.actual_end_date)
+
+              const phaseTooltip: string[] = [
+                `Fase: ${ph.nombre}`,
+                `Capítulo: ${chapterLabel}`,
+                `Partner: ${partnersLabel}`,
+                `Estado: ${styling.label}`,
+              ]
+              if (baseline) {
+                phaseTooltip.push(`Plan original: ${fmtDate(baseline.start)} → ${fmtDate(baseline.end)}`)
+              }
+              if (plannedStart && plannedEnd) {
+                const dur = ph.planned_duration_dias != null ? ` (${Math.round(ph.planned_duration_dias)} días háb.)` : ''
+                phaseTooltip.push(`Plan actual: ${fmtDate(plannedStart)} → ${fmtDate(plannedEnd)}${dur}`)
+              }
+              if (actualStart || actualEnd) {
+                const dur = ph.actual_duration_dias != null ? ` (${Math.round(ph.actual_duration_dias)} días háb.)` : ''
+                phaseTooltip.push(`Real: ${actualStart ? fmtDate(actualStart) : '—'} → ${actualEnd ? fmtDate(actualEnd) : '—'}${dur}`)
+              }
+              if (ph.pct_avance > 0) {
+                phaseTooltip.push(`Avance: ${Math.round(ph.pct_avance)}%`)
+              }
+              if (ph.notas) phaseTooltip.push(`Notas: ${ph.notas}`)
+
               return (
                 <div key={ph.id} style={{
                   display: 'flex',
@@ -464,7 +498,8 @@ export default function ObraGantt({
                     {shadowVisible && baselineOff !== null && baselineWidth !== null && (
                       <div
                         onMouseEnter={handleHover([
-                          `${ph.nombre} (plan original)`,
+                          `${ph.nombre} — plan original (baseline)`,
+                          `Capítulo: ${chapterLabel}`,
                           `${fmtDate(baseline!.start)} → ${fmtDate(baseline!.end)}`,
                         ])}
                         onMouseMove={handleMove}
@@ -488,11 +523,7 @@ export default function ObraGantt({
                     {startOff !== null && widthDays !== null && (
                       <div
                         onClick={() => onPhaseClick?.(ph.id)}
-                        onMouseEnter={handleHover([
-                          `${ph.nombre} — ${styling.label}${d.isActual ? ' (real)' : ' (planificado)'}`,
-                          d.start && d.end ? `${fmtDate(d.start)} → ${fmtDate(d.end)}` : '',
-                          ph.status === 'en_curso' ? `Avance: ${Math.round(ph.pct_avance)}%` : '',
-                        ].filter(Boolean))}
+                        onMouseEnter={handleHover(phaseTooltip)}
                         onMouseMove={handleMove}
                         onMouseLeave={clearHover}
                         style={{

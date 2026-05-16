@@ -34,6 +34,7 @@ export default async function FpeProjectDetailPage({
         tour_virtual_url, fecha_inicio_obra, obra_start_date_override, duracion_obra_semanas,
         m2_construccion, duracion_factor,
         obra_management_started_at, obra_baseline_snapshot,
+        obra_fecha_inicio, obra_iniciada_at,
         project_units:fpe_project_units (
           id, template_unit_id, notas, orden,
           line_items:fpe_project_line_items (
@@ -325,6 +326,8 @@ export default async function FpeProjectDetailPage({
     duracion_factor: number | null
     obra_management_started_at: string | null
     obra_baseline_snapshot: ObraBaselineSnapshot | null
+    obra_fecha_inicio: string | null
+    obra_iniciada_at:  string | null
   }
   const projectExt = project as unknown as ProjectExtended
 
@@ -376,6 +379,8 @@ export default async function FpeProjectDetailPage({
       obraBaselineSnapshot={projectExt.obra_baseline_snapshot}
       obraPhases={obraPhases}
       obraMilestones={obraMilestones}
+      obraFechaInicio={projectExt.obra_fecha_inicio}
+      obraIniciadaAt={projectExt.obra_iniciada_at}
     />
   )
 }

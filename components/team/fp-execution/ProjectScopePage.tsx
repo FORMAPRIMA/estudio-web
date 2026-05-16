@@ -1732,6 +1732,8 @@ export default function ProjectScopePage({
   obraBaselineSnapshot = null,
   obraPhases = [],
   obraMilestones = [],
+  obraFechaInicio = null,
+  obraIniciadaAt = null,
 }: {
   project: Project
   chapters: TemplateChapter[]
@@ -1760,6 +1762,8 @@ export default function ProjectScopePage({
   obraBaselineSnapshot?: ObraBaselineSnapshot | null
   obraPhases?:           ObraPhase[]
   obraMilestones?:       ObraMilestone[]
+  obraFechaInicio?:      string | null
+  obraIniciadaAt?:       string | null
 }) {
   const [project, setProject] = useState<Project>(initialProject)
   const [scope, setScope] = useState<ScopeState>(() =>
@@ -1958,10 +1962,13 @@ export default function ProjectScopePage({
           <ObraManagementPage
             projectId={project.id}
             obraStartedAt={obraStartedAt}
+            obraFechaInicio={obraFechaInicio}
+            obraIniciadaAt={obraIniciadaAt}
             baselineSnapshot={obraBaselineSnapshot}
             phases={obraPhases}
             milestones={obraMilestones}
             chapterNames={Object.fromEntries(chapters.map(ch => [ch.id, ch.nombre]))}
+            partnerNames={Object.fromEntries(partners.map(p => [p.id, p.nombre]))}
           />
         )}
 
