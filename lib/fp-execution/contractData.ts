@@ -41,13 +41,13 @@ export function buildContractData(args: {
   pkg:             FpeOverviewPartner
   awarded_at?:     string
   technical_docs?: FpeContractTechnicalDoc[]
-  /** Per-chapter computed dates from the Dream Team Gantt (Anexo III + Cl. 6). */
-  chapter_dates?:  { chapter_id: string; fecha_inicio: string; fecha_fin: string; duracion_dias: number }[]
+  /** Per-phase computed dates from the Dream Team Gantt (Anexo III + Cl. 6). */
+  phase_dates?:    { template_phase_id: string; fecha_inicio: string; fecha_fin: string; duracion_dias: number }[]
 }): FpeContractData {
   const { project, partner, pkg } = args
-  const datesByChapter = new Map<string, { fecha_inicio: string; fecha_fin: string; duracion_dias: number }>()
-  for (const d of (args.chapter_dates ?? [])) {
-    datesByChapter.set(d.chapter_id, { fecha_inicio: d.fecha_inicio, fecha_fin: d.fecha_fin, duracion_dias: d.duracion_dias })
+  const datesByPhaseId = new Map<string, { fecha_inicio: string; fecha_fin: string; duracion_dias: number }>()
+  for (const d of (args.phase_dates ?? [])) {
+    datesByPhaseId.set(d.template_phase_id, { fecha_inicio: d.fecha_inicio, fecha_fin: d.fecha_fin, duracion_dias: d.duracion_dias })
   }
 
   const partnerAddress = [partner?.direccion, partner?.codigo_postal, partner?.ciudad]
@@ -66,15 +66,16 @@ export function buildContractData(args: {
     )
   )
 
-  // One phase row per chapter. When real dates from the Dream Team Gantt are
-  // available (chapter_dates), they are rendered as the contractual reference
-  // in Anexo III + Cláusula 6. Otherwise the row falls back to duration-only.
-  const schedule_phases = pkg.chapters.map(ch => {
-    const dates = ch.chapter_id ? datesByChapter.get(ch.chapter_id) : undefined
-    const fallbackDays = ch.units.reduce((s, u) => s + (u.days ?? 0), 0)
+  // One row per execution phase the partner has been awarded. The duration is
+  // the one the partner offered through the licitation portal; dates come from
+  // the Dream Team Gantt when available. Falls back to duration-only when the
+  // schedule has no anchor date yet.
+  const schedule_phases = pkg.phase_durations.map(pd => {
+    const dates = datesByPhaseId.get(pd.template_phase_id)
     return {
-      fase:           ch.chapter_nombre,
-      duracion_dias:  Math.round(dates?.duracion_dias ?? fallbackDays),
+      fase:           pd.phase_nombre,
+      capitulo:       pd.chapter_nombre,
+      duracion_dias:  Math.round(dates?.duracion_dias ?? pd.duracion_dias),
       fecha_inicio:   dates?.fecha_inicio ?? null,
       fecha_fin:      dates?.fecha_fin    ?? null,
       dependencias:   null,
@@ -112,11 +113,12 @@ export function buildContractData(args: {
       })),
     })),
     payment_milestones: pkg.payment_milestones.map(m => ({
-      nombre:       m.nombre,
-      pct:          m.pct,
-      monto:        m.monto,
-      trigger_type: m.trigger_type,
-      status:       'pendiente',
+      nombre:           m.nombre,
+      pct:              m.pct,
+      monto:            m.monto,
+      trigger_type:     m.trigger_type,
+      milestone_nombre: m.milestone_nombre,
+      status:           'pendiente',
     })),
     schedule_phases,
     governing_discipline: pkg.governing_discipline_nombre,

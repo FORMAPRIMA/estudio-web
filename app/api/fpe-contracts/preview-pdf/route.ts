@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getAdjudicationOverview } from '@/app/actions/fpe-tenders'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { buildContractData, fetchTechnicalDocsForContract } from '@/lib/fp-execution/contractData'
-import { loadProjectScheduleInputs, computePartnerChapterDates } from '@/lib/fp-execution/loadProjectSchedule'
+import { loadProjectScheduleInputs, computePartnerPhaseDates } from '@/lib/fp-execution/loadProjectSchedule'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -51,11 +51,11 @@ export async function POST(req: NextRequest) {
       fetchTechnicalDocsForContract({ admin, project_id: body.project_id, scope_unit_ids }),
       loadProjectScheduleInputs(admin, body.project_id),
     ])
-    const chapter_dates = scheduleInputs
-      ? (computePartnerChapterDates({ inputs: scheduleInputs, pkg }) ?? undefined)
+    const phase_dates = scheduleInputs
+      ? (computePartnerPhaseDates({ inputs: scheduleInputs, pkg }) ?? undefined)
       : undefined
 
-    const data = buildContractData({ project, partner, pkg, technical_docs, chapter_dates })
+    const data = buildContractData({ project, partner, pkg, technical_docs, phase_dates })
 
     const { generateFpeContractPDF } = await import('@/components/pdfs/FpeContractPDF')
     const buffer = await generateFpeContractPDF(data)

@@ -94,12 +94,17 @@ export interface FpeContractPaymentMilestoneInput {
   pct:              number
   monto:            number
   trigger_type:     string
+  /** Nombre del hito de obra concreto (cuando trigger_type='milestone_achieved'). */
+  milestone_nombre?: string | null
   status?:          string | null
   required_evidence?: string | null
 }
 
 export interface FpeContractPhaseInput {
   fase:             string
+  /** Nombre del capítulo al que pertenece esta fase (opcional, mejora legibilidad
+   *  en el Anexo III cuando un EP ejecuta fases de varios capítulos). */
+  capitulo?:        string | null
   duracion_dias:    number
   fecha_inicio?:    string | null
   fecha_fin?:       string | null
@@ -807,7 +812,12 @@ export async function generateFpeContractPDF(data: FpeContractData): Promise<Buf
                 const sinIva = m.monto
                 const ivaAmt = Math.round(sinIva * vatRate) / 100
                 const conIva = sinIva + ivaAmt
-                const triggerLabel = TRIGGER_LABEL[m.trigger_type] ?? m.trigger_type
+                // For 'milestone_achieved' we surface the concrete construction
+                // milestone name (e.g., "Replanteo completo", "Cerramiento estanco"),
+                // not the generic trigger family label.
+                const triggerLabel = m.trigger_type === 'milestone_achieved' && m.milestone_nombre
+                  ? `Al cumplir hito: ${m.milestone_nombre}`
+                  : (TRIGGER_LABEL[m.trigger_type] ?? m.trigger_type)
                 const estadoLabel  = STATUS_LABEL[m.status ?? 'pendiente'] ?? (m.status ?? 'Pendiente')
                 return createElement(View, { key: `m-${i}`, style: i % 2 === 0 ? s.tRow : s.tRowAlt, wrap: false },
                   createElement(Text, { style: { ...s.td, flex: 3 } }, m.nombre),
@@ -827,15 +837,21 @@ export async function generateFpeContractPDF(data: FpeContractData): Promise<Buf
                 createElement(Text, { style: { width: 60 } }),
               ),
               createElement(View, { style: { marginTop: 14 }, wrap: false },
-                createElement(Text, { style: { ...s.summaryLabel, marginBottom: 6 } }, 'Evidencia requerida por tipo de disparador'),
-                ...Object.entries(TRIGGER_EVIDENCE)
-                  .filter(([k]) => milestones.some(m => m.trigger_type === k))
-                  .map(([k, v]) =>
-                    createElement(View, { key: `ev-${k}`, style: { flexDirection: 'row', paddingVertical: 4, borderBottomWidth: 0.5, borderBottomColor: C.rule } },
-                      createElement(Text, { style: { fontSize: 7.5, fontFamily: 'Helvetica-Bold', color: C.soft, width: 150 } }, TRIGGER_LABEL[k] ?? k),
-                      createElement(Text, { style: { fontSize: 7.5, color: C.mid, flex: 1, lineHeight: 1.5 } }, v),
-                    )
-                  ),
+                createElement(Text, { style: { ...s.summaryLabel, marginBottom: 6 } }, 'Evidencia requerida por hito'),
+                ...milestones.map((m, i) => {
+                  const isMilestone = m.trigger_type === 'milestone_achieved' && m.milestone_nombre
+                  const label = isMilestone
+                    ? `${m.nombre} · Hito: ${m.milestone_nombre}`
+                    : `${m.nombre} · ${TRIGGER_LABEL[m.trigger_type] ?? m.trigger_type}`
+                  const evidence = TRIGGER_EVIDENCE[m.trigger_type] ?? 'Documento de validación equivalente acordado entre las Partes.'
+                  return createElement(View, {
+                    key: `ev-${i}`,
+                    style: { flexDirection: 'row', paddingVertical: 4, borderBottomWidth: 0.5, borderBottomColor: C.rule },
+                  },
+                    createElement(Text, { style: { fontSize: 7.5, fontFamily: 'Helvetica-Bold', color: C.soft, width: 180 } }, label),
+                    createElement(Text, { style: { fontSize: 7.5, color: C.mid, flex: 1, lineHeight: 1.5 } }, evidence),
+                  )
+                }),
               ),
             ),
         createElement(Text, { style: s.anexoClose },
@@ -863,27 +879,26 @@ export async function generateFpeContractPDF(data: FpeContractData): Promise<Buf
             )
           : createElement(View, null,
               createElement(View, { style: s.tHead, fixed: true },
-                createElement(Text, { style: { ...s.th, flex: 3 } }, 'Fase'),
+                createElement(Text, { style: { ...s.th, flex: 3 } }, 'Capítulo'),
+                createElement(Text, { style: { ...s.th, flex: 3 } }, 'Fase de ejecución'),
                 createElement(Text, { style: { ...s.th, width: 62, textAlign: 'right' } }, 'Inicio'),
                 createElement(Text, { style: { ...s.th, width: 62, textAlign: 'right' } }, 'Fin'),
                 createElement(Text, { style: { ...s.th, width: 56, textAlign: 'right' } }, 'Días háb.'),
-                createElement(Text, { style: { ...s.th, flex: 2 } }, 'Dependencias'),
                 createElement(Text, { style: { ...s.th, flex: 2 } }, 'Responsable'),
               ),
               ...phases.map((p, i) =>
                 createElement(View, { key: `ph-${i}`, style: i % 2 === 0 ? s.tRow : s.tRowAlt, wrap: false },
+                  createElement(Text, { style: { ...s.tdMid, flex: 3 } }, p.capitulo || '—'),
                   createElement(Text, { style: { ...s.td, flex: 3 } }, p.fase),
                   createElement(Text, { style: { ...s.tdMid, width: 62, textAlign: 'right' } }, p.fecha_inicio ? fmtDateShort(p.fecha_inicio) : '—'),
                   createElement(Text, { style: { ...s.tdMid, width: 62, textAlign: 'right' } }, p.fecha_fin    ? fmtDateShort(p.fecha_fin)    : '—'),
                   createElement(Text, { style: { ...s.tdRight, width: 56 } }, p.duracion_dias > 0 ? `${p.duracion_dias}` : '—'),
-                  createElement(Text, { style: { ...s.tdMid, flex: 2 } }, p.dependencias || '—'),
                   createElement(Text, { style: { ...s.tdMid, flex: 2 } }, p.responsable  || 'Execution Partner'),
                 )
               ),
               createElement(View, { style: { ...s.subtotalRow, backgroundColor: '#E6E3DC' }, wrap: false },
-                createElement(Text, { style: { ...s.subtotalLabel, color: C.ink } }, 'Duración estimada total'),
+                createElement(Text, { style: { ...s.subtotalLabel, color: C.ink } }, `Total fases: ${phases.length} · Duración estimada agregada`),
                 createElement(Text, { style: { ...s.subtotalValue, width: 56 } }, `${totalDays} días háb.`),
-                createElement(Text, { style: { flex: 2 } }),
                 createElement(Text, { style: { flex: 2 } }),
               ),
             ),

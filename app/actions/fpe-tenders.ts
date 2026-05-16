@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { sendEmail, wrapEmail } from '@/lib/email'
 import { buildContractData, fetchTechnicalDocsForContract } from '@/lib/fp-execution/contractData'
-import { loadProjectScheduleInputs, computePartnerChapterDates } from '@/lib/fp-execution/loadProjectSchedule'
+import { loadProjectScheduleInputs, computePartnerPhaseDates } from '@/lib/fp-execution/loadProjectSchedule'
 
 // ── Shared types (used by BidComparison client component) ─────────────────────
 
@@ -961,8 +961,8 @@ export async function generateContractsFromAwards(
         fetchTechnicalDocsForContract({ admin, project_id, scope_unit_ids }),
       ])
 
-      const chapter_dates = scheduleInputs
-        ? (computePartnerChapterDates({ inputs: scheduleInputs, pkg }) ?? undefined)
+      const phase_dates = scheduleInputs
+        ? (computePartnerPhaseDates({ inputs: scheduleInputs, pkg }) ?? undefined)
         : undefined
 
       const contenido = buildContractData({
@@ -976,7 +976,7 @@ export async function generateContractsFromAwards(
         pkg,
         awarded_at: new Date().toISOString(),
         technical_docs,
-        chapter_dates,
+        phase_dates,
       })
 
       // 4. Insert / update fpe_contract (one per award)
@@ -1118,11 +1118,18 @@ export interface FpeOverviewDiscipline {
 }
 
 export interface FpeOverviewPaymentMilestone {
-  nombre:       string
-  pct:          number
-  monto:        number
-  trigger_type: string
-  milestone_id: string | null
+  nombre:           string
+  pct:              number
+  monto:            number
+  trigger_type:     string
+  milestone_id:     string | null
+  /** Nombre del hito de obra concreto (resuelto desde fpe_template_milestones).
+   *  Solo está poblado cuando trigger_type='milestone_achieved' y milestone_id no es null. */
+  milestone_nombre: string | null
+  /** Origen del plan de pago: 'invitation' = el plan editado y comunicado al EP
+   *  en su portal de licitación (fpe_invitation_payment_plan);
+   *  'discipline' = fallback al master de la disciplina rectora. */
+  source:           'invitation' | 'discipline'
 }
 
 export type FpeOverviewContractStatus =
@@ -1144,7 +1151,11 @@ export interface FpeOverviewContract {
 
 export interface FpeOverviewPhaseDuration {
   template_phase_id: string
+  phase_nombre:      string
+  phase_orden:       number
   chapter_id:        string | null
+  chapter_nombre:    string | null
+  chapter_orden:     number | null
   duracion_dias:     number
 }
 
@@ -1206,7 +1217,10 @@ export async function getAdjudicationOverview(
       .from('fpe_bid_phase_durations')
       .select(`
         bid_id, template_phase_id, duracion_dias,
-        phase:fpe_template_phases ( chapter_id )
+        phase:fpe_template_phases (
+          id, nombre, orden, chapter_id,
+          chapter:fpe_template_chapters ( nombre, orden )
+        )
       `)
       .in('bid_id', bidIds)
 
@@ -1214,7 +1228,13 @@ export async function getAdjudicationOverview(
       bid_id:            string
       template_phase_id: string
       duracion_dias:     number
-      phase:             { chapter_id: string | null } | null
+      phase: {
+        id:         string
+        nombre:     string
+        orden:      number
+        chapter_id: string | null
+        chapter:    { nombre: string; orden: number } | null
+      } | null
     }
     const phaseDurs = (phaseDurRaw ?? []) as unknown as PhaseDur[]
 
@@ -1313,6 +1333,57 @@ export async function getAdjudicationOverview(
 
     type Milestone = { discipline_id: string; milestone_id: string | null; nombre: string; pct: number; trigger_type: string; orden: number }
     const milestones = (milestonesRaw ?? []) as Milestone[]
+
+    // 6. Per-invitation payment plan + master milestone names.
+    //    The Orden de Ejecución must mirror the exact plan the EP saw in the
+    //    licitation portal (fpe_invitation_payment_plan), and must name the
+    //    concrete milestone in 'milestone_achieved' triggers.
+
+    const { data: bidRowsRaw } = await admin
+      .from('fpe_bids')
+      .select('id, invitation_id')
+      .in('id', bidIds)
+    type BidRow = { id: string; invitation_id: string }
+    const invitationIdByBidId = new Map<string, string>()
+    for (const b of ((bidRowsRaw ?? []) as BidRow[])) invitationIdByBidId.set(b.id, b.invitation_id)
+    const invitationIds = Array.from(new Set(Array.from(invitationIdByBidId.values()).filter(Boolean)))
+
+    const { data: invitationPlanRaw } = invitationIds.length > 0
+      ? await admin
+          .from('fpe_invitation_payment_plan')
+          .select('invitation_id, nombre, pct, trigger_type, milestone_id, orden')
+          .in('invitation_id', invitationIds)
+          .order('orden', { ascending: true })
+      : { data: [] as never[] }
+
+    type InvitationPlanRow = {
+      invitation_id: string
+      nombre:        string
+      pct:           number
+      trigger_type:  string
+      milestone_id:  string | null
+      orden:         number
+    }
+    const planByInvitation: Record<string, InvitationPlanRow[]> = {}
+    for (const p of ((invitationPlanRaw ?? []) as InvitationPlanRow[])) {
+      planByInvitation[p.invitation_id] = [...(planByInvitation[p.invitation_id] ?? []), p]
+    }
+
+    // Collect milestone_ids referenced by any source and resolve their names.
+    const milestoneIdsToResolve = new Set<string>()
+    for (const m of milestones) if (m.milestone_id) milestoneIdsToResolve.add(m.milestone_id)
+    for (const p of (invitationPlanRaw ?? []) as InvitationPlanRow[]) {
+      if (p.milestone_id) milestoneIdsToResolve.add(p.milestone_id)
+    }
+    const { data: tmRows } = milestoneIdsToResolve.size > 0
+      ? await admin
+          .from('fpe_template_milestones')
+          .select('id, nombre')
+          .in('id', Array.from(milestoneIdsToResolve))
+      : { data: [] as never[] }
+    type TmRow = { id: string; nombre: string }
+    const milestoneNombreById: Record<string, string> = {}
+    for (const m of ((tmRows ?? []) as TmRow[])) milestoneNombreById[m.id] = m.nombre
 
     // ── Aggregation ──────────────────────────────────────────────────────────
 
@@ -1450,26 +1521,56 @@ export async function getAdjudicationOverview(
       const governingId = discList[0]?.id ?? null
       const governingNombre = discList[0]?.nombre ?? null
 
-      // Payment milestones for governing discipline
-      const milestonesForGov = governingId
-        ? milestones.filter(m => m.discipline_id === governingId).sort((a, b) => a.orden - b.orden)
-        : []
-      const paymentMilestones: FpeOverviewPaymentMilestone[] = milestonesForGov.map(m => ({
-        nombre:       m.nombre,
-        pct:          m.pct,
-        monto:        Math.round(bucket.total * m.pct) / 100,
-        trigger_type: m.trigger_type,
-        milestone_id: m.milestone_id,
-      }))
+      // Payment milestones — prefer the per-invitation plan (what the EP
+      // actually saw in the licitation portal). Fall back to the governing
+      // discipline master only when the invitation has no edited plan.
+      const invitationId = invitationIdByBidId.get(bucket.bid_id) ?? null
+      const invitationPlan = invitationId ? (planByInvitation[invitationId] ?? []) : []
 
-      // Phase durations for this partner's bid (a nivel capítulo)
+      let paymentMilestones: FpeOverviewPaymentMilestone[]
+      if (invitationPlan.length > 0) {
+        paymentMilestones = invitationPlan
+          .slice()
+          .sort((a, b) => a.orden - b.orden)
+          .map(p => ({
+            nombre:           p.nombre,
+            pct:              p.pct,
+            monto:            Math.round(bucket.total * p.pct) / 100,
+            trigger_type:     p.trigger_type,
+            milestone_id:     p.milestone_id,
+            milestone_nombre: p.milestone_id ? (milestoneNombreById[p.milestone_id] ?? null) : null,
+            source:           'invitation',
+          }))
+      } else {
+        const milestonesForGov = governingId
+          ? milestones.filter(m => m.discipline_id === governingId).sort((a, b) => a.orden - b.orden)
+          : []
+        paymentMilestones = milestonesForGov.map(m => ({
+          nombre:           m.nombre,
+          pct:              m.pct,
+          monto:            Math.round(bucket.total * m.pct) / 100,
+          trigger_type:     m.trigger_type,
+          milestone_id:     m.milestone_id,
+          milestone_nombre: m.milestone_id ? (milestoneNombreById[m.milestone_id] ?? null) : null,
+          source:           'discipline',
+        }))
+      }
+
+      // Phase durations for this partner's bid, enriched with phase + chapter
+      // names. Used by the Orden de Ejecución Anexo III to list every awarded
+      // execution phase individually.
       const partnerPhaseDurs: FpeOverviewPhaseDuration[] = phaseDurs
         .filter(pd => pd.bid_id === bucket.bid_id)
         .map(pd => ({
           template_phase_id: pd.template_phase_id,
+          phase_nombre:      pd.phase?.nombre ?? 'Fase de ejecución',
+          phase_orden:       pd.phase?.orden ?? 9999,
           chapter_id:        pd.phase?.chapter_id ?? null,
+          chapter_nombre:    pd.phase?.chapter?.nombre ?? null,
+          chapter_orden:     pd.phase?.chapter?.orden ?? null,
           duracion_dias:     pd.duracion_dias,
         }))
+        .sort((a, b) => (a.chapter_orden ?? 9999) - (b.chapter_orden ?? 9999) || a.phase_orden - b.phase_orden)
 
       type ChapterBucket = { chapter_id: string; chapter_nombre: string; chapter_orden: number; units: FpeOverviewUnit[] }
       const chapterList = (Array.from(bucket.chapters.values()) as ChapterBucket[])

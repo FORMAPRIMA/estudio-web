@@ -156,33 +156,34 @@ export async function loadProjectScheduleInputs(
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Per-chapter schedule dates for a single partner.
-// Drives the Anexo III (Cronograma y Plazos) of the Orden de Ejecución PDF.
+// Per-phase schedule dates for a single partner.
+// Drives Anexo III (Cronograma y Plazos) of the Orden de Ejecución PDF:
+// one row per execution phase the partner has been awarded, with the
+// duration the partner offered and the calendar dates computed from the
+// Dream Team Gantt.
 // ══════════════════════════════════════════════════════════════════════════════
 
-export interface ChapterScheduleDates {
-  chapter_id:   string
-  fecha_inicio: string    // ISO YYYY-MM-DD
-  fecha_fin:    string    // ISO YYYY-MM-DD
-  duracion_dias: number   // business days, derived from phaseEntries
+export interface PhaseScheduleDates {
+  template_phase_id: string
+  fecha_inicio:      string    // ISO YYYY-MM-DD
+  fecha_fin:         string    // ISO YYYY-MM-DD
+  duracion_dias:     number    // business days from the schedule engine
 }
 
 /**
- * Runs computeAwardedSchedule for a single partner's package and returns
- * per-chapter aggregated start/end dates (across all phases the partner
- * executes within that chapter).
+ * Runs computeAwardedSchedule for a single partner's package and returns the
+ * calendar dates of every phase the partner executes (one entry per phase).
  *
  * Returns null when there is no effective start date (Dream Team Gantt
  * unavailable → PDF falls back to durations only, no dates).
  */
-export function computePartnerChapterDates(args: {
+export function computePartnerPhaseDates(args: {
   inputs:   ProjectScheduleInputs
   pkg:      FpeOverviewPartner
-}): ChapterScheduleDates[] | null {
+}): PhaseScheduleDates[] | null {
   const { inputs, pkg } = args
   if (!inputs.fechaInicio || inputs.scheduleChapters.length === 0) return null
 
-  // Build per-partner awardedDurations + unitChapters
   const awardedDurations: AwardedPhaseDuration[] = []
   const unitChapters:     ProjectUnitChapterMap[] = []
 
@@ -215,10 +216,8 @@ export function computePartnerChapterDates(args: {
     unitChapters,
   )
 
-  // For each chapter the partner has units in: aggregate (min start, max end)
-  // across all phases where this partner appears.
   const partnerChapterIds = new Set(pkg.chapters.map(c => c.chapter_id).filter((id): id is string => !!id))
-  const phasesByChapter = new Map<string, { start: Date; end: Date }[]>()
+  const out: PhaseScheduleDates[] = []
 
   for (const ch of inputs.scheduleChapters) {
     if (!partnerChapterIds.has(ch.id)) continue
@@ -227,27 +226,13 @@ export function computePartnerChapterDates(args: {
       if (!entry) continue
       const partners = result.phasePartners[ph.id] ?? []
       if (!partners.includes(pkg.partner_id)) continue
-      const bucket = phasesByChapter.get(ch.id) ?? []
-      bucket.push({ start: entry.startDate, end: entry.endDate })
-      phasesByChapter.set(ch.id, bucket)
+      out.push({
+        template_phase_id: ph.id,
+        fecha_inicio:      entry.startDate.toISOString().slice(0, 10),
+        fecha_fin:         entry.endDate.toISOString().slice(0, 10),
+        duracion_dias:     Math.max(0, Math.round(entry.durationDays)),
+      })
     }
-  }
-
-  const out: ChapterScheduleDates[] = []
-  for (const ch of pkg.chapters) {
-    if (!ch.chapter_id) continue
-    const list = phasesByChapter.get(ch.chapter_id) ?? []
-    if (list.length === 0) continue
-    const start = list.reduce((a, b) => a.start < b.start ? a : b).start
-    const end   = list.reduce((a, b) => a.end   > b.end   ? a : b).end
-    const ms    = end.getTime() - start.getTime()
-    const days  = Math.max(0, Math.round(ms / (1000 * 60 * 60 * 24)))
-    out.push({
-      chapter_id:    ch.chapter_id,
-      fecha_inicio:  start.toISOString().slice(0, 10),
-      fecha_fin:     end.toISOString().slice(0, 10),
-      duracion_dias: days,
-    })
   }
   return out
 }
