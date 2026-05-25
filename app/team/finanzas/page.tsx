@@ -30,6 +30,8 @@ export default async function Page() {
     { data: allTimeEntries },
     { data: allProjFases },
     { data: allFacturasKPI },
+    { data: facturasDetalle },
+    { data: proyectosInfo },
   ] = await Promise.all([
     // Billing chart — current year ± 1
     admin
@@ -68,6 +70,15 @@ export default async function Page() {
     admin
       .from('facturas')
       .select('proyecto_id, seccion, monto'),
+    // Breakdown: facturas of current year + facturas with no date
+    admin
+      .from('facturas')
+      .select('id, proyecto_id, seccion, concepto, numero_factura, factura_emitida_id, monto, fecha_pago_acordada, fecha_emision, fecha_cobro, status')
+      .or(`and(fecha_pago_acordada.gte.${year}-01-01,fecha_pago_acordada.lte.${year}-12-31),fecha_pago_acordada.is.null`),
+    // Project lookup for breakdown rows
+    admin
+      .from('proyectos')
+      .select('id, nombre, codigo'),
   ])
 
   // ── Monthly costs (for billing vs cost chart) ────────────────────────────────
@@ -174,6 +185,24 @@ export default async function Page() {
         projectCount: projectMargins.length,
         sectionMargins,
       }}
+      facturasDetalle={(facturasDetalle ?? []).map(f => ({
+        id:                  f.id,
+        proyecto_id:         f.proyecto_id,
+        seccion:             f.seccion,
+        concepto:            f.concepto ?? null,
+        numero_factura:      f.numero_factura ?? null,
+        factura_emitida_id:  f.factura_emitida_id ?? null,
+        monto:               f.monto,
+        fecha_pago_acordada: f.fecha_pago_acordada ?? null,
+        fecha_emision:       f.fecha_emision ?? null,
+        fecha_cobro:         f.fecha_cobro ?? null,
+        status:              f.status,
+      }))}
+      proyectos={(proyectosInfo ?? []).map(p => ({
+        id:     p.id,
+        nombre: p.nombre,
+        codigo: p.codigo ?? null,
+      }))}
     />
   )
 }

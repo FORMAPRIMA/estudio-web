@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useMemo, useState } from 'react'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -8,6 +9,26 @@ interface Factura {
   monto: number
   fecha_pago_acordada: string | null
   status: string
+}
+
+interface FacturaDetalle {
+  id: string
+  proyecto_id: string
+  seccion: string
+  concepto: string | null
+  numero_factura: string | null
+  factura_emitida_id: string | null
+  monto: number
+  fecha_pago_acordada: string | null
+  fecha_emision: string | null
+  fecha_cobro: string | null
+  status: string
+}
+
+interface ProyectoInfo {
+  id: string
+  nombre: string
+  codigo: string | null
 }
 
 interface SectionMargin {
@@ -28,6 +49,8 @@ interface Props {
   year: number
   monthlyCosts: Record<number, number>   // 0-indexed month → total cost
   kpis: KPIs
+  facturasDetalle: FacturaDetalle[]
+  proyectos: ProyectoInfo[]
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -523,9 +546,317 @@ function KpiBox({ label, value, sub, color }: { label: string; value: string; su
   )
 }
 
+// ── Facturas Breakdown ────────────────────────────────────────────────────────
+
+const MONTHS_LONG = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+]
+
+const SIN_FECHA_KEY = 'sin_fecha'
+
+type BucketKey = number | typeof SIN_FECHA_KEY
+
+function formatDate(iso: string | null): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  return d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' })
+}
+
+function FacturasBreakdown({
+  facturasDetalle,
+  proyectos,
+  year,
+}: {
+  facturasDetalle: FacturaDetalle[]
+  proyectos: ProyectoInfo[]
+  year: number
+}) {
+  const fmtE = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+  const proyectoMap = useMemo(() => {
+    const m = new Map<string, ProyectoInfo>()
+    for (const p of proyectos) m.set(p.id, p)
+    return m
+  }, [proyectos])
+
+  // Group by bucket (month 0-11 or 'sin_fecha')
+  const buckets = useMemo(() => {
+    const map = new Map<BucketKey, FacturaDetalle[]>()
+    for (const f of facturasDetalle) {
+      let key: BucketKey
+      if (!f.fecha_pago_acordada) {
+        key = SIN_FECHA_KEY
+      } else {
+        const d = new Date(f.fecha_pago_acordada)
+        if (d.getFullYear() !== year) continue
+        key = d.getMonth()
+      }
+      const list = map.get(key) ?? []
+      list.push(f)
+      map.set(key, list)
+    }
+    return map
+  }, [facturasDetalle, year])
+
+  const orderedKeys: BucketKey[] = useMemo(() => {
+    const ks: BucketKey[] = []
+    for (let m = 0; m < 12; m++) if (buckets.has(m)) ks.push(m)
+    if (buckets.has(SIN_FECHA_KEY)) ks.push(SIN_FECHA_KEY)
+    return ks
+  }, [buckets])
+
+  const currentMonth = new Date().getMonth()
+  const [openKeys, setOpenKeys] = useState<Set<BucketKey>>(() => new Set<BucketKey>([currentMonth]))
+  const [hiddenStatus, setHiddenStatus] = useState<Set<string>>(new Set())
+
+  const toggleKey = (k: BucketKey) => {
+    setOpenKeys(prev => {
+      const next = new Set(prev)
+      if (next.has(k)) next.delete(k); else next.add(k)
+      return next
+    })
+  }
+
+  const toggleStatus = (s: string) => {
+    setHiddenStatus(prev => {
+      const next = new Set(prev)
+      if (next.has(s)) next.delete(s); else next.add(s)
+      return next
+    })
+  }
+
+  const totalAnual = facturasDetalle
+    .filter(f => f.fecha_pago_acordada && new Date(f.fecha_pago_acordada).getFullYear() === year)
+    .reduce((s, f) => s + f.monto, 0)
+
+  const bucketLabel = (k: BucketKey) => k === SIN_FECHA_KEY ? 'Sin fecha asignada' : `${MONTHS_LONG[k as number]} ${year}`
+
+  return (
+    <div style={{
+      background: '#fff', borderRadius: 12, border: '1px solid #E8E6E0',
+      padding: '28px 28px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+    }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, gap: 16, flexWrap: 'wrap' }}>
+        <div>
+          <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', margin: '0 0 4px' }}>
+            Desglose de facturas
+          </p>
+          <p style={{ fontSize: 13, color: '#555', margin: 0, fontWeight: 300 }}>
+            {year} · € {fmtE.format(totalAnual)} · {orderedKeys.reduce<number>((s, k) => s + (buckets.get(k)?.length ?? 0), 0)} líneas
+          </p>
+        </div>
+
+        {/* Status filter chips */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {STATUS_ORDER.map(s => {
+            const meta = STATUS_META[s]
+            const hidden = hiddenStatus.has(s)
+            return (
+              <button
+                key={s}
+                onClick={() => toggleStatus(s)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '5px 10px', fontSize: 10, letterSpacing: '0.04em',
+                  background: hidden ? '#fff' : '#F8F7F4',
+                  border: `1px solid ${hidden ? '#E8E6E0' : meta.color}`,
+                  borderRadius: 999, cursor: 'pointer',
+                  color: hidden ? '#BBB' : '#555',
+                  opacity: hidden ? 0.6 : 1,
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <span style={{
+                  width: 8, height: 8, borderRadius: 2,
+                  background: meta.color,
+                  opacity: hidden ? 0.4 : 1,
+                }} />
+                {meta.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Accordion */}
+      {orderedKeys.length === 0 ? (
+        <p style={{ fontSize: 12, color: '#CCC', padding: '20px 0' }}>Sin facturas para {year}.</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {orderedKeys.map(k => {
+            const list = buckets.get(k) ?? []
+            const visible = list.filter(f => !hiddenStatus.has(f.status))
+            const total = visible.reduce((s, f) => s + f.monto, 0)
+
+            // Per-status subtotals
+            const byStatus = new Map<string, FacturaDetalle[]>()
+            for (const f of visible) {
+              const arr = byStatus.get(f.status) ?? []
+              arr.push(f)
+              byStatus.set(f.status, arr)
+            }
+
+            const isOpen = openKeys.has(k)
+            return (
+              <div key={String(k)} style={{ border: '1px solid #E8E6E0', borderRadius: 8, overflow: 'hidden' }}>
+                {/* Month header */}
+                <button
+                  onClick={() => toggleKey(k)}
+                  style={{
+                    width: '100%', background: isOpen ? '#F8F7F4' : '#fff',
+                    border: 'none', borderBottom: isOpen ? '1px solid #E8E6E0' : 'none',
+                    padding: '14px 18px', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    gap: 12, textAlign: 'left',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                    <span style={{
+                      display: 'inline-block', width: 10, fontSize: 10, color: '#888',
+                      transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s',
+                    }}>›</span>
+                    <span style={{ fontSize: 13, fontWeight: 500, color: '#1A1A1A' }}>
+                      {bucketLabel(k)}
+                    </span>
+                    <span style={{ fontSize: 10, color: '#AAA' }}>
+                      {visible.length} línea{visible.length !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    {/* Status chips with subtotals */}
+                    {STATUS_ORDER.filter(s => byStatus.has(s)).map(s => {
+                      const subtotal = byStatus.get(s)!.reduce((sum, f) => sum + f.monto, 0)
+                      const meta = STATUS_META[s]
+                      return (
+                        <span key={s} style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 5,
+                          fontSize: 10, color: '#666',
+                        }}>
+                          <span style={{ width: 6, height: 6, borderRadius: 1, background: meta.color }} />
+                          € {fmtE.format(subtotal)}
+                        </span>
+                      )
+                    })}
+                    <span style={{
+                      fontSize: 13, fontWeight: 600, color: '#1A1A1A',
+                      fontVariantNumeric: 'tabular-nums', minWidth: 100, textAlign: 'right',
+                    }}>
+                      € {fmtE.format(total)}
+                    </span>
+                  </div>
+                </button>
+
+                {/* Status blocks */}
+                {isOpen && (
+                  <div style={{ background: '#fff' }}>
+                    {visible.length === 0 ? (
+                      <p style={{ fontSize: 11, color: '#CCC', padding: '16px 18px', margin: 0 }}>
+                        Sin facturas en los estados visibles.
+                      </p>
+                    ) : (
+                      STATUS_ORDER.filter(s => byStatus.has(s)).map(s => {
+                        const meta = STATUS_META[s]
+                        const rows = (byStatus.get(s) ?? []).slice().sort((a, b) => {
+                          const da = a.fecha_pago_acordada ?? ''
+                          const db = b.fecha_pago_acordada ?? ''
+                          return da.localeCompare(db)
+                        })
+                        const subtotal = rows.reduce((sum, f) => sum + f.monto, 0)
+
+                        return (
+                          <div key={s} style={{ borderTop: '1px solid #F0EEE8' }}>
+                            <div style={{
+                              padding: '10px 18px', background: '#FAFAF8',
+                              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                              gap: 8,
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <span style={{ width: 8, height: 8, borderRadius: 2, background: meta.color }} />
+                                <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#666' }}>
+                                  {meta.label}
+                                </span>
+                                <span style={{ fontSize: 10, color: '#AAA' }}>
+                                  {rows.length} línea{rows.length !== 1 ? 's' : ''}
+                                </span>
+                              </div>
+                              <span style={{ fontSize: 11, fontWeight: 600, color: '#555', fontVariantNumeric: 'tabular-nums' }}>
+                                € {fmtE.format(subtotal)}
+                              </span>
+                            </div>
+
+                            {/* Rows */}
+                            <div>
+                              {rows.map(f => {
+                                const p = proyectoMap.get(f.proyecto_id)
+                                return (
+                                  <Link
+                                    key={f.id}
+                                    href={`/team/finanzas/facturacion/control/${f.proyecto_id}`}
+                                    style={{
+                                      display: 'grid',
+                                      gridTemplateColumns: 'minmax(180px, 1.6fr) minmax(120px, 1fr) minmax(140px, 1.2fr) 90px 90px 110px',
+                                      gap: 12, padding: '10px 18px',
+                                      borderTop: '1px solid #F4F2EC',
+                                      textDecoration: 'none', color: 'inherit',
+                                      alignItems: 'center',
+                                      transition: 'background 0.1s',
+                                    }}
+                                    onMouseEnter={e => { e.currentTarget.style.background = '#FAFAF8' }}
+                                    onMouseLeave={e => { e.currentTarget.style.background = '#fff' }}
+                                  >
+                                    <div style={{ minWidth: 0, overflow: 'hidden' }}>
+                                      <p style={{ fontSize: 11, fontWeight: 500, color: '#1A1A1A', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        {p?.nombre ?? 'Proyecto desconocido'}
+                                      </p>
+                                      {p?.codigo && (
+                                        <p style={{ fontSize: 9, color: '#AAA', margin: '2px 0 0', letterSpacing: '0.04em' }}>
+                                          {p.codigo}
+                                        </p>
+                                      )}
+                                    </div>
+                                    <span style={{ fontSize: 10, color: '#666', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                      {f.seccion}
+                                    </span>
+                                    <span style={{ fontSize: 10, color: '#666', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={f.concepto ?? ''}>
+                                      {f.concepto ?? '—'}
+                                    </span>
+                                    <span style={{ fontSize: 10, color: '#888', fontVariantNumeric: 'tabular-nums' }}>
+                                      {f.numero_factura ?? '—'}
+                                    </span>
+                                    <span style={{ fontSize: 10, color: '#888', fontVariantNumeric: 'tabular-nums' }}>
+                                      {formatDate(f.fecha_pago_acordada)}
+                                    </span>
+                                    <span style={{
+                                      fontSize: 12, fontWeight: 600, color: '#1A1A1A',
+                                      fontVariantNumeric: 'tabular-nums', textAlign: 'right',
+                                    }}>
+                                      € {fmtE.format(f.monto)}
+                                    </span>
+                                  </Link>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
-export default function FinanzasDashboard({ facturas, year, monthlyCosts, kpis }: Props) {
+export default function FinanzasDashboard({ facturas, year, monthlyCosts, kpis, facturasDetalle, proyectos }: Props) {
   const fmtE0 = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
   const yearFacturas = facturas.filter(f => {
@@ -582,7 +913,7 @@ export default function FinanzasDashboard({ facturas, year, monthlyCosts, kpis }
       </div>
 
       {/* Chart */}
-      <div className="finanzas-chart-wrap" style={{ padding: '32px 40px' }}>
+      <div className="finanzas-chart-wrap" style={{ padding: '32px 40px 0' }}>
         <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #E8E6E0', padding: '28px 28px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, gap: 16, flexWrap: 'wrap' }}>
             <div>
@@ -601,6 +932,11 @@ export default function FinanzasDashboard({ facturas, year, monthlyCosts, kpis }
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Breakdown */}
+      <div className="finanzas-breakdown-wrap" style={{ padding: '24px 40px 40px' }}>
+        <FacturasBreakdown facturasDetalle={facturasDetalle} proyectos={proyectos} year={year} />
       </div>
 
     </div>
