@@ -6,6 +6,7 @@ import TasksUrgencia from '@/components/team/dashboard/TasksUrgencia'
 import ProyectosCarrusel from '@/components/team/dashboard/ProyectosCarrusel'
 import AvisosStrip from '@/components/team/dashboard/AvisosStrip'
 import FacturasCobrables from '@/components/team/dashboard/FacturasCobrables'
+import CalendarioEquipo from '@/components/team/dashboard/CalendarioEquipo'
 import type { DashboardTask } from '@/components/team/dashboard/TasksUrgencia'
 import type { DashboardProyecto } from '@/components/team/dashboard/ProyectosCarrusel'
 import type { Aviso } from '@/components/team/dashboard/AvisosStrip'
@@ -327,6 +328,16 @@ export default async function DashboardPage() {
             <ProyectosCarrusel proyectos={misProyectos} />
           </section>
         )}
+
+        {/* Calendario del equipo */}
+        <section className="px-8 py-8 lg:px-14 lg:py-10">
+          <div className="flex items-baseline justify-between mb-5">
+            <p className="text-[11px] tracking-widest uppercase font-medium text-ink/60">
+              Calendario del equipo
+            </p>
+          </div>
+          <CalendarioEquipo />
+        </section>
 
       </div>
     </div>

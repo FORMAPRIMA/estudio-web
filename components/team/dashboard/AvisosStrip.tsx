@@ -196,7 +196,7 @@ function AvisoCard({ aviso, onArchivar, isNew, animDelay }: {
             )}
           </div>
           {expanded && aviso.contenido && (
-            <p className="mt-1.5 text-[12px] font-light leading-relaxed text-ink/55">
+            <p className="mt-1.5 text-[12px] font-light leading-relaxed text-ink/55 whitespace-pre-line">
               {aviso.contenido}
             </p>
           )}
