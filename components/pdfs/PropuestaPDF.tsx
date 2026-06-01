@@ -356,6 +356,8 @@ function sortServicios(ids: string[]): string[] {
 export function PropuestaPDF({ data }: { data: PropuestaPDFData }) {
   const lang = data.lang ?? 'es'
   const T    = lang === 'en' ? EN : ES
+  // Nunca mostrar "BORRADOR" en el documento de cara al cliente.
+  const numeroLabel = data.numero && data.numero !== 'BORRADOR' ? data.numero : '—'
 
   const sortedServicios = sortServicios(data.servicios)
   const baseServicios = sortedServicios.filter(sid => sid in SERVICIOS_CONFIG) as ServicioId[]
@@ -398,7 +400,7 @@ export function PropuestaPDF({ data }: { data: PropuestaPDFData }) {
   )
 
   return (
-    <Document title={`Propuesta ${data.numero} · Forma Prima`} author="Forma Prima">
+    <Document title={`Propuesta${numeroLabel !== '—' ? ` ${numeroLabel}` : ''} · Forma Prima`} author="Forma Prima">
 
       {/* ── PAGE 1: Portada + carta de presentación ── */}
       <Page size="A4" style={{ ...s.page, paddingTop: 0 }}>
@@ -429,7 +431,7 @@ export function PropuestaPDF({ data }: { data: PropuestaPDFData }) {
           </View>
           <View style={{ alignItems: 'flex-end' }}>
             <Text style={s.metaLabel}>{T.number}</Text>
-            <Text style={s.metaValue}>{data.numero}</Text>
+            <Text style={s.metaValue}>{numeroLabel}</Text>
             <Text style={{ ...s.metaLabel, marginTop: 10 }}>{T.dateIssued}</Text>
             <Text style={s.metaValueLight}>{formatDate(fechaEmision, lang)}</Text>
             {data.titulo && (

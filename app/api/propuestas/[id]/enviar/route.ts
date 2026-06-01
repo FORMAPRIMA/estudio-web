@@ -86,6 +86,8 @@ export async function POST(
     }
 
     const clientName = [lead.nombre, lead.apellidos].filter(Boolean).join(' ') || lead.empresa || 'Cliente'
+    // Nunca exponer "BORRADOR" al cliente: si no hay número real, se omite.
+    const numeroLabel = propuesta.numero && propuesta.numero !== 'BORRADOR' ? propuesta.numero : ''
 
     // ¿El lead tiene un Espacio? → notificación con link (sin adjunto) + avanzar etapa.
     const { data: espacioRow } = await admin
@@ -108,7 +110,7 @@ export async function POST(
         </h2>
         <p style="font-size:13px;color:#555;margin:0 0 20px;line-height:1.6;">
           Estimado/a ${clientName},<br/><br/>
-          Hemos preparado tu propuesta de honorarios <strong>${propuesta.numero}</strong>. Puedes verla
+          Hemos preparado tu propuesta de honorarios${numeroLabel ? ` <strong>${numeroLabel}</strong>` : ''}. Puedes verla
           con todo el detalle de servicios, plazos y condiciones —y descargarla en PDF— en tu espacio personal:
         </p>
         <p style="margin:0 0 24px;">
@@ -139,7 +141,7 @@ export async function POST(
         </h2>
         <p style="font-size:13px;color:#555;margin:0 0 20px;line-height:1.6;">
           Estimado/a ${clientName},<br/><br/>
-          Adjunto encontrará nuestra propuesta de honorarios <strong>${propuesta.numero}</strong>
+          Adjunto encontrará nuestra propuesta de honorarios${numeroLabel ? ` <strong>${numeroLabel}</strong>` : ''}
           con el detalle de servicios, entregables y condiciones económicas.
         </p>
         <p style="font-size:13px;color:#555;margin:0 0 20px;line-height:1.6;">
@@ -151,7 +153,7 @@ export async function POST(
           <strong>El equipo de Forma Prima</strong>
         </p>
       `
-      attachments = [{ filename: `Propuesta-${propuesta.numero}.pdf`, content: buffer }]
+      attachments = [{ filename: `Propuesta-${numeroLabel || 'Forma-Prima'}.pdf`, content: buffer }]
     }
 
     // Build internal CC list:
@@ -170,7 +172,7 @@ export async function POST(
     const result = await sendEmail({
       to:      lead.email,
       cc:      ccEmails.length ? ccEmails : undefined,
-      subject: `Propuesta de honorarios ${propuesta.numero}${propuesta.titulo ? ` · ${propuesta.titulo}` : ''}`,
+      subject: `Propuesta de honorarios${numeroLabel ? ` ${numeroLabel}` : ''}${propuesta.titulo ? ` · ${propuesta.titulo}` : ''}`,
       html:    wrapEmail(body),
       attachments,
     })

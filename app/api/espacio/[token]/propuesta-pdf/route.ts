@@ -89,7 +89,7 @@ export async function GET(req: NextRequest, { params }: { params: { token: strin
   return new NextResponse(buffer as unknown as BodyInit, {
     headers: {
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `inline; filename="Propuesta-${propuesta.numero}.pdf"`,
+      'Content-Disposition': `inline; filename="Propuesta-${propuesta.numero && propuesta.numero !== 'BORRADOR' ? propuesta.numero : 'Forma-Prima'}.pdf"`,
     },
   })
 }
