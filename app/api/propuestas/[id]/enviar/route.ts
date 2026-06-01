@@ -85,29 +85,74 @@ export async function POST(
       lead,
     }
 
-    // Generate PDF
-    const buffer = await renderToBuffer(createElement(PropuestaPDF, { data: pdfData }) as any)
-
-    // Send email
     const clientName = [lead.nombre, lead.apellidos].filter(Boolean).join(' ') || lead.empresa || 'Cliente'
-    const body = `
-      <h2 style="font-size:20px;font-weight:300;color:#1A1A1A;margin:0 0 8px;">
-        Propuesta de honorarios${propuesta.titulo ? ` — ${propuesta.titulo}` : ''}
-      </h2>
-      <p style="font-size:13px;color:#555;margin:0 0 20px;line-height:1.6;">
-        Estimado/a ${clientName},<br/><br/>
-        Adjunto encontrará nuestra propuesta de honorarios <strong>${propuesta.numero}</strong>
-        con el detalle de servicios, entregables y condiciones económicas.
-      </p>
-      <p style="font-size:13px;color:#555;margin:0 0 20px;line-height:1.6;">
-        Quedamos a su disposición para cualquier consulta o para concertar una reunión
-        de presentación.
-      </p>
-      <p style="font-size:13px;color:#555;margin:0;line-height:1.6;">
-        Atentamente,<br/>
-        <strong>El equipo de Forma Prima</strong>
-      </p>
-    `
+
+    // ¿El lead tiene un Espacio? → notificación con link (sin adjunto) + avanzar etapa.
+    const { data: espacioRow } = await admin
+      .from('espacios')
+      .select('id, token, etapa')
+      .eq('lead_id', propuesta.lead_id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    const ETAPA_ORDER = ['bienvenida', 'propuesta', 'formalizacion', 'contrato', 'proyecto']
+    let body: string
+    let attachments: { filename: string; content: Buffer }[] | undefined
+
+    if (espacioRow) {
+      const link = `${process.env.NEXT_PUBLIC_SITE_URL ?? ''}/espacio/${espacioRow.token}`
+      body = `
+        <h2 style="font-size:20px;font-weight:300;color:#1A1A1A;margin:0 0 8px;">
+          Tu propuesta de honorarios está lista
+        </h2>
+        <p style="font-size:13px;color:#555;margin:0 0 20px;line-height:1.6;">
+          Estimado/a ${clientName},<br/><br/>
+          Hemos preparado tu propuesta de honorarios <strong>${propuesta.numero}</strong>. Puedes verla
+          con todo el detalle de servicios, plazos y condiciones —y descargarla en PDF— en tu espacio personal:
+        </p>
+        <p style="margin:0 0 24px;">
+          <a href="${link}" style="display:inline-block;background:#D85A30;color:#fff;text-decoration:none;padding:14px 28px;border-radius:4px;font-size:14px;font-weight:500;">
+            Ver mi propuesta
+          </a>
+        </p>
+        <p style="font-size:13px;color:#555;margin:0;line-height:1.6;">
+          Atentamente,<br/>
+          <strong>El equipo de Forma Prima</strong>
+        </p>
+      `
+      attachments = undefined
+
+      // Avanzar la etapa del Espacio a "propuesta" (sin retroceder si ya está más avanzado).
+      if (ETAPA_ORDER.indexOf(espacioRow.etapa as string) < ETAPA_ORDER.indexOf('propuesta')) {
+        await admin
+          .from('espacios')
+          .update({ etapa: 'propuesta', etapa_propuesta_at: new Date().toISOString() })
+          .eq('id', espacioRow.id)
+      }
+    } else {
+      // Legacy: adjuntar el PDF (leads sin Espacio).
+      const buffer = await renderToBuffer(createElement(PropuestaPDF, { data: pdfData }) as any)
+      body = `
+        <h2 style="font-size:20px;font-weight:300;color:#1A1A1A;margin:0 0 8px;">
+          Propuesta de honorarios${propuesta.titulo ? ` — ${propuesta.titulo}` : ''}
+        </h2>
+        <p style="font-size:13px;color:#555;margin:0 0 20px;line-height:1.6;">
+          Estimado/a ${clientName},<br/><br/>
+          Adjunto encontrará nuestra propuesta de honorarios <strong>${propuesta.numero}</strong>
+          con el detalle de servicios, entregables y condiciones económicas.
+        </p>
+        <p style="font-size:13px;color:#555;margin:0 0 20px;line-height:1.6;">
+          Quedamos a su disposición para cualquier consulta o para concertar una reunión
+          de presentación.
+        </p>
+        <p style="font-size:13px;color:#555;margin:0;line-height:1.6;">
+          Atentamente,<br/>
+          <strong>El equipo de Forma Prima</strong>
+        </p>
+      `
+      attachments = [{ filename: `Propuesta-${propuesta.numero}.pdf`, content: buffer }]
+    }
 
     // Build internal CC list:
     // - Partner sends → CC all partners (sender included as they're a partner)
@@ -127,10 +172,7 @@ export async function POST(
       cc:      ccEmails.length ? ccEmails : undefined,
       subject: `Propuesta de honorarios ${propuesta.numero}${propuesta.titulo ? ` · ${propuesta.titulo}` : ''}`,
       html:    wrapEmail(body),
-      attachments: [{
-        filename: `Propuesta-${propuesta.numero}.pdf`,
-        content:  buffer,
-      }],
+      attachments,
     })
 
     if (result.error) {

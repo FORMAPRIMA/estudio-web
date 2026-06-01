@@ -4,7 +4,8 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { createLead, updateLead, deleteLead } from '@/app/actions/leads'
 import { createContrato } from '@/app/actions/contratos'
-import { createBienvenidaToken, deleteBienvenidaTokens } from '@/app/actions/bienvenida'
+import { deleteBienvenidaTokens } from '@/app/actions/bienvenida'
+import { createEspacio } from '@/app/actions/espacios'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -498,7 +499,9 @@ export default function LeadsPage({ leads: initial, tokens = [] }: { leads: Lead
   // ── Bienvenida token modal state ──
   const [showBienvenidaModal, setShowBienvenidaModal] = useState(false)
   const [bienvenidaNombre, setBienvenidaNombre] = useState('')
+  const [bienvenidaEmail, setBienvenidaEmail] = useState('')
   const [bienvenidaNota, setBienvenidaNota] = useState('')
+  const [bienvenidaIdioma, setBienvenidaIdioma] = useState<'es' | 'en'>('es')
   const [bienvenidaGenerating, setBienvenidaGenerating] = useState(false)
   const [bienvenidaError, setBienvenidaError] = useState<string | null>(null)
   const [bienvenidaUrl, setBienvenidaUrl] = useState<string | null>(null)
@@ -506,7 +509,9 @@ export default function LeadsPage({ leads: initial, tokens = [] }: { leads: Lead
 
   const handleOpenBienvenidaModal = () => {
     setBienvenidaNombre('')
+    setBienvenidaEmail('')
     setBienvenidaNota('')
+    setBienvenidaIdioma('es')
     setBienvenidaError(null)
     setBienvenidaUrl(null)
     setBienvenidaCopied(false)
@@ -518,15 +523,19 @@ export default function LeadsPage({ leads: initial, tokens = [] }: { leads: Lead
       setBienvenidaError('El nombre del cliente es obligatorio.')
       return
     }
+    if (!bienvenidaEmail.trim()) {
+      setBienvenidaError('El email del cliente es obligatorio.')
+      return
+    }
     setBienvenidaGenerating(true)
     setBienvenidaError(null)
-    const res = await createBienvenidaToken(bienvenidaNombre, bienvenidaNota)
+    const res = await createEspacio(bienvenidaNombre, bienvenidaEmail, bienvenidaNota, bienvenidaIdioma)
     setBienvenidaGenerating(false)
     if ('error' in res) {
       setBienvenidaError(res.error)
       return
     }
-    setBienvenidaUrl(window.location.origin + '/bienvenida/' + res.token)
+    setBienvenidaUrl(window.location.origin + '/espacio/' + res.token)
   }
 
   const handleCopyBienvenidaUrl = () => {
@@ -611,7 +620,7 @@ export default function LeadsPage({ leads: initial, tokens = [] }: { leads: Lead
               onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#F8F7F4' }}
               onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '#fff' }}
             >
-              Enviar formulario de nuevo cliente
+              Comenzar nuevo proceso de cliente
             </button>
             <button
               onClick={handleAdd}
@@ -738,7 +747,7 @@ export default function LeadsPage({ leads: initial, tokens = [] }: { leads: Lead
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #E8E6E0', flexShrink: 0 }}>
               <div>
                 <h2 style={{ fontSize: 15, fontWeight: 600, color: '#1A1A1A', margin: 0 }}>
-                  Enviar formulario de nuevo cliente
+                  Comenzar nuevo proceso de cliente
                 </h2>
                 <p style={{ fontSize: 12, color: '#888', margin: '4px 0 0' }}>
                   Genera un enlace personalizado para que el cliente se registre él mismo.
@@ -770,6 +779,18 @@ export default function LeadsPage({ leads: initial, tokens = [] }: { leads: Lead
                   </div>
                   <div>
                     <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#BBB', margin: '0 0 6px' }}>
+                      Email del cliente *
+                    </p>
+                    <input
+                      type="email"
+                      value={bienvenidaEmail}
+                      onChange={e => setBienvenidaEmail(e.target.value)}
+                      placeholder="maria@email.com"
+                      style={{ background: '#FFF8F0', border: '1px solid #E8913A', borderRadius: 4, padding: '8px 12px', fontSize: 13, color: '#1A1A1A', fontFamily: 'inherit', outline: 'none', width: '100%', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#BBB', margin: '0 0 6px' }}>
                       Nota interna (opcional)
                     </p>
                     <input
@@ -779,6 +800,29 @@ export default function LeadsPage({ leads: initial, tokens = [] }: { leads: Lead
                       placeholder="Ej: Referido por Carlos, interés en reforma integral"
                       style={{ background: '#FFF8F0', border: '1px solid #E8913A', borderRadius: 4, padding: '8px 12px', fontSize: 13, color: '#1A1A1A', fontFamily: 'inherit', outline: 'none', width: '100%', boxSizing: 'border-box' }}
                     />
+                  </div>
+                  <div>
+                    <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#BBB', margin: '0 0 6px' }}>
+                      Idioma del portal
+                    </p>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      {([['es', 'Español'], ['en', 'English']] as const).map(([val, label]) => (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={() => setBienvenidaIdioma(val)}
+                          style={{
+                            flex: 1, height: 34, borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit',
+                            fontSize: 12, fontWeight: 600,
+                            border: `1px solid ${bienvenidaIdioma === val ? '#D85A30' : '#E8913A'}`,
+                            background: bienvenidaIdioma === val ? '#D85A30' : '#FFF8F0',
+                            color: bienvenidaIdioma === val ? '#fff' : '#9A7B5A',
+                          }}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                   {bienvenidaError && (
                     <div style={{ padding: '8px 12px', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 4, fontSize: 12, color: '#DC2626' }}>

@@ -9,6 +9,34 @@ import { getPlantillaServicios } from '@/app/actions/plantillaPropuestas'
 
 const PATH = '/team/captacion/contratos'
 
+// Avanza la etapa del Espacio del lead (si existe) sin retroceder. `extra` se
+// aplica siempre (p.ej. cliente_id al firmar). Reusa el funnel; no duplica nada.
+const ESPACIO_ETAPA_ORDER = ['bienvenida', 'propuesta', 'formalizacion', 'contrato', 'proyecto']
+async function avanzarEspacioPorLead(
+  admin: ReturnType<typeof createAdminClient>,
+  leadId: string | null | undefined,
+  etapa: 'contrato' | 'proyecto',
+  extra: Record<string, unknown> = {},
+) {
+  try {
+    if (!leadId) return
+    const { data: esp } = await admin
+      .from('espacios').select('id, etapa')
+      .eq('lead_id', leadId).order('created_at', { ascending: false }).limit(1).maybeSingle()
+    if (!esp) return
+    const now = new Date().toISOString()
+    const stampCol: Record<string, string> = { contrato: 'etapa_contrato_at', proyecto: 'etapa_proyecto_at' }
+    const patch: Record<string, unknown> = { ...extra, updated_at: now }
+    if (ESPACIO_ETAPA_ORDER.indexOf(esp.etapa as string) < ESPACIO_ETAPA_ORDER.indexOf(etapa)) {
+      patch.etapa = etapa
+      patch[stampCol[etapa]] = now
+    }
+    await admin.from('espacios').update(patch).eq('id', esp.id)
+  } catch (e) {
+    console.error('[avanzarEspacioPorLead]', e)
+  }
+}
+
 async function requirePartner() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -299,6 +327,10 @@ export async function createContratoFromPropuesta(
     }).select('id').single()
 
     if (error) return { error: error.message }
+
+    // El Espacio del lead (si existe) avanza a la etapa Contrato.
+    await avanzarEspacioPorLead(admin, propuesta.lead_id, 'contrato')
+
     revalidatePath(PATH)
     return { id: data.id }
   } catch (err) {
@@ -498,6 +530,12 @@ async function _firmarContratoInternal(
     proyecto_id: proyectoId,
     cliente_id:  clienteId,
   }).eq('id', contratoId)
+
+  // Puente lead → cliente: vinculamos el cliente al Espacio. Por ahora el Espacio
+  // se queda en la etapa "contrato" (firmado); la cara de Proyecto queda en pausa
+  // hasta que repensemos las fases. (Pasar 'contrato' no retrocede ni avanza la
+  // etapa actual, solo aplica el cliente_id.)
+  await avanzarEspacioPorLead(admin, c.lead_id as string | null, 'contrato', { cliente_id: clienteId })
 
   revalidatePath(PATH)
   revalidatePath(`${PATH}/${contratoId}`)

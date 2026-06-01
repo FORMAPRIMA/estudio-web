@@ -9,7 +9,7 @@ const HERO_IMAGE = 'https://xzzxxpwshgnqpnpahgoh.supabase.co/storage/v1/object/p
 
 const STUDIO = {
   tagline: 'Architecture and interior design studio',
-  descripcion_es: `In a world where architectural uniformity prevails, where the connection with the built environment fades away, a new proposal emerges. Forma Prima embraces diversity as a source of strength. We believe that true harmony is not found in uniformity, but in the strategic amalgamation of contrasts that invite exploration.
+  descripcion: `In a world where architectural uniformity prevails, where the connection with the built environment fades away, a new proposal emerges. Forma Prima embraces diversity as a source of strength. We believe that true harmony is not found in uniformity, but in the strategic amalgamation of contrasts that invite exploration.
 
 Spaces where light and shadow engage in a perfectly synchronized discussion, where the softness of curves meets the rigidity of orthogonal lines, and where the rusticity of materials converses with the neatness of surfaces. Our mission is to transform the tension between these opposites into an enriching and memorable architectural experience.
 
