@@ -375,6 +375,8 @@ export async function getEspacioPropuesta(
     }))
 
     const vm = buildPropuestaVM(propuesta as unknown as PropuestaRowLike, serviciosPlantilla, ratios)
+    // Propuesta sin servicios = aún no está lista para mostrar al cliente.
+    if (vm.servicios.length === 0) return null
     return { vm, status: propuesta.status as string, propuestaId: propuesta.id as string }
   } catch {
     return null

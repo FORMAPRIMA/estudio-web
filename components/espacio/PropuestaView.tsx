@@ -59,7 +59,7 @@ export default function PropuestaView({
           {vm.titulo || `Hola, ${nombre}.`}
         </h1>
         <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.55)', marginTop: 18, letterSpacing: '0.04em' }}>
-          {vm.numero}{fecha ? `  ·  ${fecha}` : ''}
+          {[vm.numero && vm.numero !== 'BORRADOR' ? vm.numero : null, fecha].filter(Boolean).join('  ·  ')}
         </p>
         <div style={{ width: 48, height: 2, background: '#D85A30', margin: '32px auto 0', opacity: 0.85 }} />
       </section>
