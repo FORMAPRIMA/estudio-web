@@ -7,6 +7,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import type { Etapa } from '@/lib/espacio/theme'
+import { sendEmail, wrapEmail } from '@/lib/email'
 import { getPlantillaServicios } from '@/app/actions/plantillaPropuestas'
 import { buildPropuestaVM, type PropuestaVM, type PropuestaRowLike } from '@/lib/propuestas/build'
 import type { ServicioId } from '@/lib/propuestas/config'
@@ -24,6 +25,47 @@ async function requireCaptacion() {
     throw new Error('Sin permisos.')
   }
   return user
+}
+
+// Correo de bienvenida con el link único del Espacio (ES/EN). Mismo formato
+// (wrapEmail) que el resto de correos de la plataforma.
+async function enviarCorreoBienvenida(
+  email: string,
+  nombre: string,
+  token: string,
+  idioma: 'es' | 'en',
+): Promise<boolean> {
+  const link = `${process.env.NEXT_PUBLIC_SITE_URL ?? 'https://internal.formaprima.es'}/espacio/${token}`
+  const C = idioma === 'en'
+    ? {
+        subject: 'Your space at Forma Prima',
+        hello: `Hello, ${nombre}`,
+        intro: 'Thank you for your interest in Forma Prima. We have created your personal space: a single place to get to know us and to accompany you through every step of the process.',
+        cta: 'Open my space',
+        note: 'This link is yours and will remain the same throughout our entire relationship. Keep it safe.',
+        sign: 'Kind regards,<br/><strong>The Forma Prima team</strong>',
+      }
+    : {
+        subject: 'Tu espacio en Forma Prima',
+        hello: `Hola, ${nombre}`,
+        intro: 'Gracias por tu interés en Forma Prima. Hemos creado tu espacio personal: un único lugar donde conocernos y acompañarte en cada paso del proceso.',
+        cta: 'Abrir mi espacio',
+        note: 'Este enlace es tuyo y será siempre el mismo a lo largo de toda nuestra relación. Guárdalo.',
+        sign: 'Un saludo,<br/><strong>El equipo de Forma Prima</strong>',
+      }
+
+  const body = `
+    <h2 style="font-size:20px;font-weight:300;color:#1A1A1A;margin:0 0 8px;">${C.hello}</h2>
+    <p style="font-size:13px;color:#555;margin:0 0 24px;line-height:1.6;">${C.intro}</p>
+    <p style="margin:0 0 24px;">
+      <a href="${link}" style="display:inline-block;background:#D85A30;color:#fff;text-decoration:none;padding:14px 28px;border-radius:4px;font-size:14px;font-weight:500;">${C.cta}</a>
+    </p>
+    <p style="font-size:12px;color:#888;margin:0 0 20px;line-height:1.6;">${C.note}</p>
+    <p style="font-size:13px;color:#555;margin:0;line-height:1.6;">${C.sign}</p>
+  `
+  const res = await sendEmail({ to: email, subject: C.subject, html: wrapEmail(body) })
+  if (res.error) { console.error('[espacio] correo bienvenida:', res.error); return false }
+  return true
 }
 
 // Aviso interno al equipo de captación (mismo patrón que marketing).
@@ -73,7 +115,7 @@ export async function createEspacio(
   email: string,
   notaInterna: string,
   idioma: 'es' | 'en' = 'es',
-): Promise<{ token: string } | { error: string }> {
+): Promise<{ token: string; emailSent: boolean } | { error: string }> {
   try {
     const user = await requireCaptacion()
     const admin = createAdminClient()
@@ -106,8 +148,14 @@ export async function createEspacio(
       .select('token')
       .single()
     if (error) return { error: error.message }
+
+    const lang = idioma === 'en' ? 'en' : 'es'
+    const emailSent = email.trim()
+      ? await enviarCorreoBienvenida(email.trim(), nombre.trim(), data.token as string, lang)
+      : false
+
     revalidatePath('/team/captacion/leads')
-    return { token: data.token as string }
+    return { token: data.token as string, emailSent }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
   }

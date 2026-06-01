@@ -670,6 +670,7 @@ export default function LeadsPage({ leads: initial, tokens = [], espacios = [] }
   const [bienvenidaEmail, setBienvenidaEmail] = useState('')
   const [bienvenidaNota, setBienvenidaNota] = useState('')
   const [bienvenidaIdioma, setBienvenidaIdioma] = useState<'es' | 'en'>('es')
+  const [bienvenidaEmailSent, setBienvenidaEmailSent] = useState(false)
   const [bienvenidaGenerating, setBienvenidaGenerating] = useState(false)
   const [bienvenidaError, setBienvenidaError] = useState<string | null>(null)
   const [bienvenidaUrl, setBienvenidaUrl] = useState<string | null>(null)
@@ -680,6 +681,7 @@ export default function LeadsPage({ leads: initial, tokens = [], espacios = [] }
     setBienvenidaEmail('')
     setBienvenidaNota('')
     setBienvenidaIdioma('es')
+    setBienvenidaEmailSent(false)
     setBienvenidaError(null)
     setBienvenidaUrl(null)
     setBienvenidaCopied(false)
@@ -703,6 +705,7 @@ export default function LeadsPage({ leads: initial, tokens = [], espacios = [] }
       setBienvenidaError(res.error)
       return
     }
+    setBienvenidaEmailSent(res.emailSent)
     setBienvenidaUrl(window.location.origin + '/espacio/' + res.token)
   }
 
@@ -1005,13 +1008,15 @@ export default function LeadsPage({ leads: initial, tokens = [], espacios = [] }
                     onMouseEnter={e => { if (!bienvenidaGenerating) (e.currentTarget as HTMLElement).style.background = '#D85A30' }}
                     onMouseLeave={e => { if (!bienvenidaGenerating) (e.currentTarget as HTMLElement).style.background = '#1A1A1A' }}
                   >
-                    {bienvenidaGenerating ? 'Generando…' : 'Generar enlace'}
+                    {bienvenidaGenerating ? 'Enviando…' : 'Crear y enviar enlace'}
                   </button>
                 </>
               ) : (
                 <>
                   <p style={{ fontSize: 12, color: '#555', margin: 0 }}>
-                    Enlace generado. Compártelo por WhatsApp o email.
+                    {bienvenidaEmailSent
+                      ? `✓ Hemos enviado el enlace por correo a ${bienvenidaEmail}. También puedes copiarlo:`
+                      : 'Enlace generado (no se pudo enviar el correo). Cópialo y compártelo:'}
                   </p>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <input
