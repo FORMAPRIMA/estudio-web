@@ -26,6 +26,28 @@ async function requireCaptacion() {
   return user
 }
 
+// Aviso interno al equipo de captación (mismo patrón que marketing).
+async function crearAvisoEspacio(
+  titulo: string,
+  contenido: string,
+  nivel: 'informativo' | 'importante' = 'importante',
+) {
+  try {
+    const admin = createAdminClient()
+    await admin.from('avisos').insert({
+      tipo: 'equipo',
+      autor_id: null,
+      titulo,
+      contenido,
+      nivel,
+      fecha_activa: new Date().toISOString().slice(0, 10),
+      visible_roles: ['fp_partner'],
+    })
+  } catch (e) {
+    console.error('[espacio] crearAviso', e)
+  }
+}
+
 export interface EspacioRow {
   id: string
   token: string
@@ -253,6 +275,11 @@ export async function submitEspacioBienvenida(
       })
       .eq('id', (espacio as { id: string }).id)
 
+    await crearAvisoEspacio(
+      `Formulario completado — ${leadFields.nombre}`,
+      `${leadFields.nombre}${leadFields.email ? ` (${leadFields.email})` : ''} ha rellenado el formulario de su Espacio. Revísalo en Captación › Leads.`,
+    )
+
     revalidatePath('/team/captacion/leads')
     return { success: true }
   } catch (err) {
@@ -325,6 +352,10 @@ export async function aceptarPropuestaEspacio(
       .eq('id', espacio.id)
 
     await registrarEventoEspacio(token, 'propuesta_aceptada', { propuestaId: propuesta.id })
+    await crearAvisoEspacio(
+      `Propuesta aceptada — ${espacio.nombre}`,
+      `${espacio.nombre} ha aceptado la propuesta de honorarios. Toca pedir/confirmar datos y preparar el contrato.`,
+    )
     revalidatePath('/team/captacion/propuestas')
     return { success: true }
   } catch (err) {
@@ -401,6 +432,10 @@ export async function submitFormalizacion(
       .eq('id', espacio.lead_id)
 
     await registrarEventoEspacio(token, 'datos_completados', { tipo: data.tipo_facturacion })
+    await crearAvisoEspacio(
+      `Datos de firmante recibidos — ${espacio.nombre}`,
+      `${espacio.nombre} ha completado sus datos de formalización. Ya puedes renderizar el contrato.`,
+    )
     revalidatePath('/team/captacion/leads')
     return { success: true }
   } catch (err) {
