@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation'
 import { createLead, updateLead, deleteLead } from '@/app/actions/leads'
 import { createContrato } from '@/app/actions/contratos'
 import { deleteBienvenidaTokens } from '@/app/actions/bienvenida'
-import { createEspacio } from '@/app/actions/espacios'
+import { createEspacio, deleteEspacios } from '@/app/actions/espacios'
+import { ETAPA_LABEL, type Etapa } from '@/lib/espacio/theme'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -25,6 +26,20 @@ export interface BienvenidaToken {
   primer_acceso:   string | null
   num_accesos:     number
   accesos:         AccesoEntry[] | null
+}
+
+export interface EspacioLite {
+  id:            string
+  token:         string
+  nombre:        string
+  email:         string | null
+  idioma:        string | null
+  etapa:         string
+  nota_interna:  string | null
+  created_at:    string
+  primer_acceso: string | null
+  num_accesos:   number | null
+  accesos:       AccesoEntry[] | null
 }
 
 interface Lead {
@@ -484,9 +499,162 @@ function BienvenidaTokensPanel({ tokens: initial }: { tokens: BienvenidaToken[] 
   )
 }
 
+// ── Espacios panel (procesos de cliente con link único) ──────────────────────
+
+const ETAPA_DOT: Record<string, { color: string; bg: string; dot: string }> = {
+  bienvenida:    { color: '#777',    bg: '#F0EEE8', dot: '#BBB' },
+  propuesta:     { color: '#B45309', bg: '#FDF6EE', dot: '#D97706' },
+  formalizacion: { color: '#7C3AED', bg: '#F5F0FF', dot: '#7C3AED' },
+  contrato:      { color: '#2563EB', bg: '#EEF3FE', dot: '#2563EB' },
+  proyecto:      { color: '#1D9E75', bg: '#EEF8F4', dot: '#1D9E75' },
+}
+
+function EspaciosPanel({ espacios: initial }: { espacios: EspacioLite[] }) {
+  const [espacios, setEspacios] = useState(initial)
+  const [copied,   setCopied]   = useState<string | null>(null)
+  const [expanded, setExpanded] = useState<string | null>(null)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [deleting, setDeleting] = useState(false)
+
+  const toggleSelect = (id: string) =>
+    setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const toggleAll = () =>
+    setSelected(prev => prev.size === espacios.length ? new Set() : new Set(espacios.map(e => e.id)))
+
+  const handleDelete = async () => {
+    if (!selected.size || deleting) return
+    setDeleting(true)
+    const ids = Array.from(selected)
+    const res = await deleteEspacios(ids)
+    setDeleting(false)
+    if ('error' in res) { alert(res.error); return }
+    setEspacios(prev => prev.filter(e => !ids.includes(e.id)))
+    setSelected(new Set())
+  }
+
+  const handleCopy = (e: EspacioLite) => {
+    navigator.clipboard.writeText(window.location.origin + '/espacio/' + e.token).then(() => {
+      setCopied(e.id)
+      setTimeout(() => setCopied(null), 2000)
+    })
+  }
+
+  if (espacios.length === 0) return null
+
+  return (
+    <div style={{ padding: '0 40px 32px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', margin: 0 }}>
+          Procesos de cliente
+        </p>
+        {selected.size > 0 && (
+          <button
+            onClick={handleDelete}
+            disabled={deleting}
+            style={{ fontSize: 10, padding: '4px 12px', background: deleting ? '#888' : '#E53E3E', color: '#fff', border: 'none', borderRadius: 4, cursor: deleting ? 'not-allowed' : 'pointer', fontFamily: 'inherit', fontWeight: 600 }}
+          >
+            {deleting ? 'Eliminando…' : `Eliminar ${selected.size} seleccionado${selected.size > 1 ? 's' : ''}`}
+          </button>
+        )}
+      </div>
+      <div style={{ background: '#fff', border: '1px solid #E8E6E0', borderRadius: 8, overflow: 'hidden' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ background: '#F8F7F4' }}>
+              <th style={{ ...TH, width: 32, paddingRight: 0 }}>
+                <input type="checkbox" checked={selected.size === espacios.length && espacios.length > 0} onChange={toggleAll} style={{ cursor: 'pointer' }} />
+              </th>
+              <th style={TH}>Cliente</th>
+              <th style={TH}>Email</th>
+              <th style={TH}>Idioma</th>
+              <th style={TH}>Etapa</th>
+              <th style={TH}>Creado</th>
+              <th style={TH}>Accesos</th>
+              <th style={{ ...TH, width: 90 }} />
+            </tr>
+          </thead>
+          <tbody>
+            {espacios.map(e => {
+              const st         = ETAPA_DOT[e.etapa] ?? ETAPA_DOT.bienvenida
+              const accesos    = e.accesos ?? []
+              const isExpanded = expanded === e.id
+              const hasAccesos = accesos.length > 0
+              return (
+                <>
+                  <tr
+                    key={e.id}
+                    style={{ cursor: hasAccesos ? 'pointer' : 'default', background: isExpanded ? '#FDFCFA' : selected.has(e.id) ? '#FFF8F0' : 'transparent' }}
+                    onClick={() => hasAccesos && setExpanded(isExpanded ? null : e.id)}
+                  >
+                    <td style={{ ...TD, width: 32, paddingRight: 0 }} onClick={ev => { ev.stopPropagation(); toggleSelect(e.id) }}>
+                      <input type="checkbox" checked={selected.has(e.id)} onChange={() => toggleSelect(e.id)} style={{ cursor: 'pointer' }} />
+                    </td>
+                    <td style={{ ...TD, fontWeight: 500 }}>
+                      {hasAccesos && (
+                        <span style={{ marginRight: 6, fontSize: 10, color: '#CCC', display: 'inline-block', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}>▶</span>
+                      )}
+                      {e.nombre}
+                    </td>
+                    <td style={{ ...TD, color: '#888' }}>{e.email ?? '—'}</td>
+                    <td style={{ ...TD, color: '#888' }}>{e.idioma === 'en' ? 'English' : 'Español'}</td>
+                    <td style={TD}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', background: st.bg, borderRadius: 10 }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: st.dot, display: 'inline-block' }} />
+                        <span style={{ fontSize: 10, color: st.color, fontWeight: 600 }}>{ETAPA_LABEL[e.etapa as Etapa] ?? e.etapa}</span>
+                      </span>
+                    </td>
+                    <td style={{ ...TD, color: '#888' }}>{fmtDateTime(e.created_at)}</td>
+                    <td style={{ ...TD, color: '#888', fontSize: 11 }}>
+                      {e.primer_acceso ? `Visto ${e.num_accesos ?? 1}×` : 'Sin abrir'}
+                    </td>
+                    <td style={{ ...TD, textAlign: 'right' }} onClick={ev => ev.stopPropagation()}>
+                      <button
+                        onClick={() => handleCopy(e)}
+                        style={{ fontSize: 10, padding: '4px 10px', background: copied === e.id ? '#1D9E75' : '#F0EEE8', color: copied === e.id ? '#fff' : '#555', border: 'none', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, transition: 'background 0.2s' }}
+                      >
+                        {copied === e.id ? '✓ Copiado' : 'Copiar link'}
+                      </button>
+                    </td>
+                  </tr>
+                  {isExpanded && (
+                    <tr key={e.id + '-log'}>
+                      <td colSpan={8} style={{ padding: '0 16px 12px 48px', background: '#FDFCFA', borderBottom: '1px solid #F0EEE8' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                          <thead>
+                            <tr>
+                              <th style={{ ...TH, paddingLeft: 0, paddingTop: 8, fontSize: 8 }}>#</th>
+                              <th style={{ ...TH, paddingLeft: 0, paddingTop: 8, fontSize: 8 }}>Fecha y hora</th>
+                              <th style={{ ...TH, paddingLeft: 0, paddingTop: 8, fontSize: 8 }}>IP</th>
+                              <th style={{ ...TH, paddingLeft: 0, paddingTop: 8, fontSize: 8 }}>Dispositivo</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {accesos.map((a, i) => (
+                              <tr key={i}>
+                                <td style={{ ...TD, paddingLeft: 0, fontSize: 11, color: '#AAA', width: 24 }}>{i + 1}</td>
+                                <td style={{ ...TD, paddingLeft: 0, fontSize: 11, color: '#555' }}>{fmtDateTime(a.ts)}</td>
+                                <td style={{ ...TD, paddingLeft: 0, fontSize: 11, color: '#555', fontFamily: 'monospace' }}>{a.ip}</td>
+                                <td style={{ ...TD, paddingLeft: 0, fontSize: 11, color: '#555' }}>{a.dispositivo}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </td>
+                    </tr>
+                  )}
+                </>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export default function LeadsPage({ leads: initial, tokens = [] }: { leads: Lead[]; tokens?: BienvenidaToken[] }) {
+export default function LeadsPage({ leads: initial, tokens = [], espacios = [] }: { leads: Lead[]; tokens?: BienvenidaToken[]; espacios?: EspacioLite[] }) {
   const router = useRouter()
   const [leads, setLeads] = useState(initial)
   const [editingLead, setEditingLead] = useState<Lead | null>(null)
@@ -731,6 +899,7 @@ export default function LeadsPage({ leads: initial, tokens = [] }: { leads: Lead
       </div>
 
       {/* ── Formularios enviados ── */}
+      <EspaciosPanel espacios={espacios} />
       <BienvenidaTokensPanel tokens={tokens} />
 
       {/* ── Bienvenida token modal ── */}

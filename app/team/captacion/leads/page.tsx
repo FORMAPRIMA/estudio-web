@@ -16,7 +16,7 @@ export default async function Page() {
   if (!profile || !['fp_partner', 'fp_manager', 'fp_biz_dev'].includes(profile.rol)) redirect('/team/dashboard')
 
   const admin = createAdminClient()
-  const [{ data: leads }, { data: tokens }] = await Promise.all([
+  const [{ data: leads }, { data: tokens }, { data: espacios }] = await Promise.all([
     admin
       .from('leads')
       .select('id, nombre, apellidos, empresa, email, telefono, ciudad, origen, estado_lead, interes, presupuesto_estimado, notas, nif_cif, documento_identidad, email_cc, telefono_alt, direccion, codigo_postal, pais, direccion_facturacion, notas_facturacion, tipo_facturacion, fecha_nacimiento')
@@ -26,7 +26,12 @@ export default async function Page() {
       .select('id, token, nombre_cliente, nota_interna, used, created_at, primer_acceso, num_accesos, accesos')
       .order('created_at', { ascending: false })
       .limit(30),
+    admin
+      .from('espacios')
+      .select('id, token, nombre, email, idioma, etapa, nota_interna, created_at, primer_acceso, num_accesos, accesos')
+      .order('created_at', { ascending: false })
+      .limit(50),
   ])
 
-  return <LeadsPage leads={leads ?? []} tokens={tokens ?? []} />
+  return <LeadsPage leads={leads ?? []} tokens={tokens ?? []} espacios={espacios ?? []} />
 }
