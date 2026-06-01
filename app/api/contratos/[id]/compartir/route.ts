@@ -44,6 +44,22 @@ export async function POST(
       return NextResponse.json({ error: 'Contrato no encontrado.' }, { status: 404 })
     }
 
+    // ¿El contacto del contrato tiene un Espacio? → notificación con link, sin adjunto.
+    type EspacioLink = { id: string; token: string; etapa: string }
+    let espacioRow: EspacioLink | null = null
+    if (contrato.lead_id) {
+      const { data } = await admin
+        .from('espacios').select('id, token, etapa')
+        .eq('lead_id', contrato.lead_id).order('created_at', { ascending: false }).limit(1).maybeSingle()
+      espacioRow = (data as EspacioLink | null)
+    }
+    if (!espacioRow && contrato.cliente_id) {
+      const { data } = await admin
+        .from('espacios').select('id, token, etapa')
+        .eq('cliente_id', contrato.cliente_id).order('created_at', { ascending: false }).limit(1).maybeSingle()
+      espacioRow = (data as EspacioLink | null)
+    }
+
     // Fetch plantilla EN translations
     const { data: plantillaRows } = await admin
       .from('propuestas_servicios_plantilla')
@@ -83,69 +99,90 @@ export async function POST(
       plantilla_en,
     }
 
-    // Build PDF attachment(s)
-    const attachments: { filename: string; content: Buffer }[] = []
-
-    const langs: ('es' | 'en')[] = body.pdfLang === 'both' ? ['es', 'en'] : [body.pdfLang]
-    for (const lang of langs) {
-      const pdfBuffer = await renderToBuffer(
-        createElement(ContratoPDF, { data: { ...baseData, lang } }) as any
-      )
-      attachments.push({
-        filename: `Contrato-${contrato.numero ?? params.id}${langs.length > 1 ? `-${lang.toUpperCase()}` : ''}.pdf`,
-        content:  Buffer.from(pdfBuffer),
-      })
-    }
-
     // Always use personal name, not company name
     const clientName = [contrato.cliente_nombre, contrato.cliente_apellidos].filter(Boolean).join(' ') || 'Cliente'
-
     const projectLabel = contrato.proyecto_nombre
       ? (body.emailLang === 'en' ? ` for ${contrato.proyecto_nombre}` : ` para el proyecto ${contrato.proyecto_nombre}`)
       : ''
+    const en = body.emailLang === 'en'
 
-    // Email body
-    const emailBody = body.emailLang === 'en'
-      ? `
-        <h2 style="font-size:20px;font-weight:300;color:#1A1A1A;margin:0 0 8px;">
-          Your contract is ready
-        </h2>
-        <p style="font-size:13px;color:#555;margin:0 0 20px;line-height:1.6;">
-          Dear ${clientName},<br/><br/>
-          Please find attached your contract <strong>${contrato.numero}</strong>${projectLabel},
-          including the full scope of services, deliverables, and economic conditions.
-        </p>
-        <p style="font-size:13px;color:#555;margin:0 0 20px;line-height:1.6;">
-          We kindly ask you to review it carefully. Should you have any questions or wish to
-          schedule a call to go through it together, please do not hesitate to reach out.
-        </p>
-        <p style="font-size:13px;color:#555;margin:0;line-height:1.6;">
-          Kind regards,<br/>
-          <strong>The Forma Prima team</strong>
-        </p>
-      `
-      : `
-        <h2 style="font-size:20px;font-weight:300;color:#1A1A1A;margin:0 0 8px;">
-          Su contrato está listo
-        </h2>
-        <p style="font-size:13px;color:#555;margin:0 0 20px;line-height:1.6;">
-          Estimado/a ${clientName},<br/><br/>
-          Adjunto encontrará el contrato <strong>${contrato.numero}</strong>${projectLabel},
-          con el detalle completo de los servicios, entregables y condiciones económicas acordadas.
-        </p>
-        <p style="font-size:13px;color:#555;margin:0 0 20px;line-height:1.6;">
-          Le pedimos que lo revise con detenimiento. Si tiene cualquier duda o desea concertar
-          una llamada para repasarlo juntos, no dude en ponerse en contacto con nosotros.
-        </p>
-        <p style="font-size:13px;color:#555;margin:0;line-height:1.6;">
-          Atentamente,<br/>
-          <strong>El equipo de Forma Prima</strong>
-        </p>
-      `
+    let attachments: { filename: string; content: Buffer }[] | undefined
+    let emailBody: string
+    let subject: string
 
-    const subject = body.emailLang === 'en'
-      ? `Contract ${contrato.numero}${contrato.proyecto_nombre ? ` · ${contrato.proyecto_nombre}` : ''}`
-      : `Contrato ${contrato.numero}${contrato.proyecto_nombre ? ` · ${contrato.proyecto_nombre}` : ''}`
+    if (espacioRow) {
+      // Todo en la plataforma: link al Espacio (ya en etapa Contrato), sin adjunto.
+      const link = `${process.env.NEXT_PUBLIC_SITE_URL ?? 'https://internal.formaprima.es'}/espacio/${espacioRow.token}`
+      attachments = undefined
+      emailBody = en
+        ? `
+          <h2 style="font-size:20px;font-weight:300;color:#1A1A1A;margin:0 0 8px;">Your contract is ready</h2>
+          <p style="font-size:13px;color:#555;margin:0 0 24px;line-height:1.6;">
+            Dear ${clientName},<br/><br/>
+            We have prepared your contract${projectLabel}. You can review it —and see your fee proposal
+            archived in your history— in your personal space:
+          </p>
+          <p style="margin:0 0 24px;">
+            <a href="${link}" style="display:inline-block;background:#D85A30;color:#fff;text-decoration:none;padding:14px 28px;border-radius:4px;font-size:14px;font-weight:500;">View my contract</a>
+          </p>
+          <p style="font-size:13px;color:#555;margin:0;line-height:1.6;">Kind regards,<br/><strong>The Forma Prima team</strong></p>
+        `
+        : `
+          <h2 style="font-size:20px;font-weight:300;color:#1A1A1A;margin:0 0 8px;">Tu contrato está listo</h2>
+          <p style="font-size:13px;color:#555;margin:0 0 24px;line-height:1.6;">
+            Estimado/a ${clientName},<br/><br/>
+            Hemos preparado tu contrato${projectLabel}. Puedes revisarlo —y consultar tu propuesta de
+            honorarios archivada en el histórico— en tu espacio personal:
+          </p>
+          <p style="margin:0 0 24px;">
+            <a href="${link}" style="display:inline-block;background:#D85A30;color:#fff;text-decoration:none;padding:14px 28px;border-radius:4px;font-size:14px;font-weight:500;">Ver mi contrato</a>
+          </p>
+          <p style="font-size:13px;color:#555;margin:0;line-height:1.6;">Atentamente,<br/><strong>El equipo de Forma Prima</strong></p>
+        `
+      subject = en ? `Tu contrato está listo` : `Tu contrato está listo`
+
+      // Asegurar que el Espacio está en la etapa Contrato.
+      const ORDER = ['bienvenida', 'propuesta', 'formalizacion', 'contrato', 'proyecto']
+      if (ORDER.indexOf(espacioRow.etapa) < ORDER.indexOf('contrato')) {
+        await admin
+          .from('espacios')
+          .update({ etapa: 'contrato', etapa_contrato_at: new Date().toISOString() })
+          .eq('id', espacioRow.id)
+      }
+    } else {
+      // Legacy: adjuntar el PDF del contrato.
+      attachments = []
+      const langs: ('es' | 'en')[] = body.pdfLang === 'both' ? ['es', 'en'] : [body.pdfLang]
+      for (const lang of langs) {
+        const pdfBuffer = await renderToBuffer(
+          createElement(ContratoPDF, { data: { ...baseData, lang } }) as any
+        )
+        attachments.push({
+          filename: `Contrato-${contrato.numero ?? params.id}${langs.length > 1 ? `-${lang.toUpperCase()}` : ''}.pdf`,
+          content:  Buffer.from(pdfBuffer),
+        })
+      }
+      emailBody = en
+        ? `
+          <h2 style="font-size:20px;font-weight:300;color:#1A1A1A;margin:0 0 8px;">Your contract is ready</h2>
+          <p style="font-size:13px;color:#555;margin:0 0 20px;line-height:1.6;">
+            Dear ${clientName},<br/><br/>
+            Please find attached your contract <strong>${contrato.numero}</strong>${projectLabel},
+            including the full scope of services, deliverables, and economic conditions.
+          </p>
+          <p style="font-size:13px;color:#555;margin:0;line-height:1.6;">Kind regards,<br/><strong>The Forma Prima team</strong></p>
+        `
+        : `
+          <h2 style="font-size:20px;font-weight:300;color:#1A1A1A;margin:0 0 8px;">Su contrato está listo</h2>
+          <p style="font-size:13px;color:#555;margin:0 0 20px;line-height:1.6;">
+            Estimado/a ${clientName},<br/><br/>
+            Adjunto encontrará el contrato <strong>${contrato.numero}</strong>${projectLabel},
+            con el detalle completo de los servicios, entregables y condiciones económicas acordadas.
+          </p>
+          <p style="font-size:13px;color:#555;margin:0;line-height:1.6;">Atentamente,<br/><strong>El equipo de Forma Prima</strong></p>
+        `
+      subject = `${en ? 'Contract' : 'Contrato'} ${contrato.numero}${contrato.proyecto_nombre ? ` · ${contrato.proyecto_nombre}` : ''}`
+    }
 
     const [primaryEmail, ...ccEmails] = body.emails
     const result = await sendEmail({

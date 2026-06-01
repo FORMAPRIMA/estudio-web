@@ -16,8 +16,9 @@ export default function ContratoView({
   contrato: EspacioContrato
 }) {
   const firmado = contrato.status === 'firmado'
-  const enFirma = contrato.status === 'enviado' || contrato.status === 'negociacion'
+  const listo   = contrato.status === 'enviado' || contrato.status === 'negociacion'
   const fecha   = formatFecha(contrato.fechaFirma)
+  const verContratoUrl = `/api/espacio/${token}/contrato-pdf`
 
   return (
     <div style={{ paddingBottom: 80 }}>
@@ -44,20 +45,13 @@ export default function ContratoView({
               <p style={{ fontSize: 14, color: '#555', lineHeight: 1.7, marginTop: 12 }}>
                 Gracias por confiar en Forma Prima. A partir de aquí comenzamos a trabajar en tu proyecto.
               </p>
-              {contrato.pdfFirmadoUrl && (
-                <a className="fp-btn-primary" href={contrato.pdfFirmadoUrl} target="_blank" rel="noopener noreferrer"
-                   style={{ width: 'auto', display: 'inline-block', textDecoration: 'none', marginTop: 16 }}>
-                  Descargar contrato firmado
-                </a>
-              )}
             </>
-          ) : enFirma ? (
+          ) : listo ? (
             <>
-              <p style={{ fontSize: 15, fontWeight: 600, color: '#D85A30' }}>Tu contrato está listo para firmar</p>
+              <p style={{ fontSize: 15, fontWeight: 600, color: '#D85A30' }}>Tu contrato está listo</p>
               <p style={{ fontSize: 14, color: '#555', lineHeight: 1.7, marginTop: 12 }}>
-                Te hemos enviado el contrato para su firma electrónica (DocuSign) al correo
-                que nos facilitaste. Ábrelo desde ese email para revisarlo y firmarlo. Una vez
-                firmado, podrás descargarlo aquí mismo.
+                Hemos preparado tu contrato con todo lo acordado. Revísalo con calma a continuación.
+                Cuando esté todo conforme, coordinaremos contigo la firma.
               </p>
             </>
           ) : (
@@ -65,23 +59,42 @@ export default function ContratoView({
               <p style={{ fontSize: 15, fontWeight: 600, color: '#1A1A1A' }}>Estamos ultimando tu contrato</p>
               <p style={{ fontSize: 14, color: '#555', lineHeight: 1.7, marginTop: 12 }}>
                 Con los datos que nos has facilitado estamos preparando el contrato. Te avisaremos
-                aquí en cuanto esté listo para firmar.
+                aquí en cuanto esté listo.
               </p>
             </>
           )}
+
+          {/* Acceso al contrato (en plataforma, sin adjuntos) */}
+          {(firmado || listo) && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 18 }}>
+              <a className="fp-btn-primary" href={verContratoUrl} target="_blank" rel="noopener noreferrer"
+                 style={{ width: 'auto', display: 'inline-block', textDecoration: 'none' }}>
+                Ver contrato
+              </a>
+              {firmado && contrato.pdfFirmadoUrl && (
+                <a className="fp-btn-ghost" href={contrato.pdfFirmadoUrl} target="_blank" rel="noopener noreferrer"
+                   style={{ textDecoration: 'none' }}>
+                  Descargar firmado
+                </a>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Propuesta archivada */}
+        {/* Histórico — propuesta archivada */}
         {contrato.hasPropuesta && (
-          <div style={{ marginTop: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '14px 16px', border: '1px solid #E5E2DA', borderRadius: 8, background: '#FBFAF7' }}>
-            <div>
-              <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA' }}>Archivado</p>
-              <p style={{ fontSize: 14, color: '#555', marginTop: 4 }}>Propuesta de honorarios</p>
+          <div style={{ marginTop: 28 }}>
+            <span className="fp-section-label">Histórico</span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '14px 16px', border: '1px solid #E5E2DA', borderRadius: 8, background: '#FBFAF7' }}>
+              <div>
+                <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA' }}>Archivado</p>
+                <p style={{ fontSize: 14, color: '#555', marginTop: 4 }}>Propuesta de honorarios</p>
+              </div>
+              <a className="fp-btn-ghost" href={`/api/espacio/${token}/propuesta-pdf`} target="_blank" rel="noopener noreferrer"
+                 style={{ textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                Ver PDF
+              </a>
             </div>
-            <a className="fp-btn-ghost" href={`/api/espacio/${token}/propuesta-pdf`} target="_blank" rel="noopener noreferrer"
-               style={{ textDecoration: 'none', whiteSpace: 'nowrap' }}>
-              Ver PDF
-            </a>
           </div>
         )}
       </section>
