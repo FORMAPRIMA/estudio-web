@@ -88,6 +88,12 @@ export default function EspacioStyles() {
       .fp-socios-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 32px; }
       @media (max-width: 680px) { .fp-socios-grid { grid-template-columns: 1fr; } }
 
+      /* Resumen ejecutivo de la propuesta: 1 columna en móvil, --cols en ≥560px */
+      .fp-prop-summary { grid-template-columns: 1fr; }
+      @media (min-width: 560px) {
+        .fp-prop-summary { grid-template-columns: repeat(var(--cols, 3), 1fr); }
+      }
+
       .fp-card {
         background: #fff;
         border: 1px solid #E5E2DA;

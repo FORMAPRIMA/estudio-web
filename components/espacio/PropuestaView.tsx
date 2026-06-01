@@ -66,11 +66,13 @@ export default function PropuestaView({
 
       {/* ── Resumen ejecutivo ───────────────────────────────────────────────── */}
       <section style={{ maxWidth: 920, margin: '0 auto', padding: 'clamp(40px, 6vw, 72px) 24px 0' }}>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: `repeat(${vm.hasPem ? 3 : 2}, 1fr)`,
-          gap: 1, background: '#E5E2DA', border: '1px solid #E5E2DA', borderRadius: 8, overflow: 'hidden',
-        }}>
+        <div
+          className="fp-prop-summary"
+          style={{
+            display: 'grid', ['--cols' as string]: vm.hasPem ? 3 : 2,
+            gap: 1, background: '#E5E2DA', border: '1px solid #E5E2DA', borderRadius: 8, overflow: 'hidden',
+          } as React.CSSProperties}
+        >
           <Stat label="Superficie" value={`${vm.m2.toLocaleString('es-ES')} m²`} />
           {vm.hasPem && <Stat label="Coste objetivo de obra" value={`${fmtEur(vm.pem)}`} suffix="+ IVA" />}
           <Stat label="Honorarios totales" value={fmtEur(vm.total)} suffix="+ IVA" highlight />
