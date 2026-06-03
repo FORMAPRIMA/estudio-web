@@ -11,6 +11,7 @@ import {
   addPagoConstructora, updatePagoConstructora, deletePagoConstructora,
 } from '@/app/actions/clientes'
 import RegistrarVisitaModal from '@/components/team/clientes/RegistrarVisitaModal'
+import type { BorradorVisitaData } from '@/app/actions/actas'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -36,6 +37,7 @@ interface Render {
 interface Visita {
   id: string; fecha: string; titulo: string | null; asistentes: string | null
   notas: string | null; acta_url: string | null; acta_constructor_url: string | null; floorfy_url: string | null; visible_cliente: boolean
+  es_borrador?: boolean | null; borrador_data?: BorradorVisitaData | null
 }
 
 interface Partida {
@@ -569,8 +571,15 @@ function VisitasSection({
   const [visitas, setVisitas] = useState(initialVisitas)
   const [showForm, setShowForm] = useState(false)
   const [showActaModal, setShowActaModal] = useState(false)
+  const [editingDraft, setEditingDraft] = useState<Visita | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [, startTransition] = useTransition()
+
+  // Upsert a visita row by id (used by the acta modal for draft autosave + promotion)
+  const upsertVisita = (v: Visita) =>
+    setVisitas(prev => prev.some(x => x.id === v.id)
+      ? prev.map(x => x.id === v.id ? v : x)
+      : [v, ...prev])
 
   // New visita form state
   const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0])
@@ -605,6 +614,10 @@ function VisitasSection({
     if (!confirm('¿Eliminar esta visita?')) return
     setVisitas(prev => prev.filter(v => v.id !== id))
     startTransition(async () => { await deleteVisita(id, proyectoId) })
+  }
+
+  const continuarBorrador = (v: Visita) => {
+    setEditingDraft(v); setShowActaModal(true); setShowForm(false)
   }
 
   const handleActaUploaded = (visitaId: string, url: string) => {
@@ -673,16 +686,41 @@ function VisitasSection({
     </React.Fragment>
   )
 
+  const renderDraftRow = (v: Visita) => (
+    <tr key={v.id} style={{ background: '#FFFBF5' }}>
+      <td style={{ padding: '10px 12px 10px 0', fontSize: 12, color: '#888', borderBottom: '1px solid #F0EEE8', whiteSpace: 'nowrap' }}>{fmtShort(v.fecha)}</td>
+      <td style={{ padding: '10px 12px 10px 0', fontSize: 12, color: '#1A1A1A', borderBottom: '1px solid #F0EEE8' }}>
+        <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#C9871F', background: '#FBEFD8', padding: '2px 6px', borderRadius: 3, marginRight: 8 }}>Borrador</span>
+        {v.titulo ?? <span style={{ color: '#CCC' }}>—</span>}
+      </td>
+      <td style={{ padding: '10px 12px 10px 0', fontSize: 11, color: '#888', borderBottom: '1px solid #F0EEE8' }}>{v.asistentes ?? '—'}</td>
+      <td colSpan={3} style={{ padding: '10px 12px 10px 0', borderBottom: '1px solid #F0EEE8' }}>
+        <button onClick={() => continuarBorrador(v)} style={{ fontSize: 10, fontWeight: 600, color: '#D85A30', background: '#FDF3EE', border: '1px solid #F3D9CC', borderRadius: 4, padding: '4px 10px', cursor: 'pointer' }}>
+          Continuar redacción →
+        </button>
+      </td>
+      <td style={{ padding: '10px 0', borderBottom: '1px solid #F0EEE8' }}>
+        <button onClick={() => handleDelete(v.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: '#CCC' }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#E53E3E' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#CCC' }}>×</button>
+      </td>
+    </tr>
+  )
+
   const thStyle: React.CSSProperties = { textAlign: 'left', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', padding: '0 12px 10px 0', borderBottom: '1px solid #E8E6E0', whiteSpace: 'nowrap' }
 
   return (
     <>
     {showActaModal && (
       <RegistrarVisitaModal
+        key={editingDraft?.id ?? 'nueva'}
         proyecto={{ id: proyectoId, nombre: proyectoNombre, codigo: proyectoCodigo, direccion: proyectoDireccion }}
         constructor={proyectoConstructor}
-        onClose={() => setShowActaModal(false)}
-        onCreated={newVisita => setVisitas(prev => [newVisita, ...prev])}
+        borradorId={editingDraft?.id ?? null}
+        borrador={editingDraft?.borrador_data ?? null}
+        onClose={() => { setShowActaModal(false); setEditingDraft(null) }}
+        onCreated={upsertVisita}
+        onDraftSaved={upsertVisita}
       />
     )}
 
@@ -694,7 +732,7 @@ function VisitasSection({
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button
-            onClick={() => { setShowActaModal(true); setShowForm(false) }}
+            onClick={() => { setEditingDraft(null); setShowActaModal(true); setShowForm(false) }}
             style={{ ...S.btnPrimary, background: '#D85A30' }}
             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#C24E28' }}
             onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '#D85A30' }}
@@ -755,7 +793,7 @@ function VisitasSection({
                 ))}
               </tr>
             </thead>
-            <tbody>{visitas.map(renderVisitaRow)}</tbody>
+            <tbody>{visitas.map(v => v.es_borrador ? renderDraftRow(v) : renderVisitaRow(v))}</tbody>
           </table>
         </div>
       ) : null}

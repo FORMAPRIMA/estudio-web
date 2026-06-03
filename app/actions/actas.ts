@@ -104,6 +104,38 @@ export interface CrearActaInput {
   generarConstructor?: boolean
   generarCliente?: boolean
   idioma?: 'es' | 'en'
+  /** If set, promote this existing draft row into the real acta instead of inserting a new one. */
+  borrador_id?: string | null
+}
+
+// ── Borrador (autosave) ─────────────────────────────────────────────────────────
+
+/** Full snapshot of the modal form, stored as JSON so the draft can repopulate it. */
+export interface BorradorVisitaData {
+  fecha: string
+  titulo: string
+  estado_obras: string
+  instrucciones: string
+  instruccionesConstructor: string
+  floorfy_url: string
+  idioma: 'es' | 'en'
+  numero_visita: number
+  generarCliente: boolean
+  generarConstructor: boolean
+  asistentes: { id: string; nombre: string; tipo: AsistenteInput['tipo'] }[]
+}
+
+export interface SaveBorradorInput {
+  borrador_id?: string | null
+  proyecto_id: string
+  fecha: string
+  titulo: string
+  /** Comma-separated attendee names, for the list preview. */
+  asistentes: string | null
+  /** Concatenated estado + instrucciones, for the list preview. */
+  notas: string | null
+  floorfy_url: string | null
+  data: BorradorVisitaData
 }
 
 // ── Translation helper (client PDF only, constructor always stays in Spanish) ──
@@ -175,7 +207,8 @@ export async function getContactosParaVisita(
       admin
         .from('visitas_obra')
         .select('id', { count: 'exact', head: true })
-        .eq('proyecto_id', proyectoId),
+        .eq('proyecto_id', proyectoId)
+        .eq('es_borrador', false),
     ])
 
     const equipo: EquipoMember[] = (equipoData ?? []).map(e => ({
@@ -358,24 +391,42 @@ export async function createActaVisita(
       data.instrucciones,
     ].join('\n')
 
-    // 7 — Insert into visitas_obra
-    const { data: row, error: insertError } = await admin
-      .from('visitas_obra')
-      .insert({
-        proyecto_id:          data.proyecto_id,
-        fecha:                data.fecha,
-        titulo:               data.titulo,
-        asistentes:           asistenteStr || null,
-        notas:                notas || null,
-        acta_url,
-        acta_constructor_url: acta_constructor_url || null,
-        floorfy_url:          data.floorfy_url || null,
-        visible_cliente:      data.visible_cliente,
-      })
-      .select('id')
-      .single()
+    // 7 — Persist into visitas_obra. If this acta came from a draft, promote that
+    //     same row (clear the draft flag/payload) instead of inserting a new one.
+    const actaFields = {
+      proyecto_id:          data.proyecto_id,
+      fecha:                data.fecha,
+      titulo:               data.titulo,
+      asistentes:           asistenteStr || null,
+      notas:                notas || null,
+      acta_url,
+      acta_constructor_url: acta_constructor_url || null,
+      floorfy_url:          data.floorfy_url || null,
+      visible_cliente:      data.visible_cliente,
+    }
 
-    if (insertError) return { error: insertError.message }
+    let row: { id: string } | null = null
+
+    if (data.borrador_id) {
+      const { data: updated, error: updateError } = await admin
+        .from('visitas_obra')
+        .update({ ...actaFields, es_borrador: false, borrador_data: null } as Record<string, unknown>)
+        .eq('id', data.borrador_id)
+        .select('id')
+        .single()
+      if (!updateError && updated) row = updated as { id: string }
+      // If the draft row vanished or the update failed, fall through to a fresh insert.
+    }
+
+    if (!row) {
+      const { data: inserted, error: insertError } = await admin
+        .from('visitas_obra')
+        .insert(actaFields)
+        .select('id')
+        .single()
+      if (insertError) return { error: insertError.message }
+      row = inserted as { id: string }
+    }
 
     // 7b — Store idioma_acta (best-effort: column may not exist yet in production)
     if (idioma !== 'es') {
@@ -396,6 +447,60 @@ export async function createActaVisita(
       floorfy_url:         data.floorfy_url || null,
       traducciones,
     }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
+// ── saveBorradorVisita ──────────────────────────────────────────────────────────
+//
+// Autosave for the acta modal. Upserts a draft row in visitas_obra so an in-progress
+// acta survives an accidental modal close. Drafts are never visible to the client
+// (visible_cliente is forced false) and are excluded from the visit numbering count.
+
+export async function saveBorradorVisita(
+  input: SaveBorradorInput
+): Promise<{ id: string } | { error: string }> {
+  try {
+    await requireAnyFP()
+    const admin = createAdminClient()
+
+    const fields = {
+      proyecto_id:     input.proyecto_id,
+      fecha:           input.fecha,
+      titulo:          input.titulo,
+      asistentes:      input.asistentes,
+      notas:           input.notas,
+      floorfy_url:     input.floorfy_url,
+      visible_cliente: false,
+      es_borrador:     true,
+      borrador_data:   input.data as unknown as Record<string, unknown>,
+    } as Record<string, unknown>
+
+    if (input.borrador_id) {
+      const { data: updated, error } = await admin
+        .from('visitas_obra')
+        .update(fields)
+        .eq('id', input.borrador_id)
+        .eq('es_borrador', true) // never overwrite an already-sent acta
+        .select('id')
+        .single()
+      if (!error && updated) {
+        revalidatePath(PATH_INTERNA)
+        return { id: (updated as { id: string }).id }
+      }
+      // Row gone or already promoted — fall through to a fresh insert.
+    }
+
+    const { data: inserted, error: insertError } = await admin
+      .from('visitas_obra')
+      .insert(fields)
+      .select('id')
+      .single()
+    if (insertError) return { error: insertError.message }
+
+    revalidatePath(PATH_INTERNA)
+    return { id: (inserted as { id: string }).id }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
   }

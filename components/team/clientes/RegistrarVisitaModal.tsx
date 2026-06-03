@@ -1,8 +1,8 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
-import { getContactosParaVisita, createActaVisita, sendActaByEmail, uploadFotoVisita } from '@/app/actions/actas'
-import type { ContactosParaVisita, AsistenteInput } from '@/app/actions/actas'
+import { getContactosParaVisita, createActaVisita, sendActaByEmail, uploadFotoVisita, saveBorradorVisita } from '@/app/actions/actas'
+import type { ContactosParaVisita, AsistenteInput, BorradorVisitaData, SaveBorradorInput } from '@/app/actions/actas'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -12,10 +12,12 @@ interface VisitaCreated {
   titulo: string | null
   asistentes: string | null
   notas: string | null
-  acta_url: string
-  acta_constructor_url: string
+  acta_url: string | null
+  acta_constructor_url: string | null
   floorfy_url: string | null
   visible_cliente: boolean
+  es_borrador?: boolean
+  borrador_data?: BorradorVisitaData | null
 }
 
 interface Props {
@@ -28,6 +30,11 @@ interface Props {
   constructor: { id: string; nombre: string } | null
   onClose: () => void
   onCreated: (visita: VisitaCreated) => void
+  /** When continuing an existing draft, its id and saved form snapshot. */
+  borradorId?: string | null
+  borrador?: BorradorVisitaData | null
+  /** Called whenever the draft is persisted (autosave or on close), so the list can update. */
+  onDraftSaved?: (visita: VisitaCreated) => void
 }
 
 type TipoAsistente = 'equipo' | 'cliente' | 'proveedor' | 'externo'
@@ -102,26 +109,28 @@ const S = {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function RegistrarVisitaModal({ proyecto, constructor: proyectoConstructor, onClose, onCreated }: Props) {
+const DEFAULT_ESTADO_OBRAS = 'Se visita la obra, en la que se están ejecutando los siguientes trabajos:\n\n'
+
+export default function RegistrarVisitaModal({ proyecto, constructor: proyectoConstructor, onClose, onCreated, borradorId, borrador, onDraftSaved }: Props) {
   const today = new Date().toISOString().split('T')[0]
 
   // Step
   const [step, setStep] = useState<'form' | 'preview'>('form')
 
-  // Form state
-  const [fecha, setFecha] = useState(today)
-  const [titulo, setTitulo] = useState(`Visita de obra — ${proyecto.nombre}`)
-  const [estadoObras, setEstadoObras] = useState('Se visita la obra, en la que se están ejecutando los siguientes trabajos:\n\n')
-  const [instrucciones, setInstrucciones] = useState('')
-  const [instruccionesConstructor, setInstruccionesConstructor] = useState('')
-  const [floorfyUrl, setFloorfyUrl] = useState('')
+  // Form state — seeded from an existing draft when continuing one
+  const [fecha, setFecha] = useState(borrador?.fecha ?? today)
+  const [titulo, setTitulo] = useState(borrador?.titulo ?? `Visita de obra — ${proyecto.nombre}`)
+  const [estadoObras, setEstadoObras] = useState(borrador?.estado_obras ?? DEFAULT_ESTADO_OBRAS)
+  const [instrucciones, setInstrucciones] = useState(borrador?.instrucciones ?? '')
+  const [instruccionesConstructor, setInstruccionesConstructor] = useState(borrador?.instruccionesConstructor ?? '')
+  const [floorfyUrl, setFloorfyUrl] = useState(borrador?.floorfy_url ?? '')
   const [aiLoadingEstado, setAiLoadingEstado] = useState(false)
   const [aiLoadingConstructor, setAiLoadingConstructor] = useState(false)
   const [aiLoadingCliente, setAiLoadingCliente] = useState(false)
-  const [generarCliente, setGenerarCliente] = useState(true)
-  const [generarConstructor, setGenerarConstructor] = useState(true)
-  const [idiomaActa, setIdiomaActa] = useState<'es' | 'en'>('es')
-  const [numeroVisita, setNumeroVisita] = useState(1)
+  const [generarCliente, setGenerarCliente] = useState(borrador?.generarCliente ?? true)
+  const [generarConstructor, setGenerarConstructor] = useState(borrador?.generarConstructor ?? true)
+  const [idiomaActa, setIdiomaActa] = useState<'es' | 'en'>(borrador?.idioma ?? 'es')
+  const [numeroVisita, setNumeroVisita] = useState(borrador?.numero_visita ?? 1)
   const [fotos, setFotos] = useState<FotoVisita[]>([])
   const fotoInputRef = useRef<HTMLInputElement>(null)
   const [activePreviewTab, setActivePreviewTab] = useState<'constructor' | 'cliente'>('constructor')
@@ -129,7 +138,7 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
   const [previewTranslating, setPreviewTranslating] = useState(false)
 
   // Asistentes
-  const [asistentesSeleccionados, setAsistentesSeleccionados] = useState<AsistenteSeleccionado[]>([])
+  const [asistentesSeleccionados, setAsistentesSeleccionados] = useState<AsistenteSeleccionado[]>(borrador?.asistentes ?? [])
   const [busquedaAsistente, setBusquedaAsistente] = useState('')
   const [showDropdown, setShowDropdown] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -151,14 +160,15 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
     getContactosParaVisita(proyecto.id).then(res => {
       if (!('error' in res)) {
         setContacts(res)
-        setNumeroVisita(res.proximoNumeroVisita)
+        // Keep the draft's own number/attendees when continuing one
+        if (!borrador) setNumeroVisita(res.proximoNumeroVisita)
       }
     })
-  }, [proyecto.id])
+  }, [proyecto.id, borrador])
 
-  // Auto-add Gabriela Hidalgo as default attendee
+  // Auto-add Gabriela Hidalgo as default attendee (skip when continuing a draft)
   useEffect(() => {
-    if (!contacts) return
+    if (!contacts || borrador) return
     const gabriela = contacts.equipo.find(e =>
       `${e.nombre}${e.apellido ? ' ' + e.apellido : ''}`.toLowerCase().includes('gabriela')
     )
@@ -258,6 +268,87 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
     setAsistentesSeleccionados(prev => prev.filter(a => a.id !== id))
   }
 
+  // ── Draft autosave ──────────────────────────────────────────────────────────
+
+  const draftIdRef = useRef<string | null>(borradorId ?? null)
+  const promotedRef = useRef(false) // true once the acta is generated — stop autosaving
+  const [draftStatus, setDraftStatus] = useState<'idle' | 'saving' | 'saved'>(borradorId ? 'saved' : 'idle')
+
+  // Only persist a draft once there's real content (avoid empty draft rows)
+  const hasDraftContent = (): boolean =>
+    instrucciones.trim() !== '' ||
+    instruccionesConstructor.trim() !== '' ||
+    estadoObras.trim() !== DEFAULT_ESTADO_OBRAS.trim() ||
+    floorfyUrl.trim() !== '' ||
+    asistentesSeleccionados.length > 1
+
+  const buildBorradorPayload = (): SaveBorradorInput => {
+    const asistenteStr = asistentesSeleccionados.map(a => a.nombre).join(', ')
+    const notas = ['ESTADO DE OBRAS', estadoObras, '', 'INSTRUCCIONES', instrucciones].join('\n')
+    return {
+      borrador_id: draftIdRef.current,
+      proyecto_id: proyecto.id,
+      fecha,
+      titulo,
+      asistentes: asistenteStr || null,
+      notas: notas || null,
+      floorfy_url: floorfyUrl.trim() || null,
+      data: {
+        fecha, titulo, estado_obras: estadoObras, instrucciones, instruccionesConstructor,
+        floorfy_url: floorfyUrl, idioma: idiomaActa, numero_visita: numeroVisita,
+        generarCliente, generarConstructor,
+        asistentes: asistentesSeleccionados.map(a => ({ id: a.id, nombre: a.nombre, tipo: a.tipo })),
+      },
+    }
+  }
+
+  const buildDraftRow = (id: string): VisitaCreated => {
+    const payload = buildBorradorPayload()
+    return {
+      id,
+      fecha,
+      titulo: titulo || null,
+      asistentes: payload.asistentes,
+      notas: payload.notas,
+      acta_url: null,
+      acta_constructor_url: null,
+      floorfy_url: floorfyUrl.trim() || null,
+      visible_cliente: false,
+      es_borrador: true,
+      borrador_data: payload.data,
+    }
+  }
+
+  // Debounced autosave while editing the form
+  useEffect(() => {
+    if (step !== 'form' || promotedRef.current || !hasDraftContent()) return
+    const t = setTimeout(async () => {
+      if (promotedRef.current) return // acta was generated meanwhile — don't resurrect the draft
+      setDraftStatus('saving')
+      const res = await saveBorradorVisita(buildBorradorPayload())
+      if (promotedRef.current) return // promoted while saving
+      if ('id' in res) {
+        draftIdRef.current = res.id
+        setDraftStatus('saved')
+        onDraftSaved?.(buildDraftRow(res.id))
+      } else {
+        setDraftStatus('idle')
+      }
+    }, 1500)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, fecha, titulo, estadoObras, instrucciones, instruccionesConstructor, floorfyUrl, idiomaActa, numeroVisita, generarCliente, generarConstructor, asistentesSeleccionados])
+
+  // Flush a final save when the modal is closed by accident (click outside / ×)
+  const handleClose = () => {
+    if (step === 'form' && !promotedRef.current && hasDraftContent()) {
+      saveBorradorVisita(buildBorradorPayload()).then(res => {
+        if ('id' in res) onDraftSaved?.(buildDraftRow(res.id))
+      })
+    }
+    onClose()
+  }
+
   // ── Build email recipient lists (built independently in the preview handler) ──
 
   // ── Save ──────────────────────────────────────────────────────────────────
@@ -265,6 +356,7 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
   const handleGuardar = async () => {
     setSaving(true)
     setError(null)
+    promotedRef.current = true // stop autosave: this draft becomes a real acta
 
     const asistentesInput: AsistenteInput[] = asistentesSeleccionados.map(a => ({
       nombre: a.nombre,
@@ -279,7 +371,7 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
       fd.append('foto', foto.file)
       fd.append('proyecto_id', proyecto.id)
       const r = await uploadFotoVisita(fd)
-      if ('error' in r) { setSaving(false); setError(r.error); return }
+      if ('error' in r) { setSaving(false); setError(r.error); promotedRef.current = false; return }
       if (foto.destino === 'constructor' || foto.destino === 'ambos') fotoConstructorUrls.push(r.url)
       if (foto.destino === 'cliente'     || foto.destino === 'ambos') fotoClienteUrls.push(r.url)
     }
@@ -304,11 +396,13 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
       fotos_constructor:  fotoConstructorUrls,
       fotos_cliente:      fotoClienteUrls,
       idioma:             idiomaActa,
+      borrador_id:        draftIdRef.current,
     })
 
     if (!res || 'error' in res) {
       setSaving(false)
       setError(res?.error ?? 'Error inesperado al generar el acta.')
+      promotedRef.current = false
       return
     }
 
@@ -390,7 +484,7 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: '20px',
       }}
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      onClick={e => { if (e.target === e.currentTarget) handleClose() }}
     >
       <div style={{
         background: '#fff',
@@ -417,14 +511,21 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
                     {proyecto.codigo && <span style={{ marginLeft: 6, color: '#CCC', fontFamily: 'monospace' }}>{proyecto.codigo}</span>}
                   </p>
                 </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+                  {draftStatus !== 'idle' && (
+                    <span style={{ fontSize: 11, color: draftStatus === 'saving' ? '#AAA' : '#1D9E75', display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
+                      {draftStatus === 'saving' ? '○ Guardando borrador…' : '● Borrador guardado'}
+                    </span>
+                  )}
                 <button
-                  onClick={onClose}
+                  onClick={handleClose}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: '#CCC', lineHeight: 1, padding: '2px 4px', flexShrink: 0 }}
                   onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#1A1A1A' }}
                   onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#CCC' }}
                 >
                   ×
                 </button>
+                </div>
               </div>
             </div>
 
@@ -927,7 +1028,7 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
 
             {/* Footer */}
             <div style={{ padding: '16px 28px', borderTop: '1px solid #E8E6E0', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-              <button onClick={onClose} style={S.btnGhost}>Cancelar</button>
+              <button onClick={handleClose} style={S.btnGhost}>Cancelar</button>
               <button
                 onClick={() => {
                   if (!contacts) return
