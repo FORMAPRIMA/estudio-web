@@ -83,8 +83,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Proyecto no encontrado.' }, { status: 404 })
     }
 
-    // Fetch portal_pin separately — graceful fallback if column doesn't exist yet
-    let correctPin = '0000'
+    // Fetch portal_pin separately — graceful fallback if column doesn't exist yet.
+    // Default PIN for projects without a custom portal_pin set (temporary, uniform).
+    let correctPin = '4444'
     try {
       const { data: pinRow } = await admin
         .from('proyectos')
