@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
 
   const message = await client.messages.create({
     model: 'claude-haiku-4-5-20251001',
-    max_tokens: 1024,
+    max_tokens: 8192,
     system: isEstado
       ? `Eres el corrector de textos de Forma Prima, un estudio de arquitectura e interiorismo.
 Recibirás el contenido de un campo "Estado de obras" de un acta de visita. Puede ser una lista de capítulos (Fontanería, Electricidad…) o texto ya redactado.

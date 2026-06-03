@@ -151,7 +151,7 @@ async function traducirActaCliente(contenido: ContenidoTraducible): Promise<Cont
     const anthropic = new Anthropic()
     const message = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 2048,
+      max_tokens: 8192,
       system: `You are a professional translator for Forma Prima, an architecture studio.
 Translate construction site visit report content from Spanish to English.
 Maintain a professional, formal, technical tone.
