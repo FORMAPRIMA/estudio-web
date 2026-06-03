@@ -8,7 +8,6 @@ import ClientPortal from '@/components/portal/ClientPortal'
 import { loadPortalData } from '@/lib/portal/load'
 
 const SECRET = process.env.PORTAL_SECRET ?? 'fp-portal-secret-2024'
-const TEAM_ROLES = ['fp_partner', 'fp_manager', 'fp_team']
 
 function verifyToken(proyectoId: string, token: string): boolean {
   const expected = createHmac('sha256', SECRET).update(proyectoId).digest('hex')
@@ -19,23 +18,24 @@ export default async function PortalPage({ params }: { params: { id: string } })
   const { id } = params
   const admin = createAdminClient()
 
-  // Team members (logged-in staff) bypass the client gate
+  // Resolve the viewer's role only to tailor what the portal shows (e.g. hide
+  // "Documentos" for fp_team). Staff do NOT bypass the PIN: everyone — including
+  // logged-in employees — must enter the access PIN to view the client portal.
+  // For an internal preview without the PIN, use /team/clientes/plataforma/externa.
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  let isTeamMember = false
   let viewerRol: string | null = null
   if (user) {
     const { data: profile } = await supabase
       .from('profiles').select('rol').eq('id', user.id).single()
     viewerRol = profile?.rol ?? null
-    isTeamMember = TEAM_ROLES.includes(viewerRol ?? '')
   }
 
-  // Check access cookie (for actual clients)
+  // Access is gated solely by the per-project PIN (stored as a verified cookie)
   const cookieName = `fp_portal_${id.replace(/-/g, '').slice(0, 12)}`
   const cookieStore = await cookies()
   const token = cookieStore.get(cookieName)?.value
-  const isVerified = isTeamMember || (token ? verifyToken(id, token) : false)
+  const isVerified = token ? verifyToken(id, token) : false
 
   // Always fetch proyecto basics (for gate display)
   const { data: proyectoBasic } = await admin
