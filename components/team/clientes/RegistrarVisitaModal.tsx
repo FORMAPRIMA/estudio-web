@@ -107,6 +107,14 @@ const S = {
   btnDark:    { padding: '9px 20px', background: '#1A1A1A', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 as const },
 }
 
+// "Revert to manual text" button shown after an AI conversion
+const S_UNDO_BTN: React.CSSProperties = {
+  fontSize: 10, fontWeight: 600, padding: '4px 10px',
+  background: '#FBEFD8', color: '#C9871F',
+  border: '1px solid #F3E2C2', borderRadius: 4, cursor: 'pointer',
+  letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 5,
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 const DEFAULT_ESTADO_OBRAS = 'Se visita la obra, en la que se están ejecutando los siguientes trabajos:\n\n'
@@ -127,6 +135,10 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
   const [aiLoadingEstado, setAiLoadingEstado] = useState(false)
   const [aiLoadingConstructor, setAiLoadingConstructor] = useState(false)
   const [aiLoadingCliente, setAiLoadingCliente] = useState(false)
+  // Snapshot of the manual text just before an AI conversion, to allow reverting
+  const [estadoPrevAI, setEstadoPrevAI] = useState<string | null>(null)
+  const [constructorPrevAI, setConstructorPrevAI] = useState<string | null>(null)
+  const [clientePrevAI, setClientePrevAI] = useState<string | null>(null)
   const [generarCliente, setGenerarCliente] = useState(borrador?.generarCliente ?? true)
   const [generarConstructor, setGenerarConstructor] = useState(borrador?.generarConstructor ?? true)
   const [idiomaActa, setIdiomaActa] = useState<'es' | 'en'>(borrador?.idioma ?? 'es')
@@ -697,10 +709,17 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
                       (Describe qué capítulos se están ejecutando)
                     </span>
                   </label>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                  {estadoPrevAI !== null && !aiLoadingEstado && (
+                    <button type="button" onClick={() => { setEstadoObras(estadoPrevAI); setEstadoPrevAI(null) }} style={S_UNDO_BTN}>
+                      ↶ Volver al original
+                    </button>
+                  )}
                   <button
                     type="button"
                     disabled={aiLoadingEstado || !estadoObras.trim()}
                     onClick={async () => {
+                      const original = estadoObras
                       setAiLoadingEstado(true)
                       try {
                         const res = await fetch('/api/profesionalizar-instrucciones', {
@@ -709,7 +728,7 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
                           body: JSON.stringify({ notas: estadoObras, modo: 'estado' }),
                         })
                         const data = await res.json() as { texto?: string; error?: string }
-                        if (data.texto) setEstadoObras(data.texto)
+                        if (data.texto) { setEstadoPrevAI(original); setEstadoObras(data.texto) }
                       } finally {
                         setAiLoadingEstado(false)
                       }
@@ -733,6 +752,7 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
                       <>✦ Desarrollar con IA</>
                     )}
                   </button>
+                  </div>
                 </div>
                 <textarea
                   rows={4}
@@ -766,10 +786,16 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
                     >
                       ↻ Renumerar
                     </button>
+                    {constructorPrevAI !== null && !aiLoadingConstructor && (
+                      <button type="button" onClick={() => { setInstruccionesConstructor(constructorPrevAI); setConstructorPrevAI(null) }} style={S_UNDO_BTN}>
+                        ↶ Volver al original
+                      </button>
+                    )}
                     <button
                       type="button"
                       disabled={aiLoadingConstructor || !instruccionesConstructor.trim()}
                       onClick={async () => {
+                        const original = instruccionesConstructor
                         setAiLoadingConstructor(true)
                         try {
                           const res = await fetch('/api/profesionalizar-instrucciones', {
@@ -778,7 +804,7 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
                             body: JSON.stringify({ notas: instruccionesConstructor }),
                           })
                           const data = await res.json() as { texto?: string; error?: string }
-                          if (data.texto) setInstruccionesConstructor(data.texto)
+                          if (data.texto) { setConstructorPrevAI(original); setInstruccionesConstructor(data.texto) }
                         } finally {
                           setAiLoadingConstructor(false)
                         }
@@ -832,10 +858,16 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
                     >
                       ↻ Renumerar
                     </button>
+                    {clientePrevAI !== null && !aiLoadingCliente && (
+                      <button type="button" onClick={() => { setInstrucciones(clientePrevAI); setClientePrevAI(null) }} style={S_UNDO_BTN}>
+                        ↶ Volver al original
+                      </button>
+                    )}
                     <button
                       type="button"
                       disabled={aiLoadingCliente || !instruccionesConstructor.trim()}
                       onClick={async () => {
+                        const original = instrucciones
                         setAiLoadingCliente(true)
                         try {
                           const res = await fetch('/api/profesionalizar-instrucciones', {
@@ -844,7 +876,7 @@ export default function RegistrarVisitaModal({ proyecto, constructor: proyectoCo
                             body: JSON.stringify({ notas: instruccionesConstructor, modo: 'cliente' }),
                           })
                           const data = await res.json() as { texto?: string; error?: string }
-                          if (data.texto) setInstrucciones(data.texto)
+                          if (data.texto) { setClientePrevAI(original); setInstrucciones(data.texto) }
                         } finally {
                           setAiLoadingCliente(false)
                         }
