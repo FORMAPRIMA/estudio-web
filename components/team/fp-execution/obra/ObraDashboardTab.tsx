@@ -1,9 +1,10 @@
 'use client'
 
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { ObraBaselineSnapshot, ObraPhase, ObraMilestone } from '@/lib/fp-execution/obra'
 import ObraGantt from '@/components/team/fp-execution/obra/ObraGantt'
+import ObraPhasesTimeline from '@/components/team/fp-execution/obra/ObraPhasesTimeline'
 import ObraPhaseEditor from '@/components/team/fp-execution/obra/ObraPhaseEditor'
 import { setObraFechaInicio, marcarObraIniciada, revertirObraIniciada } from '@/app/actions/fpe-obra'
 
@@ -34,6 +35,25 @@ export default function ObraDashboardTab({
   const [rowH, setRowH]                   = useState(30)
   const [containerH, setContainerH]       = useState(560)
   const [editingPhaseId, setEditingPhaseId] = useState<string | null>(null)
+  const [ganttFullscreen, setGanttFullscreen] = useState(false)
+  const [viewportH, setViewportH]         = useState(typeof window !== 'undefined' ? window.innerHeight : 900)
+
+  // Fullscreen: cierre con Esc + bloqueo de scroll del body + tracking del viewport.
+  useEffect(() => {
+    if (!ganttFullscreen) return
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setGanttFullscreen(false) }
+    const onResize = () => setViewportH(window.innerHeight)
+    onResize()
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('resize', onResize)
+    return () => {
+      document.body.style.overflow = prevOverflow
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('resize', onResize)
+    }
+  }, [ganttFullscreen])
 
   // Fecha de inicio (editable)
   const [fechaInput, setFechaInput] = useState<string>(obraFechaInicio ?? '')
@@ -254,8 +274,26 @@ export default function ObraDashboardTab({
         <ZoomSlider label="Aire vertical"        hint={`${rowH}px/fila`} min={26} max={60} step={2} value={rowH}  onChange={setRowH} />
         <ZoomSlider label="Alto del Gantt"       hint={`${containerH}px`} min={360} max={1000} step={20} value={containerH} onChange={setContainerH} />
 
-        <div style={{ marginLeft: 'auto', fontSize: 10, color: '#AAA' }}>
-          Plataforma activada el {new Date(obraStartedAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 10, color: '#AAA' }}>
+            Plataforma activada el {new Date(obraStartedAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+          </span>
+          <button
+            type="button"
+            onClick={() => setGanttFullscreen(true)}
+            style={{
+              background: '#fff',
+              border: '1px solid #E8E6E0',
+              borderRadius: 6,
+              padding: '8px 14px',
+              fontSize: 12, fontWeight: 600, color: '#1A1A1A',
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+            }}
+            title="Ver el Gantt a pantalla completa (Esc para salir)"
+          >
+            ⛶ Pantalla completa
+          </button>
         </div>
       </div>
 
@@ -272,6 +310,80 @@ export default function ObraDashboardTab({
         containerMaxH={containerH}
         onPhaseClick={setEditingPhaseId}
       />
+
+      {/* ── Lista cronológica (espejo del Gantt) ── */}
+      <ObraPhasesTimeline
+        phases={phases}
+        milestones={milestones}
+        chapterNames={chapterNames}
+        partnerNames={partnerNames}
+        onPhaseClick={setEditingPhaseId}
+      />
+
+      {/* Overlay fullscreen del Gantt */}
+      {ganttFullscreen && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: '#fff',
+          display: 'flex', flexDirection: 'column',
+        }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '12px 20px',
+            borderBottom: '1px solid #E8E6E0',
+            background: '#FAFAF8',
+            flexShrink: 0,
+            gap: 16, flexWrap: 'wrap',
+          }}>
+            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA' }}>
+              Cronograma de obra · pantalla completa
+            </span>
+            <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: '#666', userSelect: 'none' }}>
+                <input
+                  type="checkbox"
+                  checked={shadowVisible}
+                  onChange={e => setShadowVisible(e.target.checked)}
+                  style={{ marginRight: 6, accentColor: '#D85A30' }}
+                />
+                Mostrar plan original
+              </label>
+              <ZoomSlider label="Densidad"      hint={`${dayPx}px/día`} min={2} max={24} step={1} value={dayPx} onChange={setDayPx} />
+              <ZoomSlider label="Aire vertical" hint={`${rowH}px/fila`} min={26} max={60} step={2} value={rowH}  onChange={setRowH} />
+              <button
+                type="button"
+                onClick={() => setGanttFullscreen(false)}
+                style={{
+                  background: '#fff',
+                  border: '1px solid #E8E6E0',
+                  borderRadius: 6,
+                  padding: '8px 14px',
+                  fontSize: 12, fontWeight: 600, color: '#1A1A1A',
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                }}
+                title="Cerrar (Esc)"
+              >
+                ✕ Cerrar
+              </button>
+            </div>
+          </div>
+          <div style={{ flex: 1, minHeight: 0, padding: 16, overflow: 'hidden' }}>
+            <ObraGantt
+              phases={phases}
+              milestones={milestones}
+              chapterNames={chapterNames}
+              partnerNames={partnerNames}
+              baselineSnapshot={baselineSnapshot}
+              shadowVisible={shadowVisible}
+              dayPx={dayPx}
+              rowH={rowH}
+              containerMaxH={Math.max(360, viewportH - 110)}
+              onPhaseClick={(id) => { setGanttFullscreen(false); setEditingPhaseId(id) }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Editor */}
       {editingPhase && (

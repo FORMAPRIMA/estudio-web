@@ -9,8 +9,8 @@ import { revalidatePath } from 'next/cache'
 import type { Etapa } from '@/lib/espacio/theme'
 import { sendEmail, wrapEmail } from '@/lib/email'
 import { getPlantillaServicios } from '@/app/actions/plantillaPropuestas'
-import { buildPropuestaVM, type PropuestaVM, type PropuestaRowLike } from '@/lib/propuestas/build'
-import type { ServicioId } from '@/lib/propuestas/config'
+import { buildPropuestaVM, mapInteriorismoRatios, type PropuestaVM, type PropuestaRowLike } from '@/lib/propuestas/build'
+import { buildContratoFromPropuesta } from '@/lib/contratos/buildFromPropuesta'
 
 // Roles que gestionan captación (igual que leads/propuestas).
 const CAPTACION_ROLES = ['fp_partner', 'fp_manager', 'fp_biz_dev']
@@ -368,11 +368,7 @@ export async function getEspacioPropuesta(
         .eq('seccion', 'Interiorismo')
         .order('orden'),
     ])
-    const ratios = (ratiosFases ?? []).map(r => ({
-      label:    r.label as string,
-      servicio: 'interiorismo' as ServicioId,
-      ratio:    (r.ratio as number) ?? 0,
-    }))
+    const ratios = mapInteriorismoRatios(ratiosFases ?? [])
 
     const vm = buildPropuestaVM(propuesta as unknown as PropuestaRowLike, serviciosPlantilla, ratios)
     // Propuesta sin servicios = aún no está lista para mostrar al cliente.
@@ -482,11 +478,42 @@ export async function submitFormalizacion(
       .eq('id', espacio.lead_id)
 
     await registrarEventoEspacio(token, 'datos_completados', { tipo: data.tipo_facturacion })
+
+    // Al recibir los datos fiscales generamos automáticamente el contrato en
+    // BORRADOR desde la propuesta aceptada y avanzamos el Espacio a 'contrato'.
+    // No se envía solo: el equipo lo revisa y lo envía desde el tablero de Leads.
+    let contratoGenerado = false
+    try {
+      const [{ data: propuesta }, { data: contratoExistente }] = await Promise.all([
+        admin.from('propuestas').select('id')
+          .eq('lead_id', espacio.lead_id)
+          .in('status', ['aceptada', 'enviada'])
+          .order('created_at', { ascending: false }).limit(1).maybeSingle(),
+        admin.from('contratos').select('id').eq('lead_id', espacio.lead_id).limit(1).maybeSingle(),
+      ])
+      if (propuesta && !contratoExistente) {
+        const tipoCliente = data.tipo_facturacion === 'empresa' ? 'juridica' : 'fisica'
+        const res = await buildContratoFromPropuesta(admin, propuesta.id as string, tipoCliente, null)
+        if (!('error' in res)) {
+          contratoGenerado = true
+          const now = new Date().toISOString()
+          await admin.from('espacios')
+            .update({ etapa: 'contrato', etapa_contrato_at: now, updated_at: now })
+            .eq('id', espacio.id)
+        }
+      }
+    } catch (e) {
+      console.error('[submitFormalizacion] auto-contrato', e)
+    }
+
     await crearAvisoEspacio(
       `Datos de firmante recibidos — ${espacio.nombre}`,
-      `${espacio.nombre} ha completado sus datos de formalización. Ya puedes renderizar el contrato.`,
+      contratoGenerado
+        ? `${espacio.nombre} ha completado sus datos de formalización. El contrato se ha generado en borrador: revísalo y envíalo desde Captación › Leads.`
+        : `${espacio.nombre} ha completado sus datos de formalización. Ya puedes preparar el contrato.`,
     )
     revalidatePath('/team/captacion/leads')
+    revalidatePath('/team/captacion/contratos')
     return { success: true }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }

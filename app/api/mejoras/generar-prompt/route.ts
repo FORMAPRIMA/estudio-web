@@ -90,6 +90,7 @@ por el equipo y generar un prompt preciso y accionable para un asistente de IA d
 - Siempre comprobar el error del insert/update: const { error } = await admin.from(...).insert(...); if (error) return { error: error.message }
 - revalidatePath() tras mutaciones
 - Joins anidados de Supabase pueden fallar con tablas nuevas; usar queries separadas con .in('id', ids)
+- Tablas nuevas (desde 30 oct 2026): no quedan expuestas a la Data API por defecto. service_role (createAdminClient) no se afecta; si la tabla se usa desde cliente (anon/authenticated) añadir GRANT explícito al crearla
 - Storage upload desde cliente: createClient() browser + supabase.storage.from(bucket).upload()
 - PDF: await import('@react-pdf/renderer') en API route (nunca import estático)
 - Email: sendEmail() + wrapEmail() de lib/email.ts

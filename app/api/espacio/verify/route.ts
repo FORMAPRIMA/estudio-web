@@ -3,6 +3,9 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import {
   generateEspacioCookieToken,
   espacioCookieName,
+  generatePresentationCookieToken,
+  presentationCookieName,
+  isMasterPin,
   hashPin,
   verifyPinHash,
 } from '@/lib/espacio/access'
@@ -62,6 +65,23 @@ export async function POST(req: NextRequest) {
 
     if (!espacio) {
       return NextResponse.json({ error: 'Espacio no encontrado.' }, { status: 404 })
+    }
+
+    // ── PIN maestro de administración (modo presentación) ────────────────────
+    // Se comprueba ANTES de la lógica de PIN del cliente, para que tecleando el
+    // maestro nunca quede fijado como PIN del cliente. Setea una cookie de
+    // presentación atada a este Espacio: el portal se abre como lo ve el cliente
+    // pero la visita NO se contabiliza. No toca pin_hash.
+    if (isMasterPin(pin)) {
+      const res = NextResponse.json({ success: true, presentation: true })
+      res.cookies.set(presentationCookieName(token), generatePresentationCookieToken(token), {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 60 * 60 * 24 * 7, // 7 días (contexto de reunión / preparación)
+      })
+      return res
     }
 
     const storedHash = (espacio as { pin_hash: string | null }).pin_hash

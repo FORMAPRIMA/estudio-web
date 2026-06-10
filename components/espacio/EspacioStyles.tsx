@@ -120,6 +120,48 @@ export default function EspacioStyles() {
         to   { opacity: 1; transform: translateY(0); }
       }
       .fp-hero-label { animation: fadeSlideUp 0.6s ease forwards; }
+
+      /* ── Cronograma (Gantt) ─────────────────────────────────────────────── */
+      .fp-gantt-row {
+        display: grid;
+        grid-template-columns: minmax(0, 200px) 1fr;
+        align-items: center;
+        gap: 16px;
+      }
+      .fp-gantt-label { display: flex; flex-direction: column; gap: 2px; }
+      .fp-gantt-track {
+        position: relative;
+        height: 26px;
+        background: #F6F4EF;
+        border-radius: 6px;
+        overflow: hidden;
+      }
+      .fp-gantt-bar {
+        position: absolute;
+        top: 4px;
+        bottom: 4px;
+        min-width: 6px;
+        border-radius: 5px;
+        animation: fadeSlideUp 0.5s ease both;
+      }
+      /* Fases sin duración definida: relleno difuminado + brillo en movimiento que
+         transmite "aún por concretar". */
+      .fp-gantt-bar-open {
+        background:
+          linear-gradient(90deg,
+            var(--bar-color) 0%,
+            color-mix(in srgb, var(--bar-color) 55%, transparent) 55%,
+            color-mix(in srgb, var(--bar-color) 8%, transparent) 100%);
+        background-size: 200% 100%;
+        animation: fadeSlideUp 0.5s ease both, ganttShimmer 2.6s ease-in-out infinite;
+      }
+      @keyframes ganttShimmer {
+        0%, 100% { background-position: 0% 0; opacity: 0.85; }
+        50%      { background-position: 60% 0; opacity: 1; }
+      }
+      @media (max-width: 560px) {
+        .fp-gantt-row { grid-template-columns: 1fr; gap: 6px; }
+      }
     `}</style>
   )
 }

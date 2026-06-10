@@ -377,7 +377,9 @@ export function PropuestaPDF({ data }: { data: PropuestaPDFData }) {
   for (const [sid, amount] of Object.entries(data.honorarios_override)) {
     breakdown[sid] = amount
   }
-  const total = Object.values(breakdown).reduce((s, v) => s + v, 0)
+  // Solo servicios ofertados (mismo criterio que el portal y el editor): un override
+  // de un servicio deseleccionado no infla el total.
+  const total = sortedServicios.reduce((s, sid) => s + (breakdown[sid] ?? 0), 0)
 
   const clientName = data.lead
     ? [data.lead.nombre, data.lead.apellidos].filter(Boolean).join(' ') + (data.lead.empresa ? ` · ${data.lead.empresa}` : '')

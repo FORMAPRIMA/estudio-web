@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { submitBienvenidaForm } from '@/app/actions/bienvenida'
 
 export type BienvenidaSubmit = (
   token: string,
@@ -29,9 +28,9 @@ interface Props {
     fundacion: string
     socios: { nombre: string; titulo: string; bio: string }[]
   }
-  // Acción de envío del formulario. Por defecto crea un lead suelto; el Espacio
-  // pasa una variante que además vincula el lead a su espacio.
-  submitAction?: BienvenidaSubmit
+  // Acción de envío del formulario (el Espacio pasa la variante que vincula el
+  // lead a su espacio). Obligatoria desde la retirada del flujo legacy /bienvenida.
+  submitAction: BienvenidaSubmit
   // Idioma de la landing. Por defecto inglés (compatibilidad con el flujo legacy).
   lang?: 'es' | 'en'
 }
@@ -169,8 +168,7 @@ export default function BienvenidaPage({ nombreCliente, token, heroImage, proyec
     if (!nombre.trim() || !email.trim()) return
     setSubmitting(true)
     setFormError(null)
-    const action = submitAction ?? submitBienvenidaForm
-    const result = await action(token, {
+    const result = await submitAction(token, {
       nombre: nombre.trim(),
       apellidos: apellidos.trim(),
       email: email.trim(),

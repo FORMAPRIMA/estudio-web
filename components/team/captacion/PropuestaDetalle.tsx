@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { updatePropuesta } from '@/app/actions/propuestas'
 import { SERVICIOS_CONFIG, SERVICIO_IDS, calcPropuesta, fmtEur, PRECIO_HORA } from '@/lib/propuestas/config'
 import type { ServicioId, ServicioEntry } from '@/lib/propuestas/config'
+import { mapInteriorismoRatios, buildPropuestaVM } from '@/lib/propuestas/build'
 import type { PropuestaPDFData } from '@/components/pdfs/PropuestaPDF'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -162,16 +163,9 @@ export default function PropuestaDetalle({
   const currentContacto = contactos.find(c => c.id === contactoId) ?? null
 
   // ── Live calculation ──────────────────────────────────────────────────────
-  // Solo fases de Interiorismo para calcPropuesta (ratio-based honorario)
-  const ratios = ratiosFases
-    .filter(r => (r.seccion ?? '').toLowerCase().includes('interiorismo'))
-    .map(r => ({
-      label:    r.label,
-      servicio: ((r.label ?? '').toLowerCase().includes('gesti')
-        ? 'gestion_interiorismo'
-        : 'interiorismo') as ServicioId,
-      ratio:    r.ratio ?? 0,
-    }))
+  // Fuente única compartida con el portal del cliente y el PDF (mapInteriorismoRatios),
+  // para que los importes que ve el equipo y los que ve el cliente coincidan SIEMPRE.
+  const ratios = mapInteriorismoRatios(ratiosFases)
 
   // Horas estimadas por servicio: suma de ratios h/m² de sus fases × m²
   const horasEstimadas = useMemo(() => {
@@ -297,32 +291,51 @@ export default function PropuestaDetalle({
   const effectiveTotal = servicios.reduce((s, sid) => s + effectiveAmount(sid), 0)
 
   // ── Save ──────────────────────────────────────────────────────────────────
+  // Duración EFECTIVA por servicio: la manual si existe, si no la auto-calculada en
+  // días hábiles. Se persiste así porque el servidor (PDF enviado y portal del
+  // cliente) no puede recalcular los días: dependen de personasPorServicio, que solo
+  // vive en el editor. Sin esto, el portal caía al default estático de config
+  // (p.ej. "6–8 semanas"), descuadrando con lo que ve el equipo y el PDF.
+  function resolveSemanas(): Record<string, string> {
+    const out: Record<string, string> = { ...semanas }
+    for (const sid of servicios) {
+      if (out[sid] === undefined && diasCalcPorServicio[sid]) {
+        out[sid] = `${diasCalcPorServicio[sid]} días hábiles`
+      }
+    }
+    return out
+  }
+
+  function buildUpdatePayload() {
+    // Convert override strings to numbers, drop empty entries
+    const overrideNums: Record<string, number> = {}
+    for (const [k, v] of Object.entries(honorariosOverride)) {
+      if (v !== '') overrideNums[k] = parseFloat(v) || 0
+    }
+    return {
+      lead_id:             contactoSource === 'lead'    ? contactoId : null,
+      cliente_id:          contactoSource === 'cliente' ? contactoId : null,
+      titulo:              titulo || null,
+      direccion:           direccion || null,
+      fecha_propuesta:     fecha || undefined,
+      m2_diseno:           parseFloat(m2) || null,
+      costo_m2_objetivo:   parseFloat(costoM2) || null,
+      porcentaje_pem:      parseFloat(pctPem) || 10,
+      servicios,
+      pct_junior:          parseFloat(pctJunior) || 70,
+      pct_senior:          parseFloat(pctSenior) || 0,
+      pct_partner:         parseFloat(pctPartner) || 30,
+      semanas:             resolveSemanas(),
+      notas:               notas || null,
+      status,
+      honorarios_override: overrideNums,
+      entregables_override: entregablesOverride,
+    }
+  }
+
   function handleSave() {
     startSave(async () => {
-      // Convert override strings to numbers, drop empty entries
-      const overrideNums: Record<string, number> = {}
-      for (const [k, v] of Object.entries(honorariosOverride)) {
-        if (v !== '') overrideNums[k] = parseFloat(v) || 0
-      }
-      await updatePropuesta(initial.id, {
-        lead_id:             contactoSource === 'lead'    ? contactoId : null,
-        cliente_id:          contactoSource === 'cliente' ? contactoId : null,
-        titulo:              titulo || null,
-        direccion:           direccion || null,
-        fecha_propuesta:     fecha || undefined,
-        m2_diseno:           parseFloat(m2) || null,
-        costo_m2_objetivo:   parseFloat(costoM2) || null,
-        porcentaje_pem:      parseFloat(pctPem) || 10,
-        servicios,
-        pct_junior:          parseFloat(pctJunior) || 70,
-        pct_senior:          parseFloat(pctSenior) || 0,
-        pct_partner:         parseFloat(pctPartner) || 30,
-        semanas,
-        notas:               notas || null,
-        status,
-        honorarios_override: overrideNums,
-        entregables_override: entregablesOverride,
-      })
+      await updatePropuesta(initial.id, buildUpdatePayload())
       router.refresh()
     })
   }
@@ -347,11 +360,48 @@ export default function PropuestaDetalle({
       setSendError('El contacto no tiene email registrado.')
       return
     }
+    if (servicios.length === 0) {
+      setSendError('La propuesta no tiene servicios; complétala antes de enviar.')
+      return
+    }
+    // Filtro de verificación: el total que ve el equipo DEBE coincidir con el que
+    // verá el cliente en su portal (ambos derivados de buildPropuestaVM). Si no
+    // cuadran, no se envía nada.
+    const clientVM = buildPropuestaVM(
+      {
+        numero:              initial.numero,
+        titulo:              titulo || null,
+        fecha_propuesta:     fecha || null,
+        notas:               notas || null,
+        servicios,
+        m2_diseno:           parseFloat(m2) || null,
+        costo_m2_objetivo:   parseFloat(costoM2) || null,
+        porcentaje_pem:      parseFloat(pctPem) || 10,
+        pct_junior:          parseFloat(pctJunior) || 70,
+        pct_senior:          parseFloat(pctSenior) || 0,
+        pct_partner:         parseFloat(pctPartner) || 30,
+        semanas,
+        honorarios_override: Object.fromEntries(
+          Object.entries(honorariosOverride)
+            .filter(([, v]) => v !== '')
+            .map(([k, v]) => [k, parseFloat(v) || 0])
+        ),
+      },
+      serviciosPlantilla,
+      ratios,
+    )
+    if (Math.round(clientVM.total) !== Math.round(effectiveTotal)) {
+      setSendError('El total que vería el cliente no coincide con el del editor; no se ha enviado. Guarda y vuelve a intentarlo o avisa a soporte.')
+      return
+    }
     if (!confirm(`¿Enviar propuesta ${initial.numero} a ${currentContacto.email}?`)) return
     setSendError(null)
     setSendOk(false)
     setIsSending(true)
     try {
+      // Guardar el estado en pantalla antes de enviar: el endpoint manda lo que
+      // hay en BD, no el estado del editor.
+      await updatePropuesta(initial.id, buildUpdatePayload())
       const res = await fetch(`/api/propuestas/${initial.id}/enviar`, { method: 'POST' })
       const json = await res.json()
       if (!res.ok || json.error) {
@@ -373,13 +423,8 @@ export default function PropuestaDetalle({
     for (const [k, v] of Object.entries(honorariosOverride)) {
       if (v !== '') overrideNums[k] = parseFloat(v) || 0
     }
-    // Merge manual semanas with auto-calculated days for services not manually set
-    const semanasForPdf: Record<string, string> = { ...semanas }
-    for (const sid of servicios) {
-      if (semanasForPdf[sid] === undefined && diasCalcPorServicio[sid]) {
-        semanasForPdf[sid] = `${diasCalcPorServicio[sid]} días hábiles`
-      }
-    }
+    // Misma duración efectiva que se persiste y que verá el cliente.
+    const semanasForPdf = resolveSemanas()
     return {
       numero:              initial.numero,
       titulo:              titulo || null,

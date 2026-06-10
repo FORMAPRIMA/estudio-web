@@ -55,6 +55,26 @@ function sortServicios(ids: string[]): string[] {
   })
 }
 
+// ── Fuente ÚNICA de los ratios para calcPropuesta ────────────────────────────
+// El editor, el portal del cliente y el PDF DEBEN derivar sus ratios de aquí para
+// que los importes coincidan. La fase de "Gestión de interiorismo" se imputa al
+// servicio `gestion_interiorismo`; el resto de fases de Interiorismo, a `interiorismo`.
+// (Antes el portal y el PDF metían todas las fases en `interiorismo`, descuadrando
+// montos por servicio y el total cuando se ofertaba interiorismo sin gestión.)
+export function mapInteriorismoRatios(
+  rows: { label: string | null; seccion: string | null; ratio: number | null }[],
+): { label: string; servicio: ServicioId; ratio: number }[] {
+  return rows
+    .filter(r => (r.seccion ?? '').toLowerCase().includes('interiorismo'))
+    .map(r => ({
+      label:    r.label ?? '',
+      servicio: ((r.label ?? '').toLowerCase().includes('gesti')
+        ? 'gestion_interiorismo'
+        : 'interiorismo') as ServicioId,
+      ratio:    r.ratio ?? 0,
+    }))
+}
+
 export function buildPropuestaVM(
   p: PropuestaRowLike,
   serviciosPlantilla: ServicioEntry[],
@@ -80,7 +100,10 @@ export function buildPropuestaVM(
   for (const [sid, amount] of Object.entries(p.honorarios_override ?? {})) {
     breakdown[sid] = amount
   }
-  const total = Object.values(breakdown).reduce((s, v) => s + v, 0)
+  // Solo cuentan los servicios ofertados: un override "huérfano" de un servicio
+  // deseleccionado no debe inflar el total (igual que el editor, que suma sobre
+  // los servicios seleccionados).
+  const total = sorted.reduce((s, sid) => s + (breakdown[sid] ?? 0), 0)
 
   const servicios: PropuestaVMServicio[] = sorted.map(sid => {
     const entry = serviciosPlantilla.find(e => e.id === sid)

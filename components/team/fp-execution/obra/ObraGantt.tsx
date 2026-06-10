@@ -15,24 +15,16 @@
 
 import React, { useMemo, useState } from 'react'
 import type { ObraBaselineSnapshot, ObraPhase, ObraMilestone } from '@/lib/fp-execution/obra'
+import {
+  STATUS_STYLE,
+  parseISODate,
+  fmtDate,
+  resolvePhaseDates,
+  type ResolvedPhaseDates,
+} from '@/lib/fp-execution/obra-view'
 
 const MESES_CORTOS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 
-const STATUS_STYLE: Record<ObraPhase['status'], { fill: string; border: string; label: string }> = {
-  pendiente:  { fill: '#E8E6E0', border: '#C9C5BD', label: 'Pendiente'  },
-  en_curso:   { fill: '#378ADD', border: '#1B6BC3', label: 'En curso'   },
-  completada: { fill: '#059669', border: '#047857', label: 'Completada' },
-  bloqueada:  { fill: '#DC2626', border: '#991B1B', label: 'Bloqueada'  },
-}
-
-function parseISODate(s: string | null): Date | null {
-  if (!s) return null
-  const d = new Date(s + 'T00:00:00Z')
-  return Number.isNaN(d.getTime()) ? null : d
-}
-function fmtDate(d: Date): string {
-  return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
-}
 function dayDiff(a: Date, b: Date): number {
   return (a.getTime() - b.getTime()) / 86400000
 }
@@ -77,19 +69,10 @@ export default function ObraGantt({
   }, [phases])
 
   // ── Date helpers per phase ────────────────────────────────────────────────
+  // Regla canónica de fallback actual_/planned_ centralizada en obra-view.ts.
   const phaseDates = useMemo(() => {
-    const map: Record<string, { start: Date | null; end: Date | null; isActual: boolean }> = {}
-    for (const ph of phases) {
-      const aStart = parseISODate(ph.actual_start_date)
-      const aEnd   = parseISODate(ph.actual_end_date)
-      const pStart = parseISODate(ph.planned_start_date)
-      const pEnd   = parseISODate(ph.planned_end_date)
-      map[ph.id] = {
-        start:    aStart ?? pStart,
-        end:      aEnd   ?? pEnd,
-        isActual: !!(aStart || aEnd),
-      }
-    }
+    const map: Record<string, ResolvedPhaseDates> = {}
+    for (const ph of phases) map[ph.id] = resolvePhaseDates(ph)
     return map
   }, [phases])
 
@@ -106,6 +89,9 @@ export default function ObraGantt({
   }, [baselineSnapshot])
 
   // ── Timeline span ──────────────────────────────────────────────────────────
+  // Snap a límites de mes: el timeline empieza el día 1 del mes más temprano y
+  // termina al inicio del mes siguiente al evento más tardío. Así los marcadores
+  // de mes siempre arrancan en el 1 (no en el día del primer evento).
   const { projectStart, totalDays } = useMemo(() => {
     let minMs = Infinity
     let maxMs = -Infinity
@@ -121,11 +107,16 @@ export default function ObraGantt({
       }
     }
     if (minMs === Infinity || maxMs === -Infinity) {
-      return { projectStart: new Date(), totalDays: 30 }
+      const t = new Date()
+      const snapped = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), 1))
+      return { projectStart: snapped, totalDays: 30 }
     }
-    const start = new Date(minMs)
-    const days  = Math.max(1, Math.ceil((maxMs - minMs) / 86400000))
-    return { projectStart: start, totalDays: days }
+    const startRaw = new Date(minMs)
+    const endRaw   = new Date(maxMs)
+    const snappedStart = new Date(Date.UTC(startRaw.getUTCFullYear(), startRaw.getUTCMonth(), 1))
+    const snappedEnd   = new Date(Date.UTC(endRaw.getUTCFullYear(),   endRaw.getUTCMonth() + 1, 1))
+    const days = Math.max(1, (snappedEnd.getTime() - snappedStart.getTime()) / 86400000)
+    return { projectStart: snappedStart, totalDays: days }
   }, [phases, phaseDates, shadowVisible, baselineByTemplatePhase])
 
   const calOffset = (d: Date) => dayDiff(d, projectStart)
@@ -142,7 +133,21 @@ export default function ObraGantt({
   const todayOffsetDays = calOffset(todayUTC)
   const todayInRange    = todayOffsetDays >= 0 && todayOffsetDays <= totalDays + 1
 
+  // ── Week markers (lunes) ───────────────────────────────────────────────────
+  // Offsets en días desde projectStart de cada lunes dentro del rango.
+  const weekOffsets: number[] = useMemo(() => {
+    const out: number[] = []
+    const startDay = projectStart.getUTCDay()             // 0=Dom … 6=Sáb
+    const daysToFirstMonday = (8 - startDay) % 7          // 0 si ya es lunes
+    for (let off = daysToFirstMonday; off < totalDays; off += 7) {
+      out.push(off)
+    }
+    return out
+  }, [projectStart, totalDays])
+
   // ── Month markers ──────────────────────────────────────────────────────────
+  // Año completo solo en el primer marcador y cuando cambia de año (enero).
+  // En el resto, solo el nombre del mes — evita confundir "Jul 26" con "Jul 26".
   type MonthMarker = { label: string; calOffset: number; widthDays: number; day1Offset: number | null }
   const monthMarkers: MonthMarker[] = useMemo(() => {
     const out: MonthMarker[] = []
@@ -150,6 +155,7 @@ export default function ObraGantt({
     const endMs   = startMs + totalDays * 86400000
     const startDate = new Date(startMs)
     let cursor = Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), 1)
+    let prevYear: number | null = null
     while (cursor < endMs) {
       const cursorDate = new Date(cursor)
       const next       = Date.UTC(cursorDate.getUTCFullYear(), cursorDate.getUTCMonth() + 1, 1)
@@ -160,8 +166,12 @@ export default function ObraGantt({
       const rawDay1    = (cursor - startMs) / 86400000
       const day1Offset = rawDay1 >= 0 ? rawDay1 : null
       if (widthDays > 0) {
-        const label = `${MESES_CORTOS[cursorDate.getUTCMonth()]} ${String(cursorDate.getUTCFullYear()).slice(2)}`
+        const year     = cursorDate.getUTCFullYear()
+        const showYear = prevYear === null || year !== prevYear
+        const mesNombre = MESES_CORTOS[cursorDate.getUTCMonth()]
+        const label = showYear ? `${mesNombre} ${year}` : mesNombre
         out.push({ label, calOffset: offsetDays, widthDays, day1Offset })
+        prevYear = year
       }
       cursor = next
     }
@@ -402,6 +412,14 @@ export default function ObraGantt({
                 {chapterNames[cg.chapter_id] ?? `Capítulo ${cgIdx + 1}`}
               </div>
               <div style={{ width: timelineWidthPx, height: chapterRowH, position: 'relative' }}>
+                {weekOffsets.map((off, i) => (
+                  <div key={`wk-${i}`} style={{
+                    position: 'absolute', left: toLeftPx(off),
+                    top: 0, bottom: 0,
+                    borderLeft: '1px dotted rgba(0,0,0,0.08)',
+                    pointerEvents: 'none',
+                  }} />
+                ))}
                 {todayInRange && (
                   <div style={{
                     position: 'absolute', left: toLeftPx(todayOffsetDays),
@@ -485,6 +503,15 @@ export default function ObraGantt({
                     )}
                   </div>
                   <div style={{ width: timelineWidthPx, position: 'relative', height: rowH }}>
+                    {/* Week lines (Mondays) — debajo de barras */}
+                    {weekOffsets.map((off, i) => (
+                      <div key={`wk-${i}`} style={{
+                        position: 'absolute', left: toLeftPx(off),
+                        top: 0, bottom: 0,
+                        borderLeft: '1px dotted rgba(0,0,0,0.08)',
+                        pointerEvents: 'none',
+                      }} />
+                    ))}
                     {/* Today line */}
                     {todayInRange && (
                       <div style={{

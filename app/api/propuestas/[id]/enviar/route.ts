@@ -7,6 +7,7 @@ import { PropuestaPDF } from '@/components/pdfs/PropuestaPDF'
 import type { PropuestaPDFData } from '@/components/pdfs/PropuestaPDF'
 import { sendEmail, wrapEmail } from '@/lib/email'
 import type { ServicioId } from '@/lib/propuestas/config'
+import { mapInteriorismoRatios } from '@/lib/propuestas/build'
 import { getPlantillaServicios } from '@/app/actions/plantillaPropuestas'
 
 export async function POST(
@@ -34,6 +35,14 @@ export async function POST(
       .single()
     if (!propuesta) return NextResponse.json({ error: 'Propuesta no encontrada' }, { status: 404 })
 
+    // No enviar propuestas vacías: sin servicios el PDF y el portal salen en blanco.
+    if (!Array.isArray(propuesta.servicios) || propuesta.servicios.length === 0) {
+      return NextResponse.json(
+        { error: 'La propuesta no tiene servicios; complétala antes de enviar.' },
+        { status: 400 }
+      )
+    }
+
     // Fetch lead
     let lead: PropuestaPDFData['lead'] = null
     if (propuesta.lead_id) {
@@ -59,11 +68,7 @@ export async function POST(
         .order('orden'),
     ])
 
-    const ratios = (ratiosFases ?? []).map(r => ({
-      label:    r.label,
-      servicio: 'interiorismo' as ServicioId,
-      ratio:    r.ratio ?? 0,
-    }))
+    const ratios = mapInteriorismoRatios(ratiosFases ?? [])
 
     const pdfData: PropuestaPDFData = {
       numero:              propuesta.numero,

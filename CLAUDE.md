@@ -565,6 +565,11 @@ Registro de horas por proyecto y fase. Todos los roles FP.
 - **Storage upload desde cliente**: usar `createClient()` (browser) con `supabase.storage.from(bucket).upload(...)`. Requiere RLS policy `FOR INSERT TO authenticated WITH CHECK (bucket_id = 'X')` en `storage.objects`
 - **Crear bucket público vía SQL**: `INSERT INTO storage.buckets (id, name, public) VALUES ('X', 'X', true) ON CONFLICT (id) DO UPDATE SET public = true`
 - **Recargar schema cache** tras crear tablas nuevas: `NOTIFY pgrst, 'reload schema'`
+- **Grants en tablas nuevas (desde 30 oct 2026):** Supabase deja de exponer por defecto las tablas de `public` a la Data API. Para proyectos existentes (como este) el cambio se aplica solo a tablas creadas **después del 30 oct 2026**. Las tablas existentes no se tocan. El `service_role` (usado por `createAdminClient()`) conserva sus grants, así que Server Actions y API routes no se ven afectados. Solo si una tabla nueva debe leerse/escribirse desde el navegador (`createClient()`, roles `anon`/`authenticated`) hay que añadir el grant explícito al crearla:
+  ```sql
+  GRANT SELECT, INSERT, UPDATE, DELETE ON public.nueva_tabla TO authenticated;
+  GRANT SELECT ON public.nueva_tabla TO anon;  -- solo si debe ser pública sin login
+  ```
 
 ---
 

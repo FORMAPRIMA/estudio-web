@@ -4,6 +4,9 @@ import { useState } from 'react'
 import { fmtEur } from '@/lib/propuestas/config'
 import type { PropuestaVM } from '@/lib/propuestas/build'
 import { aceptarPropuestaEspacio } from '@/app/actions/espacios'
+import PropuestaCronograma from './PropuestaCronograma'
+
+const HONORARIOS_VIDEO = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/portal/espacio/honorarios-hero.mp4`
 
 function formatFecha(iso: string | null) {
   if (!iso) return null
@@ -40,6 +43,19 @@ export default function PropuestaView({
 
   return (
     <div style={{ paddingBottom: 120 }}>
+      {/* ── Vídeo de presentación ───────────────────────────────────────────── */}
+      <div style={{ background: '#1A1A1A', lineHeight: 0 }}>
+        <video
+          src={HONORARIOS_VIDEO}
+          autoPlay
+          muted
+          playsInline
+          controls
+          preload="auto"
+          style={{ width: '100%', maxHeight: '78vh', objectFit: 'cover', display: 'block' }}
+        />
+      </div>
+
       {/* ── Top bar ─────────────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', justifyContent: 'center', padding: '24px' }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -84,6 +100,9 @@ export default function PropuestaView({
           propuesta, con sus entregables, plazos y condiciones de pago.
         </p>
       </section>
+
+      {/* ── Cronograma estimado ─────────────────────────────────────────────── */}
+      <PropuestaCronograma servicios={vm.servicios} />
 
       {/* ── Alcance de servicios ────────────────────────────────────────────── */}
       <section style={{ maxWidth: 920, margin: '0 auto', padding: 'clamp(40px, 6vw, 64px) 24px 0' }}>
