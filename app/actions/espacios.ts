@@ -196,18 +196,22 @@ export async function registrarAccesoEspacio(token: string, ip: string, ua: stri
     const admin = createAdminClient()
     const { data: row } = await admin
       .from('espacios')
-      .select('id, primer_acceso, num_accesos, accesos')
+      .select('id, primer_acceso, num_accesos, accesos, etapa')
       .eq('token', token)
       .single()
     if (!row) return
     const now     = new Date().toISOString()
     const accesos = (row.accesos as object[] | null) ?? []
+    // Cada acceso se etiqueta con la etapa en que ocurre: así el termómetro del
+    // lead cuenta solo la etapa actual (se "reinicia" al avanzar) sin perder el
+    // histórico, que queda en el mismo array agrupable por etapa.
+    const etapa = (row.etapa as string | null) ?? 'bienvenida'
     await admin
       .from('espacios')
       .update({
         primer_acceso: (row.primer_acceso as string | null) ?? now,
         num_accesos:   ((row.num_accesos as number) ?? 0) + 1,
-        accesos:       [...accesos, { ts: now, ip, dispositivo: parseDispositivo(ua) }],
+        accesos:       [...accesos, { ts: now, ip, dispositivo: parseDispositivo(ua), etapa }],
         updated_at:    now,
       })
       .eq('id', row.id)

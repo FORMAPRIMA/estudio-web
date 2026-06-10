@@ -69,22 +69,25 @@ export default async function EspacioPage({
   const cookieStore = await cookies()
   const presentationValid =
     cookieStore.get(presentationCookieName(token))?.value === generatePresentationCookieToken(token)
+  const needsPin = requierePin(etapa)
+  const clientCookieValid =
+    cookieStore.get(espacioCookieName(token))?.value === generateEspacioCookieToken(token)
 
-  // Tracking de acceso (no bloqueante) — solo visitas reales de cliente.
-  if (!presentationValid) {
+  // Gate de PIN: contenido privado sin autorización → pedir PIN. (No cuenta acceso:
+  // ver la pantalla del PIN no es "ver la propuesta".)
+  if (needsPin && !presentationValid && !clientCookieValid) {
+    return <EspacioGate token={token} nombre={espacio.nombre} needsSetup={!espacio.pin_hash} />
+  }
+
+  // Tracking de acceso (no bloqueante): SOLO visitas reales de cliente ya
+  // autorizado (cookie válida, o etapa pública). El modo presentación (PIN
+  // maestro) nunca cuenta. Se registra aquí, tras el gate, no antes.
+  const clienteAutorizado = !presentationValid && (!needsPin || clientCookieValid)
+  if (clienteAutorizado) {
     const h = await headers()
     const ip = h.get('x-forwarded-for')?.split(',')[0]?.trim() ?? h.get('x-real-ip') ?? 'desconocida'
     const ua = h.get('user-agent') ?? ''
     void registrarAccesoEspacio(token, ip, ua)
-  }
-
-  // Gate de PIN: a partir de contenido privado (propuesta en adelante).
-  if (requierePin(etapa) && !presentationValid) {
-    const cookie = cookieStore.get(espacioCookieName(token))?.value
-    const valid = cookie === generateEspacioCookieToken(token)
-    if (!valid) {
-      return <EspacioGate token={token} nombre={espacio.nombre} needsSetup={!espacio.pin_hash} />
-    }
   }
 
   let content: ReactNode = null

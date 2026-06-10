@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { updateLead, deleteLead } from '@/app/actions/leads'
 import { createPropuesta } from '@/app/actions/propuestas'
 import { createEspacio } from '@/app/actions/espacios'
+import { ETAPA_LABEL, type Etapa } from '@/lib/espacio/theme'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -12,7 +13,10 @@ export interface AccesoEntry {
   ts:          string
   ip:          string
   dispositivo: string
+  etapa?:      string
 }
+
+const ETAPA_SEQ = ['bienvenida', 'propuesta', 'formalizacion', 'contrato', 'proyecto']
 
 export interface EventoEntry {
   tipo: string
@@ -143,13 +147,89 @@ function presupuestoLabel(n: number | null) {
   return `€ ${new Intl.NumberFormat('es-ES').format(n)}`
 }
 
-// Termómetro de interés: basado en accesos del Espacio (visitas reales del cliente;
-// las del equipo en modo presentación no cuentan).
+function fmtDateTime(iso: string) {
+  const d = new Date(iso)
+  return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: '2-digit' })
+    + ' · ' + d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+}
+
+// Accesos de la etapa ACTUAL del espacio (los registros sin etiqueta se tratan
+// como 'bienvenida', por compatibilidad con accesos previos al etiquetado).
+function accesosEtapaActual(esp: EspacioLite | undefined): AccesoEntry[] {
+  if (!esp) return []
+  return (esp.accesos ?? []).filter(a => (a.etapa ?? 'bienvenida') === esp.etapa)
+}
+
+// Termómetro de interés: cuenta SOLO la etapa actual (visitas reales del cliente;
+// el modo presentación con PIN maestro no cuenta). Se "reinicia" al avanzar de
+// etapa porque filtra por la etapa vigente; el histórico se ve en el modal.
 function termometro(esp: EspacioLite | undefined): { label: string; color: string; bg: string; dot: string } {
-  if (!esp || !esp.primer_acceso) return { label: 'Sin abrir', color: '#AAA', bg: '#F4F3EF', dot: '#CCC' }
-  const n = esp.num_accesos ?? 1
-  if (n >= 3)  return { label: `Caliente · ${n}×`, color: '#C0392B', bg: '#FDECEA', dot: '#E74C3C' }
+  const n = accesosEtapaActual(esp).length
+  if (!esp || n === 0) return { label: 'Sin abrir', color: '#AAA', bg: '#F4F3EF', dot: '#CCC' }
+  if (n >= 3) return { label: `Caliente · ${n}×`, color: '#C0392B', bg: '#FDECEA', dot: '#E74C3C' }
   return { label: `Visto ${n}×`, color: '#B45309', bg: '#FDF6EE', dot: '#D97706' }
+}
+
+// ── Modal de accesos (etapa actual + histórico por etapa) ──────────────────────
+
+function AccesosModal({ espacio, onClose }: { espacio: EspacioLite; onClose: () => void }) {
+  const accesos = (espacio.accesos ?? []).slice().sort((a, b) => b.ts.localeCompare(a.ts))
+  const byEtapa = new Map<string, AccesoEntry[]>()
+  for (const a of accesos) {
+    const et = a.etapa ?? 'bienvenida'
+    if (!byEtapa.has(et)) byEtapa.set(et, [])
+    byEtapa.get(et)!.push(a)
+  }
+  const actual = espacio.etapa
+  const otras = Array.from(byEtapa.keys())
+    .filter(e => e !== actual)
+    .sort((a, b) => ETAPA_SEQ.indexOf(b) - ETAPA_SEQ.indexOf(a))
+  const orden = [actual, ...otras]
+
+  const Grupo = ({ etapa, esActual }: { etapa: string; esActual: boolean }) => {
+    const items = byEtapa.get(etapa) ?? []
+    return (
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: esActual ? '#D85A30' : '#888' }}>
+            {ETAPA_LABEL[etapa as Etapa] ?? etapa}
+          </span>
+          {esActual && <span style={{ fontSize: 9, fontWeight: 700, color: '#D85A30', background: '#FDF3EE', padding: '1px 7px', borderRadius: 8 }}>Etapa actual</span>}
+          <span style={{ fontSize: 11, color: '#AAA', marginLeft: 'auto' }}>{items.length} {items.length === 1 ? 'acceso' : 'accesos'}</span>
+        </div>
+        {items.length === 0 ? (
+          <p style={{ fontSize: 12, color: '#BBB', margin: 0 }}>Aún sin accesos en esta etapa.</p>
+        ) : (
+          <div style={{ border: '1px solid #F0EEE8', borderRadius: 6, overflow: 'hidden' }}>
+            {items.map((a, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', fontSize: 12, color: '#555', background: i % 2 ? '#FAFAF8' : '#fff' }}>
+                <span style={{ width: 18, color: '#CCC', fontSize: 11 }}>{i + 1}</span>
+                <span style={{ flex: 1 }}>{fmtDateTime(a.ts)}</span>
+                <span style={{ color: '#888' }}>{a.dispositivo}</span>
+                <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#BBB' }}>{a.ip}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 20px', zIndex: 110, overflowY: 'auto' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 10, padding: 26, width: '100%', maxWidth: 560 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+          <h2 style={{ fontSize: 17, fontWeight: 400, margin: 0 }}>Accesos · {espacio.nombre}</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: '#CCC', lineHeight: 1 }}>×</button>
+        </div>
+        <p style={{ fontSize: 12, color: '#999', margin: '0 0 18px' }}>
+          Visitas reales del cliente. Las del equipo en modo presentación (PIN maestro) no se registran.
+        </p>
+        {accesos.length === 0 && <p style={{ fontSize: 13, color: '#AAA' }}>Este espacio aún no se ha abierto.</p>}
+        {orden.map(et => <Grupo key={et} etapa={et} esActual={et === actual} />)}
+      </div>
+    </div>
+  )
 }
 
 function tieneEvento(esp: EspacioLite | undefined, tipo: string): boolean {
@@ -305,6 +385,7 @@ function LeadCard({
   onAbrirPropuesta,
   onAbrirContrato,
   onMarcarPerdido,
+  onVerLogs,
   busy,
 }: {
   data: CardData
@@ -316,6 +397,7 @@ function LeadCard({
   onAbrirPropuesta: () => void
   onAbrirContrato: () => void
   onMarcarPerdido: () => void
+  onVerLogs: () => void
   busy: boolean
 }) {
   const { lead, espacio, propuesta, contrato } = data
@@ -337,10 +419,16 @@ function LeadCard({
 
       {/* Chips de estado */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', borderRadius: 10, background: term.bg }}>
+        <button
+          type="button"
+          onClick={espacio ? onVerLogs : undefined}
+          disabled={!espacio}
+          title={espacio ? 'Ver accesos y histórico por etapa' : 'Sin espacio'}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 10, background: term.bg, border: 'none', cursor: espacio ? 'pointer' : 'default', fontFamily: 'inherit' }}
+        >
           <span style={{ width: 5, height: 5, borderRadius: '50%', background: term.dot }} />
           <span style={{ fontSize: 9, fontWeight: 600, color: term.color }}>{term.label}</span>
-        </span>
+        </button>
         {formularioOk && (
           <span style={{ fontSize: 9, fontWeight: 600, color: '#1D9E75', background: '#EEF8F4', padding: '2px 7px', borderRadius: 10 }}>
             Formulario ✓
@@ -429,6 +517,7 @@ export default function LeadsPage({
 
   // Modales
   const [editLead, setEditLead] = useState<Lead | null>(null)
+  const [logEspacio, setLogEspacio] = useState<EspacioLite | null>(null)
   const [showNuevo, setShowNuevo] = useState(false)
   const [nuevoNombre, setNuevoNombre] = useState('')
   const [nuevoEmail, setNuevoEmail] = useState('')
@@ -618,6 +707,7 @@ export default function LeadsPage({
                       onAbrirPropuesta={() => data.propuesta && router.push(`/team/captacion/propuestas/${data.propuesta.id}`)}
                       onAbrirContrato={() => data.contrato && router.push(`/team/captacion/contratos/${data.contrato.id}`)}
                       onMarcarPerdido={() => handleMarcarPerdido(data.lead)}
+                      onVerLogs={() => data.espacio && setLogEspacio(data.espacio)}
                     />
                   ))}
                 </div>
@@ -626,6 +716,9 @@ export default function LeadsPage({
           })}
         </div>
       )}
+
+      {/* Modal: accesos (etapa actual + histórico) */}
+      {logEspacio && <AccesosModal espacio={logEspacio} onClose={() => setLogEspacio(null)} />}
 
       {/* Modal: editar lead */}
       {editLead && (
