@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import ProyectosCarousel from '@/components/espacio/ProyectosCarousel'
 
 export type BienvenidaSubmit = (
   token: string,
@@ -190,7 +191,9 @@ export default function BienvenidaPage({ nombreCliente, token, heroImage, proyec
 
   return (
     <>
-      <style>{`
+      {/* dangerouslySetInnerHTML: como texto, React escaparía las comillas en el
+          servidor y la hidratación fallaría (re-render completo en el cliente). */}
+      <style dangerouslySetInnerHTML={{ __html: `
         * { box-sizing: border-box; margin: 0; padding: 0; }
         html { scroll-behavior: smooth; }
         body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: #F8F6F1; color: #1A1A1A; }
@@ -297,7 +300,7 @@ export default function BienvenidaPage({ nombreCliente, token, heroImage, proyec
           to   { opacity: 1; transform: translateY(0); }
         }
         .fp-hero-label { animation: fadeSlideUp 0.6s ease forwards; }
-      `}</style>
+      ` }} />
 
       {/* ── 1. HERO ───────────────────────────────────────────────────────────── */}
       <section style={{
@@ -532,58 +535,7 @@ export default function BienvenidaPage({ nombreCliente, token, heroImage, proyec
       </section>
 
       {/* ── 4. CAROUSEL ───────────────────────────────────────────────────────── */}
-      {proyectoImages.length > 0 && (
-        <section style={{ background: '#1A1A1A', padding: 'clamp(48px, 6vw, 72px) 0' }}>
-          <div style={{ padding: '0 24px 20px' }}>
-            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.35)' }}>
-              {t.recentProjects}
-            </span>
-          </div>
-          <div
-            className="fp-carousel"
-            style={{
-              display: 'flex',
-              gap: 3,
-              overflowX: 'auto',
-              scrollbarWidth: 'none',
-              paddingLeft: 24,
-              paddingRight: 24,
-            }}
-          >
-            {proyectoImages.map((p, i) => (
-              <div
-                key={i}
-                style={{
-                  position: 'relative',
-                  flexShrink: 0,
-                  width: 'clamp(260px, 45vw, 380px)',
-                  aspectRatio: '3/4',
-                  borderRadius: 4,
-                  overflow: 'hidden',
-                  background: '#2A2A2A',
-                }}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={p.url}
-                  alt={p.nombre}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                />
-                <div style={{
-                  position: 'absolute', bottom: 0, left: 0, right: 0,
-                  background: 'linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 100%)',
-                  padding: '24px 16px 16px',
-                }}>
-                  <p style={{ fontSize: 12, fontWeight: 500, color: '#fff', letterSpacing: '0.02em' }}>{p.nombre}</p>
-                  {p.tipologia && (
-                    <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{p.tipologia}</p>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+      <ProyectosCarousel proyectoImages={proyectoImages} title={t.recentProjects} />
 
       {/* ── 5. SOCIOS ─────────────────────────────────────────────────────────── */}
       <section style={{ background: '#F8F6F1', padding: 'clamp(60px, 8vw, 96px) 0' }}>

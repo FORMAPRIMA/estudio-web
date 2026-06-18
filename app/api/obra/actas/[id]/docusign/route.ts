@@ -139,10 +139,8 @@ export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
       contratoId:  acta.id,
       numero:      acta.codigo,
       pdfBuffer,
-      signers: {
-        cliente: { email: c.email, name: clientNombre },
-        estudio: studioSigner,
-      },
+      cliente: { email: c.email, name: clientNombre },
+      estudio: studioSigner,
       webhookUrl,
       emailSubject: `Acta de modificación ${acta.codigo} — Forma Prima`,
       documentName: `Acta-${acta.codigo}`,

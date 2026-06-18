@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import type { LinkeableType } from '@/lib/avisos/getAvisoRoute'
 
@@ -56,7 +57,8 @@ export async function archivarAviso(avisoId: string): Promise<{ success: true } 
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return { error: 'Sin sesión activa.' }
 
-    const { error } = await supabase
+    const admin = createAdminClient()
+    const { error } = await admin
       .from('avisos_archivados')
       .insert({ aviso_id: avisoId, user_id: user.id })
 

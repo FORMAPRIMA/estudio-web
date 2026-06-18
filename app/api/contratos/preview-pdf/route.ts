@@ -5,6 +5,7 @@ import { renderToBuffer } from '@react-pdf/renderer'
 import { createElement } from 'react'
 import { ContratoPDF } from '@/components/pdfs/ContratoPDF'
 import type { ContratoPDFData, ServicioContrato, ContratoHonorario } from '@/components/pdfs/ContratoPDF'
+import { CLAUSULAS_DEFAULT, type ContratoClausula } from '@/lib/contratos/clausulas'
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -44,7 +45,7 @@ export async function POST(req: NextRequest) {
 
   const data: ContratoPDFData = {
     numero:             contrato.numero ?? '—',
-    fecha_contrato:     contrato.fecha_contrato ?? null,
+    fecha_contrato:     contrato.fecha_contrato ?? contrato.fecha_firma ?? null, // viva hasta la firma
     tipo_cliente:       (contrato.contenido?.tipo_cliente ?? (contrato.cliente_empresa ? 'juridica' : 'fisica')) as 'fisica' | 'juridica',
     cliente_nombre:     contrato.cliente_nombre    ?? null,
     cliente_apellidos:  contrato.cliente_apellidos ?? null,
@@ -58,6 +59,7 @@ export async function POST(req: NextRequest) {
     servicios_contrato: serviciosContrato,
     honorarios,
     notas:              contrato.notas ?? null,
+    clausulas:          (contrato.contenido?.clausulas as ContratoClausula[] | undefined) ?? CLAUSULAS_DEFAULT,
     lang:               (lang === 'en' ? 'en' : 'es') as 'es' | 'en',
     plantilla_en,
   }

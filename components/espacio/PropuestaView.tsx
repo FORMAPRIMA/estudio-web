@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { fmtEur } from '@/lib/propuestas/config'
 import type { PropuestaVM } from '@/lib/propuestas/build'
 import { aceptarPropuestaEspacio } from '@/app/actions/espacios'
@@ -44,17 +44,7 @@ export default function PropuestaView({
   return (
     <div style={{ paddingBottom: 120 }}>
       {/* ── Vídeo de presentación ───────────────────────────────────────────── */}
-      <div style={{ background: '#1A1A1A', lineHeight: 0 }}>
-        <video
-          src={HONORARIOS_VIDEO}
-          autoPlay
-          muted
-          playsInline
-          controls
-          preload="auto"
-          style={{ width: '100%', maxHeight: '78vh', objectFit: 'cover', display: 'block' }}
-        />
-      </div>
+      <VideoHero src={HONORARIOS_VIDEO} />
 
       {/* ── Top bar ─────────────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', justifyContent: 'center', padding: '24px' }}>
@@ -218,6 +208,65 @@ export default function PropuestaView({
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+// Vídeo en pausa con botón de play que arranca imagen y sonido a la vez.
+// objectFit "contain" sobre fondo negro: se ve entero, sin recortes.
+function VideoHero({ src }: { src: string }) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const [playing, setPlaying] = useState(false)
+
+  function handlePlay() {
+    const v = videoRef.current
+    if (!v) return
+    v.muted = false
+    v.volume = 1
+    v.play().catch(() => {})
+    setPlaying(true)
+  }
+
+  return (
+    <div style={{ background: '#1A1A1A', lineHeight: 0, position: 'relative' }}>
+      <video
+        ref={videoRef}
+        src={`${src}#t=0.1`}   /* fuerza el primer frame como póster */
+        playsInline
+        controls={playing}
+        preload="metadata"
+        onPause={() => { /* mantener controles una vez iniciado */ }}
+        style={{ width: '100%', maxHeight: '78vh', objectFit: 'contain', display: 'block', background: '#1A1A1A' }}
+      />
+      {!playing && (
+        <button
+          onClick={handlePlay}
+          aria-label="Reproducir vídeo"
+          style={{
+            position: 'absolute', inset: 0, width: '100%', height: '100%',
+            background: 'rgba(26,26,26,0.25)', border: 'none', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <span style={{
+            width: 84, height: 84, borderRadius: '50%',
+            background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.35)',
+            transition: 'transform 0.2s ease',
+          }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'scale(1.08)' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = 'scale(1)' }}
+          >
+            {/* triángulo de play, ligeramente descentrado a la derecha como manda la óptica */}
+            <span style={{
+              width: 0, height: 0, marginLeft: 6,
+              borderTop: '16px solid transparent', borderBottom: '16px solid transparent',
+              borderLeft: '26px solid #1A1A1A',
+            }} />
+          </span>
+        </button>
+      )}
     </div>
   )
 }

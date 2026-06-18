@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import * as XLSX from 'xlsx'
 import Anthropic from '@anthropic-ai/sdk'
+import { computeScore, MATCH_THRESHOLD, AUTO_THRESHOLD, type TxForScore } from '@/lib/finanzas/reconciliation'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -65,84 +66,52 @@ Ejemplos:
   return result
 }
 
-// ── Score-based matching ──────────────────────────────────────────────────────
+// ── Column detection by header ────────────────────────────────────────────────
+// Busca una fila de cabecera por nombres (fecha/concepto/importe…) en las
+// primeras filas; si no la encuentra, cae al mapeo fijo A/C/D.
 
-interface TxForScore {
-  importe: number
-  fecha: string
-  hora: string | null
-  comercio: string | null
-  ultimos_4: string | null
+interface ColumnMap {
+  colFecha: string
+  colHora: string | null
+  colConcepto: string
+  colImporte: string
+  headerRows: number   // filas a saltar (cabecera incluida)
 }
 
-interface ScanForScore {
-  monto: number
-  fecha_ticket: string
-  hora_ticket: string | null
-  proveedor: string | null
-  ultimos_4: string | null
-  nif_proveedor: string | null
-}
+function detectColumns(rows: Record<string, unknown>[]): ColumnMap {
+  const isFechaHeader    = (s: string) => /fecha|date|f\.?\s*valor|f\.?\s*operac/i.test(s)
+  const isConceptoHeader = (s: string) => /concepto|descrip|movimiento|detalle/i.test(s)
+  const isImporteHeader  = (s: string) => /importe|amount|monto|cargo|d[eé]bito/i.test(s)
+  const isHoraHeader     = (s: string) => /^hora$/i.test(s)
 
-function computeScore(tx: TxForScore, scan: ScanForScore): number {
-  const absTx = Math.abs(tx.importe)
+  for (let i = 0; i < Math.min(rows.length, 10); i++) {
+    const row = rows[i]
+    let colFecha: string | null = null
+    let colConcepto: string | null = null
+    let colImporte: string | null = null
+    let colHora: string | null = null
 
-  // ── Amount (0–60 pts) ────────────────────────────────────────────────────
-  const diff = Math.abs(absTx - scan.monto)
-  let amountScore: number
-  if      (diff <= 0.01)                                  amountScore = 60
-  else if (diff <= 0.50)                                  amountScore = 45
-  else if (diff <= 1.00 || (absTx > 0 && diff / absTx <= 0.01)) amountScore = 30
-  else if (diff <= 2.00 || (absTx > 0 && diff / absTx <= 0.05)) amountScore = 15
-  else return 0   // Too far — not a candidate
+    for (const [col, val] of Object.entries(row)) {
+      if (typeof val !== 'string') continue
+      const v = val.trim()
+      if (!v) continue
+      if (!colFecha && isFechaHeader(v))            colFecha = col
+      else if (!colHora && isHoraHeader(v))         colHora = col
+      else if (!colConcepto && isConceptoHeader(v)) colConcepto = col
+      else if (!colImporte && isImporteHeader(v))   colImporte = col
+    }
 
-  // ── Date (0–25 pts) ──────────────────────────────────────────────────────
-  const days = Math.abs(
-    (new Date(tx.fecha).getTime() - new Date(scan.fecha_ticket).getTime()) / 86400000
-  )
-  let dateScore: number
-  if      (days === 0)  dateScore = 25
-  else if (days <= 1)   dateScore = 22
-  else if (days <= 3)   dateScore = 17
-  else if (days <= 5)   dateScore = 12
-  else if (days <= 7)   dateScore = 7
-  else if (days <= 14 && amountScore === 60) dateScore = 2  // exact amount: allow up to 14 days
-  else return 0   // >7 days and non-exact amount → not a candidate
-
-  let score = amountScore + dateScore
-
-  // ── Card last 4 digits (+30 pts) ────────────────────────────────────────
-  if (tx.ultimos_4 && scan.ultimos_4 && tx.ultimos_4 === scan.ultimos_4) {
-    score += 30
-  }
-
-  // ── Merchant similarity (0–15 pts) ──────────────────────────────────────
-  if (tx.comercio && scan.proveedor) {
-    const normalize = (s: string) =>
-      s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
-    const a = normalize(tx.comercio)
-    const b = normalize(scan.proveedor)
-    if (a === b) score += 15
-    else if (a.includes(b) || b.includes(a)) score += 10
-    else {
-      const wordsA = a.split(/\s+/).filter(w => w.length > 2)
-      const wordsB = new Set(b.split(/\s+/).filter(w => w.length > 2))
-      if (wordsA.some(w => wordsB.has(w))) score += 7
+    if (colFecha && colConcepto && colImporte) {
+      return { colFecha, colHora, colConcepto, colImporte, headerRows: i + 1 }
     }
   }
 
-  // ── Hour bonus (0–10 pts) — only when both available ────────────────────
-  if (tx.hora && scan.hora_ticket && scan.hora_ticket.length >= 4) {
-    try {
-      const [txH, txM]     = tx.hora.split(':').map(Number)
-      const [scanH, scanM] = scan.hora_ticket.split(':').map(Number)
-      const diffMins = Math.abs((txH * 60 + txM) - (scanH * 60 + scanM))
-      if      (diffMins <= 60)  score += 10
-      else if (diffMins <= 180) score += 5
-    } catch { /* ignore parse errors */ }
-  }
-
-  return score
+  // Fallback: mapeo histórico A=fecha, C=concepto, D=importe (B puede traer hora)
+  const firstFechaVal = rows[0]?.['A']
+  const firstIsHeader = typeof firstFechaVal === 'string'
+    && isNaN(Date.parse(firstFechaVal))
+    && !/^\d+$/.test(String(firstFechaVal))
+  return { colFecha: 'A', colHora: 'B', colConcepto: 'C', colImporte: 'D', headerRows: firstIsHeader ? 1 : 0 }
 }
 
 // ── POST /api/bank-statement ──────────────────────────────────────────────────
@@ -179,17 +148,9 @@ export async function POST(req: NextRequest) {
 
   if (dataRows.length < 2) return NextResponse.json({ error: 'El archivo no contiene datos suficientes.' }, { status: 422 })
 
-  // Fixed column mapping: A=fecha, C=descripción, D=importe
-  const colFecha    = 'A'
-  const colConcepto = 'C'
-  const colImporte  = 'D'
-
-  // Skip header row if present
-  const firstFechaVal = dataRows[0]?.[colFecha]
-  const firstIsHeader = typeof firstFechaVal === 'string'
-    && isNaN(Date.parse(firstFechaVal))
-    && !/^\d+$/.test(String(firstFechaVal))
-  const rowsToProcess = firstIsHeader ? dataRows.slice(1) : dataRows
+  // Detect columns by header names, with A/C/D fallback
+  const { colFecha, colHora, colConcepto, colImporte, headerRows } = detectColumns(dataRows)
+  const rowsToProcess = dataRows.slice(headerRows)
 
   // ── Parse rows ───────────────────────────────────────────────────────────────
 
@@ -236,12 +197,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Column B may contain a separate time
-    if (!horaStr) {
-      const rawB = row['B']
-      if (rawB != null) {
-        const bStr = String(rawB).trim()
-        if (/^\d{1,2}:\d{2}/.test(bStr)) horaStr = bStr.substring(0, 5)
+    // A dedicated column may contain a separate time
+    if (!horaStr && colHora) {
+      const rawHora = row[colHora]
+      if (rawHora != null) {
+        const hStr = String(rawHora).trim()
+        if (/^\d{1,2}:\d{2}/.test(hStr)) horaStr = hStr.substring(0, 5)
       }
     }
 
@@ -373,7 +334,7 @@ export async function POST(req: NextRequest) {
         ultimos_4:     scan.ultimos_4 ?? null,
         nif_proveedor: scan.nif_proveedor ?? null,
       })
-      if (score >= 50) scoredPairs.push({ txId: tx.id, scanId: scan.id, score })
+      if (score >= MATCH_THRESHOLD) scoredPairs.push({ txId: tx.id, scanId: scan.id, score })
     }
   }
 
@@ -389,7 +350,7 @@ export async function POST(req: NextRequest) {
     assignments.push({
       txId:       pair.txId,
       scanId:     pair.scanId,
-      confidence: pair.score >= 70 ? 'auto' : 'sugerido',
+      confidence: pair.score >= AUTO_THRESHOLD ? 'auto' : 'sugerido',
       score:      pair.score,
     })
     usedTxIds.add(pair.txId)

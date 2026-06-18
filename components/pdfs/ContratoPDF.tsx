@@ -5,6 +5,9 @@ import {
 import path from 'path'
 import { fmtEur, PRECIO_HORA, SERVICIO_IDS, SERVICIOS_CONFIG_EN, PAGO_LABEL_EN } from '@/lib/propuestas/config'
 import type { ServicioId } from '@/lib/propuestas/config'
+import { buildCronograma, addBusinessDays } from '@/lib/propuestas/cronograma'
+import { ordinal, interpolarTokens, CLAUSULAS_DEFAULT } from '@/lib/contratos/clausulas'
+import type { ClausulaBloque, ContratoClausula } from '@/lib/contratos/clausulas'
 
 const LOGO_BLANCO   = path.join(process.cwd(), 'public', 'FORMA_PRIMA_BLANCO.png')
 const FIRMA_GABRIELA = path.join(process.cwd(), 'public', 'FIRMA GABRIELA.png')
@@ -270,6 +273,8 @@ export interface ContratoPDFData {
   servicios_contrato: ServicioContrato[]
   honorarios:         ContratoHonorario[]
   notas:              string | null
+  // Cláusulas boilerplate editables (snapshot del contrato). Si falta → seed por defecto.
+  clausulas?:         ContratoClausula[]
   lang?:              'es' | 'en'
   // When true: omit pre-printed Gabriela signature image so DocuSign places the digital one
   forDocuSign?:       boolean
@@ -367,6 +372,39 @@ export function ContratoPDF({ data }: { data: ContratoPDFData }) {
   const forDocuSign  = data.forDocuSign ?? false
   const sortedServicios = sortServicios(data.servicios_contrato)
   const totalHonorarios = data.honorarios.reduce((s, h) => s + (h.importe ?? 0), 0)
+
+  // ── Fechas estimadas de cobro por hito ──────────────────────────────────────
+  // Misma programación que el cronograma del Espacio (lib/propuestas/cronograma),
+  // anclada a la fecha del contrato (viva = hoy hasta la firma). Cada hito de la
+  // tabla de honorarios se casa con su pago del cronograma por servicio + label.
+  const fechaBase = data.fecha_contrato ? new Date(data.fecha_contrato) : new Date()
+  const crono = buildCronograma(data.servicios_contrato)
+  const pagoFechas = new Map<string, { day: number; abierto: boolean }[]>()
+  for (const p of crono?.pagos ?? []) {
+    const key = `${p.servicio}|${p.hito}`
+    const list = pagoFechas.get(key) ?? []
+    list.push({ day: p.day, abierto: p.abierto })
+    pagoFechas.set(key, list)
+  }
+  const fechaEstimadaDe = (h: ContratoHonorario): { texto: string; estimada: boolean } | null => {
+    if (h.fecha_pago_acordada) {
+      return {
+        texto: (lang === 'en' ? 'Agreed date: ' : 'Fecha acordada: ') + formatDate(h.fecha_pago_acordada, lang),
+        estimada: false,
+      }
+    }
+    const est = pagoFechas.get(`${h.seccion}|${h.descripcion}`)?.shift()
+    if (!est) return null
+    if (est.abierto) {
+      return { texto: lang === 'en' ? 'As construction progresses' : 'Según avance de obra', estimada: true }
+    }
+    const fecha = addBusinessDays(fechaBase, est.day)
+    // Sin símbolo "≈": Helvetica no tiene el glifo y @react-pdf lo pinta como "H".
+    return {
+      texto: (lang === 'en' ? 'Estimated: ' : 'Cobro estimado: ') + formatDate(fecha.toISOString(), lang),
+      estimada: true,
+    }
+  }
 
   const nombreCompleto = [data.cliente_nombre, data.cliente_apellidos].filter(Boolean).join(' ')
   const domicilio = [data.cliente_direccion, data.cliente_ciudad].filter(Boolean).join(', ') || '—'
@@ -615,6 +653,35 @@ export function ContratoPDF({ data }: { data: ContratoPDFData }) {
 
   const T = lang === 'en' ? en : es
 
+  // ── Cláusulas boilerplate editables ─────────────────────────────────────────
+  const clausulas = data.clausulas ?? CLAUSULAS_DEFAULT
+
+  // Texto inline con soporte de **negrita** y tokens {{precio_*}}
+  const renderInline = (texto: string) => {
+    const parts = interpolarTokens(texto).split(/(\*\*[^*]+\*\*)/g)
+    return parts.map((p, i) =>
+      p.startsWith('**') && p.endsWith('**')
+        ? <Text key={i} style={{ fontFamily: 'Helvetica-Bold' }}>{p.slice(2, -2)}</Text>
+        : <Text key={i}>{p}</Text>
+    )
+  }
+
+  const renderBloques = (bloques: ClausulaBloque[]) =>
+    bloques.map((b, bi) => {
+      if (b.tipo === 'lista') {
+        return (b.items ?? []).map((it, j) => (
+          <Text key={`${bi}-${j}`} style={{ ...s.indented, marginBottom: 5 }}>
+            {String.fromCharCode(97 + j) + '. '}{renderInline(it)}
+          </Text>
+        ))
+      }
+      return (
+        <Text key={bi} style={{ ...s.bodyText, marginTop: bi === 0 ? 0 : 4 }}>
+          {renderInline(b.texto ?? '')}
+        </Text>
+      )
+    })
+
   return (
     <Document title={`Contrato ${data.numero} · Forma Prima`} author="Forma Prima">
 
@@ -841,6 +908,7 @@ export function ContratoPDF({ data }: { data: ContratoPDFData }) {
               const descripcionStr = lang === 'en'
                 ? (PAGO_LABEL_EN[h.descripcion] ?? h.descripcion)
                 : h.descripcion
+              const fechaEst = fechaEstimadaDe(h)
               return (
                 <View key={i} wrap={false} style={{ ...s.pagoRow, backgroundColor: i % 2 === 0 ? C.white : C.light }}>
                   <View style={s.pagoLeft}>
@@ -848,6 +916,9 @@ export function ContratoPDF({ data }: { data: ContratoPDFData }) {
                       <Text style={s.pagoSeccion}>{seccionStr}</Text>
                     )}
                     <Text style={s.pagoLabel}>{descripcionStr}</Text>
+                    {fechaEst && (
+                      <Text style={{ fontSize: 7, color: C.mid, marginTop: 2 }}>{fechaEst.texto}</Text>
+                    )}
                   </View>
                   <Text style={s.pagoImporte}>{fmtEur(h.importe)} + {lang === 'en' ? 'VAT' : 'IVA'}</Text>
                 </View>
@@ -860,77 +931,38 @@ export function ContratoPDF({ data }: { data: ContratoPDFData }) {
           </View>
           </View>{/* end no-wrap payment block */}
 
+          {crono && (
+            <Text style={{ fontSize: 7, color: C.mid, marginTop: 6, lineHeight: 1.5 }}>
+              {lang === 'en'
+                ? 'Estimated collection dates are computed in business days from the contract date, according to the duration of each phase. They are indicative; invoicing follows the milestones above.'
+                : 'Las fechas estimadas de cobro se calculan en días hábiles desde la fecha del contrato, según la duración de cada fase. Son orientativas; la facturación sigue los hitos arriba indicados.'}
+            </Text>
+          )}
+
           <Text style={{ fontSize: 7.5, color: C.mid, marginTop: 8, lineHeight: 1.55 }}>
             {T.travelNote}
           </Text>
 
-          {/* Modifications */}
-          <Text style={{ ...s.subClauseTitle, marginTop: 14 }}>{T.modificacionesTitle}</Text>
-          <Text style={s.bodyText}>{T.modificaciones1}</Text>
-          <Text style={{ ...s.bodyText, marginTop: 4 }}>{T.modificaciones2}</Text>
-
-          {/* Payment terms */}
-          <Text style={{ ...s.subClauseTitle, marginTop: 10 }}>{T.formaPagoTitle}</Text>
-          <Text style={s.bodyText}>{T.formaPago1}</Text>
-          <Text style={{ ...s.bodyText, marginTop: 4 }}>{T.formaPago2}</Text>
-
-          {/* Exclusions */}
-          <Text style={{ ...s.subClauseTitle, marginTop: 10 }}>{T.exclusionesTitle}</Text>
-          <Text style={s.bodyText}>{T.exclusiones}</Text>
-
-          {/* CLAUSE 3 */}
-          <Text style={s.clauseTitle}>{T.clause3Title}</Text>
-          {T.clause3Items.map((txt, i) => (
-            <Text key={i} style={{ ...s.indented, marginBottom: 5 }}>
-              {String.fromCharCode(97 + i) + '. ' + txt}
-            </Text>
-          ))}
-
-          {/* CLAUSE 4 */}
-          <Text style={s.clauseTitle}>{T.clause4Title}</Text>
-          {T.clause4Items.map((txt, i) => (
-            <Text key={i} style={{ ...s.indented, marginBottom: 5 }}>
-              {String.fromCharCode(97 + i) + '. ' + txt}
-            </Text>
-          ))}
-
-          {/* CLAUSE 5 */}
-          <Text style={s.clauseTitle}>{T.clause5Title}</Text>
-          <Text style={s.bodyText}>{T.clause5_1}</Text>
-          <Text style={{ ...s.bodyText, marginTop: 4 }}>{T.clause5_2}</Text>
-
-          {/* CLAUSE 6 */}
-          <Text style={s.clauseTitle}>{T.clause6Title}</Text>
-          <Text style={{ ...s.bodyText, marginBottom: 4 }}>{T.clause6Intro}</Text>
-          {T.clause6Items.map((txt, i) => (
-            <Text key={i} style={{ ...s.indented, marginBottom: 5 }}>
-              {String.fromCharCode(97 + i) + '. ' + txt}
-            </Text>
-          ))}
-          <Text style={{ ...s.bodyText, marginTop: 6 }}>{T.clause6Close1}</Text>
-          <Text style={{ ...s.bodyText, marginTop: 4 }}>{T.clause6Close2}</Text>
-
-          {/* CLAUSE 7 */}
-          <Text style={s.clauseTitle}>{T.clause7Title}</Text>
-          <Text style={s.bodyText}>{T.clause7_1}</Text>
-          <Text style={{ ...s.bodyText, marginTop: 4 }}>{T.clause7_2}</Text>
-          <Text style={{ ...s.bodyText, marginTop: 4 }}>{T.clause7_3}</Text>
-
-          {/* CLAUSE 8 */}
-          <Text style={s.clauseTitle}>{T.clause8Title}</Text>
-          <Text style={s.bodyText}>{T.clause8}</Text>
-
-          {/* CLAUSE 9 */}
-          <Text style={s.clauseTitle}>{T.clause9Title}</Text>
-          <Text style={s.bodyText}>{T.clause9_1}</Text>
-          <Text style={{ ...s.bodyText, marginTop: 4 }}>{T.clause9_2}</Text>
-          <Text style={{ ...s.bodyText, marginTop: 4 }}>{T.clause9_3}</Text>
-
-          {/* CLAUSE 10 */}
-          <Text style={s.clauseTitle}>{T.clause10Title}</Text>
-          <Text style={s.bodyText}>{T.clause10_1}</Text>
-          <Text style={{ ...s.bodyText, marginTop: 4 }}>{T.clause10_2}</Text>
-          <Text style={{ ...s.bodyText, marginTop: 4 }}>{T.clause10_3}</Text>
+          {/* ── Cláusulas editables (sub-apartados de Honorarios + cláusulas 3ª en adelante) ── */}
+          {(() => {
+            let ord = 2 // Primera = Contenido, Segunda = Honorarios (fijas)
+            return clausulas
+              .filter(c => !c.condicion || data.servicios_contrato.some(sv => sv.id === c.condicion))
+              .map(c => {
+                const isClausula = c.nivel === 'clausula'
+                if (isClausula) ord++
+                const titulo  = lang === 'en' ? c.titulo_en : c.titulo_es
+                const bloques = lang === 'en' ? c.bloques_en : c.bloques_es
+                return (
+                  <View key={c.key}>
+                    <Text style={isClausula ? s.clauseTitle : { ...s.subClauseTitle, marginTop: 12 }}>
+                      {isClausula ? `${ordinal(ord, lang)}. ${titulo}` : titulo}
+                    </Text>
+                    {renderBloques(bloques)}
+                  </View>
+                )
+              })
+          })()}
 
           {/* Additional notes */}
           {data.notas && (
@@ -943,9 +975,12 @@ export function ContratoPDF({ data }: { data: ContratoPDFData }) {
           {/* Signatures */}
           <View style={s.firmaBlock} wrap={false}>
             <View style={s.firmaCol}>
-              {/* DocuSign anchor — white 1pt text, invisible but present in PDF text layer */}
-              <Text style={{ fontSize: 1, color: C.white }}>«FP_FIRMA_CLIENTE»</Text>
-              <View style={s.firmaLinea} />
+              <View style={s.firmaLinea}>
+                {/* DocuSign anchor — texto blanco de 1pt, invisible pero presente en la capa
+                    de texto. Va pegado a la LÍNEA (no arriba del bloque) para que los offsets
+                    del tab en lib/docusign/client.ts posicionen la firma sobre la línea. */}
+                <Text style={{ position: 'absolute', bottom: 0, left: 0, fontSize: 1, color: C.white }}>«FP_FIRMA_CLIENTE»</Text>
+              </View>
               <Text style={s.firmaLabel}>{T.firmaCliente}</Text>
               <Text style={s.firmaNombre}>
                 {[data.cliente_nombre, data.cliente_apellidos].filter(Boolean).join(' ')}
@@ -953,28 +988,32 @@ export function ContratoPDF({ data }: { data: ContratoPDFData }) {
               {data.tipo_cliente === 'juridica' && data.cliente_empresa && (
                 <Text style={{ ...s.firmaLabel, marginTop: 2 }}>{data.cliente_empresa}</Text>
               )}
+              {data.cliente_nif && (
+                <Text style={{ ...s.firmaLabel, marginTop: 2 }}>
+                  {(lang === 'en' ? 'ID ' : 'DNI/NIF ') + data.cliente_nif}
+                </Text>
+              )}
             </View>
             <View style={s.firmaCol}>
-              {/* DocuSign anchor */}
-              <Text style={{ fontSize: 1, color: C.white }}>«FP_FIRMA_ESTUDIO»</Text>
-              {/* Signature image only when not sending to DocuSign */}
-              {forDocuSign ? (
-                <View style={{ width: '80%', height: 36, borderBottomWidth: 1, borderBottomColor: C.ink, marginBottom: 6 }} />
-              ) : (
-                <View style={{ position: 'relative', width: '80%', height: 36, borderBottomWidth: 1, borderBottomColor: C.ink, marginBottom: 6 }}>
-                  <Image
-                    src={FIRMA_GABRIELA}
-                    style={{
-                      position: 'absolute',
-                      bottom: 0,
-                      left: 0,
-                      width: '100%',
-                      height: 100,
-                      objectFit: 'contain',
-                    }}
-                  />
-                </View>
-              )}
+              {/* El Estudio firma siempre de forma pre-impresa (firma de Gabriela).
+                  En el envío a DocuSign el ÚNICO firmante digital es el cliente, por lo
+                  que aquí NO se coloca anchor del estudio. */}
+              <View style={{ position: 'relative', width: '80%', height: 36, borderBottomWidth: 1, borderBottomColor: C.ink, marginBottom: 6 }}>
+                {/* La caja de la imagen mide 46pt y queda anclada con la base 8pt por
+                    debajo de la línea: la rúbrica apoya sobre la línea y la cruza
+                    ligeramente, como una firma manuscrita real. */}
+                <Image
+                  src={FIRMA_GABRIELA}
+                  style={{
+                    position: 'absolute',
+                    bottom: -8,
+                    left: 0,
+                    width: '100%',
+                    height: 46,
+                    objectFit: 'contain',
+                  }}
+                />
+              </View>
               <Text style={s.firmaLabel}>{T.firmaEstudio}</Text>
               <Text style={s.firmaNombre}>{STUDIO.rep_nombre}</Text>
               <Text style={{ ...s.firmaLabel, marginTop: 2 }}>{STUDIO.nombre_comercial}</Text>

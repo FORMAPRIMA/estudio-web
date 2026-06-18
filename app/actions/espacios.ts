@@ -10,6 +10,7 @@ import type { Etapa } from '@/lib/espacio/theme'
 import { sendEmail, wrapEmail } from '@/lib/email'
 import { getPlantillaServicios } from '@/app/actions/plantillaPropuestas'
 import { buildPropuestaVM, mapInteriorismoRatios, type PropuestaVM, type PropuestaRowLike } from '@/lib/propuestas/build'
+import type { CronoServicio } from '@/lib/propuestas/cronograma'
 import { buildContratoFromPropuesta } from '@/lib/contratos/buildFromPropuesta'
 
 // Roles que gestionan captación (igual que leads/propuestas).
@@ -530,7 +531,11 @@ export interface EspacioContrato {
   status: string
   pdfFirmadoUrl: string | null
   fechaFirma: string | null
+  fechaContrato: string | null
   hasPropuesta: boolean
+  // Servicios del contrato (alcance firmado) con importes por hito, para pintar
+  // el cronograma de fases y el flujo de pagos en la etapa Contrato.
+  servicios: CronoServicio[]
 }
 
 export async function getEspacioContrato(token: string): Promise<EspacioContrato | null> {
@@ -541,7 +546,9 @@ export async function getEspacioContrato(token: string): Promise<EspacioContrato
 
     const { data: contrato } = await admin
       .from('contratos')
-      .select('numero, status, pdf_firmado_url, fecha_firma')
+      // OJO: contratos NO tiene columna fecha_contrato (el PDF la deriva en runtime);
+      // como fecha de referencia pre-firma usamos fecha_envio.
+      .select('numero, status, pdf_firmado_url, fecha_firma, fecha_envio, contenido, honorarios')
       .eq('lead_id', espacio.lead_id)
       .order('created_at', { ascending: false })
       .limit(1)
@@ -556,12 +563,32 @@ export async function getEspacioContrato(token: string): Promise<EspacioContrato
       .limit(1)
       .maybeSingle()
 
+    // Servicios del contenido del contrato, hidratando el importe de cada hito de
+    // pago desde la tabla de honorarios (que es la fuente firmada de los importes).
+    type RawServicio = { id: string; label: string; semanas?: string; pago?: { label: string; pct: number }[] }
+    type RawHonorario = { seccion: string; descripcion: string; importe: number }
+    const rawServicios = ((contrato.contenido as { servicios?: RawServicio[] } | null)?.servicios ?? [])
+    const honorarios = (contrato.honorarios ?? []) as RawHonorario[]
+    const usados = new Set<number>()
+    const servicios: CronoServicio[] = rawServicios.map(srv => ({
+      id:      srv.id,
+      label:   srv.label,
+      semanas: srv.semanas ?? '',
+      pago:    (srv.pago ?? []).map(p => {
+        const idx = honorarios.findIndex((h, i) => !usados.has(i) && h.seccion === srv.label && h.descripcion === p.label)
+        if (idx >= 0) usados.add(idx)
+        return { label: p.label, pct: p.pct, importe: idx >= 0 ? honorarios[idx].importe : 0 }
+      }),
+    }))
+
     return {
       numero:        (contrato.numero as string) ?? null,
       status:        (contrato.status as string) ?? 'borrador',
       pdfFirmadoUrl: (contrato.pdf_firmado_url as string) ?? null,
       fechaFirma:    (contrato.fecha_firma as string) ?? null,
+      fechaContrato: (contrato.fecha_envio as string) ?? null,
       hasPropuesta:  !!propuesta,
+      servicios,
     }
   } catch {
     return null

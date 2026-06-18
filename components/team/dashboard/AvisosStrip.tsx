@@ -732,9 +732,17 @@ export default function AvisosStrip({ avisos, facturasPendientes = [] }: Props) 
   const visible         = avisos.filter(a => !hidden.has(a.id))
   const visibleFacturas = facturasPendientes.filter(f => !hiddenFacturas.has(f.id))
 
-  const handleArchivar = (id: string) => {
+  const handleArchivar = async (id: string) => {
     setHidden(prev => new Set([...Array.from(prev), id]))
-    archivarAviso(id)
+    const result = await archivarAviso(id)
+    if ('error' in result) {
+      // Restore the card so the failure is visible instead of silent
+      setHidden(prev => {
+        const next = new Set(Array.from(prev))
+        next.delete(id)
+        return next
+      })
+    }
   }
 
   const handleDismissFactura = (id: string) => {

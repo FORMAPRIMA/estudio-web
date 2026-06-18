@@ -2,9 +2,12 @@
 // el layout de /espacio. Nace del bloque de estilos de la landing de Bienvenida y
 // añade utilidades comunes (tarjetas, animaciones de entrada).
 
+// El CSS va vía dangerouslySetInnerHTML: como hijo de texto, React lo escapa en
+// el servidor (' → &#x27;) y el cliente genera la comilla literal, lo que rompe la
+// hidratación y fuerza un re-render completo de la página en el navegador.
 export default function EspacioStyles() {
   return (
-    <style>{`
+    <style dangerouslySetInnerHTML={{ __html: `
       .fp-espacio * { box-sizing: border-box; margin: 0; padding: 0; }
       .fp-espacio {
         font-family: 'Inter', system-ui, -apple-system, sans-serif;
@@ -162,6 +165,6 @@ export default function EspacioStyles() {
       @media (max-width: 560px) {
         .fp-gantt-row { grid-template-columns: 1fr; gap: 6px; }
       }
-    `}</style>
+    ` }} />
   )
 }

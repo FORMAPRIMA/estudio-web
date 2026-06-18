@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { isFpRole } from '@/lib/types'
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -9,7 +10,7 @@ export async function POST(req: NextRequest) {
 
   const { data: profile } = await supabase
     .from('profiles').select('rol').eq('id', user.id).single()
-  if (!profile || profile.rol !== 'fp_partner') {
+  if (!profile || !isFpRole(profile.rol)) {
     return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
   }
 

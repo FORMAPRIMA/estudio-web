@@ -6,6 +6,7 @@ import { createElement } from 'react'
 import { ContratoPDF } from '@/components/pdfs/ContratoPDF'
 import type { ContratoPDFData, ServicioContrato, ContratoHonorario } from '@/components/pdfs/ContratoPDF'
 import { createAndSendEnvelope } from '@/lib/docusign/client'
+import { CLAUSULAS_DEFAULT, type ContratoClausula } from '@/lib/contratos/clausulas'
 
 export async function POST(
   req: NextRequest,
@@ -67,9 +68,17 @@ export async function POST(
     const serviciosContrato: ServicioContrato[] = (contrato.contenido?.servicios ?? []) as ServicioContrato[]
     const honorarios: ContratoHonorario[]       = (contrato.honorarios ?? []) as ContratoHonorario[]
 
+    // Congela el snapshot de cláusulas en el envío (si aún no estaba persistido).
+    const clausulasSnapshot = (contrato.contenido?.clausulas as ContratoClausula[] | undefined) ?? CLAUSULAS_DEFAULT
+    if (!contrato.contenido?.clausulas) {
+      await admin.from('contratos')
+        .update({ contenido: { ...(contrato.contenido ?? {}), clausulas: clausulasSnapshot } })
+        .eq('id', params.id)
+    }
+
     const pdfData: ContratoPDFData = {
       numero:             contrato.numero ?? '—',
-      fecha_contrato:     contrato.fecha_contrato ?? null,
+      fecha_contrato:     contrato.fecha_contrato ?? contrato.fecha_firma ?? null, // viva hasta la firma
       tipo_cliente:       (contrato.contenido?.tipo_cliente ?? (contrato.cliente_empresa ? 'juridica' : 'fisica')) as 'fisica' | 'juridica',
       cliente_nombre:     contrato.cliente_nombre    ?? null,
       cliente_apellidos:  contrato.cliente_apellidos ?? null,
@@ -83,6 +92,7 @@ export async function POST(
       servicios_contrato: serviciosContrato,
       honorarios,
       notas:              contrato.notas ?? null,
+      clausulas:          clausulasSnapshot,
       lang:               'es',
       plantilla_en,
       forDocuSign:        true,
@@ -94,25 +104,22 @@ export async function POST(
     )
 
     // ── Build webhook URL ─────────────────────────────────────────────────────
-    const appUrl     = process.env.NEXT_PUBLIC_APP_URL ?? 'https://internal.formaprima.es'
+    const appUrl     = process.env.NEXT_PUBLIC_SITE_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? 'https://internal.formaprima.es'
     const webhookUrl = `${appUrl}/api/webhooks/docusign`
-
-    // ── Studio signer email comes from the logged-in partner user ─────────────
-    const estudioEmail = user.email ?? 'contacto@formaprima.es'
-    const estudioNombre = profile.nombre ?? 'Forma Prima'
 
     const clienteNombre = [contrato.cliente_nombre, contrato.cliente_apellidos]
       .filter(Boolean).join(' ') || 'Cliente'
 
-    // ── Send to DocuSign ──────────────────────────────────────────────────────
+    // ── Send to DocuSign (remote/email signing — single signer: the client) ───
+    // El estudio NO firma digitalmente: su firma (Gabriela) va pre-impresa en el PDF.
     const { envelopeId } = await createAndSendEnvelope({
       contratoId: params.id,
       numero:     contrato.numero ?? params.id,
       pdfBuffer,
-      signers: {
-        cliente: { email: contrato.cliente_email, name: clienteNombre },
-        estudio: { email: estudioEmail,           name: estudioNombre  },
-      },
+      cliente:    { email: contrato.cliente_email, name: clienteNombre },
+      // El anchor de ContratoPDF está pegado a la línea de firma: la rúbrica se
+      // estampa apoyada en la línea y la fecha pequeña a su derecha, encima.
+      clienteTabOffsets: { signX: 14, signY: -38, dateX: 110, dateY: -12 },
       webhookUrl,
     })
 

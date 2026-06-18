@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { buildContratoFromPropuesta } from '@/lib/contratos/buildFromPropuesta'
+import { getPlantillaClausulas } from '@/app/actions/plantillaContratos'
 
 const PATH = '/team/captacion/contratos'
 
@@ -77,8 +78,9 @@ export async function createContrato(
       : 0
     const numero = `C-${year}-${String(lastN + 1).padStart(3, '0')}`
 
-    // Pre-fill studio config
+    // Pre-fill studio config + snapshot de cláusulas desde la plantilla de origen
     const { data: cfg } = await admin.from('estudio_config').select('*').eq('id', 1).single()
+    const clausulasPlantilla = await getPlantillaClausulas()
 
     // Pre-fill contacto data (lead or cliente)
     let contactoData: Record<string, string | null> = {}
@@ -122,6 +124,7 @@ export async function createContrato(
         honorarios:       [],
         status:           'borrador',
         created_by:       user.id,
+        contenido:        { clausulas: clausulasPlantilla },
         ...contactoData,
       })
       .select('id')
@@ -221,6 +224,82 @@ export async function deleteContrato(id: string): Promise<{ success: true } | { 
 
 // ── Firmar contrato → genera proyecto, cliente y facturación ─────────────────
 
+// ── Cálculo de fechas de pago a partir de la fecha de firma ──────────────────
+// Las fases comprometidas (anteproyecto → proyecto de ejecución → interiorismo)
+// corren en días hábiles desde la firma. Los hitos de cada fase se reparten:
+// "a la firma" → día de la firma; último hito → fin de fase; intermedios →
+// proporcional. Fases sin plazo numérico (obra, gestión) → sin fecha (avance).
+
+function parseDiasHabiles(s?: string | null): number | null {
+  if (!s) return null
+  const nums = s.match(/\d+(?:[.,]\d+)?/g)?.map(n => parseFloat(n.replace(',', '.'))) ?? []
+  if (nums.length === 0) return null
+  const v = nums.length >= 2 ? (nums[0] + nums[1]) / 2 : nums[0]
+  const lc = s.toLowerCase()
+  if (lc.includes('semana') || lc.includes('week')) return Math.round(v * 5)
+  if (lc.includes('mes') || lc.includes('month')) return Math.round(v * 21)
+  return Math.round(v)
+}
+
+function addBusinessDays(startISO: string, days: number): string {
+  const d = new Date(`${startISO}T12:00:00`)
+  let remaining = Math.round(days)
+  while (remaining > 0) {
+    d.setDate(d.getDate() + 1)
+    const dow = d.getDay()
+    if (dow !== 0 && dow !== 6) remaining--
+  }
+  return d.toISOString().split('T')[0]
+}
+
+/** Para cada línea de honorarios devuelve su fecha de pago calculada (o null). */
+function calcFechasPagoDesdefirma(
+  honorarios: Honorario[],
+  servicios: { id: string; label: string; semanas?: string }[],
+  firmaISO: string,
+): (string | null)[] {
+  // Ventana [inicio, fin] de cada fase con plazo definido, en días hábiles desde la firma
+  const ranges: Record<string, { start: number; end: number }> = {}
+  let cursor = 0
+  for (const sid of ['anteproyecto', 'proyecto_ejecucion'] as const) {
+    const svc = servicios.find(s => s.id === sid)
+    if (!svc) continue
+    const d = parseDiasHabiles(svc.semanas)
+    if (!d || d <= 0) continue
+    ranges[svc.label] = { start: cursor, end: cursor + d }
+    cursor += d
+  }
+  // Interiorismo arranca al terminar el proyecto de ejecución (o lo que haya antes)
+  const inte = servicios.find(s => s.id === 'interiorismo')
+  if (inte) {
+    const d = parseDiasHabiles(inte.semanas)
+    if (d && d > 0) ranges[inte.label] = { start: cursor, end: cursor + d }
+  }
+
+  // Agrupar hitos por sección preservando el orden de aparición
+  const grupos = new Map<string, number[]>()
+  honorarios.forEach((h, i) => {
+    const arr = grupos.get(h.seccion) ?? []
+    arr.push(i)
+    grupos.set(h.seccion, arr)
+  })
+
+  const out: (string | null)[] = honorarios.map(() => null)
+  grupos.forEach((idxs, seccion) => {
+    const range = ranges[seccion]
+    idxs.forEach((hIdx, pos) => {
+      const h = honorarios[hIdx]
+      const esALaFirma = (h.descripcion ?? '').toLowerCase().includes('firma')
+      if (esALaFirma) { out[hIdx] = firmaISO; return }
+      if (!range) return // fase sin plazo definido → ligada a avance, sin fecha
+      const frac = idxs.length === 1 ? 1 : pos / (idxs.length - 1)
+      const dias = range.start + (range.end - range.start) * frac
+      out[hIdx] = addBusinessDays(firmaISO, dias)
+    })
+  })
+  return out
+}
+
 async function _firmarContratoInternal(
   contratoId: string,
   callerUserId: string,
@@ -319,13 +398,19 @@ async function _firmarContratoInternal(
   }
 
   if (honorarios.length > 0) {
+    // Fechas de pago derivadas del día de firma + plazos comprometidos por fase.
+    // Una fecha puesta a mano en el contrato siempre gana al cálculo.
+    const hoyISO = new Date().toISOString().split('T')[0]
+    const serviciosContrato = ((c.contenido?.servicios ?? []) as { id: string; label: string; semanas?: string }[])
+    const fechasCalculadas = calcFechasPagoDesdefirma(honorarios, serviciosContrato, hoyISO)
+
     const { error: facturasErr } = await admin.from('facturas').insert(
-      honorarios.map(h => ({
+      honorarios.map((h, i) => ({
         proyecto_id:         proyectoId,
         seccion:             SECCION_NORM[h.seccion] ?? h.seccion,
         concepto:            h.descripcion || h.seccion,
         monto:               h.importe,
-        fecha_pago_acordada: h.fecha_pago_acordada ?? null,
+        fecha_pago_acordada: h.fecha_pago_acordada ?? fechasCalculadas[i],
         status:              'acordada_contrato',
         clientes_ids:        [clienteId],
       }))
@@ -391,7 +476,9 @@ async function _firmarContratoInternal(
     }
   }
 
-  // 8. Mark contract as firmado and link to project/client
+  // 8. Mark contract as firmado and link to project/client.
+  // La fecha del contrato es "viva" hasta este momento (el PDF pinta el día en que
+  // el cliente lo abre); fecha_firma la congela: los renders posteriores la usan.
   await admin.from('contratos').update({
     status:      'firmado',
     fecha_firma: new Date().toISOString().split('T')[0],

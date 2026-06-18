@@ -128,9 +128,12 @@ export default async function EspacioPage({
 
   // ── Etapa Contrato: estado + propuesta archivada + PDF firmado ────────────
   } else if (etapa === 'contrato') {
-    const contrato = await getEspacioContrato(token)
+    const [contrato, proyectoImages] = await Promise.all([
+      getEspacioContrato(token),
+      getOrderedProyectoImages(),
+    ])
     if (contrato) {
-      content = <ContratoView token={token} nombre={espacio.nombre} contrato={contrato} />
+      content = <ContratoView token={token} nombre={espacio.nombre} contrato={contrato} proyectoImages={proyectoImages} />
     } else {
       content = (
         <div style={{ maxWidth: 560, margin: '0 auto', padding: '96px 24px', textAlign: 'center' }}>

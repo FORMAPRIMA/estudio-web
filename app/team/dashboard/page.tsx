@@ -53,6 +53,8 @@ export default async function DashboardPage() {
   const today = now.toISOString().split('T')[0]
   const nowTime = now.toTimeString().slice(0, 8) // "HH:MM:SS"
 
+  const admin = createAdminClient()
+
   // ── Avisos ────────────────────────────────────────────────────────────────
   const [{ data: avisosRaw }, { data: archivadosRaw }] = await Promise.all([
     supabase
@@ -62,7 +64,7 @@ export default async function DashboardPage() {
       .or(`fecha_caducidad.is.null,fecha_caducidad.gte.${today}`)
       .or(`destinatario_id.is.null,destinatario_id.eq.${user.id}`)
       .order('created_at', { ascending: false }),
-    supabase
+    admin
       .from('avisos_archivados')
       .select('aviso_id')
       .eq('user_id', user.id),
@@ -95,8 +97,6 @@ export default async function DashboardPage() {
   let facturasPendientes: import('@/components/team/dashboard/AvisosStrip').FacturaPendiente[] = []
 
   if (profile.rol === 'fp_partner') {
-    const admin = createAdminClient()
-
     const cutoff = new Date()
     cutoff.setDate(cutoff.getDate() - 14)
     const cutoffIso = cutoff.toISOString().split('T')[0]

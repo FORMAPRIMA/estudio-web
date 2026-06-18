@@ -59,10 +59,15 @@ por el equipo y generar un prompt preciso y accionable para un asistente de IA d
 - Tablas: design_hunter_viajes, design_hunter_entries (media_urls text[])
 - Bucket Storage: design-hunter (público)
 
+### Gastos y facturas (/team/gastos) — todos los roles FP
+- ScannerPage: components/team/finanzas/ScannerPage.tsx (mode 'partner' = vista completa, 'personal' = drop-off solo gastos propios), app/api/scan-ticket/route.ts
+- Autocrop de fotos: lib/gastos/autocrop.ts (jscanify + OpenCV, carga bajo demanda)
+- Export ZIP/Excel: lib/gastos/exportZip.ts
+
 ### Finanzas — fp_partner
-- Scanner: components/team/finanzas/ScannerPage.tsx, app/api/scan-ticket/route.ts
-- Conciliación: components/team/finanzas/ReconciliationPage.tsx
-- Facturas emitidas: components/team/finanzas/FacturasEmitidasPage.tsx
+- Conciliación: components/team/finanzas/ReconciliationPage.tsx; scoring compartido en lib/finanzas/reconciliation.ts (matching automático al guardar scans, tolerancia importe ±0,02)
+- Facturas emitidas: components/team/finanzas/FacturasEmitidasPage.tsx; PDF compartido en lib/facturas/buildFacturaPdf.ts
+- Portal del gestor: /team/finanzas/gestor (tokens), portal público /gestor/[token], tabla gestor_tokens
 
 ### Proyectos — todos los roles FP
 - app/team/proyectos/ → fases, tasks, kanban, documentación

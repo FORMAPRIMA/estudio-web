@@ -1046,10 +1046,8 @@ export async function generateContractsFromAwards(
             contratoId:   contractId,
             numero:       docNumero,
             pdfBuffer,
-            signers: {
-              cliente: { email: pkg.partner_email, name: pkg.partner_nombre },
-              estudio: { email: 'contacto@formaprima.es', name: 'Forma Prima' },
-            },
+            cliente: { email: pkg.partner_email, name: pkg.partner_nombre },
+            estudio: { email: 'contacto@formaprima.es', name: 'Forma Prima' },
             webhookUrl,
             emailSubject: `Orden de Ejecución de Obra · ${project.nombre} — FP execution`,
             documentName: `Orden-Ejecucion-${safePartner}`,

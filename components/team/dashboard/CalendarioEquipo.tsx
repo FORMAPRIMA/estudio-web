@@ -37,11 +37,6 @@ function personColor(id: string | null) {
   return PERSON_COLORS[h % PERSON_COLORS.length]
 }
 
-function getInitials(nombre: string) {
-  const parts = nombre.trim().split(/\s+/)
-  return (parts.length >= 2 ? parts[0][0] + parts[1][0] : nombre.slice(0, 2)).toUpperCase()
-}
-
 // ── Helpers de fecha ──────────────────────────────────────────────────────────
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -362,7 +357,7 @@ function Chip({
   // Etiqueta visible solo al inicio del segmento (inicio del evento o lunes).
   const baseLabel = ev.tipo === 'hito'
     ? (ev.titulo ?? 'Hito')
-    : `${getInitials(ev.autor_nombre)} - ${meta.label}`
+    : `${ev.autor_nombre} - ${meta.label}`
   const showLabel = segmentStart
 
   return (

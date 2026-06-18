@@ -28,6 +28,12 @@ const ALL_NAV: (NavItem & { roles: FpRole[] })[] = [
     label: 'Time Tracker',
     roles: ['fp_team', 'fp_manager', 'fp_partner', 'fp_biz_dev'],
   },
+  // Gastos y facturas: los no-partner solo ven (y suben) sus propios gastos
+  {
+    href: '/team/gastos',
+    label: 'Gastos y facturas',
+    roles: ['fp_team', 'fp_manager', 'fp_biz_dev'],
+  },
   {
     href: '/team/mejoras',
     label: 'Mejoras & Bugs',
@@ -51,6 +57,7 @@ const ALL_NAV: (NavItem & { roles: FpRole[] })[] = [
   { href: '/team/captacion', label: 'Captación', roles: ['fp_partner', 'fp_manager', 'fp_biz_dev'] },
   { href: '/team/captacion/leads', label: 'Leads', roles: ['fp_partner', 'fp_manager', 'fp_biz_dev'], isSubItem: true },
   { href: '/team/captacion/plantilla-propuestas', label: 'Plantilla prop', roles: ['fp_partner', 'fp_manager', 'fp_biz_dev'], isSubItem: true },
+  { href: '/team/captacion/plantilla-contratos', label: 'Plantilla contr', roles: ['fp_partner', 'fp_manager', 'fp_biz_dev'], isSubItem: true },
   { href: '/team/captacion/due-diligencia', label: 'Due Diligence Tec.', roles: ['fp_partner', 'fp_manager', 'fp_biz_dev'], isSubItem: true },
   // ── Proyectos ─────────────────────────────────────────────────────────────
   {
@@ -84,8 +91,9 @@ const ALL_NAV: (NavItem & { roles: FpRole[] })[] = [
   { href: '', label: 'Finanzas generales', roles: ['fp_partner'], isSection: true },
   { href: '/team/finanzas/macro/costes', label: 'Costes fijos/variables', roles: ['fp_partner'], isSubItem: true },
   { href: '', label: 'Gastos', roles: ['fp_partner'], isSection: true },
-  { href: '/team/finanzas/scanner', label: 'Scanner de tickets', roles: ['fp_partner'], isSubItem: true },
+  { href: '/team/gastos', label: 'Gastos y facturas', roles: ['fp_partner'], isSubItem: true },
   { href: '/team/finanzas/conciliacion', label: 'Conciliación bancaria', roles: ['fp_partner'], isSubItem: true },
+  { href: '/team/finanzas/gestor', label: 'Portal del gestor', roles: ['fp_partner'], isSubItem: true },
   { href: '', label: 'Facturación', roles: ['fp_partner'], isSection: true },
   { href: '/team/finanzas/facturacion/dashboard', label: 'Dashboard general', roles: ['fp_partner'], isSubItem: true },
   { href: '/team/finanzas/facturacion/control', label: 'Facturación por proyecto', roles: ['fp_partner'], isSubItem: true },

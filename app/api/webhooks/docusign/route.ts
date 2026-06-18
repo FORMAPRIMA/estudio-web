@@ -10,7 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { downloadCompletedDocument } from '@/lib/docusign/client'
-import { firmarContratoAdmin } from '@/app/actions/contratos'
+import { finalizeContratoFirmado } from '@/lib/docusign/finalizeContrato'
 import { applyClienteChangesForActa, cancelClienteChangesForActa } from '@/lib/fp-execution/obra-apply'
 import crypto from 'node:crypto'
 
@@ -163,50 +163,12 @@ export async function POST(req: NextRequest) {
     }
 
     if (envelopeStatus === 'completed') {
-      // Guard against duplicate webhook deliveries
-      if (contrato.docusign_status === 'completed') {
-        return NextResponse.json({ ok: true })
-      }
-
-      // ── Download signed PDF ───────────────────────────────────────────────
-      let pdfFirmadoUrl: string | null = null
-      try {
-        const signedPdf = await downloadCompletedDocument(envelopeId)
-
-        // Upload to Supabase Storage bucket "contratos-firmados"
-        const fileName = `${contrato.id}/${envelopeId}-firmado.pdf`
-        const { data: uploadData, error: uploadErr } = await admin.storage
-          .from('contratos-firmados')
-          .upload(fileName, signedPdf, {
-            contentType: 'application/pdf',
-            upsert:      true,
-          })
-
-        if (!uploadErr && uploadData) {
-          const { data: urlData } = admin.storage
-            .from('contratos-firmados')
-            .getPublicUrl(fileName)
-          pdfFirmadoUrl = urlData.publicUrl
-        } else {
-          console.error('[docusign/webhook] storage upload error:', uploadErr?.message)
-        }
-      } catch (dlErr) {
-        console.error('[docusign/webhook] download error:', dlErr)
-      }
-
-      // ── Update docusign fields ────────────────────────────────────────────
-      await admin.from('contratos').update({
-        docusign_status:       'completed',
-        docusign_completed_at: new Date().toISOString(),
-        ...(pdfFirmadoUrl ? { pdf_firmado_url: pdfFirmadoUrl } : {}),
-      }).eq('id', contrato.id)
-
-      // ── Fire firmarContratoAdmin (creates project, client, billing) ────────
-      if (contrato.status !== 'firmado') {
-        const result = await firmarContratoAdmin(contrato.id)
-        if ('error' in result) {
-          console.error('[docusign/webhook] firmarContratoAdmin error:', result.error)
-        }
+      const result = await finalizeContratoFirmado(
+        contrato as { id: string; status: string | null; docusign_status: string | null },
+        envelopeId,
+      )
+      if ('error' in result) {
+        console.error('[docusign/webhook] finalize error:', result.error)
       }
 
     } else if (envelopeStatus === 'declined' || envelopeStatus === 'voided') {

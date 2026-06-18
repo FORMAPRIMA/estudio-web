@@ -2,6 +2,7 @@ import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import ContratoDetalle from '@/components/team/captacion/ContratoDetalle'
+import { getPlantillaClausulas } from '@/app/actions/plantillaContratos'
 
 export const metadata = { title: 'Contrato · Captación' }
 
@@ -16,9 +17,10 @@ export default async function Page({ params }: { params: { id: string } }) {
 
   const admin = createAdminClient()
 
-  const [{ data: contrato }, { data: leads }] = await Promise.all([
+  const [{ data: contrato }, { data: leads }, plantillaClausulas] = await Promise.all([
     admin.from('contratos').select('*').eq('id', params.id).single(),
     admin.from('leads').select('id, nombre, apellidos, empresa, nif_cif, email, email_cc, telefono, telefono_alt, direccion, ciudad, codigo_postal, pais').order('nombre'),
+    getPlantillaClausulas(),
   ])
 
   if (!contrato) notFound()
@@ -27,6 +29,7 @@ export default async function Page({ params }: { params: { id: string } }) {
     <ContratoDetalle
       contrato={contrato}
       leads={leads ?? []}
+      plantillaClausulas={plantillaClausulas}
     />
   )
 }

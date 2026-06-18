@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { generateEspacioCookieToken, espacioCookieName } from '@/lib/espacio/access'
 import type { ContratoPDFData, ServicioContrato, ContratoHonorario } from '@/components/pdfs/ContratoPDF'
+import { CLAUSULAS_DEFAULT, type ContratoClausula } from '@/lib/contratos/clausulas'
 
 export const dynamic = 'force-dynamic'
 
@@ -58,7 +59,7 @@ export async function GET(req: NextRequest, { params }: { params: { token: strin
   const c = contrato as Record<string, any>
   const pdfData: ContratoPDFData = {
     numero:             c.numero ?? '—',
-    fecha_contrato:     c.fecha_contrato ?? null,
+    fecha_contrato:     c.fecha_contrato ?? c.fecha_firma ?? null, // viva hasta la firma
     tipo_cliente:       (c.contenido?.tipo_cliente ?? (c.cliente_empresa ? 'juridica' : 'fisica')) as 'fisica' | 'juridica',
     cliente_nombre:     c.cliente_nombre ?? null,
     cliente_apellidos:  c.cliente_apellidos ?? null,
@@ -72,6 +73,7 @@ export async function GET(req: NextRequest, { params }: { params: { token: strin
     servicios_contrato: (c.contenido?.servicios ?? []) as ServicioContrato[],
     honorarios:         (c.honorarios ?? []) as ContratoHonorario[],
     notas:              c.notas ?? null,
+    clausulas:          (c.contenido?.clausulas as ContratoClausula[] | undefined) ?? CLAUSULAS_DEFAULT,
     plantilla_en,
     lang: 'es',
   }

@@ -26,6 +26,39 @@ export default async function AppsPage() {
       </p>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
+        <Link href="/team/apps/quiniela" style={{ textDecoration: 'none' }}>
+          <div
+            className="apps-card"
+            style={{
+              background: '#fff',
+              borderRadius: 4,
+              padding: '28px 24px',
+              cursor: 'pointer',
+            }}
+          >
+            <div style={{
+              width: 40, height: 40, borderRadius: 4,
+              background: '#3D8B5F15',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 20, marginBottom: 16,
+            }}>
+              ⚽
+            </div>
+            <p style={{ fontSize: 13, fontWeight: 500, color: '#1A1A1A', marginBottom: 6, letterSpacing: '-0.01em' }}>
+              La Porra del Mundial
+            </p>
+            <p style={{ fontSize: 11, color: '#1A1A1A70', fontWeight: 300, lineHeight: 1.5, marginBottom: 20 }}>
+              Quiniela del Mundial 2026: marcadores, escalera del campeón y bote para el podio.
+            </p>
+            <span style={{
+              fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase',
+              color: '#3D8B5F', fontWeight: 500,
+            }}>
+              Abrir →
+            </span>
+          </div>
+        </Link>
+
         <Link href="/team/apps/design-hunter" style={{ textDecoration: 'none' }}>
           <div
             className="apps-card"

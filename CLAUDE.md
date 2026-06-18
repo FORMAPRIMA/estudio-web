@@ -184,8 +184,9 @@ Sistema de control financiero completo.
 | `/facturacion/control` | `FacturacionKanbanPage` → `FacturacionProyectoDetalle` | Facturas por proyecto (kanban) |
 | `/facturacion/emitidas` | `FacturasEmitidasPage` | Facturas emitidas en PDF |
 | `/facturacion/empresa` | `InfoEmpresaPage` | Datos fiscales del estudio |
-| `/scanner` | `ScannerPage` | Escaneo de tickets con OCR (IA) |
-| `/conciliacion` | `ReconciliationPage` | Conciliación bancaria |
+| `/team/gastos` (fuera de finanzas) | `ScannerPage` | Gastos y facturas: escaneo con OCR (IA) + autocrop (jscanify). Partner ve todo; el resto de roles FP solo sube y ve SUS gastos (modo "personal") |
+| `/conciliacion` | `ReconciliationPage` | Conciliación bancaria. Matching automático al guardar cada scan (`lib/finanzas/reconciliation.ts`, tolerancia importe ±0,02) |
+| `/gestor` | `GestorAccesosPage` | Tokens de acceso del portal del gestor (solo lectura, revocables) |
 | `/dashboard` | `FinanzasDashboard` | Dashboard general (aún en construcción) |
 
 **Sistema de históricos** (muy importante):
@@ -363,6 +364,7 @@ Registro de horas por proyecto y fase. Todos los roles FP.
 | `mejoras` | Bugs y mejoras reportadas por el equipo |
 | `avisos` | Avisos internos. `visible_roles text[]` filtra por rol (null = todos). `nivel`: `informativo\|recordatorio\|importante\|urgente` |
 | `bienvenida_tokens` | Tokens de onboarding para nuevos clientes |
+| `gestor_tokens` | Tokens revocables del portal del gestor (acceso solo lectura) |
 
 ---
 
@@ -407,6 +409,7 @@ Registro de horas por proyecto y fase. Todos los roles FP.
 /portal/[id]                Vista de proyecto del cliente (token)
 /bienvenida/[token]         Onboarding de nuevo cliente
 /execution-portal/[token]   Portal para partners de FP Execution
+/gestor/[token]             Portal de la gestoría (solo lectura: gastos, facturas, conciliación)
 ```
 
 ### Área interna `/team`
@@ -440,8 +443,10 @@ Registro de horas por proyecto y fase. Todos los roles FP.
 /team/finanzas/facturacion/control/[id] Detalle facturación proyecto
 /team/finanzas/facturacion/emitidas     Facturas emitidas
 /team/finanzas/facturacion/empresa      Datos fiscales estudio
-/team/finanzas/scanner      Scanner de tickets
+/team/gastos                Gastos y facturas (todos los roles FP; no-partner solo ve los suyos)
+/team/finanzas/scanner      (redirect → /team/gastos)
 /team/finanzas/conciliacion Conciliación bancaria
+/team/finanzas/gestor       Gestión de accesos del portal del gestor
 /team/fp-execution/dashboard     Dashboard FP Execution
 /team/fp-execution/projects      Lista proyectos FPE
 /team/fp-execution/projects/[id] Detalle proyecto FPE
@@ -491,6 +496,8 @@ Registro de horas por proyecto y fase. Todos los roles FP.
 /api/fpe-documents/upload-url       POST — URL firmada para upload
 /api/fpe-portal/bid                 POST — submit de oferta de partner
 /api/fpe-portal/question            POST — pregunta de partner
+/api/gestor/[token]/gastos-zip      GET  — ZIP mensual de gastos (portal del gestor)
+/api/gestor/[token]/factura/[id]     GET  — PDF de factura emitida (portal del gestor)
 /api/webhooks/docusign              POST — webhook de eventos DocuSign
 /api/cron/horas-faltantes           GET  — recuerda registrar horas
 /api/cron/docs-faltantes            GET  — avisa de documentos pendientes

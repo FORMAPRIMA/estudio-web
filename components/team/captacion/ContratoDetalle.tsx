@@ -7,6 +7,9 @@ import type { Honorario } from '@/app/actions/contratos'
 import { SERVICIO_IDS, SERVICIOS_CONFIG } from '@/lib/propuestas/config'
 import type { ServicioId } from '@/lib/propuestas/config'
 import type { ServicioContrato } from '@/components/pdfs/ContratoPDF'
+import ClausulasEditor from '@/components/team/captacion/ClausulasEditor'
+import { seedClausulas } from '@/lib/contratos/clausulas'
+import type { ContratoClausula } from '@/lib/contratos/clausulas'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -31,39 +34,6 @@ const STATUS_META: Record<string, { label: string; color: string; bg: string }> 
 }
 
 const STATUS_ORDER = ['borrador', 'enviado', 'negociacion', 'firmado', 'cancelado']
-
-const DEFAULT_CUERPO_TEXTO = `CONDICIONES GENERALES DEL CONTRATO DE SERVICIOS PROFESIONALES
-
-PRIMERA. OBJETO DEL CONTRATO
-El presente contrato tiene por objeto la prestación de los servicios profesionales de arquitectura e interiorismo detallados en el apartado de honorarios y facturación, conforme a las condiciones acordadas entre las partes.
-
-SEGUNDA. OBLIGACIONES DEL ESTUDIO
-El estudio se compromete a ejecutar los servicios contratados con la diligencia y competencia profesional exigibles, manteniendo informado al cliente de cualquier circunstancia relevante que afecte al desarrollo del proyecto, y respetando los plazos acordados salvo causa de fuerza mayor o modificaciones solicitadas por el cliente.
-
-TERCERA. OBLIGACIONES DEL CLIENTE
-El cliente facilitará al estudio toda la documentación, accesos e información necesarios para el correcto desarrollo de los servicios. Asimismo, tomará las decisiones requeridas en los plazos acordados, siendo responsable de los retrasos derivados de una demora en dichas decisiones.
-
-CUARTA. HONORARIOS Y FORMA DE PAGO
-Los honorarios y el calendario de pagos acordados se detallan en el apartado de estructura de honorarios y facturación del presente contrato. Las facturas serán abonadas en el plazo máximo de 30 días naturales desde su emisión. El impago de cualquier factura en su fecha de vencimiento faculta al estudio a paralizar los trabajos hasta la regularización de la deuda, sin que ello genere responsabilidad alguna frente al cliente.
-
-QUINTA. PROPIEDAD INTELECTUAL
-Todos los proyectos, planos, diseños, renders, memorias y documentos elaborados por el estudio son de su exclusiva propiedad intelectual hasta el abono íntegro de los honorarios acordados. Una vez satisfechos la totalidad de los honorarios, el cliente adquiere el derecho de uso de la documentación para el proyecto objeto del presente contrato, sin posibilidad de cesión a terceros sin consentimiento expreso del estudio.
-
-SEXTA. CONFIDENCIALIDAD
-Ambas partes se comprometen a mantener la más estricta confidencialidad sobre la información intercambiada en el marco del presente contrato, y a no divulgarla a terceros sin consentimiento previo y por escrito de la otra parte. Esta obligación se mantendrá vigente durante la ejecución del contrato y durante los tres años siguientes a su finalización.
-
-SÉPTIMA. MODIFICACIONES DEL ALCANCE
-Cualquier modificación del alcance de los servicios respecto a lo inicialmente acordado deberá formalizarse por escrito entre las partes, mediante adenda al presente contrato. Dichas modificaciones podrán dar lugar a una revisión de los honorarios y plazos pactados.
-
-OCTAVA. RESOLUCIÓN DEL CONTRATO
-Cualquiera de las partes podrá resolver el presente contrato mediante comunicación escrita con un preaviso mínimo de 15 días naturales. En caso de resolución por iniciativa del cliente, éste abonará los honorarios proporcionales a los trabajos realizados hasta la fecha efectiva de resolución. En caso de resolución por causa imputable al estudio, éste reintegrará los honorarios percibidos por trabajos no realizados.
-
-NOVENA. PROTECCIÓN DE DATOS
-Los datos personales facilitados por las partes serán tratados conforme al Reglamento (UE) 2016/679 (RGPD) y la normativa española de protección de datos vigente, utilizándose exclusivamente para la gestión y ejecución del presente contrato.
-
-DÉCIMA. JURISDICCIÓN Y LEY APLICABLE
-El presente contrato se rige por la legislación española. Las partes, con renuncia expresa a cualquier otro fuero que pudiera corresponderles, se someten a los Juzgados y Tribunales de la ciudad donde radique el domicilio del estudio para resolver cualquier controversia derivada de la interpretación o ejecución del presente contrato.`
-
 
 const TIPOS_PROYECTO = [
   'Vivienda unifamiliar',
@@ -311,9 +281,11 @@ function HonorariosTable({
 export default function ContratoDetalle({
   contrato: initial,
   leads,
+  plantillaClausulas,
 }: {
   contrato: Contrato
   leads: Lead[]
+  plantillaClausulas: ContratoClausula[]
 }) {
   const router = useRouter()
   const [, startTransition] = useTransition()
@@ -361,8 +333,9 @@ export default function ContratoDetalle({
   const [fechaFirma,  setFechaFirma]  = useState(initial.fecha_firma  ?? '')
   const [notas,       setNotas]       = useState(initial.notas         ?? '')
   const [honorarios,  setHonorarios]  = useState<Honorario[]>(initial.honorarios ?? [])
-  const [cuerpoTexto, setCuerpoTexto] = useState<string>(
-    (initial.contenido?.cuerpo_texto as string | undefined) ?? DEFAULT_CUERPO_TEXTO
+  const [clausulas, setClausulas] = useState<ContratoClausula[]>(
+    (initial.contenido?.clausulas as ContratoClausula[] | undefined)
+      ?? (plantillaClausulas.length ? plantillaClausulas : seedClausulas())
   )
   const [serviciosEdit, setServiciosEdit] = useState<ServicioContrato[]>(
     (initial.contenido?.servicios ?? []) as ServicioContrato[]
@@ -383,7 +356,6 @@ export default function ContratoDetalle({
   const [successMsg,      setSuccessMsg]      = useState<string | null>(null)
 
   // ── DocuSign state ────────────────────────────────────────────────────────
-  const [isDocusignLoading,       setIsDocusignLoading]       = useState(false)
   const [dsError,         setDsError]         = useState<string | null>(null)
   const [dsEnvelopeId,    setDsEnvelopeId]    = useState<string | null>(initial.docusign_envelope_id ?? null)
   const [dsStatus,        setDsStatus]        = useState<string | null>(initial.docusign_status ?? null)
@@ -425,7 +397,7 @@ export default function ContratoDetalle({
       if (!res.ok || data.error) { setCompartirError(data.error ?? 'Error al enviar.'); return }
       setShowCompartir(false)
       setStatus('enviado')
-      setSuccessMsg(`Contrato enviado a ${compartirEmails.map(r => r.email).join(', ')}`)
+      setSuccessMsg(`✓ Contrato enviado a ${compartirEmails.map(r => r.email).join(', ')}. El cliente podrá verlo y firmarlo en su portal.`)
     } catch {
       setCompartirError('Error de conexión.')
     } finally {
@@ -575,7 +547,7 @@ export default function ContratoDetalle({
   }
 
   const handleFirmar = async () => {
-    if (!confirm('¿Firmar el contrato? Esto creará automáticamente el cliente, el proyecto y la estructura de facturación.')) return
+    if (!confirm('¿Marcar el contrato como firmado manualmente? Úsalo solo si la firma se hizo fuera de la plataforma (p. ej. en papel). Esto creará automáticamente el cliente, el proyecto y la estructura de facturación.')) return
     setIsFirmando(true)
     setFirmandoError(null)
     const result = await firmarContrato(initial.id)
@@ -586,28 +558,6 @@ export default function ContratoDetalle({
       setStatus('firmado')
       setSuccessMsg(`✓ Contrato firmado. Proyecto y cliente creados correctamente.`)
       router.refresh()
-    }
-  }
-
-  const handleDocuSign = async () => {
-    if (!confirm('¿Enviar a DocuSign? Se enviará el contrato por email a ambas partes para firma electrónica.')) return
-    setIsDocusignLoading(true)
-    setDsError(null)
-    try {
-      const res = await fetch(`/api/contratos/${initial.id}/docusign`, { method: 'POST' })
-      const data = await res.json() as { ok?: boolean; envelopeId?: string; error?: string }
-      if (!res.ok || data.error) {
-        setDsError(data.error ?? 'Error al enviar a DocuSign.')
-        return
-      }
-      setDsEnvelopeId(data.envelopeId ?? null)
-      setDsStatus('sent')
-      if (status === 'borrador') setStatus('enviado')
-      setSuccessMsg('✓ Contrato enviado a DocuSign. Ambas partes recibirán un email para firmar.')
-    } catch {
-      setDsError('Error de conexión.')
-    } finally {
-      setIsDocusignLoading(false)
     }
   }
 
@@ -675,73 +625,55 @@ export default function ContratoDetalle({
               PDF (EN)
             </button>
 
+            {/* Acción principal: enviar al cliente → lo ve y lo firma (DocuSign embebido) en su Espacio */}
             {status !== 'firmado' && status !== 'cancelado' && (
               <button
                 onClick={openCompartir}
                 style={{
-                  height: 36, padding: '0 18px',
-                  background: '#378ADD', color: '#fff',
+                  height: 36, padding: '0 20px',
+                  background: '#1A1A1A', color: '#fff',
                   border: 'none', borderRadius: 4,
-                  cursor: 'pointer', fontSize: 11, fontWeight: 600, letterSpacing: '0.03em',
+                  cursor: 'pointer', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em',
                 }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#2A6DB5' }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '#378ADD' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#333' }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '#1A1A1A' }}
               >
-                ↑ Compartir con cliente
+                ↑ Enviar contrato al cliente
               </button>
             )}
 
+            {/* Estado de la firma electrónica (solo informativo) */}
+            {status !== 'firmado' && status !== 'cancelado' && dsEnvelopeId && (
+              <span style={{
+                height: 34, padding: '0 14px', display: 'inline-flex', alignItems: 'center',
+                fontSize: 11, fontWeight: 600, borderRadius: 4, gap: 6,
+                background: dsStatus === 'completed' ? '#EEF8F4' : dsStatus === 'declined' || dsStatus === 'voided' ? '#FEF2F2' : '#FFF8ED',
+                color:      dsStatus === 'completed' ? '#1D9E75' : dsStatus === 'declined' || dsStatus === 'voided' ? '#DC2626' : '#B45309',
+                border:     '1px solid',
+                borderColor:dsStatus === 'completed' ? '#86EFAC' : dsStatus === 'declined' || dsStatus === 'voided' ? '#FCA5A5' : '#FCD34D',
+              }}>
+                Firma electrónica · {dsStatus === 'completed' ? 'Firmado' : dsStatus === 'declined' ? 'Rechazado' : dsStatus === 'voided' ? 'Anulado' : 'Pendiente'}
+              </span>
+            )}
+
+            {/* Fallback discreto: firma fuera de la plataforma (papel, etc.) */}
             {status !== 'firmado' && status !== 'cancelado' && (
               <button
                 onClick={handleFirmar}
                 disabled={isFirmando}
+                title="Solo si la firma se hizo fuera de la plataforma"
                 style={{
-                  height: 36, padding: '0 20px',
-                  background: isFirmando ? '#888' : '#1D9E75',
-                  color: '#fff', border: 'none', borderRadius: 4,
+                  height: 36, padding: '0 14px',
+                  background: 'none', color: isFirmando ? '#888' : '#999',
+                  border: '1px dashed #D5D2CA', borderRadius: 4,
                   cursor: isFirmando ? 'not-allowed' : 'pointer',
-                  fontSize: 11, fontWeight: 700, letterSpacing: '0.05em',
-                  opacity: isFirmando ? 0.7 : 1,
+                  fontSize: 10.5, fontWeight: 500,
                 }}
-                onMouseEnter={e => { if (!isFirmando) (e.currentTarget as HTMLElement).style.background = '#15805E' }}
-                onMouseLeave={e => { if (!isFirmando) (e.currentTarget as HTMLElement).style.background = '#1D9E75' }}
+                onMouseEnter={e => { if (!isFirmando) { const el = e.currentTarget as HTMLElement; el.style.color = '#1D9E75'; el.style.borderColor = '#1D9E75' } }}
+                onMouseLeave={e => { if (!isFirmando) { const el = e.currentTarget as HTMLElement; el.style.color = '#999'; el.style.borderColor = '#D5D2CA' } }}
               >
-                {isFirmando ? 'Procesando…' : '✓ Firmar contrato'}
+                {isFirmando ? 'Procesando…' : 'Marcar como firmado (manual)'}
               </button>
-            )}
-
-            {/* DocuSign button + status */}
-            {status !== 'firmado' && status !== 'cancelado' && (
-              dsEnvelopeId ? (
-                <span style={{
-                  height: 34, padding: '0 14px', display: 'inline-flex', alignItems: 'center',
-                  fontSize: 11, fontWeight: 600, borderRadius: 4, gap: 6,
-                  background: dsStatus === 'completed' ? '#EEF8F4' : dsStatus === 'declined' || dsStatus === 'voided' ? '#FEF2F2' : '#FFF8ED',
-                  color:      dsStatus === 'completed' ? '#1D9E75' : dsStatus === 'declined' || dsStatus === 'voided' ? '#DC2626' : '#B45309',
-                  border:     '1px solid',
-                  borderColor:dsStatus === 'completed' ? '#86EFAC' : dsStatus === 'declined' || dsStatus === 'voided' ? '#FCA5A5' : '#FCD34D',
-                }}>
-                  DocuSign · {dsStatus === 'completed' ? 'Firmado' : dsStatus === 'declined' ? 'Rechazado' : dsStatus === 'voided' ? 'Anulado' : 'Pendiente de firma'}
-                </span>
-              ) : (
-                <button
-                  onClick={handleDocuSign}
-                  disabled={isDocusignLoading}
-                  title="Enviar a DocuSign para firma electrónica"
-                  style={{
-                    height: 36, padding: '0 18px',
-                    background: isDocusignLoading ? '#888' : '#1A1A1A',
-                    color: '#fff', border: 'none', borderRadius: 4,
-                    cursor: isDocusignLoading ? 'not-allowed' : 'pointer',
-                    fontSize: 11, fontWeight: 600, letterSpacing: '0.03em',
-                    opacity: isDocusignLoading ? 0.7 : 1,
-                  }}
-                  onMouseEnter={e => { if (!isDocusignLoading) (e.currentTarget as HTMLElement).style.background = '#333' }}
-                  onMouseLeave={e => { if (!isDocusignLoading) (e.currentTarget as HTMLElement).style.background = '#1A1A1A' }}
-                >
-                  {isDocusignLoading ? 'Enviando…' : '✍ DocuSign'}
-                </button>
-              )
             )}
 
             {isFirmado && initial.pdf_firmado_url && (
@@ -1066,42 +998,20 @@ export default function ContratoDetalle({
           />
         </section>
 
-        {/* ── Cuerpo del contrato ────────────────────────── */}
+        {/* ── Cláusulas del contrato ─────────────────────── */}
         <section style={{ background: '#fff', border: '1px solid #E8E6E0', borderRadius: 8, padding: '24px 28px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
-            <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', margin: 0 }}>
-              Cuerpo del contrato
-            </p>
-            {!isReadonly && (
-              <button
-                onClick={() => { setCuerpoTexto(DEFAULT_CUERPO_TEXTO); saveContenido({ cuerpo_texto: DEFAULT_CUERPO_TEXTO }) }}
-                style={{ fontSize: 11, color: '#AAA', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
-              >
-                Restaurar plantilla
-              </button>
-            )}
-          </div>
-          <textarea
-            readOnly={isReadonly}
-            value={cuerpoTexto}
-            onChange={e => {
-              setCuerpoTexto(e.target.value)
-              saveContenido({ cuerpo_texto: e.target.value })
-            }}
-            style={{
-              width: '100%', boxSizing: 'border-box',
-              minHeight: 480, padding: '12px 14px',
-              border: '1px solid #E8E6E0', borderRadius: 6,
-              fontSize: 12, lineHeight: 1.8,
-              fontFamily: "'Inter', system-ui, sans-serif",
-              color: isReadonly ? '#888' : '#1A1A1A',
-              background: isReadonly ? '#F8F7F4' : '#fff',
-              resize: 'vertical', outline: 'none',
-            }}
-          />
-          <p style={{ fontSize: 10, color: '#CCC', margin: '8px 0 0', lineHeight: 1.5 }}>
-            Este texto forma el cuerpo legal del contrato. Puedes editarlo libremente para cada contrato. Los datos del cliente, proyecto y honorarios se recogen en las secciones anteriores.
+          <p style={SECTION_TITLE}>Cláusulas del contrato</p>
+          <p style={{ fontSize: 11, color: '#AAA', margin: '0 0 16px', lineHeight: 1.5 }}>
+            Cláusulas legales del contrato. Puedes editarlas, reordenarlas o añadir nuevas para este contrato concreto
+            (p. ej. lo que pida el abogado del cliente). Las partes, el alcance de servicios y los honorarios se generan
+            de las secciones anteriores y no se editan aquí.
           </p>
+          <ClausulasEditor
+            clausulas={clausulas}
+            onChange={next => { setClausulas(next); saveContenido({ clausulas: next }) }}
+            disabled={isReadonly}
+            baseline={plantillaClausulas.length ? plantillaClausulas : undefined}
+          />
         </section>
 
       </div>

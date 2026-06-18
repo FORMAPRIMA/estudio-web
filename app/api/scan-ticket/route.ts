@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { isFpRole } from '@/lib/types'
 import Anthropic from '@anthropic-ai/sdk'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest) {
 
   const { data: profile } = await supabase
     .from('profiles').select('rol').eq('id', user.id).single()
-  if (!profile || profile.rol !== 'fp_partner') {
+  if (!profile || !isFpRole(profile.rol)) {
     return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
   }
 
@@ -51,8 +52,14 @@ export async function POST(req: NextRequest) {
   "nif_proveedor": "NIF/CIF/VAT del proveedor si aparece en la factura, or null"
 }`
 
-  const commonRules = `Reglas por campo:
-- fecha_ticket: fecha del ticket/factura. Usa null si no está clara.
+  const commonRules = `REGLAS ANTI-ERROR (las más importantes):
+- NUNCA inventes datos. Cada valor que devuelvas debe estar escrito literalmente en el documento.
+- Si la imagen está rotada (90/180/270 grados), borrosa o con poco contraste, haz el esfuerzo de leer el texto en su orientación real antes de responder.
+- Si NO puedes leer el documento con claridad suficiente, devuelve null en todos los campos dudosos (incluido monto y proveedor) y tipo "otro". Es MUCHO mejor un campo null que un dato incorrecto: estos datos alimentan la contabilidad de la empresa.
+- No deduzcas el tipo de establecimiento por el aspecto del papel: básate solo en el texto legible.
+
+Reglas por campo:
+- fecha_ticket: la fecha IMPRESA en el documento (formatos españoles tipo 05/05/26 = 5 de mayo de 2026). NUNCA uses la fecha de referencia de hoy como fecha del ticket; solo sirve para resolver años ambiguos. Usa null si no está clara.
 - hora_ticket: hora de la compra en formato HH:MM (24h). Extráela si aparece en el ticket. Usa null si no está visible.
 - monto: importe TOTAL en número (sin símbolo). Usa null si no está claro.
 - moneda: casi siempre EUR. Si ves otro símbolo, ponlo (USD, GBP…).
@@ -101,7 +108,9 @@ ${commonRules}`
       }
 
   const message = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
+    // Opus: la lectura de tickets exige máxima precisión (Haiku llegaba a
+    // inventar comercios e importes en fotos rotadas o borrosas)
+    model: 'claude-opus-4-8',
     max_tokens: 1024,
     system: isPdf ? pdfSystemPrompt : imageSystemPrompt,
     messages: [

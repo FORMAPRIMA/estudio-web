@@ -91,7 +91,9 @@ function PageBreak() {
 export default function ManualPage() {
   return (
     <>
-      <style>{`
+      {/* dangerouslySetInnerHTML: como texto, React escaparía las comillas en el
+          servidor y la hidratación fallaría (re-render completo en el cliente). */}
+      <style dangerouslySetInnerHTML={{ __html: `
         @media print {
           .no-print { display: none !important; }
           .page-break { page-break-before: always; }
@@ -100,7 +102,7 @@ export default function ManualPage() {
         }
         @page { margin: 18mm 16mm; size: A4; }
         body { font-family: 'Inter', system-ui, sans-serif; }
-      `}</style>
+      ` }} />
 
       {/* ── Floating nav bar (hidden when printing) ── */}
       <div className="no-print" style={{

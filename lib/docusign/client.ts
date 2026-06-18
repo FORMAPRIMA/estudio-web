@@ -19,10 +19,26 @@ export interface CreateEnvelopeOptions {
   contratoId:  string
   numero:      string
   pdfBuffer:   Buffer
-  signers: {
-    cliente: DocuSignSigner
-    estudio: DocuSignSigner
-  }
+  /** Primary signer. For Forma Prima service contracts the studio signs by pre-printed
+   *  image, so the client is the ONLY digital signer. */
+  cliente: DocuSignSigner
+  /**
+   * Optional second signer at the «FP_FIRMA_ESTUDIO» anchor. Used by flows that DO
+   * need a second digital signature (e.g. FP Execution work orders). Omit it for the
+   * service contract flow where the studio signature is pre-printed.
+   */
+  estudio?: DocuSignSigner
+  /**
+   * If set, the client signs EMBEDDED (no email): we then request a recipient view
+   * URL with this same clientUserId. If omitted, the client signs REMOTELY via email.
+   */
+  clientUserId?: string
+  /**
+   * Offsets (px) of the client tabs relative to the «FP_FIRMA_CLIENTE» anchor.
+   * Defaults match the legacy PDFs (FPE / actas) whose anchor sits ABOVE the block.
+   * ContratoPDF anchors AT the signature line, so its routes pass their own values.
+   */
+  clienteTabOffsets?: { signX: number; signY: number; dateX: number; dateY: number }
   webhookUrl:  string
   /** Optional override for the envelope email subject and document filename. */
   emailSubject?: string
@@ -30,10 +46,15 @@ export interface CreateEnvelopeOptions {
 }
 
 /**
- * Creates and immediately sends a DocuSign envelope with two signers.
- * Signature positions are located via invisible anchor strings embedded in the PDF:
+ * Creates and immediately sends a DocuSign envelope with a SINGLE signer (the client).
+ * The studio's signature is already pre-printed in the PDF (Gabriela's image), so the
+ * studio is not a digital recipient.
+ *
+ * The client signature position is located via an invisible anchor string in the PDF:
  *   «FP_FIRMA_CLIENTE» — client signature area
- *   «FP_FIRMA_ESTUDIO» — studio signature area
+ *
+ * When `clientUserId` is provided the recipient is set up for embedded signing
+ * (captive recipient) and no email is sent to them.
  */
 export async function createAndSendEnvelope(
   opts: CreateEnvelopeOptions
@@ -41,6 +62,8 @@ export async function createAndSendEnvelope(
   if (!ACCOUNT_ID) throw new Error('DOCUSIGN_ACCOUNT_ID env var not set')
 
   const token = await getDocuSignToken()
+
+  const tabOff = opts.clienteTabOffsets ?? { signX: 0, signY: -32, dateX: 130, dateY: -16 }
 
   const body = {
     emailSubject: opts.emailSubject ?? `Contrato de servicios ${opts.numero} — Forma Prima`,
@@ -53,29 +76,33 @@ export async function createAndSendEnvelope(
     recipients: {
       signers: [
         {
-          email:        opts.signers.cliente.email,
-          name:         opts.signers.cliente.name,
+          email:        opts.cliente.email,
+          name:         opts.cliente.name,
           recipientId:  '1',
           routingOrder: '1',
+          // clientUserId presente → firmante embebido (captive); ausente → firma por email
+          ...(opts.clientUserId ? { clientUserId: opts.clientUserId } : {}),
           tabs: {
             signHereTabs: [{
               anchorString:             '«FP_FIRMA_CLIENTE»',
-              anchorXOffset:            '0',
-              anchorYOffset:            '-32',
+              anchorXOffset:            String(tabOff.signX),
+              anchorYOffset:            String(tabOff.signY),
               anchorUnits:              'pixels',
               anchorIgnoreIfNotPresent: 'false',
             }],
             dateSignedTabs: [{
               anchorString:  '«FP_FIRMA_CLIENTE»',
-              anchorXOffset: '130',
-              anchorYOffset: '-16',
+              anchorXOffset: String(tabOff.dateX),
+              anchorYOffset: String(tabOff.dateY),
               anchorUnits:   'pixels',
             }],
           },
         },
-        {
-          email:        opts.signers.estudio.email,
-          name:         opts.signers.estudio.name,
+        // Optional second signer (e.g. FP Execution work orders). Omitted for the
+        // service-contract flow where the studio signature is pre-printed.
+        ...(opts.estudio ? [{
+          email:        opts.estudio.email,
+          name:         opts.estudio.name,
           recipientId:  '2',
           routingOrder: '1',   // parallel signing — both sign simultaneously
           tabs: {
@@ -93,7 +120,7 @@ export async function createAndSendEnvelope(
               anchorUnits:   'pixels',
             }],
           },
-        },
+        }] : []),
       ],
     },
     // Per-envelope webhook — no DocuSign admin config needed
@@ -135,6 +162,73 @@ export async function createAndSendEnvelope(
 
   const data = await res.json() as { envelopeId: string }
   return { envelopeId: data.envelopeId }
+}
+
+export interface RecipientViewOptions {
+  envelopeId:   string
+  /** Must match exactly the email/name/clientUserId used when creating the envelope. */
+  email:        string
+  name:         string
+  clientUserId: string
+  /** URL DocuSign redirects to after signing (with ?event=signing_complete appended). */
+  returnUrl:    string
+}
+
+/**
+ * Returns a short-lived URL (valid a few minutes) that renders the DocuSign signing
+ * ceremony for an embedded (captive) recipient. Load it inside an iframe so the client
+ * signs without leaving our app.
+ */
+export async function createRecipientView(
+  opts: RecipientViewOptions
+): Promise<{ url: string }> {
+  if (!ACCOUNT_ID) throw new Error('DOCUSIGN_ACCOUNT_ID env var not set')
+
+  const token = await getDocuSignToken()
+
+  const res = await fetch(
+    `${BASE_URL}/restapi/v2.1/accounts/${ACCOUNT_ID}/envelopes/${opts.envelopeId}/views/recipient`,
+    {
+      method:  'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type':  'application/json',
+      },
+      body: JSON.stringify({
+        returnUrl:            opts.returnUrl,
+        authenticationMethod: 'none',
+        email:                opts.email,
+        userName:             opts.name,
+        clientUserId:         opts.clientUserId,
+      }),
+    }
+  )
+
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`DocuSign recipient view error (${res.status}): ${text}`)
+  }
+
+  const data = await res.json() as { url: string }
+  return { url: data.url }
+}
+
+/** Estado actual de un envelope ("sent", "completed", "declined", "voided"…). */
+export async function getEnvelopeStatus(envelopeId: string): Promise<string> {
+  const token = await getDocuSignToken()
+
+  const res = await fetch(
+    `${BASE_URL}/restapi/v2.1/accounts/${ACCOUNT_ID}/envelopes/${envelopeId}`,
+    { headers: { 'Authorization': `Bearer ${token}` } }
+  )
+
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`DocuSign envelope status error (${res.status}): ${text}`)
+  }
+
+  const data = await res.json() as { status: string }
+  return data.status
 }
 
 /** Downloads the combined signed PDF once an envelope is completed */

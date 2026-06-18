@@ -12,6 +12,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { SERVICIOS_CONFIG, calcPropuesta } from '@/lib/propuestas/config'
 import type { ServicioId } from '@/lib/propuestas/config'
 import { getPlantillaServicios } from '@/app/actions/plantillaPropuestas'
+import { getPlantillaClausulas } from '@/app/actions/plantillaContratos'
 
 type Admin = ReturnType<typeof createAdminClient>
 
@@ -79,8 +80,9 @@ export async function buildContratoFromPropuesta(
   }
 
   // Servicios plantilla + ratios + config del estudio
-  const [serviciosPlantilla, { data: ratiosFases }, { data: cfg }] = await Promise.all([
+  const [serviciosPlantilla, clausulasPlantilla, { data: ratiosFases }, { data: cfg }] = await Promise.all([
     getPlantillaServicios(),
+    getPlantillaClausulas(),
     admin.from('catalogo_fases').select('id, label, seccion, ratio').eq('seccion', 'Interiorismo').order('orden'),
     admin.from('estudio_config').select('*').eq('id', 1).single(),
   ])
@@ -148,7 +150,7 @@ export async function buildContratoFromPropuesta(
     proyecto_direccion:  propuesta.direccion  ?? null,
     honorarios,
     proyecto_superficie: propuesta.m2_diseno ?? null,
-    contenido:           { servicios: serviciosContenido, tipo_cliente: tipoCliente },
+    contenido:           { servicios: serviciosContenido, tipo_cliente: tipoCliente, clausulas: clausulasPlantilla },
     emisor_nombre:       cfg?.nombre        ?? 'GEINEX GROUP SLU',
     emisor_nif:          cfg?.nif           ?? 'B44873552',
     emisor_direccion:    cfg?.direccion     ?? 'Calle Príncipe de Vergara 56, Piso 6 Pta 2',

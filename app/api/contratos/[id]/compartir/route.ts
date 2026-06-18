@@ -6,6 +6,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { ContratoPDF } from '@/components/pdfs/ContratoPDF'
 import type { ContratoPDFData, ServicioContrato, ContratoHonorario } from '@/components/pdfs/ContratoPDF'
 import { sendEmail, wrapEmail } from '@/lib/email'
+import { CLAUSULAS_DEFAULT, type ContratoClausula } from '@/lib/contratos/clausulas'
 
 export async function POST(
   req: NextRequest,
@@ -80,9 +81,17 @@ export async function POST(
     const serviciosContrato: ServicioContrato[] = (contrato.contenido?.servicios ?? []) as ServicioContrato[]
     const honorarios: ContratoHonorario[]       = (contrato.honorarios ?? []) as ContratoHonorario[]
 
+    // Congela el snapshot de cláusulas en el envío (si aún no estaba persistido).
+    const clausulasSnapshot = (contrato.contenido?.clausulas as ContratoClausula[] | undefined) ?? CLAUSULAS_DEFAULT
+    if (!contrato.contenido?.clausulas) {
+      await admin.from('contratos')
+        .update({ contenido: { ...(contrato.contenido ?? {}), clausulas: clausulasSnapshot } })
+        .eq('id', params.id)
+    }
+
     const baseData: Omit<ContratoPDFData, 'lang'> = {
       numero:             contrato.numero ?? '—',
-      fecha_contrato:     contrato.fecha_contrato ?? null,
+      fecha_contrato:     contrato.fecha_contrato ?? contrato.fecha_firma ?? null, // viva hasta la firma
       tipo_cliente:       (contrato.contenido?.tipo_cliente ?? (contrato.cliente_empresa ? 'juridica' : 'fisica')) as 'fisica' | 'juridica',
       cliente_nombre:     contrato.cliente_nombre    ?? null,
       cliente_apellidos:  contrato.cliente_apellidos ?? null,
@@ -96,6 +105,7 @@ export async function POST(
       servicios_contrato: serviciosContrato,
       honorarios,
       notas:              contrato.notas ?? null,
+      clausulas:          clausulasSnapshot,
       plantilla_en,
     }
 
