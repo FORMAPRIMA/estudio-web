@@ -4,6 +4,7 @@ import { FP_ROLES } from '@/lib/types'
 import type { FpRole } from '@/lib/types'
 import { getQuinielaData } from '@/app/actions/quiniela'
 import QuinielaPage from '@/components/team/quiniela/QuinielaPage'
+import { quinielaFontVars } from '@/components/team/quiniela/fonts'
 
 export const metadata = { title: 'La Porra del Mundial' }
 export const dynamic = 'force-dynamic'
@@ -31,10 +32,12 @@ export default async function QuinielaRoute() {
   }
 
   return (
-    <QuinielaPage
-      data={data}
-      isPartner={profile.rol === 'fp_partner'}
-      esExterno={false}
-    />
+    <div className={quinielaFontVars}>
+      <QuinielaPage
+        data={data}
+        isPartner={profile.rol === 'fp_partner'}
+        esExterno={false}
+      />
+    </div>
   )
 }

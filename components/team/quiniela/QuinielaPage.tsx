@@ -12,6 +12,11 @@ import QuinielaReglas from '@/components/quiniela/QuinielaReglas'
 import QuinielaOnboarding from '@/components/quiniela/QuinielaOnboarding'
 import QuinielaChat from '@/components/quiniela/QuinielaChat'
 import QuinielaStats from '@/components/quiniela/QuinielaStats'
+import Confetti, { type ConfettiHandle } from '@/components/team/quiniela/Confetti'
+import {
+  Q, FONT, QUINIELA_KEYFRAMES, labelStyle, pixelStyle, cardStyle,
+  avatarColor, iniciales, posColor, MEDALLAS,
+} from '@/components/team/quiniela/theme'
 import {
   PUNTOS_PARTIDO, PUNTOS_ESCALERA, PUNTOS_PICHICHI,
   VENTANA_LABELS, VENTANA_FASE_ELEGIBLE, FASE_LABELS, FASES_ORDEN,
@@ -23,15 +28,7 @@ import type {
   QuinielaEquipo, QuinielaPartido, QuinielaFase, VentanaCampeon,
 } from '@/lib/quiniela/config'
 
-const C = {
-  ink: '#1A1A1A',
-  cream: '#F8F7F4',
-  accent: '#D85A30',
-  border: '#F0EEE8',
-  green: '#3D8B5F',
-}
-
-type Tab = 'partidos' | 'clasificacion' | 'escalera' | 'stats' | 'admin'
+type Tab = 'home' | 'partidos' | 'clasificacion' | 'escalera' | 'stats' | 'bar' | 'admin'
 type SaveState = 'sin_guardar' | 'guardando' | 'guardada' | 'error' | 'vacia'
 
 const VENTANAS: VentanaCampeon[] = ['apertura', 'grupos', 'dieciseisavos', 'octavos', 'cuartos']
@@ -55,10 +52,12 @@ export default function QuinielaPage({
 }) {
   const router = useRouter()
   const ahora = useNow()
-  const [tab, setTab] = useState<Tab>('partidos')
+  const [tab, setTab] = useState<Tab>('home')
   const [isJoining, setIsJoining] = useState(false)
   const [verReglas, setVerReglas] = useState(false)
   const [onboardingCerrado, setOnboardingCerrado] = useState(false)
+  const confettiRef = useRef<ConfettiHandle>(null)
+  const fireConfetti = (n?: number) => confettiRef.current?.fire(n)
 
   const miJugadorId = data.miJugadorId
   const deadlineApertura = getAperturaDeadlineMs(data.config, data.partidos)
@@ -75,6 +74,15 @@ export default function QuinielaPage({
     const id = setInterval(() => router.refresh(), 60000)
     return () => clearInterval(id)
   }, [router])
+
+  // Confetti de bienvenida y al ir a clasificación/inicio
+  useEffect(() => {
+    if (tab === 'home' || tab === 'clasificacion') {
+      const t = setTimeout(() => fireConfetti(100), 400)
+      return () => clearTimeout(t)
+    }
+  }, [tab])
+
   const equiposById = useMemo(
     () => new Map(data.equipos.map(e => [e.id, e])),
     [data.equipos]
@@ -93,7 +101,7 @@ export default function QuinielaPage({
     setIsJoining(true)
     const result = await joinQuiniela()
     setIsJoining(false)
-    if ('success' in result) router.refresh()
+    if ('success' in result) { fireConfetti(120); router.refresh() }
   }
 
   async function handleLogout() {
@@ -101,135 +109,158 @@ export default function QuinielaPage({
     router.refresh()
   }
 
-  const tabs: { key: Tab; label: string }[] = [
-    { key: 'partidos', label: 'Partidos' },
-    { key: 'clasificacion', label: 'Clasificación' },
-    { key: 'escalera', label: 'Mi escalera' },
-    { key: 'stats', label: 'Stats' },
-    ...(isPartner ? [{ key: 'admin' as Tab, label: 'Admin' }] : []),
+  const navItems: { key: Tab; label: string; icon: string }[] = [
+    { key: 'home', label: 'Inicio', icon: '🏠' },
+    { key: 'partidos', label: 'Partidos', icon: '⚽' },
+    { key: 'clasificacion', label: 'Tabla', icon: '🏆' },
+    { key: 'escalera', label: 'Escalera', icon: '🪜' },
+    { key: 'stats', label: 'Stats', icon: '📊' },
+    { key: 'bar', label: 'Bar', icon: '💬' },
+    ...(isPartner ? [{ key: 'admin' as Tab, label: 'Admin', icon: '🛠️' }] : []),
   ]
 
   return (
-    <div style={{ padding: esExterno ? '32px 20px' : '40px 48px', maxWidth: 1100, margin: esExterno ? '0 auto' : undefined }}>
-      {/* ── Header ── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 16 }}>
-        <div>
-          <p style={{ fontSize: 10, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#1A1A1A99', marginBottom: 8 }}>
-            Forma Prima · Mundial 2026
-          </p>
-          <h1 style={{ fontSize: 28, fontWeight: 300, color: C.ink, marginBottom: 4, letterSpacing: '-0.02em' }}>
-            La Porra del Mundial <span style={{ fontSize: 22 }}>⚽</span>
-          </h1>
-          <p style={{ fontSize: 13, color: '#1A1A1A60', fontWeight: 300 }}>
-            {miNombre ? <>Hola, <strong style={{ fontWeight: 500 }}>{miNombre}</strong> · </> : null}
-            <button
-              onClick={() => setVerReglas(true)}
-              style={{ background: 'none', border: 'none', padding: 0, fontSize: 13, color: C.accent, cursor: 'pointer', textDecoration: 'underline' }}
-            >
-              Ver reglas
-            </button>
-            {esExterno && (
-              <>
-                {' · '}
+    <div style={{ background: Q.bg, minHeight: '100vh', fontFamily: FONT.body, color: Q.text }}>
+      <style>{QUINIELA_KEYFRAMES}</style>
+      <div style={{
+        position: 'relative', maxWidth: 480, margin: '0 auto', minHeight: '100vh',
+        display: 'flex', flexDirection: 'column', background: '#0a0e1c',
+        boxShadow: '0 0 80px rgba(0,0,0,.5)',
+      }}>
+        <Confetti ref={confettiRef} />
+
+        {/* ── Header ── */}
+        <div style={{
+          position: 'relative', zIndex: 20, padding: '20px 16px 12px',
+          background: 'linear-gradient(180deg,#0e1430,#0a0e1c)',
+          borderBottom: `1px solid ${Q.border}`,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 18 }}>⚽</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <span style={{ ...pixelStyle, fontSize: 11, color: Q.green, textShadow: '0 0 12px rgba(54,245,154,.4)' }}>
+                  LA PORRA
+                </span>
+                <span style={{ ...labelStyle, fontSize: 7, color: Q.textDimmer }}>FORMA PRIMA · MUNDIAL 2026</span>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button
+                onClick={() => setVerReglas(true)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 5, ...labelStyle, fontSize: 8,
+                  color: Q.cyan, background: 'rgba(52,227,255,.1)', border: '1px solid rgba(52,227,255,.3)',
+                  borderRadius: 999, padding: '6px 10px', cursor: 'pointer',
+                }}
+              >
+                📖 Reglas
+              </button>
+              {esExterno && (
                 <button
                   onClick={handleLogout}
-                  style={{ background: 'none', border: 'none', padding: 0, fontSize: 13, color: '#1A1A1A60', cursor: 'pointer', textDecoration: 'underline' }}
+                  style={{
+                    ...labelStyle, fontSize: 8, color: Q.textMid, background: Q.cardHi,
+                    border: `1px solid ${Q.borderHi}`, borderRadius: 999, padding: '6px 10px', cursor: 'pointer',
+                  }}
                 >
                   Salir
                 </button>
-              </>
-            )}
-          </p>
-        </div>
-        <div style={{
-          background: C.ink, color: '#fff', borderRadius: 4, padding: '14px 20px',
-          display: 'flex', gap: 24, alignItems: 'center',
-        }}>
-          <div>
-            <p style={{ fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#ffffff80', marginBottom: 2 }}>Bote</p>
-            <p style={{ fontSize: 22, fontWeight: 500 }}>{bote.toFixed(0)} €</p>
+              )}
+            </div>
           </div>
-          <div style={{ width: 1, height: 32, background: '#ffffff25' }} />
-          <div>
-            <p style={{ fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#ffffff80', marginBottom: 2 }}>Reparto</p>
-            <p style={{ fontSize: 12, fontWeight: 300 }}>
-              🥇 {(bote * reparto[0] / 100).toFixed(0)}€ · 🥈 {(bote * (reparto[1] || 0) / 100).toFixed(0)}€ · 🥉 {(bote * (reparto[2] || 0) / 100).toFixed(0)}€
+        </div>
+
+        {/* ── Join banner (solo staff FP que aún no se apuntó) ── */}
+        {!data.soyParticipante && !esExterno && (
+          <div style={{
+            margin: '12px 14px 0', background: 'rgba(54,245,154,.07)',
+            border: '1px solid rgba(54,245,154,.3)', borderRadius: 14, padding: '14px 16px',
+          }}>
+            <p style={{ fontSize: 12, color: Q.textSoft, lineHeight: 1.5, marginBottom: 12 }}>
+              Aún no estás dentro. Entrada: <strong style={{ color: Q.gold }}>{monto.toFixed(0)} €</strong> — al
+              apuntarte te comprometes a pagarla aunque no rellenes tus predicciones a tiempo.
             </p>
+            <button
+              onClick={handleJoin}
+              disabled={isJoining}
+              style={{
+                width: '100%', ...pixelStyle, fontSize: 11, color: '#06210f',
+                background: 'linear-gradient(180deg,#48ffa6,#23d985)', border: 0, borderRadius: 12,
+                padding: '12px', cursor: 'pointer', opacity: isJoining ? 0.6 : 1,
+                boxShadow: '0 4px 0 #128a52, 0 0 22px rgba(54,245,154,.4)',
+              }}
+            >
+              {isJoining ? 'ENTRANDO…' : 'APUNTARME ▸'}
+            </button>
           </div>
-        </div>
-      </div>
+        )}
 
-      {/* ── Join banner (solo staff FP que aún no se apuntó) ── */}
-      {!data.soyParticipante && !esExterno && (
+        {/* ── Contenido scroll ── */}
+        <div className="q-scroll" style={{ position: 'relative', zIndex: 10, flex: 1, overflowY: 'auto', padding: '14px 14px 96px' }}>
+          {tab === 'home' && (
+            <HomeTab data={data} equiposById={equiposById} miJugadorId={miJugadorId} miNombre={miNombre} bote={bote} ahora={ahora} setTab={setTab} />
+          )}
+          {tab === 'partidos' && (
+            <PartidosTab data={data} equiposById={equiposById} nombresById={nombresById} miJugadorId={miJugadorId} ahora={ahora} fireConfetti={fireConfetti} />
+          )}
+          {tab === 'clasificacion' && (
+            <ClasificacionTab data={data} bote={bote} reparto={reparto} miJugadorId={miJugadorId} equiposById={equiposById} />
+          )}
+          {tab === 'escalera' && (
+            <EscaleraTab data={data} equiposById={equiposById} nombresById={nombresById} miJugadorId={miJugadorId} ahora={ahora} onChanged={() => router.refresh()} fireConfetti={fireConfetti} />
+          )}
+          {tab === 'stats' && (
+            <QuinielaStats data={data} nombresById={nombresById} miJugadorId={miJugadorId} />
+          )}
+          {tab === 'bar' && (
+            <QuinielaChat
+              comentarios={data.comentarios}
+              reacciones={data.reacciones}
+              nombresById={nombresById}
+              miJugadorId={miJugadorId}
+              esPartner={isPartner}
+              onChanged={() => router.refresh()}
+            />
+          )}
+          {tab === 'admin' && isPartner && (
+            <AdminTab data={data} equiposById={equiposById} onChanged={() => router.refresh()} />
+          )}
+        </div>
+
+        {/* ── Bottom nav ── */}
         <div style={{
-          marginTop: 24, background: '#D85A3010', border: `1px solid #D85A3030`,
-          borderRadius: 4, padding: '16px 20px',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap',
+          position: 'sticky', bottom: 0, zIndex: 40, display: 'flex',
+          background: '#0c1226', borderTop: `1px solid ${Q.border}`, padding: '2px 2px 6px',
         }}>
-          <p style={{ fontSize: 13, color: C.ink }}>
-            Aún no estás dentro. Entrada: <strong>{monto.toFixed(0)} €</strong> — al apuntarte te
-            comprometes a pagarla aunque no rellenes tus predicciones a tiempo.
-          </p>
-          <button
-            onClick={handleJoin}
-            disabled={isJoining}
-            style={{
-              background: C.accent, color: '#fff', border: 'none', borderRadius: 4,
-              padding: '10px 22px', fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase',
-              fontWeight: 500, cursor: 'pointer', opacity: isJoining ? 0.6 : 1,
-            }}
-          >
-            {isJoining ? 'Entrando…' : 'Apuntarme'}
-          </button>
+          {navItems.map(n => {
+            const activo = tab === n.key
+            return (
+              <button
+                key={n.key}
+                onClick={() => setTab(n.key)}
+                style={{
+                  flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+                  background: 'transparent', border: 0, cursor: 'pointer', padding: '7px 0 4px',
+                }}
+              >
+                <span style={{
+                  height: 3, width: 18, borderRadius: 2,
+                  background: activo ? Q.green : 'transparent',
+                  boxShadow: activo ? `0 0 8px ${Q.green}` : 'none',
+                }} />
+                <span style={{ fontSize: 17, lineHeight: 1, filter: activo ? 'drop-shadow(0 0 6px rgba(54,245,154,.5))' : 'grayscale(.4) opacity(.8)' }}>
+                  {n.icon}
+                </span>
+                <span style={{ ...labelStyle, fontSize: 7, color: activo ? Q.green : Q.textDimmer }}>{n.label}</span>
+              </button>
+            )
+          })}
         </div>
-      )}
 
-      {/* ── Chat ── */}
-      <QuinielaChat
-        comentarios={data.comentarios}
-        reacciones={data.reacciones}
-        nombresById={nombresById}
-        miJugadorId={miJugadorId}
-        esPartner={isPartner}
-        onChanged={() => router.refresh()}
-      />
-
-      {/* ── Tabs ── */}
-      <div style={{ display: 'flex', gap: 4, marginTop: 32, borderBottom: `1px solid ${C.border}`, overflowX: 'auto' }}>
-        {tabs.map(t => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            style={{
-              background: 'none', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
-              padding: '10px 16px', fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase',
-              fontWeight: tab === t.key ? 500 : 300,
-              color: tab === t.key ? C.ink : '#1A1A1A70',
-              borderBottom: tab === t.key ? `2px solid ${C.accent}` : '2px solid transparent',
-              marginBottom: -1,
-            }}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      <div style={{ marginTop: 28 }}>
-        {tab === 'partidos' && (
-          <PartidosTab data={data} equiposById={equiposById} nombresById={nombresById} miJugadorId={miJugadorId} ahora={ahora} />
-        )}
-        {tab === 'clasificacion' && (
-          <ClasificacionTab data={data} bote={bote} reparto={reparto} miJugadorId={miJugadorId} equiposById={equiposById} />
-        )}
-        {tab === 'escalera' && (
-          <EscaleraTab data={data} equiposById={equiposById} nombresById={nombresById} miJugadorId={miJugadorId} ahora={ahora} onChanged={() => router.refresh()} />
-        )}
-        {tab === 'stats' && (
-          <QuinielaStats data={data} nombresById={nombresById} miJugadorId={miJugadorId} />
-        )}
-        {tab === 'admin' && isPartner && (
-          <AdminTab data={data} equiposById={equiposById} onChanged={() => router.refresh()} />
-        )}
+        {/* Scanlines CRT */}
+        <div style={{ position: 'absolute', inset: 0, zIndex: 90, pointerEvents: 'none', background: 'repeating-linear-gradient(rgba(255,255,255,.02) 0 1px, transparent 1px 3px)' }} />
+        <div style={{ position: 'absolute', inset: 0, zIndex: 90, pointerEvents: 'none', boxShadow: 'inset 0 0 90px rgba(0,0,0,.55)' }} />
       </div>
 
       {verReglas && <QuinielaReglas monto={monto} onClose={() => setVerReglas(false)} />}
@@ -248,6 +279,170 @@ export default function QuinielaPage({
   )
 }
 
+// ── Podio (reutilizado en Inicio y Clasificación) ───────────────────────────────
+
+function Podio({ leaderboard }: { leaderboard: QuinielaData['leaderboard'] }) {
+  const top = leaderboard.slice(0, 3)
+  if (top.length === 0) return null
+  // Slots en orden visual (2º, 1º, 3º), cada uno apunta a su posición real
+  const slots = [
+    { rank: 1, medal: '🥈', av: 46, h: 96, delay: '.12s' },
+    { rank: 0, medal: '🥇', av: 56, h: 128, delay: '0s' },
+    { rank: 2, medal: '🥉', av: 42, h: 74, delay: '.24s' },
+  ].filter(s => top[s.rank])
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 8, marginBottom: 16, paddingTop: 10 }}>
+      {slots.map(m => {
+        const row = top[m.rank]
+        const rank = m.rank
+        const color = posColor(rank)
+        return (
+          <div key={row.jugador_id} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div style={{ fontSize: 24, animation: `q-floaty 2.6s ease-in-out infinite`, animationDelay: m.delay }}>{m.medal}</div>
+            <div style={{
+              width: m.av, height: m.av, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              ...pixelStyle, fontSize: rank === 0 ? 15 : 13, color: '#0a0e1c', background: color,
+              border: '2px solid rgba(255,255,255,.25)', boxShadow: `0 0 18px ${color}66`, margin: '5px 0 6px',
+            }}>
+              {iniciales(row.nombre)}
+            </div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: Q.text, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 96 }}>
+              {row.nombre}
+            </div>
+            <div style={{ ...pixelStyle, fontSize: 9, color, marginTop: 4 }}>{row.total}pts</div>
+            <div style={{
+              width: '100%', height: m.h, marginTop: 8, borderRadius: '8px 8px 0 0',
+              background: `linear-gradient(180deg,${color},transparent)`, border: '1px solid rgba(255,255,255,.1)', borderBottom: 0,
+              display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: 7,
+              transformOrigin: 'bottom', animation: `q-rise .6s cubic-bezier(.2,1.2,.4,1) both`, animationDelay: m.delay,
+            }}>
+              <span style={{ ...pixelStyle, fontSize: 13, color: '#0a0e1c' }}>{rank + 1}</span>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Tab: Inicio ─────────────────────────────────────────────────────────────────
+
+function HomeTab({ data, equiposById, miJugadorId, miNombre, bote, ahora, setTab }: {
+  data: QuinielaData
+  equiposById: Map<string, QuinielaEquipo>
+  miJugadorId: string | null
+  miNombre: string | null | undefined
+  bote: number
+  ahora: number
+  setTab: (t: Tab) => void
+}) {
+  const miIndex = data.leaderboard.findIndex(r => r.jugador_id === miJugadorId)
+  const miRow = miIndex >= 0 ? data.leaderboard[miIndex] : null
+  const lider = data.leaderboard[0]
+  const aLider = miRow && lider ? lider.total - miRow.total : 0
+
+  // Próximo partido: el primero no finalizado con kickoff aún por venir
+  const proximo = data.partidos
+    .filter(p => p.estado !== 'finalizado')
+    .sort((a, b) => new Date(a.fecha_hora).getTime() - new Date(b.fecha_hora).getTime())[0]
+  const proxLocal = proximo?.equipo_local_id ? equiposById.get(proximo.equipo_local_id) : undefined
+  const proxVisitante = proximo?.equipo_visitante_id ? equiposById.get(proximo.equipo_visitante_id) : undefined
+  const cierreMs = proximo ? new Date(proximo.fecha_hora).getTime() - BLOQUEO_PREDICCION_MS - ahora : 0
+
+  return (
+    <div style={{ animation: 'q-slideUp .35s ease both' }}>
+      {/* Saludo + posición */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '2px 2px 16px', gap: 12 }}>
+        <div>
+          <div style={{ ...labelStyle, fontSize: 9, color: Q.textMid }}>MUNDIAL 2026</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: Q.text, marginTop: 4 }}>
+            {miNombre ? <>¡Hola, {miNombre}! 👋</> : '¡Bienvenido! 👋'}
+          </div>
+        </div>
+        {miRow && (
+          <div style={{ textAlign: 'center', background: 'rgba(54,245,154,.1)', border: '1px solid rgba(54,245,154,.4)', borderRadius: 11, padding: '7px 11px', flex: 'none' }}>
+            <div style={{ ...pixelStyle, fontSize: 13, color: Q.green }}>{miIndex + 1}º</div>
+            <div style={{ fontSize: 9, color: Q.textDim, marginTop: 3 }}>
+              {miIndex === 0 ? '¡líder!' : `a ${aLider} del oro`}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Podio */}
+      {data.leaderboard.length > 0 && (
+        <>
+          <div style={{ ...pixelStyle, fontSize: 12, color: Q.gold, textAlign: 'center', marginBottom: 3, textShadow: '0 0 14px rgba(255,210,63,.4)' }}>🏆 EL PODIO</div>
+          <div style={{ textAlign: 'center', fontSize: 10, color: Q.textDim, marginBottom: 6 }}>
+            Top 3 del bote · <b style={{ color: Q.gold }}>{bote.toFixed(0)}€</b> en juego
+          </div>
+          <Podio leaderboard={data.leaderboard} />
+        </>
+      )}
+
+      {/* Chips */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+        <StatChip icon="📍" valor={miRow ? `${miIndex + 1}º` : '—'} label="Posición" color={Q.cyan} />
+        <StatChip icon="🎯" valor={miRow ? String(miRow.exactos) : '0'} label="Exactos" color={Q.green} />
+        <StatChip icon="💰" valor={`${bote.toFixed(0)}€`} label="Bote" color={Q.gold} />
+      </div>
+
+      {/* Próximo partido */}
+      {proximo && proxLocal && proxVisitante ? (
+        <button
+          onClick={() => setTab('partidos')}
+          style={{
+            width: '100%', textAlign: 'left', cursor: 'pointer',
+            background: 'linear-gradient(160deg,#15224a,#0f1838)', border: '1.5px solid rgba(54,245,154,.3)',
+            borderRadius: 16, padding: 14, marginBottom: 9,
+            boxShadow: '0 0 24px rgba(54,245,154,.1), 0 6px 0 rgba(0,0,0,.3)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 11 }}>
+            <span style={{ ...labelStyle, color: Q.green }}>⭐ PRÓXIMO PARTIDO</span>
+            <span style={{ ...labelStyle, color: Q.pink, background: 'rgba(255,91,118,.14)', border: '1px solid rgba(255,91,118,.4)', borderRadius: 999, padding: '4px 9px' }}>
+              🔒 {formatCountdown(cierreMs)}
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 11 }}>
+            <span style={{ fontSize: 26 }}>{proxLocal.bandera}</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: Q.text }}>{proxLocal.codigo}</span>
+            <span style={{ ...pixelStyle, fontSize: 10, color: Q.textDim }}>VS</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: Q.text }}>{proxVisitante.codigo}</span>
+            <span style={{ fontSize: 26 }}>{proxVisitante.bandera}</span>
+          </div>
+          <div style={{ textAlign: 'center', ...pixelStyle, fontSize: 9, color: Q.green }}>TOCA PARA PREDECIR ▸</div>
+        </button>
+      ) : (
+        <div style={{ ...cardStyle, padding: 14, marginBottom: 9, textAlign: 'center', fontSize: 12, color: Q.textMid }}>
+          No hay partidos próximos por ahora.
+        </div>
+      )}
+
+      <button
+        onClick={() => setTab('clasificacion')}
+        style={{
+          width: '100%', cursor: 'pointer', background: Q.card, border: `1px solid ${Q.borderHi}`,
+          borderRadius: 13, padding: 13, color: Q.textSoft, ...labelStyle, fontSize: 10,
+        }}
+      >
+        VER CLASIFICACIÓN COMPLETA ▸
+      </button>
+    </div>
+  )
+}
+
+function StatChip({ icon, valor, label, color }: { icon: string; valor: string; label: string; color: string }) {
+  return (
+    <div style={{ flex: 1, background: Q.card, border: `1px solid ${Q.border}`, borderRadius: 12, padding: '11px 6px', textAlign: 'center' }}>
+      <div style={{ fontSize: 17 }}>{icon}</div>
+      <div style={{ ...pixelStyle, fontSize: 12, color, marginTop: 5 }}>{valor}</div>
+      <div style={{ ...labelStyle, fontSize: 7, color: Q.textDim, marginTop: 5 }}>{label.toUpperCase()}</div>
+    </div>
+  )
+}
+
 // ── Equipo chip ───────────────────────────────────────────────────────────────
 
 function EquipoLabel({ equipo, etiqueta, align = 'left' }: {
@@ -260,9 +455,9 @@ function EquipoLabel({ equipo, etiqueta, align = 'left' }: {
       display: 'flex', alignItems: 'center', gap: 8, minWidth: 0,
       flexDirection: align === 'right' ? 'row-reverse' : 'row',
     }}>
-      <span style={{ fontSize: 20, lineHeight: 1 }}>{equipo?.bandera || '⏳'}</span>
+      <span style={{ fontSize: 22, lineHeight: 1 }}>{equipo?.bandera || '⏳'}</span>
       <span style={{
-        fontSize: 13, fontWeight: 400, color: equipo ? C.ink : '#1A1A1A50',
+        fontSize: 12, fontWeight: 600, color: equipo ? Q.text : Q.textDim,
         whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
       }}>
         {equipo?.nombre || etiqueta || 'Por definir'}
@@ -273,12 +468,13 @@ function EquipoLabel({ equipo, etiqueta, align = 'left' }: {
 
 // ── Tab: Partidos ─────────────────────────────────────────────────────────────
 
-function PartidosTab({ data, equiposById, nombresById, miJugadorId, ahora }: {
+function PartidosTab({ data, equiposById, nombresById, miJugadorId, ahora, fireConfetti }: {
   data: QuinielaData
   equiposById: Map<string, QuinielaEquipo>
   nombresById: Map<string, string>
   miJugadorId: string | null
   ahora: number
+  fireConfetti: (n?: number) => void
 }) {
   const [fase, setFase] = useState<QuinielaFase>('grupos')
   const [diasAbiertos, setDiasAbiertos] = useState<Record<string, boolean>>({})
@@ -289,6 +485,7 @@ function PartidosTab({ data, equiposById, nombresById, miJugadorId, ahora }: {
   const predichos = partidos.filter(p =>
     data.misPredicciones.some(pred => pred.partido_id === p.id)
   ).length
+  const pct = partidos.length ? Math.round((predichos / partidos.length) * 100) : 0
 
   // Agrupar por día (zona Madrid)
   const porDia = new Map<string, QuinielaPartido[]>()
@@ -301,72 +498,76 @@ function PartidosTab({ data, equiposById, nombresById, miJugadorId, ahora }: {
   }
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {FASES_ORDEN.map(f => (
+    <div style={{ animation: 'q-slideUp .35s ease both' }}>
+      {/* Progreso */}
+      {miJugadorId && (
+        <div style={{ ...cardStyle, padding: '13px 14px', marginBottom: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 9 }}>
+            <span style={{ ...labelStyle }}>TUS PREDICCIONES · {FASE_LABELS[fase]}</span>
+            <span style={{ ...pixelStyle, fontSize: 11, color: Q.green }}>
+              {predichos}<span style={{ color: Q.textDim, fontSize: 9 }}> / {partidos.length}</span>
+            </span>
+          </div>
+          <div style={{ height: 9, borderRadius: 6, background: '#070b18', overflow: 'hidden', border: '1px solid rgba(255,255,255,.05)' }}>
+            <div style={{ height: '100%', width: `${pct}%`, borderRadius: 6, background: 'linear-gradient(90deg,#36f59a,#34e3ff)', boxShadow: '0 0 10px rgba(54,245,154,.6)' }} />
+          </div>
+        </div>
+      )}
+
+      {/* Chips de fase */}
+      <div className="q-scroll" style={{ display: 'flex', gap: 7, overflowX: 'auto', margin: '0 -2px 14px', padding: '0 2px 2px' }}>
+        {FASES_ORDEN.map(f => {
+          const activa = fase === f
+          return (
             <button
               key={f}
               onClick={() => setFase(f)}
               style={{
-                background: fase === f ? C.ink : '#fff',
-                color: fase === f ? '#fff' : '#1A1A1A90',
-                border: `1px solid ${fase === f ? C.ink : C.border}`,
-                borderRadius: 20, padding: '6px 14px', fontSize: 11, cursor: 'pointer',
-                fontWeight: fase === f ? 500 : 300,
+                flex: 'none', ...labelStyle, fontSize: 9, padding: '7px 11px', borderRadius: 9, cursor: 'pointer',
+                border: `1px solid ${activa ? 'rgba(54,245,154,.5)' : Q.border}`,
+                background: activa ? 'rgba(54,245,154,.14)' : Q.card,
+                color: activa ? Q.green : Q.textMid,
               }}
             >
               {FASE_LABELS[f]}
             </button>
-          ))}
-        </div>
+          )
+        })}
       </div>
 
-      <p style={{ fontSize: 11, color: '#1A1A1A60', marginBottom: 6 }}>
-        {FASE_LABELS[fase]}: acierto de {fase === 'grupos' ? 'resultado' : 'quién pasa'}{' '}
-        <strong>{PUNTOS_PARTIDO[fase].resultado} pts</strong> · marcador exacto{' '}
-        <strong>{PUNTOS_PARTIDO[fase].exacto} pts</strong>
-        {fase !== 'grupos' && ' · marcador al final de la prórroga, sin penaltis'}
-        . Las predicciones se cierran <strong>1 hora antes</strong> de cada partido.
+      <p style={{ fontSize: 10, color: Q.textMid, marginBottom: 14, lineHeight: 1.5 }}>
+        Acierto de {fase === 'grupos' ? 'resultado' : 'quién pasa'}{' '}
+        <strong style={{ color: Q.green }}>{PUNTOS_PARTIDO[fase].resultado} pts</strong> · marcador exacto{' '}
+        <strong style={{ color: Q.gold }}>{PUNTOS_PARTIDO[fase].exacto} pts</strong>
+        {fase !== 'grupos' && ' · al final de la prórroga, sin penaltis'}
+        . Cierran <strong style={{ color: Q.pink }}>1 h antes</strong> de cada partido.
       </p>
-      {miJugadorId && (
-        <p style={{ fontSize: 11, color: predichos === partidos.length ? C.green : C.accent, marginBottom: 20 }}>
-          Has guardado {predichos} de {partidos.length} predicciones de esta fase.
-        </p>
-      )}
 
       {visibles.length === 0 && (
-        <p style={{ fontSize: 13, color: '#1A1A1A50', padding: '32px 0' }}>
+        <p style={{ fontSize: 13, color: Q.textDim, padding: '32px 0', textAlign: 'center' }}>
           No hay partidos en esta fase.
         </p>
       )}
 
       {Array.from(porDia.entries()).map(([dia, partidosDia]) => {
-        // Días con todo terminado salen colapsados por defecto; clic en el día para plegar/desplegar
         const todosTerminados = partidosDia.every(p => p.estado === 'finalizado')
         const abierto = diasAbiertos[dia] ?? !todosTerminados
         return (
-          <div key={dia} style={{ marginBottom: abierto ? 28 : 10 }}>
+          <div key={dia} style={{ marginBottom: abierto ? 22 : 10 }}>
             <button
               onClick={() => setDiasAbiertos(prev => ({ ...prev, [dia]: !abierto }))}
-              style={{
-                background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-                display: 'flex', alignItems: 'center', gap: 8, marginBottom: abierto ? 10 : 0,
-              }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 8, marginBottom: abierto ? 10 : 0 }}
             >
-              <span style={{
-                fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase',
-                color: '#1A1A1A70', fontWeight: 500,
-              }}>
+              <span style={{ ...labelStyle, fontSize: 9, color: Q.textMid }}>
                 {abierto ? '▾' : '▸'} {dia}
               </span>
-              <span style={{ fontSize: 10, color: '#1A1A1A45' }}>
+              <span style={{ fontSize: 9, color: Q.textDim }}>
                 {partidosDia.length} {partidosDia.length === 1 ? 'partido' : 'partidos'}
-                {todosTerminados && ' · ✓ jugados'}
+                {todosTerminados && ' · ✓'}
               </span>
             </button>
             {abierto && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
                 {partidosDia.map(p => (
                   <MatchCard
                     key={p.id}
@@ -376,6 +577,7 @@ function PartidosTab({ data, equiposById, nombresById, miJugadorId, ahora }: {
                     data={data}
                     miJugadorId={miJugadorId}
                     ahora={ahora}
+                    fireConfetti={fireConfetti}
                   />
                 ))}
               </div>
@@ -387,13 +589,14 @@ function PartidosTab({ data, equiposById, nombresById, miJugadorId, ahora }: {
   )
 }
 
-function MatchCard({ partido, equiposById, nombresById, data, miJugadorId, ahora }: {
+function MatchCard({ partido, equiposById, nombresById, data, miJugadorId, ahora, fireConfetti }: {
   partido: QuinielaPartido
   equiposById: Map<string, QuinielaEquipo>
   nombresById: Map<string, string>
   data: QuinielaData
   miJugadorId: string | null
   ahora: number
+  fireConfetti: (n?: number) => void
 }) {
   const local = partido.equipo_local_id ? equiposById.get(partido.equipo_local_id) : undefined
   const visitante = partido.equipo_visitante_id ? equiposById.get(partido.equipo_visitante_id) : undefined
@@ -444,6 +647,7 @@ function MatchCard({ partido, equiposById, nombresById, data, miJugadorId, ahora
     } else {
       setSaveState('guardada')
       setSaveError('')
+      fireConfetti(60)
     }
   }
 
@@ -468,25 +672,32 @@ function MatchCard({ partido, equiposById, nombresById, data, miJugadorId, ahora
         )
       : null
 
+  const destacado = puedoPredecirlo && cierraPronto
   return (
-    <div style={{ background: '#fff', borderRadius: 4, border: `1px solid ${saveState === 'error' ? '#D85A3060' : C.border}`, padding: '14px 18px' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr auto', gap: 16, alignItems: 'center' }}>
+    <div style={{
+      background: destacado ? 'linear-gradient(160deg,#15224a,#0f1838)' : Q.card,
+      borderRadius: 14,
+      border: `1px solid ${saveState === 'error' ? 'rgba(255,91,118,.5)' : destacado ? 'rgba(54,245,154,.3)' : Q.border}`,
+      padding: '13px 14px',
+      boxShadow: destacado ? '0 0 24px rgba(54,245,154,.08)' : 'none',
+    }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 10, alignItems: 'center' }}>
         <EquipoLabel equipo={local} etiqueta={partido.etiqueta_local} align="right" />
 
         {/* Centro: resultado o inputs */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center', minWidth: 110 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center', minWidth: 96 }}>
           {empezado ? (
-            <span style={{ fontSize: 17, fontWeight: 500, color: C.ink, letterSpacing: '0.05em', textAlign: 'center' }}>
+            <span style={{ ...pixelStyle, fontSize: 15, color: Q.text, textAlign: 'center' }}>
               {partido.estado === 'finalizado'
-                ? `${partido.goles_local} – ${partido.goles_visitante}`
+                ? `${partido.goles_local}–${partido.goles_visitante}`
                 : live
                   ? <>
-                      {live.gl} – {live.gv}
-                      <span style={{ display: 'block', fontSize: 10, color: C.accent, fontWeight: 500, marginTop: 2 }}>
-                        🔴 {live.minuto || 'en juego'}
+                      {live.gl}–{live.gv}
+                      <span style={{ display: 'block', ...labelStyle, fontSize: 8, color: Q.pink, marginTop: 3 }}>
+                        🔴 {live.minuto || 'EN JUEGO'}
                       </span>
                     </>
-                  : <span style={{ color: C.accent, fontSize: 13 }}>🔴 En juego</span>}
+                  : <span style={{ color: Q.pink, fontSize: 12 }}>🔴 En juego</span>}
             </span>
           ) : puedoPredecirlo ? (
             <>
@@ -495,7 +706,7 @@ function MatchCard({ partido, equiposById, nombresById, data, miJugadorId, ahora
                 onChange={e => { setGolesL(e.target.value); onCambio(e.target.value, golesV, quePasa) }}
                 style={scoreInputStyle}
               />
-              <span style={{ color: '#1A1A1A40', fontSize: 13 }}>–</span>
+              <span style={{ color: Q.textDim, fontSize: 13 }}>–</span>
               <input
                 type="number" min={0} max={20} value={golesV}
                 onChange={e => { setGolesV(e.target.value); onCambio(golesL, e.target.value, quePasa) }}
@@ -503,66 +714,68 @@ function MatchCard({ partido, equiposById, nombresById, data, miJugadorId, ahora
               />
             </>
           ) : bloqueado && miPred ? (
-            <span style={{ fontSize: 15, fontWeight: 500, color: '#1A1A1A80' }}>
-              🔒 {miPred.goles_local} – {miPred.goles_visitante}
+            <span style={{ ...pixelStyle, fontSize: 13, color: Q.textMid }}>
+              🔒 {miPred.goles_local}–{miPred.goles_visitante}
             </span>
           ) : (
-            <span style={{ fontSize: 13, color: '#1A1A1A40' }}>{bloqueado ? '🔒 Cerrado' : `${hora}h`}</span>
+            <span style={{ fontSize: 12, color: Q.textDim }}>{bloqueado ? '🔒' : `${hora}h`}</span>
           )}
         </div>
 
         <EquipoLabel equipo={visitante} etiqueta={partido.etiqueta_visitante} />
+      </div>
 
-        {/* Estado derecho: botón guardar + estado */}
-        <div style={{ textAlign: 'right', minWidth: 110 }}>
-          {empezado ? (
-            <MiPuntuacion partido={partido} data={data} live={live} />
-          ) : puedoPredecirlo ? (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-              <button
-                onClick={() => guardar(golesL, golesV, quePasa)}
-                disabled={saveState === 'guardando' || saveState === 'guardada' || saveState === 'vacia'}
-                style={{
-                  background: saveState === 'guardada' ? '#3D8B5F12' : saveState === 'sin_guardar' || saveState === 'error' ? C.accent : '#fff',
-                  color: saveState === 'guardada' ? C.green : saveState === 'sin_guardar' || saveState === 'error' ? '#fff' : '#1A1A1A60',
-                  border: `1px solid ${saveState === 'guardada' ? '#3D8B5F40' : saveState === 'sin_guardar' || saveState === 'error' ? C.accent : C.border}`,
-                  borderRadius: 4, padding: '6px 14px', fontSize: 11, fontWeight: 500,
-                  cursor: saveState === 'sin_guardar' || saveState === 'error' ? 'pointer' : 'default',
-                }}
-              >
-                {saveState === 'guardando' ? 'Guardando…'
-                  : saveState === 'guardada' ? '✓ Guardada'
-                  : saveState === 'error' ? 'Reintentar'
-                  : saveState === 'sin_guardar' ? 'Guardar'
-                  : 'Sin predicción'}
-              </button>
-              <p style={{ fontSize: 9, color: cierraPronto ? C.accent : '#1A1A1A40', fontWeight: cierraPronto ? 500 : 400 }}>
-                {hora}h · 🕐 cierra en {formatCountdown(cierreMs)}
-              </p>
-            </div>
-          ) : (
-            <p style={{ fontSize: 11, color: '#1A1A1A50' }}>
-              {hora}h
-              {bloqueado && !empezado ? ' · 🔒' : ''}
-              {bloqueado && !miPred ? ' · sin predicción' : ''}
-              {!bloqueado && cierreMs > 0 ? ` · cierra en ${formatCountdown(cierreMs)}` : ''}
+      {/* Fila inferior: estado / guardar */}
+      <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        {empezado ? (
+          <MiPuntuacion partido={partido} data={data} live={live} />
+        ) : puedoPredecirlo ? (
+          <>
+            <p style={{ fontSize: 9, color: cierraPronto ? Q.pink : Q.textDim, fontWeight: cierraPronto ? 600 : 400 }}>
+              {hora}h · 🕐 cierra en {formatCountdown(cierreMs)}
             </p>
-          )}
-        </div>
+            <button
+              onClick={() => guardar(golesL, golesV, quePasa)}
+              disabled={saveState === 'guardando' || saveState === 'guardada' || saveState === 'vacia'}
+              style={{
+                ...(saveState === 'guardada'
+                  ? { background: 'rgba(54,245,154,.1)', color: Q.green, border: '1px solid rgba(54,245,154,.5)' }
+                  : saveState === 'sin_guardar' || saveState === 'error'
+                    ? { background: 'linear-gradient(180deg,#48ffa6,#23d985)', color: '#06210f', border: 0, boxShadow: '0 3px 0 #128a52' }
+                    : { background: Q.cardHi, color: Q.textDim, border: `1px solid ${Q.border}` }),
+                borderRadius: 10, padding: '8px 14px', ...labelStyle, fontSize: 9,
+                cursor: saveState === 'sin_guardar' || saveState === 'error' ? 'pointer' : 'default',
+              }}
+            >
+              {saveState === 'guardando' ? 'GUARDANDO…'
+                : saveState === 'guardada' ? '✓ GUARDADA'
+                : saveState === 'error' ? 'REINTENTAR'
+                : saveState === 'sin_guardar' ? 'GUARDAR ▸'
+                : 'SIN PREDICCIÓN'}
+            </button>
+          </>
+        ) : (
+          <p style={{ fontSize: 10, color: Q.textDim }}>
+            {hora}h
+            {bloqueado && !empezado ? ' · 🔒' : ''}
+            {bloqueado && !miPred ? ' · sin predicción' : ''}
+            {!bloqueado && cierreMs > 0 ? ` · cierra en ${formatCountdown(cierreMs)}` : ''}
+          </p>
+        )}
       </div>
 
       {/* Empate en eliminatoria: elegir quién pasa */}
       {!bloqueado && puedoPredecirlo && empateElim && local && visitante && (
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center', marginTop: 10 }}>
-          <span style={{ fontSize: 11, color: '#1A1A1A70' }}>¿Quién pasa?</span>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center', marginTop: 10, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, color: Q.textMid }}>¿Quién pasa?</span>
           {[local, visitante].map(eq => (
             <button
               key={eq.id}
               onClick={() => { setQuePasa(eq.id); guardar(golesL, golesV, eq.id) }}
               style={{
-                background: quePasa === eq.id ? C.ink : '#fff',
-                color: quePasa === eq.id ? '#fff' : C.ink,
-                border: `1px solid ${quePasa === eq.id ? C.ink : C.border}`,
+                background: quePasa === eq.id ? Q.green : Q.cardHi,
+                color: quePasa === eq.id ? '#06210f' : Q.textSoft,
+                border: `1px solid ${quePasa === eq.id ? Q.green : Q.border}`,
                 borderRadius: 20, padding: '4px 12px', fontSize: 11, cursor: 'pointer',
               }}
             >
@@ -573,10 +786,10 @@ function MatchCard({ partido, equiposById, nombresById, data, miJugadorId, ahora
       )}
 
       {saveError && (
-        <p style={{ fontSize: 11, color: C.accent, marginTop: 8, textAlign: 'center' }}>{saveError}</p>
+        <p style={{ fontSize: 11, color: Q.pink, marginTop: 8, textAlign: 'center' }}>{saveError}</p>
       )}
 
-      {/* Qué está en juego: análisis de predicciones del partido bloqueado */}
+      {/* Qué está en juego */}
       {bloqueado && partido.estado !== 'finalizado' && local && visitante && prediccionesPartido.length > 0 && (
         <StakesPanel
           partido={partido}
@@ -588,31 +801,31 @@ function MatchCard({ partido, equiposById, nombresById, data, miJugadorId, ahora
         />
       )}
 
-      {/* Predicciones reveladas (desde que el partido se bloquea, 1 h antes) */}
+      {/* Predicciones reveladas */}
       {bloqueado && prediccionesPartido.length > 0 && (
-        <div style={{ marginTop: 10, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+        <div style={{ marginTop: 10, borderTop: `1px solid ${Q.border}`, paddingTop: 10 }}>
           <button
             onClick={() => setVerPredicciones(v => !v)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: '#1A1A1A60', padding: 0 }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: Q.cyan, padding: 0, fontWeight: 600 }}
           >
-            {verPredicciones ? '▾' : '▸'} Predicciones de la porra ({prediccionesPartido.length})
+            {verPredicciones ? '▾' : '▸'} ver porra ({prediccionesPartido.length})
           </button>
           {verPredicciones && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
               {prediccionesPartido.map(pred => (
                 <span key={pred.id} style={{
-                  fontSize: 11, padding: '4px 10px', borderRadius: 20,
-                  background: pred.jugador_id === miJugadorId ? '#D85A3015' : C.cream,
-                  border: `1px solid ${pred.jugador_id === miJugadorId ? '#D85A3040' : C.border}`,
-                  color: C.ink,
+                  fontSize: 10, padding: '4px 10px', borderRadius: 20,
+                  background: pred.jugador_id === miJugadorId ? 'rgba(54,245,154,.12)' : Q.cardHi,
+                  border: `1px solid ${pred.jugador_id === miJugadorId ? 'rgba(54,245,154,.4)' : Q.border}`,
+                  color: Q.textSoft,
                 }}>
                   {nombresById.get(pred.jugador_id) || '—'} · {pred.goles_local}-{pred.goles_visitante}
                   {partido.estado === 'finalizado' ? (
-                    <strong style={{ color: (pred.puntos ?? 0) > 0 ? C.green : '#1A1A1A40', marginLeft: 6 }}>
+                    <strong style={{ color: (pred.puntos ?? 0) > 0 ? Q.green : Q.textDim, marginLeft: 6 }}>
                       +{pred.puntos ?? 0}
                     </strong>
                   ) : live ? (
-                    <span style={{ color: (puntosProvisionales(pred) ?? 0) > 0 ? C.green : '#1A1A1A40', marginLeft: 6, fontSize: 10 }}>
+                    <span style={{ color: (puntosProvisionales(pred) ?? 0) > 0 ? Q.green : Q.textDim, marginLeft: 6, fontSize: 9 }}>
                       +{puntosProvisionales(pred)}
                     </span>
                   ) : null}
@@ -674,25 +887,25 @@ function StakesPanel({ partido, local, visitante, predicciones, nombresById, dat
       ]
 
   return (
-    <div style={{ marginTop: 10, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+    <div style={{ marginTop: 10, borderTop: `1px solid ${Q.border}`, paddingTop: 10 }}>
       <button
         onClick={() => setAbierto(v => !v)}
-        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: C.accent, fontWeight: 500, padding: 0 }}
+        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: Q.gold, fontWeight: 600, padding: 0 }}
       >
         {abierto ? '▾' : '▸'} ⚡ Qué está en juego
       </button>
       {abierto && (
         <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
           {filas.map(f => (
-            <p key={f.label} style={{ fontSize: 11, color: C.ink, lineHeight: 1.5 }}>
-              <strong style={{ fontWeight: 600 }}>{f.label}</strong>
-              <span style={{ color: '#1A1A1A50' }}> (+{pts.resultado}, exacto +{pts.exacto})</span>
+            <p key={f.label} style={{ fontSize: 11, color: Q.textSoft, lineHeight: 1.5 }}>
+              <strong style={{ fontWeight: 600, color: Q.text }}>{f.label}</strong>
+              <span style={{ color: Q.textDim }}> (+{pts.resultado}, exacto +{pts.exacto})</span>
               {' → '}
-              {f.gente.length ? f.gente.join(' · ') : <span style={{ color: '#1A1A1A40' }}>nadie</span>}
+              {f.gente.length ? f.gente.join(' · ') : <span style={{ color: Q.textDim }}>nadie</span>}
             </p>
           ))}
           {sinPrediccion.length > 0 && (
-            <p style={{ fontSize: 11, color: '#1A1A1A50' }}>
+            <p style={{ fontSize: 11, color: Q.textDim }}>
               😴 Sin mojarse: {sinPrediccion.join(' · ')}
             </p>
           )}
@@ -700,7 +913,7 @@ function StakesPanel({ partido, local, visitante, predicciones, nombresById, dat
             const riesgo = escaleraEnRiesgo(eq.id)
             if (!riesgo.length) return null
             return (
-              <p key={eq.id} style={{ fontSize: 11, color: C.accent }}>
+              <p key={eq.id} style={{ fontSize: 11, color: Q.gold }}>
                 🏆 Si cae {eq.bandera} {eq.nombre}, pierden su campeón: {riesgo.join(' · ')}
               </p>
             )
@@ -717,39 +930,41 @@ function MiPuntuacion({ partido, data, live }: {
   live?: { gl: number; gv: number; minuto: string }
 }) {
   const miPred = data.misPredicciones.find(p => p.partido_id === partido.id)
-  if (!miPred) return <p style={{ fontSize: 11, color: '#1A1A1A40' }}>Sin predicción</p>
+  if (!miPred) return <p style={{ fontSize: 11, color: Q.textDim }}>Sin predicción</p>
   const provisional = partido.estado !== 'finalizado' && live
     ? calcPuntosPrediccion(
         { ...partido, goles_local: live.gl, goles_visitante: live.gv, equipo_que_pasa_id: null },
         miPred
       )
     : null
+  const exacto = partido.estado === 'finalizado'
+    && miPred.goles_local === partido.goles_local && miPred.goles_visitante === partido.goles_visitante
   return (
-    <div>
-      <p style={{ fontSize: 11, color: '#1A1A1A60' }}>Tú: {miPred.goles_local}-{miPred.goles_visitante}</p>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <span style={{ fontSize: 10, color: Q.textMid }}>Tú: <b style={{ color: Q.textSoft }}>{miPred.goles_local}-{miPred.goles_visitante}</b></span>
       {partido.estado === 'finalizado' ? (
-        <p style={{
-          fontSize: 13, fontWeight: 500, marginTop: 2,
-          color: (miPred.puntos ?? 0) > 0 ? C.green : '#1A1A1A40',
-        }}>
-          +{miPred.puntos ?? 0} pts
-        </p>
+        exacto ? (
+          <span style={{ ...pixelStyle, fontSize: 8, color: '#06210f', background: 'linear-gradient(180deg,#ffe066,#ffc31f)', borderRadius: 7, padding: '5px 8px', boxShadow: '0 0 12px rgba(255,210,63,.5)' }}>
+            +{miPred.puntos ?? 0} 🎯 EXACTO
+          </span>
+        ) : (
+          <span style={{ ...labelStyle, fontSize: 9, color: (miPred.puntos ?? 0) > 0 ? Q.green : Q.textDim, background: (miPred.puntos ?? 0) > 0 ? 'rgba(54,245,154,.12)' : 'rgba(255,255,255,.05)', borderRadius: 7, padding: '4px 7px' }}>
+            +{miPred.puntos ?? 0} pts
+          </span>
+        )
       ) : provisional !== null ? (
-        <p style={{
-          fontSize: 11, fontWeight: 500, marginTop: 2,
-          color: provisional > 0 ? C.green : '#1A1A1A40',
-        }}>
+        <span style={{ fontSize: 10, fontWeight: 600, color: provisional > 0 ? Q.green : Q.textDim }}>
           +{provisional} si queda así
-        </p>
+        </span>
       ) : null}
     </div>
   )
 }
 
 const scoreInputStyle: React.CSSProperties = {
-  width: 44, height: 36, textAlign: 'center', fontSize: 15, fontWeight: 500,
-  border: `1px solid #E5E2DA`, borderRadius: 4, color: '#1A1A1A',
-  background: '#FDFDFC', outline: 'none',
+  width: 44, height: 38, textAlign: 'center', fontFamily: FONT.pixel, fontSize: 15,
+  border: `1px solid rgba(54,245,154,.4)`, borderRadius: 8, color: Q.green,
+  background: '#10233a', outline: 'none',
 }
 
 // ── Tab: Clasificación ────────────────────────────────────────────────────────
@@ -761,7 +976,6 @@ function ClasificacionTab({ data, bote, reparto, miJugadorId, equiposById }: {
   miJugadorId: string | null
   equiposById: Map<string, QuinielaEquipo>
 }) {
-  const medallas = ['🥇', '🥈', '🥉']
   const [expandido, setExpandido] = useState<string | null>(null)
 
   // Partidos finalizados ordenados, para el detalle por jugador
@@ -782,11 +996,36 @@ function ClasificacionTab({ data, bote, reparto, miJugadorId, equiposById }: {
   }, [data.prediccionesReveladas])
 
   return (
-    <div>
+    <div style={{ animation: 'q-slideUp .35s ease both' }}>
+      {/* Bote */}
+      <div style={{ position: 'relative', background: 'linear-gradient(135deg,#2a1f08,#1a1530)', border: '1.5px solid rgba(255,210,63,.35)', borderRadius: 18, padding: 14, marginBottom: 18, overflow: 'hidden', boxShadow: '0 0 30px rgba(255,210,63,.1)' }}>
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(110deg,transparent 30%,rgba(255,210,63,.12) 50%,transparent 70%)', backgroundSize: '200% 100%', animation: 'q-shine 3.5s infinite' }} />
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ ...labelStyle, color: '#d9b84a' }}>EL BOTE</div>
+            <div style={{ ...pixelStyle, fontSize: 30, color: Q.gold, textShadow: '0 0 18px rgba(255,210,63,.5)', marginTop: 6 }}>{bote.toFixed(0)}€</div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-end', fontSize: 11 }}>
+            <span style={{ color: Q.gold }}>🥇 {(bote * reparto[0] / 100).toFixed(0)}€</span>
+            <span style={{ color: Q.textSoft }}>🥈 {(bote * (reparto[1] || 0) / 100).toFixed(0)}€</span>
+            <span style={{ color: Q.orange }}>🥉 {(bote * (reparto[2] || 0) / 100).toFixed(0)}€</span>
+          </div>
+        </div>
+        <div style={{ position: 'relative', marginTop: 10, fontSize: 10, color: '#b09a55' }}>
+          Reparto {reparto.join(' / ')} % entre los tres primeros
+        </div>
+      </div>
+
       {data.leaderboard.length === 0 && (
-        <p style={{ fontSize: 13, color: '#1A1A1A50' }}>Todavía no hay jugadores.</p>
+        <p style={{ fontSize: 13, color: Q.textDim }}>Todavía no hay jugadores.</p>
       )}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+
+      {/* Podio */}
+      {data.leaderboard.length > 0 && <Podio leaderboard={data.leaderboard} />}
+
+      {/* Tabla */}
+      <div style={{ ...labelStyle, fontSize: 10, color: Q.textMid, margin: '8px 2px 9px' }}>TABLA COMPLETA</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
         {data.leaderboard.map((row, i) => {
           const esYo = row.jugador_id === miJugadorId
           const premio = i < reparto.length ? bote * reparto[i] / 100 : 0
@@ -796,35 +1035,35 @@ function ClasificacionTab({ data, bote, reparto, miJugadorId, equiposById }: {
               <div
                 onClick={() => setExpandido(abierto ? null : row.jugador_id)}
                 style={{
-                  display: 'grid', gridTemplateColumns: '40px 1fr auto auto 18px', gap: 16, alignItems: 'center',
-                  background: esYo ? '#D85A3008' : '#fff',
-                  border: `1px solid ${esYo ? '#D85A3030' : C.border}`,
-                  borderRadius: abierto ? '4px 4px 0 0' : 4, padding: '14px 18px', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 11, cursor: 'pointer',
+                  background: esYo ? 'rgba(54,245,154,.08)' : Q.card,
+                  border: `1px solid ${esYo ? 'rgba(54,245,154,.4)' : Q.border}`,
+                  borderRadius: abierto ? '12px 12px 0 0' : 12, padding: '9px 11px',
                 }}
               >
-                <span style={{ fontSize: i < 3 ? 18 : 13, fontWeight: 500, color: '#1A1A1A70', textAlign: 'center' }}>
-                  {i < 3 ? medallas[i] : i + 1}
-                </span>
-                <div>
-                  <p style={{ fontSize: 13, fontWeight: esYo ? 500 : 400, color: C.ink }}>
-                    {row.nombre} {esYo && <span style={{ fontSize: 10, color: C.accent }}>(tú)</span>}
-                    {!row.pagado && (
-                      <span style={{ fontSize: 9, marginLeft: 8, padding: '2px 8px', borderRadius: 20, background: '#D85A3015', color: C.accent, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                        pendiente de pago
-                      </span>
-                    )}
-                  </p>
-                  <p style={{ fontSize: 10, color: '#1A1A1A50', marginTop: 2 }}>
-                    Partidos {row.puntos_partidos} · Escalera {row.puntos_escalera} · Pichichi {row.puntos_pichichi} · {row.exactos} exactos
-                  </p>
+                <div style={{ width: 26, textAlign: 'center', ...pixelStyle, fontSize: 11, color: posColor(i), flex: 'none' }}>
+                  {i < 3 ? MEDALLAS[i] : String(i + 1)}
                 </div>
-                {premio > 0 ? (
-                  <span style={{ fontSize: 11, color: C.green, fontWeight: 500 }}>{premio.toFixed(0)} €</span>
-                ) : <span />}
-                <span style={{ fontSize: 18, fontWeight: 500, color: C.ink, minWidth: 60, textAlign: 'right' }}>
-                  {row.total} <span style={{ fontSize: 10, fontWeight: 300, color: '#1A1A1A50' }}>pts</span>
-                </span>
-                <span style={{ fontSize: 10, color: '#1A1A1A40', textAlign: 'center', transform: abierto ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>▾</span>
+                <div style={{ width: 30, height: 30, borderRadius: '50%', flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', ...pixelStyle, fontSize: 9, color: '#0a0e1c', background: avatarColor(i) }}>
+                  {iniciales(row.nombre)}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: Q.text }}>
+                    {row.nombre} {esYo && <span style={{ fontSize: 10, color: Q.cyan, fontWeight: 600 }}>(tú)</span>}
+                  </div>
+                  <div style={{ fontSize: 9, color: Q.textDimmer, marginTop: 1 }}>
+                    P {row.puntos_partidos} · E {row.puntos_escalera} · 🎯 {row.exactos}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flex: 'none' }}>
+                  <span style={{ ...pixelStyle, fontSize: 11, color: Q.green }}>{row.total}</span>
+                  {premio > 0 ? (
+                    <span style={{ fontSize: 8, color: Q.gold }}>{premio.toFixed(0)}€</span>
+                  ) : !row.pagado ? (
+                    <span style={{ fontSize: 8, color: Q.orange, background: 'rgba(255,155,91,.12)', borderRadius: 5, padding: '2px 5px' }}>PDTE PAGO</span>
+                  ) : <span style={{ fontSize: 8, color: Q.textDim }}>pts</span>}
+                </div>
+                <span style={{ fontSize: 10, color: Q.textDim, transform: abierto ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>▾</span>
               </div>
               {abierto && (
                 <DetalleJugador
@@ -837,9 +1076,8 @@ function ClasificacionTab({ data, bote, reparto, miJugadorId, equiposById }: {
           )
         })}
       </div>
-      <p style={{ fontSize: 10, color: '#1A1A1A50', marginTop: 16 }}>
-        Toca un jugador para ver su historial partido a partido. Desempate: total → marcadores
-        exactos → aciertos en eliminatorias. El reparto del bote es {reparto.join(' / ')} % entre los tres primeros.
+      <p style={{ fontSize: 10, color: Q.textDim, marginTop: 12, lineHeight: 1.5 }}>
+        Toca un jugador para ver su historial. Desempate: total → marcadores exactos → aciertos en eliminatorias.
       </p>
     </div>
   )
@@ -854,34 +1092,31 @@ function DetalleJugador({ finalizados, preds, equiposById }: {
   const cod = (id: string | null) => (id && equiposById.get(id)?.codigo) || '¿?'
   if (finalizados.length === 0) {
     return (
-      <div style={{ border: `1px solid ${C.border}`, borderTop: 'none', borderRadius: '0 0 4px 4px', background: '#FBFAF8', padding: '12px 18px' }}>
-        <p style={{ fontSize: 11, color: '#1A1A1A50' }}>Aún no hay partidos cerrados.</p>
+      <div style={{ border: `1px solid ${Q.border}`, borderTop: 'none', borderRadius: '0 0 12px 12px', background: Q.cardAlt, padding: '12px 14px' }}>
+        <p style={{ fontSize: 11, color: Q.textDim }}>Aún no hay partidos cerrados.</p>
       </div>
     )
   }
   return (
-    <div style={{ border: `1px solid ${C.border}`, borderTop: 'none', borderRadius: '0 0 4px 4px', background: '#FBFAF8', padding: '8px 18px 12px', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ border: `1px solid ${Q.border}`, borderTop: 'none', borderRadius: '0 0 12px 12px', background: Q.cardAlt, padding: '6px 14px 10px', display: 'flex', flexDirection: 'column' }}>
       {finalizados.map(p => {
         const pred = preds?.get(p.id)
         const pts = pred?.puntos ?? 0
         const exacto = pred && pred.goles_local === p.goles_local && pred.goles_visitante === p.goles_visitante
         return (
           <div key={p.id} style={{
-            display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 12, alignItems: 'center',
-            padding: '7px 0', borderBottom: `1px solid ${C.border}`, fontSize: 11,
+            display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 10, alignItems: 'center',
+            padding: '7px 0', borderBottom: `1px solid ${Q.border}`, fontSize: 11,
           }}>
-            <span style={{ color: C.ink }}>
-              <span style={{ color: '#1A1A1A40', marginRight: 6 }}>#{p.numero}</span>
+            <span style={{ color: Q.textSoft }}>
+              <span style={{ color: Q.textDim, marginRight: 6 }}>#{p.numero}</span>
               {cod(p.equipo_local_id)} {p.goles_local}–{p.goles_visitante} {cod(p.equipo_visitante_id)}
             </span>
-            <span style={{ color: pred ? '#1A1A1A70' : '#1A1A1A35' }}>
+            <span style={{ color: pred ? Q.textMid : Q.textDim }}>
               {pred ? `tú: ${pred.goles_local}–${pred.goles_visitante}` : 'sin pronóstico'}
             </span>
-            <span style={{
-              minWidth: 70, textAlign: 'right', fontWeight: 500,
-              color: pts > 0 ? C.green : '#1A1A1A35',
-            }}>
-              {pts > 0 ? `+${pts} pts` : '0'}{exacto && <span title="marcador exacto"> 🎯</span>}
+            <span style={{ minWidth: 60, textAlign: 'right', fontWeight: 600, color: pts > 0 ? Q.green : Q.textDim }}>
+              {pts > 0 ? `+${pts}` : '0'}{exacto && <span title="marcador exacto"> 🎯</span>}
             </span>
           </div>
         )
@@ -892,13 +1127,14 @@ function DetalleJugador({ finalizados, preds, equiposById }: {
 
 // ── Tab: Mi escalera ──────────────────────────────────────────────────────────
 
-function EscaleraTab({ data, equiposById, nombresById, miJugadorId, ahora, onChanged }: {
+function EscaleraTab({ data, equiposById, nombresById, miJugadorId, ahora, onChanged, fireConfetti }: {
   data: QuinielaData
   equiposById: Map<string, QuinielaEquipo>
   nombresById: Map<string, string>
   miJugadorId: string | null
   ahora: number
   onChanged: () => void
+  fireConfetti: (n?: number) => void
 }) {
   const ventanaActiva = data.config['ventana_activa'] as VentanaCampeon | 'cerrada' | null
   const campeonId = data.config['campeon_id']
@@ -931,7 +1167,7 @@ function EscaleraTab({ data, equiposById, nombresById, miJugadorId, ahora, onCha
     const result = await upsertPickCampeon({ ventana, equipoId })
     setIsSavingPick(false)
     if ('error' in result) setPickError(result.error)
-    else onChanged()
+    else { fireConfetti(70); onChanged() }
   }
 
   async function handlePichichi() {
@@ -941,164 +1177,146 @@ function EscaleraTab({ data, equiposById, nombresById, miJugadorId, ahora, onCha
   }
 
   if (!data.soyParticipante) {
-    return <p style={{ fontSize: 13, color: '#1A1A1A50' }}>Apúntate a la porra para hacer tus picks de campeón.</p>
+    return <p style={{ fontSize: 13, color: Q.textDim }}>Apúntate a la porra para hacer tus picks de campeón.</p>
   }
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)', gap: 32, alignItems: 'start' }}>
-      {/* Escalera */}
-      <div>
-        <p style={{ fontSize: 11, color: '#1A1A1A60', marginBottom: 16, lineHeight: 1.6 }}>
-          Un pick de campeón por ventana, <strong>independiente y acumulable</strong>: si sostienes
-          al mismo equipo desde el día 1 hasta cuartos y es campeón, sumas las cinco ventanas
-          ({Object.values(PUNTOS_ESCALERA).reduce((a, b) => a + b, 0)} pts).
-        </p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {VENTANAS.map(ventana => {
-            const miPick = data.misPicks.find(p => p.ventana === ventana)
-            const equipo = miPick ? equiposById.get(miPick.equipo_id) : undefined
-            const activa = ventanaActiva === ventana && (ventana !== 'apertura' || aperturaAbierta)
-            const acierto = campeonId && miPick?.equipo_id === campeonId
-            const elegibles = activa ? equiposElegibles(ventana) : []
-            return (
-              <div key={ventana} style={{
-                background: '#fff', borderRadius: 4, padding: '16px 20px',
-                border: `1px solid ${activa ? '#D85A3050' : C.border}`,
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-                  <div>
-                    <p style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#1A1A1A60' }}>
-                      {VENTANA_LABELS[ventana]}
-                      {activa && (
-                        <span style={{ color: C.accent, marginLeft: 8 }}>
-                          ● abierta{ventana === 'apertura' && ` · 🕐 cierra en ${formatCountdown(cierreAperturaMs)}`}
-                        </span>
-                      )}
-                    </p>
-                    <p style={{ fontSize: 14, marginTop: 6, color: C.ink }}>
-                      {equipo
-                        ? <>{equipo.bandera} {equipo.nombre} {acierto && <strong style={{ color: C.green }}>✓ ¡Campeón!</strong>}</>
-                        : <span style={{ color: '#1A1A1A40' }}>{activa ? 'Elige tu campeón ↓' : 'Sin pick'}</span>}
-                    </p>
-                  </div>
-                  <span style={{
-                    fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap',
-                    color: acierto ? C.green : '#1A1A1A70',
-                  }}>
-                    {acierto ? `+${PUNTOS_ESCALERA[ventana]}` : PUNTOS_ESCALERA[ventana]} pts
-                  </span>
-                </div>
-                {activa && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 14 }}>
-                    {elegibles.length === 0 && (
-                      <p style={{ fontSize: 11, color: '#1A1A1A50' }}>Esperando a que se definan los cruces…</p>
+    <div style={{ animation: 'q-slideUp .35s ease both' }}>
+      <div style={{ ...pixelStyle, fontSize: 11, color: Q.cyan, margin: '4px 2px 4px', textShadow: '0 0 12px rgba(52,227,255,.4)' }}>🪜 CAMINO AL TÍTULO</div>
+      <p style={{ fontSize: 11, color: Q.textMid, margin: '0 2px 16px', lineHeight: 1.5 }}>
+        Un pick de campeón por ventana, <strong style={{ color: Q.text }}>independiente y acumulable</strong>: si sostienes
+        al mismo equipo desde el día 1 hasta cuartos y es campeón, sumas las cinco ventanas
+        ({Object.values(PUNTOS_ESCALERA).reduce((a, b) => a + b, 0)} pts).
+      </p>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {VENTANAS.map(ventana => {
+          const miPick = data.misPicks.find(p => p.ventana === ventana)
+          const equipo = miPick ? equiposById.get(miPick.equipo_id) : undefined
+          const activa = ventanaActiva === ventana && (ventana !== 'apertura' || aperturaAbierta)
+          const acierto = campeonId && miPick?.equipo_id === campeonId
+          const elegibles = activa ? equiposElegibles(ventana) : []
+          return (
+            <div key={ventana} style={{
+              background: acierto ? 'linear-gradient(135deg,#2a1f08,#231836)' : Q.card, borderRadius: 14, padding: '14px 16px',
+              border: `1px solid ${activa ? 'rgba(54,245,154,.5)' : acierto ? 'rgba(255,210,63,.4)' : Q.border}`,
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                <div style={{ minWidth: 0 }}>
+                  <p style={{ ...labelStyle, color: Q.textMid }}>
+                    {VENTANA_LABELS[ventana]}
+                    {activa && (
+                      <span style={{ color: Q.green, marginLeft: 8, textTransform: 'none', letterSpacing: 0 }}>
+                        ● abierta{ventana === 'apertura' && ` · 🕐 ${formatCountdown(cierreAperturaMs)}`}
+                      </span>
                     )}
-                    {elegibles.map(eq => (
-                      <button
-                        key={eq.id}
-                        onClick={() => handlePick(ventana, eq.id)}
-                        disabled={isSavingPick}
-                        style={{
-                          background: miPick?.equipo_id === eq.id ? C.ink : '#fff',
-                          color: miPick?.equipo_id === eq.id ? '#fff' : C.ink,
-                          border: `1px solid ${miPick?.equipo_id === eq.id ? C.ink : C.border}`,
-                          borderRadius: 20, padding: '5px 12px', fontSize: 11, cursor: 'pointer',
-                          opacity: isSavingPick ? 0.6 : 1,
-                        }}
-                      >
-                        {eq.bandera} {eq.nombre}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                  </p>
+                  <p style={{ fontSize: 14, marginTop: 6, color: Q.text }}>
+                    {equipo
+                      ? <>{equipo.bandera} {equipo.nombre} {acierto && <strong style={{ color: Q.gold }}>✓ ¡Campeón!</strong>}</>
+                      : <span style={{ color: Q.textDim }}>{activa ? 'Elige tu campeón ↓' : 'Sin pick'}</span>}
+                  </p>
+                </div>
+                <span style={{ ...pixelStyle, fontSize: 9, whiteSpace: 'nowrap', color: acierto ? Q.gold : Q.textMid }}>
+                  {acierto ? `+${PUNTOS_ESCALERA[ventana]}` : PUNTOS_ESCALERA[ventana]}pts
+                </span>
               </div>
-            )
-          })}
-        </div>
-        {pickError && <p style={{ fontSize: 11, color: C.accent, marginTop: 10 }}>{pickError}</p>}
+              {activa && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 14 }}>
+                  {elegibles.length === 0 && (
+                    <p style={{ fontSize: 11, color: Q.textDim }}>Esperando a que se definan los cruces…</p>
+                  )}
+                  {elegibles.map(eq => (
+                    <button
+                      key={eq.id}
+                      onClick={() => handlePick(ventana, eq.id)}
+                      disabled={isSavingPick}
+                      style={{
+                        background: miPick?.equipo_id === eq.id ? Q.green : Q.cardHi,
+                        color: miPick?.equipo_id === eq.id ? '#06210f' : Q.textSoft,
+                        border: `1px solid ${miPick?.equipo_id === eq.id ? Q.green : Q.border}`,
+                        borderRadius: 20, padding: '5px 12px', fontSize: 11, cursor: 'pointer',
+                        opacity: isSavingPick ? 0.6 : 1,
+                      }}
+                    >
+                      {eq.bandera} {eq.nombre}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+      {pickError && <p style={{ fontSize: 11, color: Q.pink, marginTop: 10 }}>{pickError}</p>}
+
+      {/* Pichichi */}
+      <div style={{ ...cardStyle, padding: '14px 16px', marginTop: 16 }}>
+        <p style={{ ...labelStyle, color: Q.purple, marginBottom: 10 }}>
+          ⚽ BONUS PICHICHI · {PUNTOS_PICHICHI} PTS
+          {aperturaAbierta && (
+            <span style={{ color: Q.pink, marginLeft: 8, textTransform: 'none', letterSpacing: 0 }}>
+              🕐 {formatCountdown(cierreAperturaMs)}
+            </span>
+          )}
+        </p>
+        {!aperturaAbierta ? (
+          <p style={{ fontSize: 13, color: Q.text }}>
+            {miJugador?.pichichi
+              ? <>⚽ {miJugador.pichichi}</>
+              : <span style={{ color: Q.textDim }}>No elegiste pichichi (cerrado).</span>}
+          </p>
+        ) : (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              value={pichichi}
+              onChange={e => { setPichichi(e.target.value); setPichichiState('idle') }}
+              placeholder="Máximo goleador del Mundial…"
+              style={inputDark}
+            />
+            <button
+              onClick={handlePichichi}
+              disabled={pichichiState === 'saving'}
+              style={{ background: Q.green, color: '#06210f', border: 'none', borderRadius: 10, padding: '8px 14px', ...labelStyle, fontSize: 9, cursor: 'pointer' }}
+            >
+              {pichichiState === 'saving' ? '…' : pichichiState === 'saved' ? '✓' : 'GUARDAR'}
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Columna derecha: pichichi + picks de la porra */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <div style={{ background: '#fff', borderRadius: 4, padding: '16px 20px', border: `1px solid ${C.border}` }}>
-          <p style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#1A1A1A60', marginBottom: 10 }}>
-            Bonus Pichichi · {PUNTOS_PICHICHI} pts
-            {aperturaAbierta && (
-              <span style={{ color: C.accent, marginLeft: 8, textTransform: 'none', letterSpacing: 0 }}>
-                🕐 cierra en {formatCountdown(cierreAperturaMs)}
-              </span>
-            )}
-          </p>
-          {!aperturaAbierta ? (
-            <p style={{ fontSize: 13, color: C.ink }}>
-              {miJugador?.pichichi
-                ? <>⚽ {miJugador.pichichi}</>
-                : <span style={{ color: '#1A1A1A40' }}>No elegiste pichichi (cerrado).</span>}
-            </p>
-          ) : (
-            <div style={{ display: 'flex', gap: 8 }}>
-              <input
-                value={pichichi}
-                onChange={e => { setPichichi(e.target.value); setPichichiState('idle') }}
-                placeholder="Máximo goleador del Mundial…"
-                style={{
-                  flex: 1, border: `1px solid #E5E2DA`, borderRadius: 4, padding: '8px 12px',
-                  fontSize: 12, outline: 'none', color: C.ink, background: '#FDFDFC',
-                }}
-              />
-              <button
-                onClick={handlePichichi}
-                disabled={pichichiState === 'saving'}
-                style={{
-                  background: C.ink, color: '#fff', border: 'none', borderRadius: 4,
-                  padding: '8px 14px', fontSize: 11, cursor: 'pointer',
-                }}
-              >
-                {pichichiState === 'saving' ? '…' : pichichiState === 'saved' ? '✓' : 'Guardar'}
-              </button>
-            </div>
-          )}
-        </div>
-
-        <div style={{ background: '#fff', borderRadius: 4, padding: '16px 20px', border: `1px solid ${C.border}` }}>
-          <p style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#1A1A1A60', marginBottom: 10 }}>
-            Picks de la porra
-          </p>
-          {aperturaAbierta ? (
-            <p style={{ fontSize: 12, color: '#1A1A1A50' }}>
-              Se revelan cuando se cierre la ventana inicial. 🤫
-            </p>
-          ) : (
-            VENTANAS.map(ventana => {
-              const picks = data.picksRevelados.filter(p => p.ventana === ventana)
-              if (picks.length === 0) return null
-              return (
-                <div key={ventana} style={{ marginBottom: 12 }}>
-                  <p style={{ fontSize: 10, color: '#1A1A1A50', marginBottom: 6 }}>{VENTANA_LABELS[ventana]}</p>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {picks.map(pick => {
-                      const eq = equiposById.get(pick.equipo_id)
-                      return (
-                        <span key={pick.id} style={{
-                          fontSize: 11, padding: '4px 10px', borderRadius: 20,
-                          background: C.cream, border: `1px solid ${C.border}`, color: C.ink,
-                        }}>
-                          {nombresById.get(pick.jugador_id) || '—'} · {eq?.bandera} {eq?.codigo}
-                        </span>
-                      )
-                    })}
-                  </div>
+      {/* Picks de la porra */}
+      <div style={{ ...cardStyle, padding: '14px 16px', marginTop: 12 }}>
+        <p style={{ ...labelStyle, color: Q.textMid, marginBottom: 10 }}>PICKS DE LA PORRA</p>
+        {aperturaAbierta ? (
+          <p style={{ fontSize: 12, color: Q.textDim }}>Se revelan cuando se cierre la ventana inicial. 🤫</p>
+        ) : (
+          VENTANAS.map(ventana => {
+            const picks = data.picksRevelados.filter(p => p.ventana === ventana)
+            if (picks.length === 0) return null
+            return (
+              <div key={ventana} style={{ marginBottom: 12 }}>
+                <p style={{ fontSize: 10, color: Q.textDim, marginBottom: 6 }}>{VENTANA_LABELS[ventana]}</p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {picks.map(pick => {
+                    const eq = equiposById.get(pick.equipo_id)
+                    return (
+                      <span key={pick.id} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 20, background: Q.cardHi, border: `1px solid ${Q.border}`, color: Q.textSoft }}>
+                        {nombresById.get(pick.jugador_id) || '—'} · {eq?.bandera} {eq?.codigo}
+                      </span>
+                    )
+                  })}
                 </div>
-              )
-            })
-          )}
-        </div>
+              </div>
+            )
+          })
+        )}
       </div>
     </div>
   )
 }
 
-// ── Tab: Admin ────────────────────────────────────────────────────────────────
+// ── Tab: Admin (reskin ligero, lógica intacta) ──────────────────────────────────
 
 function AdminTab({ data, equiposById, onChanged }: {
   data: QuinielaData
@@ -1113,9 +1331,9 @@ function AdminTab({ data, equiposById, onChanged }: {
   const partidos = data.partidos.filter(p => p.fase === fase)
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, animation: 'q-slideUp .35s ease both' }}>
       {/* Config */}
-      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         <div style={adminCardStyle}>
           <p style={adminCardTitleStyle}>Entrada (€)</p>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -1135,9 +1353,9 @@ function AdminTab({ data, equiposById, onChanged }: {
                 onClick={async () => { await updateVentanaActiva(v); onChanged() }}
                 style={{
                   ...adminButtonStyle,
-                  background: ventanaActiva === v ? C.accent : '#fff',
-                  color: ventanaActiva === v ? '#fff' : C.ink,
-                  border: `1px solid ${ventanaActiva === v ? C.accent : C.border}`,
+                  background: ventanaActiva === v ? Q.green : Q.cardHi,
+                  color: ventanaActiva === v ? '#06210f' : Q.textSoft,
+                  border: `1px solid ${ventanaActiva === v ? Q.green : Q.border}`,
                 }}
               >
                 {v === 'cerrada' ? 'Cerrada' : VENTANA_LABELS[v as VentanaCampeon]}
@@ -1175,10 +1393,10 @@ function AdminTab({ data, equiposById, onChanged }: {
               key={j.id}
               onClick={async () => { await updatePagado(j.id, !j.pagado); onChanged() }}
               style={{
-                background: j.pagado ? '#3D8B5F12' : '#fff',
-                border: `1px solid ${j.pagado ? '#3D8B5F50' : C.border}`,
+                background: j.pagado ? 'rgba(54,245,154,.12)' : Q.cardHi,
+                border: `1px solid ${j.pagado ? 'rgba(54,245,154,.5)' : Q.border}`,
                 borderRadius: 20, padding: '6px 14px', fontSize: 11, cursor: 'pointer',
-                color: j.pagado ? C.green : '#1A1A1A70',
+                color: j.pagado ? Q.green : Q.textSoft,
               }}
             >
               {j.pagado ? '✓' : '○'} {j.nombre}{j.user_id ? '' : ' (ext)'}
@@ -1189,15 +1407,15 @@ function AdminTab({ data, equiposById, onChanged }: {
 
       {/* Resultados y cruces */}
       <div>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+        <div className="q-scroll" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
           {FASES_ORDEN.map(f => (
             <button
               key={f}
               onClick={() => setFase(f)}
               style={{
-                background: fase === f ? C.ink : '#fff',
-                color: fase === f ? '#fff' : '#1A1A1A90',
-                border: `1px solid ${fase === f ? C.ink : C.border}`,
+                background: fase === f ? Q.green : Q.cardHi,
+                color: fase === f ? '#06210f' : Q.textSoft,
+                border: `1px solid ${fase === f ? Q.green : Q.border}`,
                 borderRadius: 20, padding: '6px 14px', fontSize: 11, cursor: 'pointer',
               }}
             >
@@ -1293,9 +1511,9 @@ function AdminMatchRow({ partido, equipos, equiposById, onChanged }: {
   }
 
   return (
-    <div style={{ background: '#fff', borderRadius: 4, border: `1px solid ${C.border}`, padding: '12px 16px' }}>
+    <div style={{ background: Q.card, borderRadius: 12, border: `1px solid ${Q.border}`, padding: '12px 14px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 10, color: '#1A1A1A50', minWidth: 90 }}>
+        <span style={{ fontSize: 10, color: Q.textDim, minWidth: 90 }}>
           #{partido.numero} · {dia} {hora}h
         </span>
 
@@ -1306,7 +1524,7 @@ function AdminMatchRow({ partido, equipos, equiposById, onChanged }: {
               <option value="">{partido.etiqueta_local || 'Local'}</option>
               {equipos.map(e => <option key={e.id} value={e.id}>{e.bandera} {e.nombre}</option>)}
             </select>
-            <span style={{ fontSize: 11, color: '#1A1A1A40' }}>vs</span>
+            <span style={{ fontSize: 11, color: Q.textDim }}>vs</span>
             <select value={visitanteId} onChange={e => setVisitanteId(e.target.value)} style={adminSelectStyle}>
               <option value="">{partido.etiqueta_visitante || 'Visitante'}</option>
               {equipos.map(e => <option key={e.id} value={e.id}>{e.bandera} {e.nombre}</option>)}
@@ -1315,13 +1533,13 @@ function AdminMatchRow({ partido, equipos, equiposById, onChanged }: {
           </>
         ) : (
           <>
-            <span style={{ fontSize: 12, color: C.ink, minWidth: 140, textAlign: 'right' }}>
+            <span style={{ fontSize: 12, color: Q.text, minWidth: 120, textAlign: 'right' }}>
               {local?.bandera} {local?.nombre || partido.etiqueta_local}
             </span>
-            <input type="number" min={0} value={golesL} onChange={e => setGolesL(e.target.value)} style={{ ...scoreInputStyle, width: 40, height: 30 }} />
-            <span style={{ color: '#1A1A1A40' }}>–</span>
-            <input type="number" min={0} value={golesV} onChange={e => setGolesV(e.target.value)} style={{ ...scoreInputStyle, width: 40, height: 30 }} />
-            <span style={{ fontSize: 12, color: C.ink, minWidth: 140 }}>
+            <input type="number" min={0} value={golesL} onChange={e => setGolesL(e.target.value)} style={{ ...adminScoreStyle }} />
+            <span style={{ color: Q.textDim }}>–</span>
+            <input type="number" min={0} value={golesV} onChange={e => setGolesV(e.target.value)} style={{ ...adminScoreStyle }} />
+            <span style={{ fontSize: 12, color: Q.text, minWidth: 120 }}>
               {visitante?.bandera} {visitante?.nombre || partido.etiqueta_visitante}
             </span>
             {esEliminatoria && empate && local && visitante && (
@@ -1331,11 +1549,11 @@ function AdminMatchRow({ partido, equipos, equiposById, onChanged }: {
                 <option value={visitante.id}>{visitante.nombre}</option>
               </select>
             )}
-            <button onClick={handleResultado} disabled={estado === 'saving'} style={{ ...adminButtonStyle, background: C.ink, color: '#fff' }}>
+            <button onClick={handleResultado} disabled={estado === 'saving'} style={{ ...adminButtonStyle, background: Q.green, color: '#06210f', border: 0 }}>
               {estado === 'saving' ? '…' : partido.estado === 'finalizado' ? 'Recalcular' : 'Cerrar partido'}
             </button>
-            {partido.estado === 'finalizado' && <span style={{ fontSize: 10, color: C.green }}>✓ finalizado</span>}
-            {estado === 'error' && <span style={{ fontSize: 10, color: C.accent }}>{errorMsg}</span>}
+            {partido.estado === 'finalizado' && <span style={{ fontSize: 10, color: Q.green }}>✓ finalizado</span>}
+            {estado === 'error' && <span style={{ fontSize: 10, color: Q.pink }}>{errorMsg}</span>}
           </>
         )}
       </div>
@@ -1343,21 +1561,29 @@ function AdminMatchRow({ partido, equipos, equiposById, onChanged }: {
   )
 }
 
+const inputDark: React.CSSProperties = {
+  flex: 1, border: `1px solid ${Q.borderHi}`, borderRadius: 10, padding: '9px 12px',
+  fontSize: 13, outline: 'none', color: Q.text, background: Q.cardHi, fontFamily: FONT.body,
+}
 const adminCardStyle: React.CSSProperties = {
-  background: '#fff', borderRadius: 4, border: `1px solid #F0EEE8`, padding: '14px 18px', minWidth: 220,
+  background: Q.card, borderRadius: 12, border: `1px solid ${Q.border}`, padding: '14px 16px', minWidth: 220,
 }
 const adminCardTitleStyle: React.CSSProperties = {
-  fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#1A1A1A60', marginBottom: 10,
+  ...labelStyle, fontSize: 9, marginBottom: 10,
 }
 const adminInputStyle: React.CSSProperties = {
-  border: `1px solid #E5E2DA`, borderRadius: 4, padding: '7px 10px', fontSize: 12,
-  outline: 'none', color: '#1A1A1A', background: '#FDFDFC', width: 150,
+  border: `1px solid ${Q.borderHi}`, borderRadius: 8, padding: '7px 10px', fontSize: 12,
+  outline: 'none', color: Q.text, background: Q.cardHi, width: 150, fontFamily: FONT.body,
+}
+const adminScoreStyle: React.CSSProperties = {
+  width: 40, height: 30, textAlign: 'center', fontSize: 14, color: Q.text,
+  border: `1px solid ${Q.borderHi}`, borderRadius: 8, background: Q.cardHi, outline: 'none',
 }
 const adminButtonStyle: React.CSSProperties = {
-  background: '#fff', border: `1px solid #F0EEE8`, borderRadius: 4, padding: '7px 12px',
-  fontSize: 11, cursor: 'pointer', color: '#1A1A1A',
+  background: Q.cardHi, border: `1px solid ${Q.border}`, borderRadius: 8, padding: '7px 12px',
+  fontSize: 11, cursor: 'pointer', color: Q.textSoft,
 }
 const adminSelectStyle: React.CSSProperties = {
-  border: `1px solid #E5E2DA`, borderRadius: 4, padding: '6px 8px', fontSize: 11,
-  outline: 'none', color: '#1A1A1A', background: '#FDFDFC', maxWidth: 180,
+  border: `1px solid ${Q.borderHi}`, borderRadius: 8, padding: '6px 8px', fontSize: 11,
+  outline: 'none', color: Q.text, background: Q.cardHi, maxWidth: 180,
 }

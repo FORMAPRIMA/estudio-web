@@ -4,8 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { registerJugadorExterno, loginJugadorExterno } from '@/app/actions/quiniela'
 import QuinielaReglas from '@/components/quiniela/QuinielaReglas'
-
-const C = { ink: '#1A1A1A', cream: '#F8F7F4', accent: '#D85A30', border: '#F0EEE8' }
+import { Q, FONT, QUINIELA_KEYFRAMES, labelStyle, pixelStyle } from '@/components/team/quiniela/theme'
 
 export default function QuinielaGate({ monto, numJugadores }: { monto: number; numJugadores: number }) {
   const router = useRouter()
@@ -35,49 +34,45 @@ export default function QuinielaGate({ monto, numJugadores }: { monto: number; n
 
   return (
     <div style={{
-      minHeight: '100vh', background: C.cream,
+      minHeight: '100vh', background: Q.bg, fontFamily: FONT.body, color: Q.text,
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
     }}>
+      <style>{QUINIELA_KEYFRAMES}</style>
       <div style={{ maxWidth: 420, width: '100%' }}>
-        <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <p style={{ fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: '#1A1A1A99', marginBottom: 10 }}>
-            Forma Prima presenta
-          </p>
-          <h1 style={{ fontSize: 30, fontWeight: 300, color: C.ink, letterSpacing: '-0.02em', marginBottom: 8 }}>
-            La Porra del Mundial <span style={{ fontSize: 24 }}>⚽</span>
+        <div style={{ textAlign: 'center', marginBottom: 24 }}>
+          <div style={{ ...labelStyle, color: Q.textMid, marginBottom: 12 }}>FORMA PRIMA PRESENTA</div>
+          <h1 style={{ ...pixelStyle, fontSize: 22, color: Q.green, marginBottom: 12, textShadow: '0 0 16px rgba(54,245,154,.4)', lineHeight: 1.4 }}>
+            LA PORRA<br />DEL MUNDIAL ⚽
           </h1>
-          <p style={{ fontSize: 13, color: '#1A1A1A70', fontWeight: 300, lineHeight: 1.6 }}>
+          <p style={{ fontSize: 13, color: Q.textMid, lineHeight: 1.6 }}>
             Predice marcadores, elige a tu campeón y pelea por el bote.
             <br />
-            Entrada: <strong>{monto.toFixed(0)} €</strong>
-            {numJugadores > 0 && <> · ya hay <strong>{numJugadores}</strong> dentro</>}
+            Entrada: <strong style={{ color: Q.gold }}>{monto.toFixed(0)} €</strong>
+            {numJugadores > 0 && <> · ya hay <strong style={{ color: Q.text }}>{numJugadores}</strong> dentro</>}
           </p>
           <button
             onClick={() => setVerReglas(true)}
             style={{
-              marginTop: 12, background: 'none', border: `1px solid #1A1A1A30`, borderRadius: 20,
-              padding: '7px 18px', fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase',
-              color: C.ink, cursor: 'pointer',
+              marginTop: 14, background: 'rgba(52,227,255,.1)', border: '1px solid rgba(52,227,255,.3)',
+              borderRadius: 999, padding: '8px 18px', ...labelStyle, fontSize: 9, color: Q.cyan, cursor: 'pointer',
             }}
           >
-            📖 Ver reglas
+            📖 VER REGLAS
           </button>
         </div>
 
-        <div style={{ background: '#fff', borderRadius: 6, border: `1px solid ${C.border}`, padding: '28px 28px' }}>
+        <div style={{ background: Q.card, borderRadius: 18, border: `1px solid ${Q.border}`, padding: '24px 22px', boxShadow: '0 0 40px rgba(0,0,0,.4)' }}>
           {/* Tabs */}
-          <div style={{ display: 'flex', gap: 4, marginBottom: 22, background: C.cream, borderRadius: 4, padding: 4 }}>
+          <div style={{ display: 'flex', gap: 4, marginBottom: 20, background: Q.panel, borderRadius: 11, padding: 4 }}>
             {(['registro', 'login'] as const).map(m => (
               <button
                 key={m}
                 onClick={() => { setModo(m); setError('') }}
                 style={{
-                  flex: 1, padding: '9px', fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase',
-                  fontWeight: modo === m ? 500 : 300, cursor: 'pointer',
-                  background: modo === m ? '#fff' : 'none',
-                  color: modo === m ? C.ink : '#1A1A1A60',
-                  border: 'none', borderRadius: 3,
-                  boxShadow: modo === m ? '0 1px 3px #1A1A1A10' : 'none',
+                  flex: 1, padding: '10px', ...labelStyle, fontSize: 9, cursor: 'pointer', borderRadius: 8,
+                  background: modo === m ? Q.cardHi : 'transparent',
+                  color: modo === m ? Q.green : Q.textMid,
+                  border: modo === m ? `1px solid ${Q.border}` : '1px solid transparent',
                 }}
               >
                 {m === 'registro' ? 'Quiero jugar' : 'Ya tengo cuenta'}
@@ -87,7 +82,7 @@ export default function QuinielaGate({ monto, numJugadores }: { monto: number; n
 
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div>
-              <label style={labelStyle}>Tu nombre</label>
+              <label style={labelStyle as React.CSSProperties}>Tu nombre</label>
               <input
                 value={nombre}
                 onChange={e => setNombre(e.target.value)}
@@ -98,7 +93,7 @@ export default function QuinielaGate({ monto, numJugadores }: { monto: number; n
               />
             </div>
             <div>
-              <label style={labelStyle}>PIN (4–6 dígitos)</label>
+              <label style={labelStyle as React.CSSProperties}>PIN (4–6 dígitos)</label>
               <input
                 value={pin}
                 onChange={e => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
@@ -112,40 +107,40 @@ export default function QuinielaGate({ monto, numJugadores }: { monto: number; n
 
             {modo === 'registro' && (
               <label style={{
-                display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 12, color: C.ink,
-                background: '#D85A3008', border: '1px solid #D85A3025', borderRadius: 4,
+                display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 12, color: Q.textSoft,
+                background: 'rgba(255,91,118,.08)', border: '1px solid rgba(255,91,118,.25)', borderRadius: 10,
                 padding: '10px 12px', cursor: 'pointer', lineHeight: 1.5,
               }}>
                 <input
                   type="checkbox"
                   checked={compromiso}
                   onChange={e => setCompromiso(e.target.checked)}
-                  style={{ marginTop: 2, accentColor: C.accent }}
+                  style={{ marginTop: 2, accentColor: Q.green }}
                 />
                 <span>
-                  Me comprometo a pagar la entrada de <strong>{monto.toFixed(0)} €</strong>,{' '}
-                  <strong>aunque no rellene mis predicciones a tiempo</strong>. Apuntarse es apostar.
+                  Me comprometo a pagar la entrada de <strong style={{ color: Q.gold }}>{monto.toFixed(0)} €</strong>,{' '}
+                  <strong style={{ color: Q.text }}>aunque no rellene mis predicciones a tiempo</strong>. Apuntarse es apostar.
                 </span>
               </label>
             )}
 
-            {error && <p style={{ fontSize: 12, color: C.accent }}>{error}</p>}
+            {error && <p style={{ fontSize: 12, color: Q.pink }}>{error}</p>}
 
             <button
               type="submit"
               disabled={isSubmitting}
               style={{
-                background: C.accent, color: '#fff', border: 'none', borderRadius: 4,
-                padding: '13px', fontSize: 12, letterSpacing: '0.1em', textTransform: 'uppercase',
-                fontWeight: 500, cursor: 'pointer', opacity: isSubmitting ? 0.6 : 1, marginTop: 4,
+                ...pixelStyle, fontSize: 11, color: '#06210f', background: 'linear-gradient(180deg,#48ffa6,#23d985)',
+                border: 'none', borderRadius: 12, padding: '14px', cursor: 'pointer',
+                opacity: isSubmitting ? 0.6 : 1, marginTop: 4, boxShadow: '0 4px 0 #128a52, 0 0 22px rgba(54,245,154,.4)',
               }}
             >
-              {isSubmitting ? 'Un momento…' : modo === 'registro' ? 'Registrarme y jugar' : 'Entrar'}
+              {isSubmitting ? 'UN MOMENTO…' : modo === 'registro' ? 'REGISTRARME Y JUGAR ▸' : 'ENTRAR ▸'}
             </button>
           </form>
         </div>
 
-        <p style={{ textAlign: 'center', fontSize: 10, color: '#1A1A1A50', marginTop: 16, lineHeight: 1.6 }}>
+        <p style={{ textAlign: 'center', fontSize: 10, color: Q.textDim, marginTop: 16, lineHeight: 1.6 }}>
           Porra privada entre amigos de Forma Prima. Tu nombre y tus predicciones
           serán visibles para el resto de jugadores.
         </p>
@@ -156,11 +151,8 @@ export default function QuinielaGate({ monto, numJugadores }: { monto: number; n
   )
 }
 
-const labelStyle: React.CSSProperties = {
-  display: 'block', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase',
-  color: '#1A1A1A70', marginBottom: 6,
-}
 const inputStyle: React.CSSProperties = {
-  width: '100%', boxSizing: 'border-box', border: '1px solid #E5E2DA', borderRadius: 4,
-  padding: '11px 12px', fontSize: 14, outline: 'none', color: '#1A1A1A', background: '#FDFDFC',
+  width: '100%', boxSizing: 'border-box', background: Q.cardHi, border: `1px solid ${Q.borderHi}`,
+  borderRadius: 10, padding: '11px 12px', fontSize: 14, outline: 'none', color: Q.text, fontFamily: FONT.body,
+  marginTop: 6,
 }

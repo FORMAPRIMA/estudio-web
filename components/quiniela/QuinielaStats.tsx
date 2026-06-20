@@ -3,12 +3,11 @@
 import { useMemo } from 'react'
 import type { QuinielaData } from '@/app/actions/quiniela'
 import type { QuinielaPartido } from '@/lib/quiniela/config'
-
-const C = { ink: '#1A1A1A', cream: '#F8F7F4', accent: '#D85A30', border: '#F0EEE8', green: '#3D8B5F' }
+import { Q, labelStyle, pixelStyle, cardStyle } from '@/components/team/quiniela/theme'
 
 const PALETA = [
-  '#D85A30', '#3D8B5F', '#5B7FA6', '#B0892F', '#7A5BA6', '#C94F6D',
-  '#3FA0A6', '#8B6F4E', '#566B2F', '#A65B5B', '#4E5D8B', '#856FA0',
+  '#ffd23f', '#36f59a', '#34e3ff', '#9d7bff', '#ff9b5b', '#ff5b76',
+  '#ff4d9d', '#5fa8ff', '#62e0b0', '#d98bff', '#5b7fa6', '#b0892f',
 ]
 
 interface Premio {
@@ -27,40 +26,44 @@ export default function QuinielaStats({ data, nombresById, miJugadorId }: {
   const stats = useMemo(() => calcular(data), [data])
 
   return (
-    <div>
+    <div style={{ animation: 'q-slideUp .35s ease both' }}>
       {/* ── Premios secundarios ── */}
-      <p style={{ fontSize: 11, color: '#1A1A1A60', marginBottom: 14 }}>
-        Premios honoríficos (sin dinero, solo gloria y vergüenza). Se actualizan con cada partido cerrado.
+      <div style={{ ...pixelStyle, fontSize: 10, color: Q.pink, margin: '4px 2px 5px' }}>🏅 PREMIOS HONORÍFICOS</div>
+      <p style={{ fontSize: 11, color: Q.textMid, margin: '0 2px 14px' }}>
+        Solo gloria y vergüenza. Se actualizan con cada partido cerrado.
       </p>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 12, marginBottom: 36 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginBottom: 28 }}>
         {stats.premios.map(p => (
-          <div key={p.titulo} style={{
-            background: '#fff', borderRadius: 4, border: `1px solid ${C.border}`, padding: '16px 18px',
-          }}>
-            <p style={{ fontSize: 22, marginBottom: 8 }}>{p.emoji}</p>
-            <p style={{ fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#1A1A1A60', fontWeight: 500 }}>
-              {p.titulo}
-            </p>
-            <p style={{ fontSize: 14, color: C.ink, marginTop: 6, fontWeight: 500 }}>
-              {p.ganadores || '—'}
-              {p.valor && <span style={{ fontSize: 11, color: C.accent, marginLeft: 6 }}>{p.valor}</span>}
-            </p>
-            <p style={{ fontSize: 10, color: '#1A1A1A50', marginTop: 4, lineHeight: 1.5 }}>{p.descripcion}</p>
+          <div key={p.titulo} style={{ display: 'flex', alignItems: 'center', gap: 12, ...cardStyle, padding: '11px 13px' }}>
+            <span style={{ fontSize: 26, flex: 'none' }}>{p.emoji}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ ...labelStyle, fontSize: 10, color: Q.cyan }}>{p.titulo}</span>
+              <p style={{ fontSize: 11, color: Q.textMid, marginTop: 3, lineHeight: 1.4 }}>{p.descripcion}</p>
+            </div>
+            <div style={{ textAlign: 'right', flex: 'none' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: Q.text }}>{p.ganadores || '—'}</div>
+              {p.valor && <div style={{ fontSize: 9, color: Q.gold, marginTop: 2 }}>{p.valor}</div>}
+            </div>
           </div>
         ))}
       </div>
 
       {/* ── Evolución de posiciones ── */}
-      <p style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#1A1A1A70', fontWeight: 500, marginBottom: 12 }}>
-        📈 Evolución de la clasificación (puntos de partidos, por jornada)
-      </p>
-      {stats.dias.length < 2 ? (
-        <p style={{ fontSize: 12, color: '#1A1A1A50' }}>
-          La gráfica aparece cuando haya al menos dos jornadas con partidos cerrados. Paciencia, que esto dura un mes. 🍿
+      <div style={{ ...cardStyle, padding: 14, background: 'linear-gradient(160deg,#0f1838,#101733)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
+          <span style={{ ...labelStyle, fontSize: 10, color: Q.cyan }}>🏁 CARRERA DE PUNTOS</span>
+        </div>
+        <p style={{ fontSize: 10, color: Q.textMid, marginBottom: 10 }}>
+          Posiciones por jornada (solo puntos de partidos).
         </p>
-      ) : (
-        <Grafica dias={stats.dias} series={stats.series} nombresById={nombresById} miJugadorId={miJugadorId} />
-      )}
+        {stats.dias.length < 2 ? (
+          <p style={{ fontSize: 12, color: Q.textDim }}>
+            La gráfica aparece cuando haya al menos dos jornadas con partidos cerrados. Paciencia, que esto dura un mes. 🍿
+          </p>
+        ) : (
+          <Grafica dias={stats.dias} series={stats.series} nombresById={nombresById} miJugadorId={miJugadorId} />
+        )}
+      </div>
     </div>
   )
 }
@@ -211,18 +214,18 @@ function Grafica({ dias, series, nombresById, miJugadorId }: {
   const y = (pos: number) => PAD_Y + ((pos - 1) * (H - 2 * PAD_Y)) / Math.max(n - 1, 1)
 
   return (
-    <div style={{ background: '#fff', borderRadius: 4, border: `1px solid ${C.border}`, padding: '20px 16px' }}>
+    <div>
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto' }}>
         {/* Líneas de posición de fondo */}
         {Array.from({ length: n }, (_, i) => (
           <g key={i}>
-            <line x1={PAD_X} y1={y(i + 1)} x2={W - PAD_X} y2={y(i + 1)} stroke="#F0EEE8" strokeWidth={1} />
-            <text x={PAD_X - 8} y={y(i + 1) + 3} textAnchor="end" fontSize={10} fill="#1A1A1A50">{i + 1}º</text>
+            <line x1={PAD_X} y1={y(i + 1)} x2={W - PAD_X} y2={y(i + 1)} stroke="rgba(255,255,255,.06)" strokeWidth={1} />
+            <text x={PAD_X - 8} y={y(i + 1) + 3} textAnchor="end" fontSize={10} fill={Q.textDim}>{i + 1}º</text>
           </g>
         ))}
         {/* Etiquetas de jornada */}
         {dias.map((dia, i) => (
-          <text key={dia} x={x(i)} y={H - 4} textAnchor="middle" fontSize={9} fill="#1A1A1A50">{dia}</text>
+          <text key={dia} x={x(i)} y={H - 4} textAnchor="middle" fontSize={9} fill={Q.textDim}>{dia}</text>
         ))}
         {/* Series */}
         {jugadores.map((id, idx) => {
@@ -247,16 +250,15 @@ function Grafica({ dias, series, nombresById, miJugadorId }: {
       {/* Leyenda */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 12 }}>
         {jugadores.map((id, idx) => (
-          <span key={id} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: C.ink, fontWeight: id === miJugadorId ? 600 : 400 }}>
+          <span key={id} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: Q.textSoft, fontWeight: id === miJugadorId ? 700 : 400 }}>
             <span style={{ width: 10, height: 10, borderRadius: '50%', background: PALETA[idx % PALETA.length], display: 'inline-block' }} />
             {nombresById.get(id) || '—'}
           </span>
         ))}
       </div>
-      <p style={{ fontSize: 10, color: '#1A1A1A45', marginTop: 10 }}>
+      <p style={{ fontSize: 10, color: Q.textDim, marginTop: 10 }}>
         Posiciones según puntos de partidos acumulados al cierre de cada jornada (la escalera y el pichichi se suman al final).
       </p>
     </div>
   )
 }
-

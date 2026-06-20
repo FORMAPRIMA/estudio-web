@@ -4,9 +4,7 @@ import { useState } from 'react'
 import { createComentario, toggleReaccion, deleteComentario } from '@/app/actions/quiniela'
 import { CHAT_EMOJIS } from '@/lib/quiniela/config'
 import type { QuinielaComentario, QuinielaReaccion } from '@/lib/quiniela/config'
-
-const C = { ink: '#1A1A1A', cream: '#F8F7F4', accent: '#D85A30', border: '#F0EEE8', green: '#3D8B5F' }
-const VISIBLES_COLAPSADO = 3
+import { Q, FONT, pixelStyle, avatarColor, iniciales } from '@/components/team/quiniela/theme'
 
 function timeAgo(iso: string): string {
   const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
@@ -30,13 +28,10 @@ export default function QuinielaChat({
 }) {
   const [texto, setTexto] = useState('')
   const [isSending, setIsSending] = useState(false)
-  const [expandido, setExpandido] = useState(false)
   const [error, setError] = useState('')
 
-  // comentarios llega ordenado desc por created_at
-  const principales = comentarios.filter(c => !c.parent_id)
-  const visibles = expandido ? principales : principales.slice(0, VISIBLES_COLAPSADO)
-  const ocultos = principales.length - VISIBLES_COLAPSADO
+  // comentarios llega ordenado desc por created_at → para el chat lo mostramos asc
+  const principales = comentarios.filter(c => !c.parent_id).slice().reverse()
 
   async function handleEnviar() {
     const t = texto.trim()
@@ -50,51 +45,18 @@ export default function QuinielaChat({
   }
 
   return (
-    <div style={{
-      marginTop: 24, background: '#fff', borderRadius: 4,
-      border: `1px solid ${C.border}`, padding: '18px 20px',
-    }}>
-      <p style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#1A1A1A60', marginBottom: 12 }}>
-        💬 El bar de la porra
-      </p>
+    <div style={{ animation: 'q-slideUp .35s ease both' }}>
+      <div style={{ ...pixelStyle, fontSize: 11, color: Q.green, margin: '4px 2px 4px', textShadow: '0 0 12px rgba(54,245,154,.4)' }}>💬 EL BAR DE LA PORRA</div>
+      <p style={{ fontSize: 11, color: Q.textMid, margin: '0 2px 16px' }}>Presume, vacila, llora.</p>
 
-      {/* Composer */}
-      {miJugadorId ? (
-        <div style={{ display: 'flex', gap: 8, marginBottom: principales.length ? 16 : 0 }}>
-          <input
-            value={texto}
-            onChange={e => setTexto(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') handleEnviar() }}
-            placeholder="Di algo… (presume, vacila, llora)"
-            maxLength={500}
-            style={{
-              flex: 1, border: '1px solid #E5E2DA', borderRadius: 20, padding: '9px 16px',
-              fontSize: 13, outline: 'none', color: C.ink, background: '#FDFDFC',
-            }}
-          />
-          <button
-            onClick={handleEnviar}
-            disabled={isSending || !texto.trim()}
-            style={{
-              background: texto.trim() ? C.accent : '#fff',
-              color: texto.trim() ? '#fff' : '#1A1A1A40',
-              border: texto.trim() ? 'none' : `1px solid ${C.border}`,
-              borderRadius: 20, padding: '9px 18px', fontSize: 12, fontWeight: 500, cursor: 'pointer',
-            }}
-          >
-            {isSending ? '…' : 'Enviar'}
-          </button>
-        </div>
-      ) : (
-        <p style={{ fontSize: 12, color: '#1A1A1A50', marginBottom: principales.length ? 16 : 0 }}>
-          Apúntate a la porra para comentar.
-        </p>
-      )}
-      {error && <p style={{ fontSize: 11, color: C.accent, marginBottom: 10 }}>{error}</p>}
-
-      {/* Comentarios */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {visibles.map(c => (
+      {/* Mensajes */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {principales.length === 0 && (
+          <p style={{ fontSize: 12, color: Q.textDim, padding: '20px 0', textAlign: 'center' }}>
+            Todavía no ha hablado nadie. Rompe el hielo. 🍺
+          </p>
+        )}
+        {principales.map(c => (
           <Comentario
             key={c.id}
             comentario={c}
@@ -108,17 +70,38 @@ export default function QuinielaChat({
         ))}
       </div>
 
-      {ocultos > 0 && (
-        <button
-          onClick={() => setExpandido(v => !v)}
-          style={{
-            marginTop: 12, background: 'none', border: 'none', cursor: 'pointer',
-            fontSize: 11, color: C.accent, fontWeight: 500, padding: 0,
-          }}
-        >
-          {expandido ? '▴ Ver menos' : `▾ Ver todos los comentarios (${principales.length})`}
-        </button>
+      {/* Composer */}
+      {miJugadorId ? (
+        <div style={{ display: 'flex', gap: 8, marginTop: 16, position: 'sticky', bottom: 0 }}>
+          <input
+            value={texto}
+            onChange={e => setTexto(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleEnviar() }}
+            placeholder="Di algo…"
+            maxLength={500}
+            style={{
+              flex: 1, background: Q.cardHi, border: `1px solid ${Q.borderHi}`, borderRadius: 11,
+              padding: '11px 13px', color: Q.text, fontSize: 13, fontFamily: FONT.body, outline: 'none',
+            }}
+          />
+          <button
+            onClick={handleEnviar}
+            disabled={isSending || !texto.trim()}
+            style={{
+              border: 0, cursor: 'pointer', borderRadius: 11, padding: '0 16px', ...pixelStyle, fontSize: 10,
+              color: '#06210f', background: texto.trim() ? 'linear-gradient(180deg,#48ffa6,#23d985)' : Q.cardHi,
+              boxShadow: texto.trim() ? '0 3px 0 #128a52' : 'none', opacity: texto.trim() ? 1 : 0.5,
+            }}
+          >
+            {isSending ? '…' : '▸'}
+          </button>
+        </div>
+      ) : (
+        <p style={{ fontSize: 12, color: Q.textDim, marginTop: 16 }}>
+          Apúntate a la porra para comentar.
+        </p>
       )}
+      {error && <p style={{ fontSize: 11, color: Q.pink, marginTop: 10 }}>{error}</p>}
     </div>
   )
 }
@@ -140,6 +123,11 @@ function Comentario({ comentario, replies, reacciones, nombresById, miJugadorId,
   const [isSending, setIsSending] = useState(false)
 
   const esMio = comentario.jugador_id === miJugadorId
+  const nombre = nombresById.get(comentario.jugador_id) || '—'
+  // Color de avatar estable por jugador
+  const idxColor = Math.abs(Array.from(comentario.jugador_id).reduce((a, c) => a + c.charCodeAt(0), 0))
+  const avColor = esMio ? Q.textSoft : avatarColor(idxColor)
+
   const misReacciones = reacciones.filter(r => r.comentario_id === comentario.id)
   // Agrupar reacciones por emoji
   const grupos = new Map<string, { count: number; mia: boolean }>()
@@ -177,135 +165,118 @@ function Comentario({ comentario, replies, reacciones, nombresById, miJugadorId,
   }
 
   return (
-    <div style={{
-      background: esReply ? 'transparent' : C.cream,
-      borderRadius: 4, padding: esReply ? '8px 0 0 0' : '10px 14px',
-    }}>
-      <p style={{ fontSize: 12, color: C.ink, lineHeight: 1.5 }}>
-        <strong style={{ fontWeight: 600 }}>{nombresById.get(comentario.jugador_id) || '—'}</strong>
-        <span style={{ fontSize: 10, color: '#1A1A1A40', marginLeft: 8 }}>{timeAgo(comentario.created_at)}</span>
-        {(esMio || esPartner) && (
-          <button
-            onClick={handleDelete}
-            title="Borrar"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1A1A1A30', fontSize: 10, marginLeft: 8, padding: 0 }}
-          >
-            ✕
-          </button>
-        )}
-        <br />
-        {comentario.texto}
-      </p>
-
-      {/* Reacciones + acciones */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-        {Array.from(grupos.entries()).map(([emoji, g]) => (
-          <button
-            key={emoji}
-            onClick={() => handleReaccion(emoji)}
-            style={{
-              background: g.mia ? '#D85A3015' : '#fff',
-              border: `1px solid ${g.mia ? '#D85A3040' : C.border}`,
-              borderRadius: 20, padding: '2px 8px', fontSize: 11, cursor: 'pointer', color: C.ink,
-            }}
-          >
-            {emoji} {g.count}
-          </button>
-        ))}
-        {miJugadorId && (
-          <div style={{ position: 'relative' }}>
-            <button
-              onClick={() => setVerEmojis(v => !v)}
-              style={{
-                background: '#fff', border: `1px solid ${C.border}`, borderRadius: 20,
-                padding: '2px 8px', fontSize: 11, cursor: 'pointer', color: '#1A1A1A60',
-              }}
-            >
-              {verEmojis ? '✕' : '+ 😊'}
-            </button>
-            {verEmojis && (
-              <div style={{
-                position: 'absolute', bottom: '110%', left: 0, zIndex: 10,
-                background: '#fff', border: `1px solid ${C.border}`, borderRadius: 20,
-                padding: '6px 10px', display: 'flex', gap: 6, boxShadow: '0 2px 12px #1A1A1A15',
-              }}>
-                {CHAT_EMOJIS.map(e => (
-                  <button
-                    key={e}
-                    onClick={() => handleReaccion(e)}
-                    style={{ background: 'none', border: 'none', fontSize: 16, cursor: 'pointer', padding: 0 }}
-                  >
-                    {e}
-                  </button>
-                ))}
-              </div>
+    <div style={{ marginBottom: esReply ? 8 : 13 }}>
+      <div style={{ display: 'flex', gap: 9, flexDirection: esMio ? 'row-reverse' : 'row' }}>
+        <div style={{
+          width: 30, height: 30, borderRadius: '50%', flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          ...pixelStyle, fontSize: 9, color: '#0a0e1c', background: avColor,
+        }}>
+          {iniciales(nombre)}
+        </div>
+        <div style={{ maxWidth: '80%' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 3, flexDirection: esMio ? 'row-reverse' : 'row' }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: Q.textSoft }}>{nombre}</span>
+            <span style={{ fontSize: 9, color: Q.textDim }}>{timeAgo(comentario.created_at)}</span>
+            {(esMio || esPartner) && (
+              <button onClick={handleDelete} title="Borrar" style={{ background: 'none', border: 'none', cursor: 'pointer', color: Q.textDim, fontSize: 10, padding: 0 }}>✕</button>
             )}
           </div>
-        )}
-        {miJugadorId && !esReply && (
-          <button
-            onClick={() => setRespondiendo(v => !v)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: '#1A1A1A60', padding: 0 }}
-          >
-            Responder
-          </button>
-        )}
-        {!esReply && replies.length > 0 && (
-          <button
-            onClick={() => setVerReplies(v => !v)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: C.accent, padding: 0 }}
-          >
-            {verReplies ? '▴ ocultar' : `▾ ${replies.length} ${replies.length === 1 ? 'respuesta' : 'respuestas'}`}
-          </button>
-        )}
+          <div style={{
+            background: esMio ? 'rgba(54,245,154,.12)' : Q.cardHi,
+            border: `1px solid ${esMio ? 'rgba(54,245,154,.3)' : Q.border}`,
+            borderRadius: 13, padding: '9px 12px', fontSize: 13, color: Q.text, lineHeight: 1.4,
+          }}>
+            {comentario.texto}
+          </div>
+
+          {/* Reacciones + acciones */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6, flexWrap: 'wrap', flexDirection: esMio ? 'row-reverse' : 'row' }}>
+            {Array.from(grupos.entries()).map(([emoji, g]) => (
+              <button
+                key={emoji}
+                onClick={() => handleReaccion(emoji)}
+                style={{
+                  background: g.mia ? 'rgba(54,245,154,.12)' : 'rgba(255,255,255,.07)',
+                  border: `1px solid ${g.mia ? 'rgba(54,245,154,.4)' : Q.borderHi}`,
+                  borderRadius: 999, padding: '2px 8px', fontSize: 11, cursor: 'pointer', color: Q.textSoft,
+                }}
+              >
+                {emoji} {g.count}
+              </button>
+            ))}
+            {miJugadorId && (
+              <div style={{ position: 'relative' }}>
+                <button
+                  onClick={() => setVerEmojis(v => !v)}
+                  style={{ background: 'rgba(255,255,255,.07)', border: `1px solid ${Q.borderHi}`, borderRadius: 999, padding: '2px 8px', fontSize: 11, cursor: 'pointer', color: Q.textMid }}
+                >
+                  {verEmojis ? '✕' : '+ 😊'}
+                </button>
+                {verEmojis && (
+                  <div style={{
+                    position: 'absolute', bottom: '110%', left: 0, zIndex: 10,
+                    background: Q.cardHi, border: `1px solid ${Q.borderHi}`, borderRadius: 999,
+                    padding: '6px 10px', display: 'flex', gap: 6, boxShadow: '0 4px 16px rgba(0,0,0,.5)',
+                  }}>
+                    {CHAT_EMOJIS.map(e => (
+                      <button key={e} onClick={() => handleReaccion(e)} style={{ background: 'none', border: 'none', fontSize: 16, cursor: 'pointer', padding: 0 }}>{e}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {miJugadorId && !esReply && (
+              <button onClick={() => setRespondiendo(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: Q.textMid, padding: 0 }}>Responder</button>
+            )}
+            {!esReply && replies.length > 0 && (
+              <button onClick={() => setVerReplies(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: Q.cyan, padding: 0 }}>
+                {verReplies ? '▴ ocultar' : `▾ ${replies.length} ${replies.length === 1 ? 'respuesta' : 'respuestas'}`}
+              </button>
+            )}
+          </div>
+
+          {/* Composer de reply */}
+          {respondiendo && (
+            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+              <input
+                value={replyTexto}
+                onChange={e => setReplyTexto(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleReply() }}
+                placeholder={`Responder a ${nombre}…`}
+                maxLength={500}
+                autoFocus
+                style={{ flex: 1, background: Q.cardHi, border: `1px solid ${Q.borderHi}`, borderRadius: 11, padding: '6px 12px', fontSize: 12, outline: 'none', color: Q.text, fontFamily: FONT.body }}
+              />
+              <button
+                onClick={handleReply}
+                disabled={isSending || !replyTexto.trim()}
+                style={{ background: Q.green, color: '#06210f', border: 'none', borderRadius: 11, padding: '6px 14px', fontSize: 11, cursor: 'pointer' }}
+              >
+                {isSending ? '…' : '→'}
+              </button>
+            </div>
+          )}
+
+          {/* Replies anidados */}
+          {!esReply && verReplies && replies.length > 0 && (
+            <div style={{ marginTop: 8, borderLeft: `2px solid ${Q.border}`, paddingLeft: 12 }}>
+              {replies.map(r => (
+                <Comentario
+                  key={r.id}
+                  comentario={r}
+                  replies={[]}
+                  reacciones={reacciones}
+                  nombresById={nombresById}
+                  miJugadorId={miJugadorId}
+                  esPartner={esPartner}
+                  onChanged={onChanged}
+                  esReply
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
-
-      {/* Composer de reply */}
-      {respondiendo && (
-        <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-          <input
-            value={replyTexto}
-            onChange={e => setReplyTexto(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') handleReply() }}
-            placeholder={`Responder a ${nombresById.get(comentario.jugador_id) || ''}…`}
-            maxLength={500}
-            autoFocus
-            style={{
-              flex: 1, border: '1px solid #E5E2DA', borderRadius: 20, padding: '6px 12px',
-              fontSize: 12, outline: 'none', color: C.ink, background: '#fff',
-            }}
-          />
-          <button
-            onClick={handleReply}
-            disabled={isSending || !replyTexto.trim()}
-            style={{
-              background: C.ink, color: '#fff', border: 'none', borderRadius: 20,
-              padding: '6px 14px', fontSize: 11, cursor: 'pointer',
-            }}
-          >
-            {isSending ? '…' : '→'}
-          </button>
-        </div>
-      )}
-
-      {/* Replies anidados */}
-      {!esReply && verReplies && replies.length > 0 && (
-        <div style={{ marginLeft: 16, marginTop: 4, borderLeft: `2px solid ${C.border}`, paddingLeft: 12 }}>
-          {replies.map(r => (
-            <Comentario
-              key={r.id}
-              comentario={r}
-              replies={[]}
-              reacciones={reacciones}
-              nombresById={nombresById}
-              miJugadorId={miJugadorId}
-              esPartner={esPartner}
-              onChanged={onChanged}
-              esReply
-            />
-          ))}
-        </div>
-      )}
     </div>
   )
 }
