@@ -14,38 +14,41 @@ export interface Modelo3D {
   autor_nombre?: string | null
 }
 
-// Presets de iluminación basada en imagen (IBL). El fondo siempre es blanco;
-// el HDRI solo aporta luz/reflejos, no se usa como skybox.
+// Presets de iluminación basada en imagen (IBL) para el visor R3F. El fondo
+// siempre es blanco; el HDRI solo aporta luz/reflejos, no se usa como skybox.
 export interface LightingPreset {
   id: string
   label: string
-  // environment-image de <model-viewer>. null = entorno neutro generado por model-viewer.
-  environmentImage: string | null
-  exposure: number
-  shadowIntensity: number
+  environmentImage: string  // HDRI local en /public/hdri
+  exposure: number          // toneMappingExposure (ACES filmic)
+  envIntensity: number      // intensidad de la luz de entorno
+  shadowOpacity: number     // opacidad de la sombra de contacto
 }
 
 export const LIGHTING_PRESETS: LightingPreset[] = [
   {
     id: 'neutro',
-    label: 'Estudio neutro',
+    label: 'Estudio',
     environmentImage: '/hdri/studio_small_09_2k.hdr',
-    exposure: 1.05,
-    shadowIntensity: 0.9,
+    exposure: 1.0,
+    envIntensity: 1.0,
+    shadowOpacity: 0.55,
   },
   {
     id: 'calido',
-    label: 'Estudio cálido',
+    label: 'Cálido',
     environmentImage: '/hdri/brown_photostudio_02_2k.hdr',
     exposure: 1.0,
-    shadowIntensity: 1.0,
+    envIntensity: 0.95,
+    shadowOpacity: 0.62,
   },
   {
-    id: 'suave',
-    label: 'Difuso suave',
-    environmentImage: null,
-    exposure: 1.15,
-    shadowIntensity: 0.55,
+    id: 'brillante',
+    label: 'Brillante',
+    environmentImage: '/hdri/studio_small_09_2k.hdr',
+    exposure: 1.28,
+    envIntensity: 1.3,
+    shadowOpacity: 0.38,
   },
 ]
 

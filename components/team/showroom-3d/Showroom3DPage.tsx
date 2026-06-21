@@ -1,42 +1,38 @@
 'use client'
 
-import { useState, useEffect, useRef, useTransition, useCallback } from 'react'
+import { useState, useEffect, useRef, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import { createClient } from '@/lib/supabase/client'
 import { createModelo3D, deleteModelo3D } from '@/app/actions/showroom-3d'
 import { LIGHTING_PRESETS, DEFAULT_PRESET, fmtFileSize } from '@/lib/showroom'
 import type { Modelo3D } from '@/lib/showroom'
 
-// <model-viewer> es un custom element: lo declaramos para JSX.
-declare global {
-  // eslint-disable-next-line @typescript-eslint/no-namespace
-  namespace JSX {
-    interface IntrinsicElements {
-      'model-viewer': any
-    }
-  }
-}
+// Visor R3F (Three.js): pesado, solo se carga en cliente al abrir una maqueta.
+const ModelStage = dynamic(() => import('./ModelStage'), { ssr: false })
 
 const BUCKET = 'modelos-3d'
 const MAX_SIZE_MB = 75
 const ACCENT = '#D85A30'
 
-// Carga única del módulo en cliente (registra el custom element)
-let mvPromise: Promise<unknown> | null = null
-function ensureModelViewer() {
-  if (typeof window === 'undefined') return Promise.resolve()
-  if (!mvPromise) mvPromise = import('@google/model-viewer')
-  return mvPromise
-}
+// Miniatura 3D de la rejilla (R3F): solo cliente, se carga al entrar en viewport.
+const ModelThumb = dynamic(() => import('./ModelThumb'), { ssr: false })
 
-function useModelViewerReady() {
-  const [ready, setReady] = useState(false)
+// Monta el contenido 3D solo cuando la tarjeta está cerca del viewport.
+function useInView<T extends HTMLElement>() {
+  const ref = useRef<T>(null)
+  const [inView, setInView] = useState(false)
   useEffect(() => {
-    let alive = true
-    ensureModelViewer().then(() => { if (alive) setReady(true) })
-    return () => { alive = false }
-  }, [])
-  return ready
+    const el = ref.current
+    if (!el || inView) return
+    const io = new IntersectionObserver(
+      entries => { if (entries.some(e => e.isIntersecting)) { setInView(true); io.disconnect() } },
+      { rootMargin: '250px' }
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [inView])
+  return { ref, inView }
 }
 
 async function uploadGlb(file: File): Promise<{ url: string } | { error: string }> {
@@ -56,7 +52,6 @@ async function uploadGlb(file: File): Promise<{ url: string } | { error: string 
 // ────────────────────────────────────────────────────────────────────────────
 
 export default function Showroom3DPage({ modelos }: { modelos: Modelo3D[] }) {
-  const ready = useModelViewerReady()
   const [active, setActive] = useState<Modelo3D | null>(null)
   const [uploadOpen, setUploadOpen] = useState(false)
 
@@ -99,14 +94,14 @@ export default function Showroom3DPage({ modelos }: { modelos: Modelo3D[] }) {
         ) : (
           <div className="sr-grid">
             {modelos.map((m, i) => (
-              <ModelCard key={m.id} modelo={m} ready={ready} index={i} onOpen={() => setActive(m)} />
+              <ModelCard key={m.id} modelo={m} index={i} onOpen={() => setActive(m)} />
             ))}
           </div>
         )}
       </div>
 
       {active && (
-        <ImmersiveViewer modelo={active} ready={ready} onClose={() => setActive(null)} />
+        <ImmersiveViewer modelo={active} onClose={() => setActive(null)} />
       )}
       {uploadOpen && (
         <UploadModal onClose={() => setUploadOpen(false)} />
@@ -117,8 +112,9 @@ export default function Showroom3DPage({ modelos }: { modelos: Modelo3D[] }) {
 
 // ── Tarjeta de la galería ───────────────────────────────────────────────────
 
-function ModelCard({ modelo, ready, index, onOpen }: { modelo: Modelo3D; ready: boolean; index: number; onOpen: () => void }) {
+function ModelCard({ modelo, index, onOpen }: { modelo: Modelo3D; index: number; onOpen: () => void }) {
   const [hover, setHover] = useState(false)
+  const { ref, inView } = useInView<HTMLDivElement>()
   return (
     <div
       className="sr-card"
@@ -127,29 +123,8 @@ function ModelCard({ modelo, ready, index, onOpen }: { modelo: Modelo3D; ready: 
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
-      <div className="sr-card-stage">
-        {ready ? (
-          <model-viewer
-            src={modelo.glb_url}
-            poster={modelo.poster_url || undefined}
-            disable-zoom=""
-            interaction-prompt="none"
-            shadow-intensity="0.65"
-            shadow-softness="1"
-            exposure="1.1"
-            tone-mapping="neutral"
-            camera-orbit="-22deg 76deg auto"
-            field-of-view="32deg"
-            loading="lazy"
-            reveal="auto"
-            {...(hover ? { 'auto-rotate': true, 'rotation-per-second': '24deg' } : {})}
-            style={{ width: '100%', height: '100%', backgroundColor: 'transparent', '--poster-color': 'transparent' } as any}
-          >
-            <div slot="progress-bar" />
-          </model-viewer>
-        ) : (
-          <div className="sr-shimmer" />
-        )}
+      <div ref={ref} className="sr-card-stage">
+        {inView ? <ModelThumb url={modelo.glb_url} spin={hover} /> : <div className="sr-shimmer" />}
         <div className="sr-card-hint" style={{ opacity: hover ? 1 : 0 }}>Ver maqueta →</div>
       </div>
       <div style={{ padding: '16px 18px 18px' }}>
@@ -173,28 +148,18 @@ function ModelCard({ modelo, ready, index, onOpen }: { modelo: Modelo3D; ready: 
 
 // ── Visor inmersivo a pantalla completa ───────────────────────────────────────
 
-function ImmersiveViewer({ modelo, ready, onClose }: { modelo: Modelo3D; ready: boolean; onClose: () => void }) {
+function ImmersiveViewer({ modelo, onClose }: { modelo: Modelo3D; onClose: () => void }) {
   const router = useRouter()
-  const mvRef = useRef<any>(null)
   const [presetId, setPresetId] = useState(DEFAULT_PRESET.id)
-  const [autoRotate, setAutoRotate] = useState(true)
-  const [loaded, setLoaded] = useState(false)
+  const [autoRotate, setAutoRotate] = useState(false)
+  const [resetKey, setResetKey] = useState(0)
   const [isPending, startTransition] = useTransition()
-  const preset = LIGHTING_PRESETS.find(p => p.id === presetId) ?? DEFAULT_PRESET
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
-
-  const resetView = useCallback(() => {
-    const el = mvRef.current
-    if (!el) return
-    el.cameraOrbit = '-22deg 76deg auto'
-    el.fieldOfView = 'auto'
-    el.jumpCameraToGoal?.()
-  }, [])
 
   function handleDelete() {
     if (!confirm(`¿Eliminar la maqueta "${modelo.nombre}"?`)) return
@@ -209,35 +174,7 @@ function ImmersiveViewer({ modelo, ready, onClose }: { modelo: Modelo3D; ready: 
   return (
     <div className="sr-overlay" onClick={onClose}>
       <div className="sr-viewer-shell" onClick={e => e.stopPropagation()}>
-        {ready ? (
-          <model-viewer
-            ref={mvRef}
-            src={modelo.glb_url}
-            camera-controls=""
-            interaction-prompt="none"
-            touch-action="none"
-            shadow-intensity={String(preset.shadowIntensity)}
-            shadow-softness="1"
-            exposure={String(preset.exposure)}
-            tone-mapping="neutral"
-            camera-orbit="-22deg 76deg auto"
-            min-field-of-view="12deg"
-            max-field-of-view="55deg"
-            field-of-view="40deg"
-            {...(preset.environmentImage ? { 'environment-image': preset.environmentImage } : {})}
-            {...(autoRotate ? { 'auto-rotate': true, 'rotation-per-second': '18deg', 'auto-rotate-delay': '0' } : {})}
-            onLoad={() => setLoaded(true)}
-            style={{ width: '100%', height: '100%', backgroundColor: '#FFFFFF', '--poster-color': '#FFFFFF' } as any}
-          >
-            <div slot="progress-bar" className="sr-progress">
-              <div className="sr-progress-track"><div className="sr-progress-bar" /></div>
-              <span>Cargando maqueta…</span>
-            </div>
-            <div slot="interaction-prompt" />
-          </model-viewer>
-        ) : (
-          <div className="sr-shimmer" style={{ width: '100%', height: '100%' }} />
-        )}
+        <ModelStage url={modelo.glb_url} presetId={presetId} autoRotate={autoRotate} resetKey={resetKey} />
 
         {/* Top bar */}
         <div className="sr-topbar">
@@ -271,10 +208,8 @@ function ImmersiveViewer({ modelo, ready, onClose }: { modelo: Modelo3D; ready: 
           <button onClick={() => setAutoRotate(v => !v)} className={`sr-icon-btn ${autoRotate ? 'is-active' : ''}`} title="Giro automático">
             ⟳
           </button>
-          <button onClick={resetView} className="sr-icon-btn" title="Centrar vista">⊹</button>
+          <button onClick={() => setResetKey(k => k + 1)} className="sr-icon-btn" title="Centrar vista">⊹</button>
         </div>
-
-        {!loaded && ready && <div className="sr-loading-veil" />}
 
         <button onClick={handleDelete} disabled={isPending} className="sr-delete" title="Eliminar maqueta">
           {isPending ? '…' : 'Eliminar'}
