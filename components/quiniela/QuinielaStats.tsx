@@ -48,13 +48,30 @@ export default function QuinielaStats({ data, nombresById, miJugadorId }: {
         ))}
       </div>
 
-      {/* ── Evolución de posiciones ── */}
-      <div style={{ ...cardStyle, padding: 14, background: 'linear-gradient(160deg,#0f1838,#101733)' }}>
+      {/* ── Evolución del puntaje (curvas) ── */}
+      <div style={{ ...cardStyle, padding: 14, background: 'linear-gradient(160deg,#0f1838,#101733)', marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
-          <span style={{ ...labelStyle, fontSize: 10, color: Q.cyan }}>🏁 CARRERA DE PUNTOS</span>
+          <span style={{ ...labelStyle, fontSize: 10, color: Q.green }}>📈 EVOLUCIÓN DEL PUNTAJE</span>
         </div>
         <p style={{ fontSize: 10, color: Q.textMid, marginBottom: 10 }}>
-          Posiciones por jornada (solo puntos de partidos).
+          Puntos acumulados de cada jugador, jornada a jornada.
+        </p>
+        {stats.dias.length < 2 ? (
+          <p style={{ fontSize: 12, color: Q.textDim }}>
+            La gráfica aparece cuando haya al menos dos jornadas con partidos cerrados. Paciencia, que esto dura un mes. 🍿
+          </p>
+        ) : (
+          <GraficaPuntos dias={stats.dias} puntosSeries={stats.puntosSeries} maxPuntos={stats.maxPuntos} nombresById={nombresById} miJugadorId={miJugadorId} />
+        )}
+      </div>
+
+      {/* ── Carrera de puestos (posiciones) ── */}
+      <div style={{ ...cardStyle, padding: 14, background: 'linear-gradient(160deg,#0f1838,#101733)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
+          <span style={{ ...labelStyle, fontSize: 10, color: Q.cyan }}>🏁 CARRERA DE PUESTOS</span>
+        </div>
+        <p style={{ fontSize: 10, color: Q.textMid, marginBottom: 10 }}>
+          Posición en la tabla por jornada (solo puntos de partidos).
         </p>
         {stats.dias.length < 2 ? (
           <p style={{ fontSize: 12, color: Q.textDim }}>
@@ -63,6 +80,120 @@ export default function QuinielaStats({ data, nombresById, miJugadorId }: {
         ) : (
           <Grafica dias={stats.dias} series={stats.series} nombresById={nombresById} miJugadorId={miJugadorId} />
         )}
+      </div>
+    </div>
+  )
+}
+
+// ── Gráfica de curvas: puntos acumulados por jugador ────────────────────────────
+
+/** Catmull-Rom → Bézier para curvas suaves a través de los puntos. */
+function smoothPath(pts: [number, number][]): string {
+  if (pts.length === 0) return ''
+  if (pts.length === 1) return `M ${pts[0][0]} ${pts[0][1]}`
+  const d = [`M ${pts[0][0]} ${pts[0][1]}`]
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[i]
+    const p1 = pts[i]
+    const p2 = pts[i + 1]
+    const p3 = pts[i + 2] || p2
+    const cp1x = p1[0] + (p2[0] - p0[0]) / 6
+    const cp1y = p1[1] + (p2[1] - p0[1]) / 6
+    const cp2x = p2[0] - (p3[0] - p1[0]) / 6
+    const cp2y = p2[1] - (p3[1] - p1[1]) / 6
+    d.push(`C ${cp1x.toFixed(2)} ${cp1y.toFixed(2)}, ${cp2x.toFixed(2)} ${cp2y.toFixed(2)}, ${p2[0]} ${p2[1]}`)
+  }
+  return d.join(' ')
+}
+
+function GraficaPuntos({ dias, puntosSeries, maxPuntos, nombresById, miJugadorId }: {
+  dias: string[]
+  puntosSeries: Map<string, number[]>
+  maxPuntos: number
+  nombresById: Map<string, string>
+  miJugadorId: string | null
+}) {
+  const jugadores = Array.from(puntosSeries.keys())
+  const W = 320, H = 200, PAD_L = 28, PAD_R = 12, PAD_T = 12, PAD_B = 28
+  const techo = Math.max(maxPuntos, 1)
+  const x = (i: number) => PAD_L + (dias.length === 1 ? 0 : (i * (W - PAD_L - PAD_R)) / (dias.length - 1))
+  const y = (v: number) => PAD_T + (1 - v / techo) * (H - PAD_T - PAD_B)
+
+  // Líneas de cuadrícula horizontales (5 niveles)
+  const niveles = Array.from({ length: 5 }, (_, i) => Math.round((techo * i) / 4))
+
+  // Orden por puntaje final (para leyenda y resaltado de cabeza)
+  const ranking = jugadores
+    .map(id => ({ id, total: puntosSeries.get(id)!.slice(-1)[0] ?? 0 }))
+    .sort((a, b) => b.total - a.total)
+
+  return (
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', overflow: 'visible' }}>
+        <defs>
+          <filter id="q-pglow" x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur stdDeviation="2.2" result="b" />
+            <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+        </defs>
+
+        {/* Cuadrícula + eje Y */}
+        {niveles.map((nivel, i) => (
+          <g key={i}>
+            <line x1={PAD_L} y1={y(nivel)} x2={W - PAD_R} y2={y(nivel)} stroke="rgba(255,255,255,.06)" strokeWidth={1} />
+            <text x={PAD_L - 6} y={y(nivel) + 3} textAnchor="end" fontSize={8} fill={Q.textDim}>{nivel}</text>
+          </g>
+        ))}
+        {/* Etiquetas de jornada (máx ~6 para no saturar) */}
+        {dias.map((dia, i) => {
+          const paso = Math.ceil(dias.length / 6)
+          if (i % paso !== 0 && i !== dias.length - 1) return null
+          return <text key={dia + i} x={x(i)} y={H - 8} textAnchor="middle" fontSize={8} fill={Q.textDim}>{dia}</text>
+        })}
+
+        {/* Curvas por jugador */}
+        {jugadores.map((id, idx) => {
+          const vals = puntosSeries.get(id)!
+          const color = PALETA[idx % PALETA.length]
+          const esYo = id === miJugadorId
+          const pts: [number, number][] = vals.map((v, i) => [x(i), y(v)])
+          return (
+            <g key={id} opacity={esYo ? 1 : 0.7}>
+              <path
+                d={smoothPath(pts)}
+                fill="none"
+                stroke={color}
+                strokeWidth={esYo ? 3 : 1.8}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                filter={esYo ? 'url(#q-pglow)' : undefined}
+              />
+              {/* Punto final destacado */}
+              {pts.length > 0 && (
+                <circle cx={pts[pts.length - 1][0]} cy={pts[pts.length - 1][1]} r={esYo ? 4 : 2.8} fill={color} filter="url(#q-pglow)" />
+              )}
+            </g>
+          )
+        })}
+      </svg>
+
+      {/* Leyenda con puntaje actual, ordenada */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+        {ranking.map(({ id, total }) => {
+          const idx = jugadores.indexOf(id)
+          const esYo = id === miJugadorId
+          return (
+            <span key={id} style={{
+              display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, color: Q.text,
+              background: esYo ? 'rgba(54,245,154,.12)' : 'rgba(255,255,255,.05)',
+              border: `1px solid ${esYo ? 'rgba(54,245,154,.35)' : 'rgba(255,255,255,.1)'}`,
+              borderRadius: 999, padding: '3px 9px',
+            }}>
+              <b style={{ color: PALETA[idx % PALETA.length] }}>●</b>
+              {nombresById.get(id) || '—'}{esYo ? ' (tú)' : ''} · {total}
+            </span>
+          )
+        })}
       </div>
     </div>
   )
@@ -184,6 +315,9 @@ function calcular(data: QuinielaData) {
   const dias = Array.from(porDia.keys())
   const acumulado = new Map<string, number>(data.jugadores.map(j => [j.id, 0]))
   const series = new Map<string, number[]>(data.jugadores.map(j => [j.id, []]))
+  // Serie de PUNTOS acumulados (valores reales, no posiciones) para la gráfica de curvas
+  const puntosSeries = new Map<string, number[]>(data.jugadores.map(j => [j.id, []]))
+  let maxPuntos = 0
   for (const dia of dias) {
     for (const partido of porDia.get(dia)!) {
       for (const pred of predsPorPartido.get(partido.id) || []) {
@@ -194,9 +328,14 @@ function calcular(data: QuinielaData) {
       .slice()
       .sort((a, b) => (acumulado.get(b.id)! - acumulado.get(a.id)!) || a.nombre.localeCompare(b.nombre))
     orden.forEach((j, i) => series.get(j.id)!.push(i + 1))
+    for (const j of data.jugadores) {
+      const v = acumulado.get(j.id) || 0
+      puntosSeries.get(j.id)!.push(v)
+      if (v > maxPuntos) maxPuntos = v
+    }
   }
 
-  return { premios, dias, series }
+  return { premios, dias, series, puntosSeries, maxPuntos }
 }
 
 // ── Gráfica SVG de posiciones ─────────────────────────────────────────────────
