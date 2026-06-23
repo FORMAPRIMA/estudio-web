@@ -73,7 +73,7 @@ function Maqueta({ url }: { url: string }) {
 function ShadowFloor({ opacity }: { opacity: number }) {
   return (
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
-      <planeGeometry args={[2.4, 6]} />
+      <planeGeometry args={[2.6, 6]} />
       <shadowMaterial transparent opacity={opacity} color="#000000" />
     </mesh>
   )
@@ -138,10 +138,10 @@ function Scene({
       {/* Penumbra suave (PCSS) — mismos valores que el visor inmersivo (sin conflicto) */}
       <SoftShadows size={70} samples={26} focus={0} />
       <hemisphereLight args={['#ffffff', '#EDEAE2', 0.5]} />
-      {/* Luz clave desde detrás-arriba → sombra suave hacia delante (visible) y en su columna */}
+      {/* Luz clave desde arriba-derecha-atrás → sombra suave en diagonal abajo-izquierda */}
       <directionalLight
         castShadow
-        position={[0, 6.5, -5]}
+        position={[2.5, 6.5, -4]}
         intensity={1.1}
         shadow-mapSize={[2048, 2048]}
         shadow-bias={-0.0002}
@@ -245,6 +245,21 @@ export default function ScrollGallery({
 
   const currentStart = startForPage(page)
 
+  // Precarga (en segundo plano) los GLB de las páginas vecinas → al hacer scroll
+  // la maqueta ya está en caché y no se traba. useGLTF cachea por URL.
+  useEffect(() => {
+    const warm = (p: number) => {
+      if (p < 0 || p >= pageCount) return
+      const s = startForPage(p)
+      for (let i = 0; i < slotCount; i++) {
+        const u = modelos[s + i]?.glb_url
+        if (u) useGLTF.preload(u, '/draco/')
+      }
+    }
+    warm(page + 1)
+    warm(page - 1)
+  }, [page, slotCount, pageCount, modelos])
+
   function navigate(dir: number) {
     if (busy.current || trans) return
     const to = page + dir
@@ -302,7 +317,7 @@ export default function ScrollGallery({
       {/* Canvas único, transparente */}
       <Canvas
         shadows
-        frameloop={paused ? 'never' : 'always'}
+        frameloop={paused ? 'never' : trans ? 'always' : 'demand'}
         dpr={[1, 1.85]}
         gl={{ antialias: true, alpha: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: preset.exposure }}
         style={{
