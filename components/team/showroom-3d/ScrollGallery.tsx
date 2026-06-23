@@ -15,18 +15,22 @@ const TARGET = 2 // lado mayor del modelo normalizado (uds de mundo)
 // plano). La del centro se ve frontal; las laterales, "un poco de lado" por estar
 // desplazadas respecto a ese único punto de vista (perspectiva, no giro).
 const FRAME = {
-  FOV: 34,
+  FOV: 34,          // FOV de la VENTANA VISIBLE (no del canvas completo)
   DIST: 9.0,        // distancia de la cámara (lejana → no recorta)
   SEP: 2.6,         // separación entre maquetas (controla cuánto "de lado" se ven las laterales)
   PITCH: 14,        // grados que la cámara mira hacia abajo → escorzo vertical (revela la parte superior)
   LOOK_Y: 1.55,     // altura a la que mira; más alto → la maqueta reposa más abajo (tercio inferior)
   TILT_X: 10,       // giro de la maqueta sobre su propio eje X (revela más su volumen)
+  VSCALE: 1.6,      // canvas más alto que la ventana → maquetas entran/salen fuera de cuadro (sin verse el corte)
 }
+// FOV del canvas completo (más alto): mantiene idéntico lo visible, solo añade margen arriba/abajo.
+const RENDER_FOV = (2 * Math.atan(FRAME.VSCALE * Math.tan((FRAME.FOV * Math.PI) / 180 / 2)) * 180) / Math.PI
+
 const TRANS = {
-  DUR: 880,         // ms de la transición entre páginas
-  EXIT_UP: 4.0,     // cuánto sube la saliente hasta perderse
+  DUR: 920,         // ms de la transición entre páginas
+  EXIT_UP: 5.5,     // cuánto sube la saliente hasta perderse (fuera de cuadro)
   EXIT_BACK: 1.1,   // cuánto retrocede en Z al salir
-  ENTER_FROM: 4.0,  // desde dónde entra la siguiente
+  ENTER_FROM: 5.5,  // desde dónde entra la siguiente
 }
 
 const clamp01 = (t: number) => Math.max(0, Math.min(1, t))
@@ -49,7 +53,7 @@ function useNormalized(url: string) {
     root.traverse((o: any) => {
       if (o.isMesh) {
         o.castShadow = true
-        o.receiveShadow = true
+        o.receiveShadow = false // el modelo no se auto-sombrea (evita el doble sobre sí mismo)
         if (o.geometry && !o.geometry.attributes.normal) o.geometry.computeVertexNormals()
       }
     })
@@ -58,9 +62,7 @@ function useNormalized(url: string) {
 }
 
 // Inclina la maqueta sobre su propio centro (no sobre la base) para revelar volumen.
-// La sombra va DENTRO del grupo inclinado → plano paralelo a la base, inclinado los
-// mismos 10°, pegado a la maqueta y se desplaza con ella.
-function Maqueta({ url, shadowOpacity }: { url: string; shadowOpacity: number }) {
+function Maqueta({ url }: { url: string }) {
   const { object, height } = useNormalized(url)
   const c = height / 2
   return (
@@ -68,14 +70,20 @@ function Maqueta({ url, shadowOpacity }: { url: string; shadowOpacity: number })
       <group rotation={[(FRAME.TILT_X * Math.PI) / 180, 0, 0]}>
         <group position={[0, -c, 0]}>
           <primitive object={object} />
-          {/* Suelo que SOLO recibe la sombra; inclinado y pegado a la base de la maqueta */}
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
-            <planeGeometry args={[4.4, 4.4]} />
-            <shadowMaterial transparent opacity={shadowOpacity} color="#000000" />
-          </mesh>
         </group>
       </group>
     </group>
+  )
+}
+
+// Suelo horizontal que SOLO recibe la sombra; va en el grupo de la maqueta → se
+// desplaza con ella en el scroll, pero se mantiene horizontal (sombra natural).
+function ShadowFloor({ opacity }: { opacity: number }) {
+  return (
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.005, 0]} receiveShadow>
+      <planeGeometry args={[4, 5]} />
+      <shadowMaterial transparent opacity={opacity} color="#000000" />
+    </mesh>
   )
 }
 
@@ -133,22 +141,22 @@ function Scene({
 
   return (
     <>
-      <PerspectiveCamera ref={camRef} makeDefault fov={FRAME.FOV} position={camPos} />
+      <PerspectiveCamera ref={camRef} makeDefault fov={RENDER_FOV} position={camPos} />
 
-      <hemisphereLight args={['#ffffff', '#EDEAE2', 0.6]} />
-      {/* Luz clave que proyecta la sombra (mapas estándar, sin parcheo global) */}
+      <hemisphereLight args={['#ffffff', '#EDEAE2', 0.7]} />
+      {/* Luz clave lateral que proyecta una sombra visible y suave (mapas estándar) */}
       <directionalLight
         castShadow
-        position={[1.5, 11, 3]}
+        position={[-5, 6.5, 1.5]}
         intensity={0.95}
         shadow-mapSize={[2048, 2048]}
-        shadow-bias={-0.0002}
-        shadow-normalBias={0.025}
-        shadow-radius={5}
+        shadow-bias={-0.0003}
+        shadow-normalBias={0.03}
+        shadow-radius={8}
       >
-        <orthographicCamera attach="shadow-camera" args={[-5, 5, 5, -5, 0.1, 30]} />
+        <orthographicCamera attach="shadow-camera" args={[-4.5, 4.5, 4.5, -4.5, 0.1, 30]} />
       </directionalLight>
-      <directionalLight position={[-4, 3, -3]} intensity={0.25} />
+      <directionalLight position={[4, 4, 3]} intensity={0.3} />
       <Environment files={preset.environmentImage} environmentIntensity={preset.envIntensity} />
 
       {/* Cada maqueta lleva su sombra dentro de su grupo → se desplaza con ella. */}
@@ -156,7 +164,8 @@ function Scene({
         const proj = modelos[fromStart + i]
         return proj ? (
           <group key={`o${i}`} ref={el => { outRefs.current[i] = el }} position={[xOf(i), 0, 0]}>
-            <Suspense fallback={null}><Maqueta url={proj.glb_url} shadowOpacity={preset.shadowOpacity} /></Suspense>
+            <Suspense fallback={null}><Maqueta url={proj.glb_url} /></Suspense>
+            <ShadowFloor opacity={preset.shadowOpacity} />
           </group>
         ) : null
       })}
@@ -164,7 +173,8 @@ function Scene({
         const proj = modelos[trans.toStart + i]
         return proj ? (
           <group key={`i${i}`} ref={el => { inRefs.current[i] = el }} position={[xOf(i), -trans.dir * TRANS.ENTER_FROM, 0]}>
-            <Suspense fallback={null}><Maqueta url={proj.glb_url} shadowOpacity={preset.shadowOpacity} /></Suspense>
+            <Suspense fallback={null}><Maqueta url={proj.glb_url} /></Suspense>
+            <ShadowFloor opacity={preset.shadowOpacity} />
           </group>
         ) : null
       })}
@@ -302,7 +312,11 @@ export default function ScrollGallery({
         frameloop={paused ? 'never' : 'always'}
         dpr={[1, 1.85]}
         gl={{ antialias: true, alpha: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: preset.exposure }}
-        style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 1 }}
+        style={{
+          position: 'absolute', left: 0, width: '100%',
+          height: `${FRAME.VSCALE * 100}%`, top: `${-((FRAME.VSCALE - 1) / 2) * 100}%`,
+          pointerEvents: 'none', zIndex: 1,
+        }}
       >
         <Scene modelos={modelos} currentStart={currentStart} slotCount={slotCount} trans={trans} preset={preset} onSettle={onSettle} />
       </Canvas>
