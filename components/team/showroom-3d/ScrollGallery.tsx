@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { PerspectiveCamera, Environment, ContactShadows, useGLTF } from '@react-three/drei'
+import { PerspectiveCamera, Environment, SoftShadows, useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
 import { LIGHTING_PRESETS, DEFAULT_PRESET } from '@/lib/showroom'
 import type { LightingPreset, Modelo3D } from '@/lib/showroom'
@@ -20,7 +20,7 @@ const FRAME = {
   SEP: 2.6,         // separación entre maquetas (controla cuánto "de lado" se ven las laterales)
   PITCH: 14,        // grados que la cámara mira hacia abajo → escorzo vertical (revela la parte superior)
   LOOK_Y: 1.55,     // altura a la que mira; más alto → la maqueta reposa más abajo (tercio inferior)
-  TILT_X: 25,       // giro de la maqueta sobre su propio eje X (revela más su volumen)
+  TILT_X: 10,       // giro de la maqueta sobre su propio eje X (revela más su volumen)
 }
 const TRANS = {
   DUR: 880,         // ms de la transición entre páginas
@@ -47,7 +47,11 @@ function useNormalized(url: string) {
     root.position.z -= center.z
     root.position.y -= box.min.y
     root.traverse((o: any) => {
-      if (o.isMesh && o.geometry && !o.geometry.attributes.normal) o.geometry.computeVertexNormals()
+      if (o.isMesh) {
+        o.castShadow = true
+        o.receiveShadow = true
+        if (o.geometry && !o.geometry.attributes.normal) o.geometry.computeVertexNormals()
+      }
     })
     return { object: root, height: box.getSize(new THREE.Vector3()).y }
   }, [scene])
@@ -125,8 +129,22 @@ function Scene({
   return (
     <>
       <PerspectiveCamera ref={camRef} makeDefault fov={FRAME.FOV} position={camPos} />
-      <hemisphereLight args={['#ffffff', '#EDEAE2', 0.7]} />
-      <directionalLight position={[3, 7, 5]} intensity={0.85} />
+
+      {/* Penumbra suave (PCSS) como en el visor inmersivo */}
+      <SoftShadows size={64} samples={24} focus={0} />
+      <hemisphereLight args={['#ffffff', '#EDEAE2', 0.6]} />
+      {/* Luz clave que proyecta la sombra sobre el plano falso; ortho ancho para cubrir la fila */}
+      <directionalLight
+        castShadow
+        position={[-5, 8, 4.5]}
+        intensity={1.05}
+        shadow-mapSize={[2048, 2048]}
+        shadow-bias={-0.0002}
+        shadow-normalBias={0.025}
+      >
+        <orthographicCamera attach="shadow-camera" args={[-span / 2, span / 2, span / 2, -span / 2, 0.1, 40]} />
+      </directionalLight>
+      <directionalLight position={[5, 6, 4]} intensity={0.3} />
       <Environment files={preset.environmentImage} environmentIntensity={preset.envIntensity} />
 
       {Array.from({ length: slotCount }, (_, i) => {
@@ -146,16 +164,11 @@ function Scene({
         ) : null
       })}
 
-      <ContactShadows
-        position={[0, 0.004, 0]}
-        scale={span}
-        far={2.6}
-        blur={2.6}
-        opacity={preset.shadowOpacity}
-        resolution={1024}
-        color="#1A1A1A"
-        frames={Infinity}
-      />
+      {/* Suelo invisible que SOLO recibe la sombra → plano continuo con sombra proyectada */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
+        <planeGeometry args={[80, 80]} />
+        <shadowMaterial transparent opacity={preset.shadowOpacity} color="#000000" />
+      </mesh>
     </>
   )
 }
@@ -281,7 +294,7 @@ export default function ScrollGallery({
 
       {/* Canvas único, transparente */}
       <Canvas
-        shadows={false}
+        shadows
         dpr={[1, 1.85]}
         gl={{ antialias: true, alpha: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: preset.exposure }}
         style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 1 }}
