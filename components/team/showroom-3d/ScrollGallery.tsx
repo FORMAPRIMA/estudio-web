@@ -18,7 +18,9 @@ const FRAME = {
   FOV: 34,
   DIST: 9.0,        // distancia de la cámara (lejana → no recorta)
   SEP: 2.6,         // separación entre maquetas (controla cuánto "de lado" se ven las laterales)
-  TARGET_Y: 0.72,   // altura a la que mira la cámara
+  PITCH: 14,        // grados que la cámara mira hacia abajo → escorzo vertical (revela la parte superior)
+  LOOK_Y: 1.55,     // altura a la que mira; más alto → la maqueta reposa más abajo (tercio inferior)
+  TILT_X: 25,       // giro de la maqueta sobre su propio eje X (revela más su volumen)
 }
 const TRANS = {
   DUR: 880,         // ms de la transición entre páginas
@@ -47,13 +49,23 @@ function useNormalized(url: string) {
     root.traverse((o: any) => {
       if (o.isMesh && o.geometry && !o.geometry.attributes.normal) o.geometry.computeVertexNormals()
     })
-    return root
+    return { object: root, height: box.getSize(new THREE.Vector3()).y }
   }, [scene])
 }
 
+// Inclina la maqueta sobre su propio centro (no sobre la base) para revelar volumen.
 function Maqueta({ url }: { url: string }) {
-  const object = useNormalized(url)
-  return <primitive object={object} />
+  const { object, height } = useNormalized(url)
+  const c = height / 2
+  return (
+    <group position={[0, c, 0]}>
+      <group rotation={[(FRAME.TILT_X * Math.PI) / 180, 0, 0]}>
+        <group position={[0, -c, 0]}>
+          <primitive object={object} />
+        </group>
+      </group>
+    </group>
+  )
 }
 
 type Trans = { fromStart: number; toStart: number; toPage: number; dir: number; start: number } | null
@@ -89,8 +101,12 @@ function Scene({
 
   const fromStart = trans ? trans.fromStart : currentStart
 
+  // Cámara con picado: por encima de LOOK_Y y mirando hacia abajo.
+  const pitch = (FRAME.PITCH * Math.PI) / 180
+  const camPos: [number, number, number] = [0, FRAME.LOOK_Y + FRAME.DIST * Math.sin(pitch), FRAME.DIST * Math.cos(pitch)]
+
   useFrame(() => {
-    camRef.current?.lookAt(0, FRAME.TARGET_Y, 0)
+    camRef.current?.lookAt(0, FRAME.LOOK_Y, 0)
     if (!trans) {
       for (let i = 0; i < slotCount; i++) outRefs.current[i]?.position.set(xOf(i), 0, 0)
       return
@@ -108,7 +124,7 @@ function Scene({
 
   return (
     <>
-      <PerspectiveCamera ref={camRef} makeDefault fov={FRAME.FOV} position={[0, FRAME.TARGET_Y, FRAME.DIST]} />
+      <PerspectiveCamera ref={camRef} makeDefault fov={FRAME.FOV} position={camPos} />
       <hemisphereLight args={['#ffffff', '#EDEAE2', 0.7]} />
       <directionalLight position={[3, 7, 5]} intensity={0.85} />
       <Environment files={preset.environmentImage} environmentIntensity={preset.envIntensity} />
