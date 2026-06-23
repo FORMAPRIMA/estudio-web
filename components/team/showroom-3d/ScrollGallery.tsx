@@ -54,7 +54,9 @@ function useNormalized(url: string) {
 }
 
 // Inclina la maqueta sobre su propio centro (no sobre la base) para revelar volumen.
-function Maqueta({ url }: { url: string }) {
+// La sombra va DENTRO del grupo inclinado → plano paralelo a la base, inclinado los
+// mismos 10°, pegado a la maqueta y se desplaza con ella.
+function Maqueta({ url, shadowOpacity }: { url: string; shadowOpacity: number }) {
   const { object, height } = useNormalized(url)
   const c = height / 2
   return (
@@ -62,6 +64,7 @@ function Maqueta({ url }: { url: string }) {
       <group rotation={[(FRAME.TILT_X * Math.PI) / 180, 0, 0]}>
         <group position={[0, -c, 0]}>
           <primitive object={object} />
+          <ContactShadows position={[0, 0.01, 0]} scale={3.4} far={2.6} blur={2.6} opacity={shadowOpacity} resolution={512} color="#1A1A1A" frames={Infinity} />
         </group>
       </group>
     </group>
@@ -129,14 +132,12 @@ function Scene({
       <directionalLight position={[-4, 3, -3]} intensity={0.3} />
       <Environment files={preset.environmentImage} environmentIntensity={preset.envIntensity} />
 
-      {/* Cada maqueta lleva su propia sombra de contacto DENTRO del grupo → se
-          desplaza con ella en el scroll (no se descuadra). */}
+      {/* Cada maqueta lleva su sombra dentro de su grupo → se desplaza con ella. */}
       {Array.from({ length: slotCount }, (_, i) => {
         const proj = modelos[fromStart + i]
         return proj ? (
           <group key={`o${i}`} ref={el => { outRefs.current[i] = el }} position={[xOf(i), 0, 0]}>
-            <Suspense fallback={null}><Maqueta url={proj.glb_url} /></Suspense>
-            <ContactShadows position={[0, 0.01, 0]} scale={3.4} far={2.6} blur={2.6} opacity={preset.shadowOpacity} resolution={512} color="#1A1A1A" frames={Infinity} />
+            <Suspense fallback={null}><Maqueta url={proj.glb_url} shadowOpacity={preset.shadowOpacity} /></Suspense>
           </group>
         ) : null
       })}
@@ -144,8 +145,7 @@ function Scene({
         const proj = modelos[trans.toStart + i]
         return proj ? (
           <group key={`i${i}`} ref={el => { inRefs.current[i] = el }} position={[xOf(i), -trans.dir * TRANS.ENTER_FROM, 0]}>
-            <Suspense fallback={null}><Maqueta url={proj.glb_url} /></Suspense>
-            <ContactShadows position={[0, 0.01, 0]} scale={3.4} far={2.6} blur={2.6} opacity={preset.shadowOpacity} resolution={512} color="#1A1A1A" frames={Infinity} />
+            <Suspense fallback={null}><Maqueta url={proj.glb_url} shadowOpacity={preset.shadowOpacity} /></Suspense>
           </group>
         ) : null
       })}

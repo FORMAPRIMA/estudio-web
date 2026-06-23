@@ -63,7 +63,7 @@ function Scene({
 
   return (
     <>
-      <PerspectiveCamera makeDefault fov={34} position={[2.6, targetY + 1.7, 3.1]} />
+      <PerspectiveCamera makeDefault fov={34} position={[5.2, targetY + 3.4, 6.2]} />
 
       {/* Penumbra suave tipo PCSS: size alto = borde muy difuminado (más feather) */}
       <SoftShadows size={70} samples={26} focus={0} />
