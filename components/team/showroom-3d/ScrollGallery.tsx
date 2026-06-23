@@ -18,9 +18,9 @@ const FRAME = {
   FOV: 34,          // FOV de la VENTANA VISIBLE (no del canvas completo)
   DIST: 9.0,        // distancia de la cámara (lejana → no recorta)
   SEP: 2.6,         // separación entre maquetas (controla cuánto "de lado" se ven las laterales)
-  PITCH: 14,        // grados que la cámara mira hacia abajo → escorzo vertical (revela la parte superior)
+  PITCH: 22,        // grados que la cámara mira hacia abajo → ES el escorzo (la maqueta queda PLANA;
+                    //   el efecto inclinado viene del punto de vista, no del objeto)
   LOOK_Y: 1.55,     // altura a la que mira; más alto → la maqueta reposa más abajo (tercio inferior)
-  TILT_X: 10,       // giro de la maqueta sobre su propio eje X (revela más su volumen)
   VSCALE: 1.6,      // canvas más alto que la ventana → maquetas entran/salen fuera de cuadro (sin verse el corte)
 }
 // FOV del canvas completo (más alto): mantiene idéntico lo visible, solo añade margen arriba/abajo.
@@ -61,27 +61,18 @@ function useNormalized(url: string) {
   }, [scene])
 }
 
-// Inclina la maqueta sobre su propio centro (no sobre la base) para revelar volumen.
+// Maqueta PLANA, apoyada en y=0 (el efecto inclinado lo da el picado de la cámara).
 function Maqueta({ url }: { url: string }) {
-  const { object, height } = useNormalized(url)
-  const c = height / 2
-  return (
-    <group position={[0, c, 0]}>
-      <group rotation={[(FRAME.TILT_X * Math.PI) / 180, 0, 0]}>
-        <group position={[0, -c, 0]}>
-          <primitive object={object} />
-        </group>
-      </group>
-    </group>
-  )
+  const { object } = useNormalized(url)
+  return <primitive object={object} />
 }
 
-// Suelo horizontal (como en el visor) que SOLO recibe la sombra; va en el grupo de
-// la maqueta → se desplaza con ella en el scroll. Estrecho en X y profundo en Z para
-// que la sombra (hacia delante) no invada a las maquetas vecinas ni a la de abajo.
+// Suelo horizontal (como en el visor) a ras de la base, que SOLO recibe la sombra; va
+// en el grupo de la maqueta → se desplaza con ella en el scroll. Estrecho en X y
+// profundo en Z para que la sombra no invada a las maquetas vecinas ni a la de abajo.
 function ShadowFloor({ opacity }: { opacity: number }) {
   return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.15, 0]} receiveShadow>
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
       <planeGeometry args={[2.4, 6]} />
       <shadowMaterial transparent opacity={opacity} color="#000000" />
     </mesh>
