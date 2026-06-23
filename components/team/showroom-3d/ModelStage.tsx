@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useMemo, useRef } from 'react'
 import { Canvas } from '@react-three/fiber'
 import {
-  OrbitControls, Environment, ContactShadows, PerspectiveCamera, useGLTF, Html,
+  OrbitControls, Environment, SoftShadows, PerspectiveCamera, useGLTF, Html,
 } from '@react-three/drei'
 import { EffectComposer, N8AO, ToneMapping } from '@react-three/postprocessing'
 import { ToneMappingMode } from 'postprocessing'
@@ -65,23 +65,32 @@ function Scene({
     <>
       <PerspectiveCamera makeDefault fov={34} position={[2.6, targetY + 1.7, 3.1]} />
 
+      {/* Penumbra suave tipo PCSS: size alto = borde muy difuminado (más feather) */}
+      <SoftShadows size={70} samples={26} focus={0} />
+
       <primitive object={object} />
 
-      {/* Luz de definición sutil; el grueso lo aporta el HDRI */}
-      <directionalLight position={[4, 7, 4]} intensity={0.45} />
+      {/* Luz clave en ángulo bajo: proyecta la sombra hacia un lado, como un sol bajo */}
+      <directionalLight
+        castShadow
+        position={[-6, 4.5, -2.5]}
+        intensity={1.15}
+        shadow-mapSize={[2048, 2048]}
+        shadow-bias={-0.0002}
+        shadow-normalBias={0.025}
+      >
+        <orthographicCamera attach="shadow-camera" args={[-3.2, 3.2, 3.2, -3.2, 0.1, 30]} />
+      </directionalLight>
+      {/* Relleno suave desde el lado opuesto para que la sombra no quede negra */}
+      <directionalLight position={[5, 6, 4]} intensity={0.3} />
 
       <Environment files={preset.environmentImage} environmentIntensity={preset.envIntensity} />
 
-      <ContactShadows
-        position={[0, 0.001, 0]}
-        scale={TARGET * 2.2}
-        far={Math.max(height * 1.1, 1.5)}
-        blur={2.7}
-        opacity={preset.shadowOpacity}
-        resolution={1024}
-        color="#1A1A1A"
-        frames={autoRotate ? Infinity : 1}
-      />
+      {/* Suelo invisible que SOLO recibe la sombra → plano blanco continuo con sombra proyectada */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
+        <planeGeometry args={[60, 60]} />
+        <shadowMaterial transparent opacity={preset.shadowOpacity} color="#000000" />
+      </mesh>
 
       <OrbitControls
         ref={controlsRef}
@@ -94,7 +103,7 @@ function Scene({
         minDistance={1.6}
         maxDistance={14}
         minPolarAngle={0.1}
-        maxPolarAngle={Math.PI / 1.92}
+        maxPolarAngle={(85 * Math.PI) / 180}
         target={[0, targetY, 0]}
       />
     </>
@@ -129,7 +138,7 @@ export default function ModelStage({
 
   return (
     <Canvas
-      shadows={false}
+      shadows
       dpr={[1, 2]}
       gl={{ antialias: false, toneMapping: THREE.NoToneMapping, preserveDrawingBuffer: false }}
       style={{ width: '100%', height: '100%', touchAction: 'none' }}

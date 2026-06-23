@@ -11,29 +11,12 @@ import type { Modelo3D } from '@/lib/showroom'
 // Visor R3F (Three.js): pesado, solo se carga en cliente al abrir una maqueta.
 const ModelStage = dynamic(() => import('./ModelStage'), { ssr: false })
 
+// Rejilla 3D dirigida por scroll (un único Canvas compartido): solo cliente.
+const ScrollGallery = dynamic(() => import('./ScrollGallery'), { ssr: false })
+
 const BUCKET = 'modelos-3d'
 const MAX_SIZE_MB = 75
 const ACCENT = '#D85A30'
-
-// Miniatura 3D de la rejilla (R3F): solo cliente, se carga al entrar en viewport.
-const ModelThumb = dynamic(() => import('./ModelThumb'), { ssr: false })
-
-// Monta el contenido 3D solo cuando la tarjeta está cerca del viewport.
-function useInView<T extends HTMLElement>() {
-  const ref = useRef<T>(null)
-  const [inView, setInView] = useState(false)
-  useEffect(() => {
-    const el = ref.current
-    if (!el || inView) return
-    const io = new IntersectionObserver(
-      entries => { if (entries.some(e => e.isIntersecting)) { setInView(true); io.disconnect() } },
-      { rootMargin: '250px' }
-    )
-    io.observe(el)
-    return () => io.disconnect()
-  }, [inView])
-  return { ref, inView }
-}
 
 async function uploadGlb(file: File): Promise<{ url: string } | { error: string }> {
   const supabase = createClient()
@@ -92,11 +75,7 @@ export default function Showroom3DPage({ modelos }: { modelos: Modelo3D[] }) {
         {modelos.length === 0 ? (
           <EmptyState onUpload={() => setUploadOpen(true)} />
         ) : (
-          <div className="sr-grid">
-            {modelos.map((m, i) => (
-              <ModelCard key={m.id} modelo={m} index={i} onOpen={() => setActive(m)} />
-            ))}
-          </div>
+          <ScrollGallery modelos={modelos} onOpen={setActive} />
         )}
       </div>
 
@@ -106,42 +85,6 @@ export default function Showroom3DPage({ modelos }: { modelos: Modelo3D[] }) {
       {uploadOpen && (
         <UploadModal onClose={() => setUploadOpen(false)} />
       )}
-    </div>
-  )
-}
-
-// ── Tarjeta de la galería ───────────────────────────────────────────────────
-
-function ModelCard({ modelo, index, onOpen }: { modelo: Modelo3D; index: number; onOpen: () => void }) {
-  const [hover, setHover] = useState(false)
-  const { ref, inView } = useInView<HTMLDivElement>()
-  return (
-    <div
-      className="sr-card"
-      style={{ animationDelay: `${Math.min(index, 12) * 45}ms` }}
-      onClick={onOpen}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-    >
-      <div ref={ref} className="sr-card-stage">
-        {inView ? <ModelThumb url={modelo.glb_url} spin={hover} /> : <div className="sr-shimmer" />}
-        <div className="sr-card-hint" style={{ opacity: hover ? 1 : 0 }}>Ver maqueta →</div>
-      </div>
-      <div style={{ padding: '16px 18px 18px' }}>
-        {modelo.proyecto && (
-          <p style={{ fontSize: 9.5, letterSpacing: '0.14em', textTransform: 'uppercase', color: ACCENT, fontWeight: 600, marginBottom: 6 }}>
-            {modelo.proyecto}
-          </p>
-        )}
-        <p style={{ fontSize: 15, fontWeight: 400, color: '#1A1A1A', letterSpacing: '-0.01em', lineHeight: 1.3 }}>
-          {modelo.nombre}
-        </p>
-        {modelo.descripcion && (
-          <p style={{ fontSize: 12, color: '#1A1A1A70', fontWeight: 300, lineHeight: 1.5, marginTop: 6, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-            {modelo.descripcion}
-          </p>
-        )}
-      </div>
     </div>
   )
 }
