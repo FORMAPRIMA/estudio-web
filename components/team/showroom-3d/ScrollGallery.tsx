@@ -62,28 +62,28 @@ function useNormalized(url: string) {
 }
 
 // Inclina la maqueta sobre su propio centro (no sobre la base) para revelar volumen.
-function Maqueta({ url }: { url: string }) {
+// El suelo de sombra va DENTRO del frame inclinado → coincide con la cara inferior.
+// `layer`: capa de aislamiento (salientes vs entrantes) para que la sombra de un
+// nivel no caiga sobre el plano de la maqueta que viene por debajo.
+function Maqueta({ url, layer, shadowOpacity }: { url: string; layer: number; shadowOpacity: number }) {
   const { object, height } = useNormalized(url)
   const c = height / 2
+  const grp = useRef<THREE.Group>(null)
+  useEffect(() => {
+    grp.current?.traverse((o: any) => o.layers.enable(layer))
+  }, [layer, object])
   return (
-    <group position={[0, c, 0]}>
+    <group ref={grp} position={[0, c, 0]}>
       <group rotation={[(FRAME.TILT_X * Math.PI) / 180, 0, 0]}>
         <group position={[0, -c, 0]}>
           <primitive object={object} />
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
+            <planeGeometry args={[4, 6]} />
+            <shadowMaterial transparent opacity={shadowOpacity} color="#000000" />
+          </mesh>
         </group>
       </group>
     </group>
-  )
-}
-
-// Suelo horizontal que SOLO recibe la sombra; va en el grupo de la maqueta → se
-// desplaza con ella en el scroll, pero se mantiene horizontal (sombra natural).
-function ShadowFloor({ opacity }: { opacity: number }) {
-  return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.005, 0]} receiveShadow>
-      <planeGeometry args={[4, 5]} />
-      <shadowMaterial transparent opacity={opacity} color="#000000" />
-    </mesh>
   )
 }
 
@@ -115,8 +115,16 @@ function Scene({
   const camRef = useRef<THREE.PerspectiveCamera>(null)
   const outRefs = useRef<(THREE.Group | null)[]>([])
   const inRefs = useRef<(THREE.Group | null)[]>([])
+  const lightOut = useRef<THREE.DirectionalLight>(null)
+  const lightIn = useRef<THREE.DirectionalLight>(null)
   const center = (slotCount - 1) / 2
   const xOf = (i: number) => (i - center) * FRAME.SEP
+
+  // Cada luz solo ilumina/proyecta su capa → sombra aislada por nivel.
+  useEffect(() => {
+    lightOut.current?.layers.set(1)
+    lightIn.current?.layers.set(2)
+  }, [])
 
   const fromStart = trans ? trans.fromStart : currentStart
 
@@ -144,19 +152,33 @@ function Scene({
       <PerspectiveCamera ref={camRef} makeDefault fov={RENDER_FOV} position={camPos} />
 
       <hemisphereLight args={['#ffffff', '#EDEAE2', 0.7]} />
-      {/* Luz clave lateral que proyecta una sombra visible y suave (mapas estándar) */}
+      <directionalLight position={[4, 4, 3]} intensity={0.3} />
+      {/* Dos luces clave aisladas por capa: salientes (1) y entrantes (2). Desde
+          detrás-arriba → la sombra cae hacia delante (visible) y dentro de su columna. */}
       <directionalLight
+        ref={lightOut}
         castShadow
-        position={[-5, 6.5, 1.5]}
-        intensity={0.95}
+        position={[-1.5, 5.5, -6]}
+        intensity={1.0}
         shadow-mapSize={[2048, 2048]}
         shadow-bias={-0.0003}
         shadow-normalBias={0.03}
-        shadow-radius={8}
+        shadow-radius={7}
       >
-        <orthographicCamera attach="shadow-camera" args={[-4.5, 4.5, 4.5, -4.5, 0.1, 30]} />
+        <orthographicCamera attach="shadow-camera" args={[-5, 5, 6, -5, 0.1, 50]} />
       </directionalLight>
-      <directionalLight position={[4, 4, 3]} intensity={0.3} />
+      <directionalLight
+        ref={lightIn}
+        castShadow
+        position={[-1.5, 5.5, -6]}
+        intensity={1.0}
+        shadow-mapSize={[2048, 2048]}
+        shadow-bias={-0.0003}
+        shadow-normalBias={0.03}
+        shadow-radius={7}
+      >
+        <orthographicCamera attach="shadow-camera" args={[-5, 5, 6, -5, 0.1, 50]} />
+      </directionalLight>
       <Environment files={preset.environmentImage} environmentIntensity={preset.envIntensity} />
 
       {/* Cada maqueta lleva su sombra dentro de su grupo → se desplaza con ella. */}
@@ -164,8 +186,7 @@ function Scene({
         const proj = modelos[fromStart + i]
         return proj ? (
           <group key={`o${i}`} ref={el => { outRefs.current[i] = el }} position={[xOf(i), 0, 0]}>
-            <Suspense fallback={null}><Maqueta url={proj.glb_url} /></Suspense>
-            <ShadowFloor opacity={preset.shadowOpacity} />
+            <Suspense fallback={null}><Maqueta url={proj.glb_url} layer={1} shadowOpacity={preset.shadowOpacity} /></Suspense>
           </group>
         ) : null
       })}
@@ -173,8 +194,7 @@ function Scene({
         const proj = modelos[trans.toStart + i]
         return proj ? (
           <group key={`i${i}`} ref={el => { inRefs.current[i] = el }} position={[xOf(i), -trans.dir * TRANS.ENTER_FROM, 0]}>
-            <Suspense fallback={null}><Maqueta url={proj.glb_url} /></Suspense>
-            <ShadowFloor opacity={preset.shadowOpacity} />
+            <Suspense fallback={null}><Maqueta url={proj.glb_url} layer={2} shadowOpacity={preset.shadowOpacity} /></Suspense>
           </group>
         ) : null
       })}
