@@ -70,10 +70,10 @@ function Maqueta({ url }: { url: string }) {
 // Suelo horizontal (como en el visor) a ras de la base, que SOLO recibe la sombra.
 // La opacidad se controla por frame (Scene) según la distancia al reposo → el plano
 // está transparente mientras su maqueta entra/sale, así no recibe la mancha de la otra.
-function ShadowFloor({ opacity, matRef }: { opacity: number; matRef: (m: THREE.ShadowMaterial | null) => void }) {
+function ShadowFloor({ opacity, matRef, size }: { opacity: number; matRef: (m: THREE.ShadowMaterial | null) => void; size: [number, number] }) {
   return (
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
-      <planeGeometry args={[2.6, 6]} />
+      <planeGeometry args={size} />
       <shadowMaterial ref={matRef} transparent opacity={opacity} color="#000000" />
     </mesh>
   )
@@ -121,8 +121,12 @@ function Scene({
 
   // La sombra de un plano se desvanece según se aleja del reposo (evita la mancha
   // de la maqueta de arriba sobre el plano de la que entra por debajo).
-  const FADE = 2.2
+  const FADE = 1.6
   const fade = (y: number) => clamp01(1 - Math.abs(y) / FADE)
+
+  // En móvil no hay maquetas vecinas → plano grande (sombra completa, sin recorte).
+  // En desktop, estrecho para no invadir el plano de las vecinas.
+  const floorSize: [number, number] = isMobile ? [16, 16] : [2.6, 6]
 
   useFrame(() => {
     camRef.current?.lookAt(0, FRAME.LOOK_Y, 0)
@@ -176,7 +180,7 @@ function Scene({
         return proj ? (
           <group key={`o${i}`} ref={el => { outRefs.current[i] = el }} position={[xOf(i), 0, 0]}>
             <Suspense fallback={null}><Maqueta url={proj.glb_url} /></Suspense>
-            <ShadowFloor opacity={preset.shadowOpacity} matRef={m => { outMats.current[i] = m }} />
+            <ShadowFloor opacity={preset.shadowOpacity} matRef={m => { outMats.current[i] = m }} size={floorSize} />
           </group>
         ) : null
       })}
@@ -185,7 +189,7 @@ function Scene({
         return proj ? (
           <group key={`i${i}`} ref={el => { inRefs.current[i] = el }} position={[xOf(i), -trans.dir * TRANS.ENTER_FROM, 0]}>
             <Suspense fallback={null}><Maqueta url={proj.glb_url} /></Suspense>
-            <ShadowFloor opacity={preset.shadowOpacity} matRef={m => { inMats.current[i] = m }} />
+            <ShadowFloor opacity={preset.shadowOpacity} matRef={m => { inMats.current[i] = m }} size={floorSize} />
           </group>
         ) : null
       })}
