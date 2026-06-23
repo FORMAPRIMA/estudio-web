@@ -67,14 +67,14 @@ function Maqueta({ url }: { url: string }) {
   return <primitive object={object} />
 }
 
-// Suelo horizontal (como en el visor) a ras de la base, que SOLO recibe la sombra; va
-// en el grupo de la maqueta → se desplaza con ella en el scroll. Estrecho en X y
-// profundo en Z para que la sombra no invada a las maquetas vecinas ni a la de abajo.
-function ShadowFloor({ opacity }: { opacity: number }) {
+// Suelo horizontal (como en el visor) a ras de la base, que SOLO recibe la sombra.
+// La opacidad se controla por frame (Scene) según la distancia al reposo → el plano
+// está transparente mientras su maqueta entra/sale, así no recibe la mancha de la otra.
+function ShadowFloor({ opacity, matRef }: { opacity: number; matRef: (m: THREE.ShadowMaterial | null) => void }) {
   return (
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
       <planeGeometry args={[2.6, 6]} />
-      <shadowMaterial transparent opacity={opacity} color="#000000" />
+      <shadowMaterial ref={matRef} transparent opacity={opacity} color="#000000" />
     </mesh>
   )
 }
@@ -95,7 +95,7 @@ function slotScreenX(slotCount: number, w: number, h: number) {
 // ── Escena única: una cámara, las maquetas en fila ────────────────────────────
 
 function Scene({
-  modelos, currentStart, slotCount, trans, preset, onSettle,
+  modelos, currentStart, slotCount, trans, preset, onSettle, isMobile,
 }: {
   modelos: Modelo3D[]
   currentStart: number
@@ -103,10 +103,13 @@ function Scene({
   trans: Trans
   preset: LightingPreset
   onSettle: () => void
+  isMobile: boolean
 }) {
   const camRef = useRef<THREE.PerspectiveCamera>(null)
   const outRefs = useRef<(THREE.Group | null)[]>([])
   const inRefs = useRef<(THREE.Group | null)[]>([])
+  const outMats = useRef<(THREE.ShadowMaterial | null)[]>([])
+  const inMats = useRef<(THREE.ShadowMaterial | null)[]>([])
   const center = (slotCount - 1) / 2
   const xOf = (i: number) => (i - center) * FRAME.SEP
 
@@ -116,34 +119,49 @@ function Scene({
   const pitch = (FRAME.PITCH * Math.PI) / 180
   const camPos: [number, number, number] = [0, FRAME.LOOK_Y + FRAME.DIST * Math.sin(pitch), FRAME.DIST * Math.cos(pitch)]
 
+  // La sombra de un plano se desvanece según se aleja del reposo (evita la mancha
+  // de la maqueta de arriba sobre el plano de la que entra por debajo).
+  const FADE = 2.2
+  const fade = (y: number) => clamp01(1 - Math.abs(y) / FADE)
+
   useFrame(() => {
     camRef.current?.lookAt(0, FRAME.LOOK_Y, 0)
+    const base = preset.shadowOpacity
     if (!trans) {
-      for (let i = 0; i < slotCount; i++) outRefs.current[i]?.position.set(xOf(i), 0, 0)
+      for (let i = 0; i < slotCount; i++) {
+        outRefs.current[i]?.position.set(xOf(i), 0, 0)
+        if (outMats.current[i]) outMats.current[i]!.opacity = base
+      }
       return
     }
     const p = easeInOut(clamp01((performance.now() - trans.start) / TRANS.DUR))
     const dir = trans.dir
     for (let i = 0; i < slotCount; i++) {
-      outRefs.current[i]?.position.set(xOf(i), dir * p * TRANS.EXIT_UP, -p * TRANS.EXIT_BACK)
-      inRefs.current[i]?.position.set(xOf(i), -dir * (1 - p) * TRANS.ENTER_FROM, 0)
+      const oy = dir * p * TRANS.EXIT_UP
+      outRefs.current[i]?.position.set(xOf(i), oy, -p * TRANS.EXIT_BACK)
+      if (outMats.current[i]) outMats.current[i]!.opacity = base * fade(oy)
+      const iy = -dir * (1 - p) * TRANS.ENTER_FROM
+      inRefs.current[i]?.position.set(xOf(i), iy, 0)
+      if (inMats.current[i]) inMats.current[i]!.opacity = base * fade(iy)
     }
     if (p >= 1) onSettle()
   })
+
+  const shadowSize = isMobile ? 1024 : 2048
 
   return (
     <>
       <PerspectiveCamera ref={camRef} makeDefault fov={RENDER_FOV} position={camPos} />
 
-      {/* Penumbra suave (PCSS) — mismos valores que el visor inmersivo (sin conflicto) */}
-      <SoftShadows size={70} samples={26} focus={0} />
+      {/* Penumbra suave (PCSS) — menos samples en móvil para más FPS */}
+      <SoftShadows size={70} samples={isMobile ? 16 : 26} focus={0} />
       <hemisphereLight args={['#ffffff', '#EDEAE2', 0.5]} />
       {/* Luz clave desde arriba-derecha-atrás → sombra suave en diagonal abajo-izquierda */}
       <directionalLight
         castShadow
         position={[2.5, 6.5, -4]}
         intensity={1.1}
-        shadow-mapSize={[2048, 2048]}
+        shadow-mapSize={[shadowSize, shadowSize]}
         shadow-bias={-0.0002}
         shadow-normalBias={0.025}
       >
@@ -158,7 +176,7 @@ function Scene({
         return proj ? (
           <group key={`o${i}`} ref={el => { outRefs.current[i] = el }} position={[xOf(i), 0, 0]}>
             <Suspense fallback={null}><Maqueta url={proj.glb_url} /></Suspense>
-            <ShadowFloor opacity={preset.shadowOpacity} />
+            <ShadowFloor opacity={preset.shadowOpacity} matRef={m => { outMats.current[i] = m }} />
           </group>
         ) : null
       })}
@@ -167,7 +185,7 @@ function Scene({
         return proj ? (
           <group key={`i${i}`} ref={el => { inRefs.current[i] = el }} position={[xOf(i), -trans.dir * TRANS.ENTER_FROM, 0]}>
             <Suspense fallback={null}><Maqueta url={proj.glb_url} /></Suspense>
-            <ShadowFloor opacity={preset.shadowOpacity} />
+            <ShadowFloor opacity={preset.shadowOpacity} matRef={m => { inMats.current[i] = m }} />
           </group>
         ) : null
       })}
@@ -211,6 +229,7 @@ export default function ScrollGallery({
 }) {
   const N = modelos.length
   const visible = useVisibleCount()
+  const isMobile = visible === 1
   const slotCount = Math.min(visible, N)
   const maxStart = Math.max(0, N - slotCount)
   const pageCount = Math.max(1, Math.ceil(N / slotCount))
@@ -318,7 +337,7 @@ export default function ScrollGallery({
       <Canvas
         shadows
         frameloop={paused ? 'never' : trans ? 'always' : 'demand'}
-        dpr={[1, 1.85]}
+        dpr={isMobile ? [1, 1.4] : [1, 1.85]}
         gl={{ antialias: true, alpha: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: preset.exposure }}
         style={{
           position: 'absolute', left: 0, width: '100%',
@@ -326,7 +345,7 @@ export default function ScrollGallery({
           pointerEvents: 'none', zIndex: 1,
         }}
       >
-        <Scene modelos={modelos} currentStart={currentStart} slotCount={slotCount} trans={trans} preset={preset} onSettle={onSettle} />
+        <Scene modelos={modelos} currentStart={currentStart} slotCount={slotCount} trans={trans} preset={preset} onSettle={onSettle} isMobile={isMobile} />
       </Canvas>
 
       {/* Tipografía flotante, sobre cada maqueta */}
