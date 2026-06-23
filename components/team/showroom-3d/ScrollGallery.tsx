@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { View, PerspectiveCamera, Environment, ContactShadows, useGLTF } from '@react-three/drei'
+import { PerspectiveCamera, Environment, ContactShadows, useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
 import { LIGHTING_PRESETS, DEFAULT_PRESET } from '@/lib/showroom'
 import type { LightingPreset, Modelo3D } from '@/lib/showroom'
@@ -11,20 +11,20 @@ const ACCENT = '#D85A30'
 const TARGET = 2 // lado mayor del modelo normalizado (uds de mundo)
 
 // ── Calibración (afinar viendo en vivo) ──────────────────────────────────────
+// Una sola cámara frontal al centro mira las maquetas puestas en fila (mismo
+// plano). La del centro se ve frontal; las laterales, "un poco de lado" por estar
+// desplazadas respecto a ese único punto de vista (perspectiva, no giro).
 const FRAME = {
-  FOV: 30,
-  DIST: 4.3,            // distancia cámara→maqueta
-  TARGET_Y: 0.72,       // punto al que mira la cámara (centro del encuadre)
-  PITCH: (7 * Math.PI) / 180,        // picada leve; azimut 0 = frontal
-  PARALLAX_AZ: (5 * Math.PI) / 180,  // giro máx. con el cursor (lateral)
-  PARALLAX_EL: (3 * Math.PI) / 180,  // giro máx. con el cursor (vertical)
-  IDLE: 0.018,          // amplitud de la respiración (flotar)
+  FOV: 34,
+  DIST: 9.0,        // distancia de la cámara (lejana → no recorta)
+  SEP: 2.6,         // separación entre maquetas (controla cuánto "de lado" se ven las laterales)
+  TARGET_Y: 0.72,   // altura a la que mira la cámara
 }
 const TRANS = {
-  DUR: 880,             // ms de la transición entre páginas
-  EXIT_UP: 3.8,         // cuánto sube la saliente hasta perderse
-  EXIT_BACK: 1.1,       // cuánto retrocede en Z al salir
-  ENTER_FROM: 3.8,      // desde dónde entra la siguiente
+  DUR: 880,         // ms de la transición entre páginas
+  EXIT_UP: 4.0,     // cuánto sube la saliente hasta perderse
+  EXIT_BACK: 1.1,   // cuánto retrocede en Z al salir
+  ENTER_FROM: 4.0,  // desde dónde entra la siguiente
 }
 
 const clamp01 = (t: number) => Math.max(0, Math.min(1, t))
@@ -58,76 +58,85 @@ function Maqueta({ url }: { url: string }) {
 
 type Trans = { fromStart: number; toStart: number; toPage: number; dir: number; start: number } | null
 
-// ── Escena de un slot (un viewport frontal) ───────────────────────────────────
+// Posición X en pantalla (%) de cada maqueta, según la proyección de la cámara.
+function slotScreenX(slotCount: number, w: number, h: number) {
+  const center = (slotCount - 1) / 2
+  const halfH = FRAME.DIST * Math.tan((FRAME.FOV * Math.PI) / 180 / 2)
+  const halfW = halfH * (h > 0 ? w / h : 1.6)
+  return Array.from({ length: slotCount }, (_, i) => {
+    const ndc = ((i - center) * FRAME.SEP) / (halfW || 1)
+    return ((ndc + 1) / 2) * 100
+  })
+}
 
-function SlotScene({
-  slot, modelos, baseStart, trans, preset, parallax,
+// ── Escena única: una cámara, las maquetas en fila ────────────────────────────
+
+function Scene({
+  modelos, currentStart, slotCount, trans, preset, onSettle,
 }: {
-  slot: number
   modelos: Modelo3D[]
-  baseStart: number
+  currentStart: number
+  slotCount: number
   trans: Trans
   preset: LightingPreset
-  parallax: React.MutableRefObject<{ x: number; y: number }>
+  onSettle: () => void
 }) {
   const camRef = useRef<THREE.PerspectiveCamera>(null)
-  const outRef = useRef<THREE.Group>(null)
-  const inRef = useRef<THREE.Group>(null)
+  const outRefs = useRef<(THREE.Group | null)[]>([])
+  const inRefs = useRef<(THREE.Group | null)[]>([])
+  const center = (slotCount - 1) / 2
+  const xOf = (i: number) => (i - center) * FRAME.SEP
 
-  const fromStart = trans ? trans.fromStart : baseStart
-  const outProj = modelos[fromStart + slot]
-  const inProj = trans ? modelos[trans.toStart + slot] : undefined
+  const fromStart = trans ? trans.fromStart : currentStart
 
-  useFrame(state => {
-    const cam = camRef.current
-    if (cam) {
-      const az = parallax.current.x * FRAME.PARALLAX_AZ
-      const el = FRAME.PITCH + parallax.current.y * FRAME.PARALLAX_EL
-      const cosE = Math.cos(el)
-      cam.position.set(
-        FRAME.DIST * cosE * Math.sin(az),
-        FRAME.TARGET_Y + FRAME.DIST * Math.sin(el),
-        FRAME.DIST * cosE * Math.cos(az)
-      )
-      cam.lookAt(0, FRAME.TARGET_Y, 0)
-    }
-
+  useFrame(() => {
+    camRef.current?.lookAt(0, FRAME.TARGET_Y, 0)
     if (!trans) {
-      // Respiración: flotar muy levemente.
-      if (outRef.current) outRef.current.position.set(0, Math.sin(state.clock.elapsedTime * 0.9 + slot) * FRAME.IDLE, 0)
+      for (let i = 0; i < slotCount; i++) outRefs.current[i]?.position.set(xOf(i), 0, 0)
       return
     }
     const p = easeInOut(clamp01((performance.now() - trans.start) / TRANS.DUR))
     const dir = trans.dir
-    if (outRef.current) outRef.current.position.set(0, dir * p * TRANS.EXIT_UP, -p * TRANS.EXIT_BACK)
-    if (inRef.current) inRef.current.position.set(0, -dir * (1 - p) * TRANS.ENTER_FROM, 0)
+    for (let i = 0; i < slotCount; i++) {
+      outRefs.current[i]?.position.set(xOf(i), dir * p * TRANS.EXIT_UP, -p * TRANS.EXIT_BACK)
+      inRefs.current[i]?.position.set(xOf(i), -dir * (1 - p) * TRANS.ENTER_FROM, 0)
+    }
+    if (p >= 1) onSettle()
   })
+
+  const span = FRAME.SEP * (slotCount - 1) + TARGET * 2
 
   return (
     <>
-      <PerspectiveCamera ref={camRef} makeDefault fov={FRAME.FOV} />
+      <PerspectiveCamera ref={camRef} makeDefault fov={FRAME.FOV} position={[0, FRAME.TARGET_Y, FRAME.DIST]} />
       <hemisphereLight args={['#ffffff', '#EDEAE2', 0.7]} />
-      <directionalLight position={[3, 6, 4]} intensity={0.85} />
+      <directionalLight position={[3, 7, 5]} intensity={0.85} />
       <Environment files={preset.environmentImage} environmentIntensity={preset.envIntensity} />
 
-      {outProj && (
-        <group ref={outRef}>
-          <Suspense fallback={null}><Maqueta url={outProj.glb_url} /></Suspense>
-        </group>
-      )}
-      {inProj && (
-        <group ref={inRef}>
-          <Suspense fallback={null}><Maqueta url={inProj.glb_url} /></Suspense>
-        </group>
-      )}
+      {Array.from({ length: slotCount }, (_, i) => {
+        const proj = modelos[fromStart + i]
+        return proj ? (
+          <group key={`o${i}`} ref={el => { outRefs.current[i] = el }} position={[xOf(i), 0, 0]}>
+            <Suspense fallback={null}><Maqueta url={proj.glb_url} /></Suspense>
+          </group>
+        ) : null
+      })}
+      {trans && Array.from({ length: slotCount }, (_, i) => {
+        const proj = modelos[trans.toStart + i]
+        return proj ? (
+          <group key={`i${i}`} ref={el => { inRefs.current[i] = el }} position={[xOf(i), -trans.dir * TRANS.ENTER_FROM, 0]}>
+            <Suspense fallback={null}><Maqueta url={proj.glb_url} /></Suspense>
+          </group>
+        ) : null
+      })}
 
       <ContactShadows
-        position={[0, 0.005, 0]}
-        scale={3.2}
-        far={2.4}
-        blur={2.8}
+        position={[0, 0.004, 0]}
+        scale={span}
+        far={2.6}
+        blur={2.6}
         opacity={preset.shadowOpacity}
-        resolution={512}
+        resolution={1024}
         color="#1A1A1A"
         frames={Infinity}
       />
@@ -135,14 +144,7 @@ function SlotScene({
   )
 }
 
-function TransitionDriver({ trans, onSettle }: { trans: Trans; onSettle: () => void }) {
-  useFrame(() => {
-    if (trans && performance.now() - trans.start >= TRANS.DUR) onSettle()
-  })
-  return null
-}
-
-// ── Tipografía flotante de cada slot (crossfade en transición) ────────────────
+// ── Tipografía flotante (crossfade en transición) ─────────────────────────────
 
 function Caption({ proj, variant }: { proj?: Modelo3D; variant: 'steady' | 'in' | 'out' }) {
   if (!proj) return null
@@ -153,8 +155,6 @@ function Caption({ proj, variant }: { proj?: Modelo3D; variant: 'steady' | 'in' 
     </div>
   )
 }
-
-// ── Componente principal ──────────────────────────────────────────────────────
 
 function useVisibleCount() {
   const [n, setN] = useState(3)
@@ -187,19 +187,24 @@ export default function ScrollGallery({
   const [page, setPage] = useState(0)
   const [presetId, setPresetId] = useState(DEFAULT_PRESET.id)
   const [trans, setTrans] = useState<Trans>(null)
+  const [slotX, setSlotX] = useState<number[]>(() => Array.from({ length: slotCount }, (_, i) => ((i + 0.5) / slotCount) * 100))
   const busy = useRef(false)
-  const parallax = useRef({ x: 0, y: 0 })
+  const touchY = useRef(0)
   const stageRef = useRef<HTMLDivElement>(null)
 
   const preset = LIGHTING_PRESETS.find(p => p.id === presetId) ?? DEFAULT_PRESET
 
-  // Refs de los divs que cada View sigue. Se rehacen si cambia el nº de slots.
-  const refs = useMemo(
-    () => Array.from({ length: slotCount }, () => ({ current: null as HTMLDivElement | null })),
-    [slotCount]
-  )
+  // Posiciones X de las maquetas en pantalla (para textos y zonas de clic).
+  useEffect(() => {
+    const recalc = () => {
+      const r = stageRef.current?.getBoundingClientRect()
+      if (r) setSlotX(slotScreenX(slotCount, r.width, r.height))
+    }
+    recalc()
+    window.addEventListener('resize', recalc)
+    return () => window.removeEventListener('resize', recalc)
+  }, [slotCount])
 
-  // Resetea la página si el nº de slots cambió y se queda fuera de rango.
   useEffect(() => { setPage(p => Math.min(p, pageCount - 1)) }, [pageCount])
 
   const currentStart = startForPage(page)
@@ -219,7 +224,6 @@ export default function ScrollGallery({
     busy.current = false
   }
 
-  // Entradas: rueda, teclado y táctil.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'ArrowDown' || e.key === 'ArrowRight') navigate(1)
@@ -229,7 +233,7 @@ export default function ScrollGallery({
     return () => window.removeEventListener('keydown', onKey)
   })
 
-  const touchY = useRef(0)
+  const widthPct = 100 / slotCount
 
   return (
     <div
@@ -242,61 +246,46 @@ export default function ScrollGallery({
         if (dy > 45) navigate(1)
         else if (dy < -45) navigate(-1)
       }}
-      onMouseMove={e => {
-        const r = stageRef.current?.getBoundingClientRect()
-        if (!r) return
-        parallax.current = {
-          x: ((e.clientX - r.left) / r.width) * 2 - 1,
-          y: -(((e.clientY - r.top) / r.height) * 2 - 1),
-        }
-      }}
-      onMouseLeave={() => { parallax.current = { x: 0, y: 0 } }}
     >
       <style>{styles}</style>
 
-      {/* Fila de slots (seamless). Cada div lo sigue un View del canvas. */}
-      <div className="sr-row">
-        {Array.from({ length: slotCount }, (_, slot) => {
-          const cur = modelos[currentStart + slot]
-          const outProj = trans ? modelos[trans.fromStart + slot] : undefined
-          const inProj = trans ? modelos[trans.toStart + slot] : undefined
-          return (
-            <div
-              key={slot}
-              className="sr-slot"
-              style={{ cursor: cur ? 'pointer' : 'default' }}
-              onClick={() => { if (!trans && cur) onOpen(cur) }}
-            >
-              <div className="sr-slot-view" ref={el => { refs[slot].current = el }} />
-              <div className="sr-cap-wrap">
-                {trans ? (
-                  <>
-                    <Caption proj={outProj} variant="out" />
-                    <Caption proj={inProj} variant="in" />
-                  </>
-                ) : (
-                  <Caption proj={cur} variant="steady" />
-                )}
-              </div>
-            </div>
-          )
-        })}
-      </div>
+      {/* Zonas de clic, centradas en cada maqueta */}
+      {!trans && Array.from({ length: slotCount }, (_, i) => {
+        const cur = modelos[currentStart + i]
+        if (!cur) return null
+        return (
+          <div
+            key={`hit${i}`}
+            className="sr-hit"
+            style={{ left: `${slotX[i] ?? ((i + 0.5) / slotCount) * 100}%`, width: `${widthPct}%` }}
+            onClick={() => onOpen(cur)}
+          />
+        )
+      })}
 
-      {/* Canvas único, transparente, sobre los slots */}
+      {/* Canvas único, transparente */}
       <Canvas
         shadows={false}
         dpr={[1, 1.85]}
         gl={{ antialias: true, alpha: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: preset.exposure }}
         style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 1 }}
       >
-        {refs.map((r, slot) => (
-          <View key={slot} track={r as any}>
-            <SlotScene slot={slot} modelos={modelos} baseStart={currentStart} trans={trans} preset={preset} parallax={parallax} />
-          </View>
-        ))}
-        <TransitionDriver trans={trans} onSettle={onSettle} />
+        <Scene modelos={modelos} currentStart={currentStart} slotCount={slotCount} trans={trans} preset={preset} onSettle={onSettle} />
       </Canvas>
+
+      {/* Tipografía flotante, sobre cada maqueta */}
+      {Array.from({ length: slotCount }, (_, i) => (
+        <div key={`cap${i}`} className="sr-cap-wrap" style={{ left: `${slotX[i] ?? ((i + 0.5) / slotCount) * 100}%` }}>
+          {trans ? (
+            <>
+              <Caption proj={modelos[trans.fromStart + i]} variant="out" />
+              <Caption proj={modelos[trans.toStart + i]} variant="in" />
+            </>
+          ) : (
+            <Caption proj={modelos[currentStart + i]} variant="steady" />
+          )}
+        </div>
+      ))}
 
       {/* Controles flotantes — arriba */}
       <div className="sr-top">
@@ -336,23 +325,20 @@ export default function ScrollGallery({
 const styles = `
 .sr-stage {
   position: relative; width: 100%; height: 100vh; overflow: hidden; user-select: none;
-  background:
-    radial-gradient(90% 70% at 50% 6%, #FFFFFF 0%, #F6F4EF 46%, #ECE9E1 100%);
+  background: radial-gradient(90% 70% at 50% 6%, #FFFFFF 0%, #F6F4EF 46%, #ECE9E1 100%);
 }
 @media (max-width: 1023px) { .sr-stage { height: calc(100dvh - 56px); } }
-.sr-stage::after { /* viñeteado sutil para profundidad cinematográfica */
+.sr-stage::after {
   content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 2;
   box-shadow: inset 0 0 220px 30px rgba(26,26,26,0.07);
 }
 
-.sr-row { position: absolute; inset: 0; display: flex; z-index: 0; }
-.sr-slot { position: relative; flex: 1; height: 100%; }
-.sr-slot-view { position: absolute; inset: 0; }
+.sr-hit { position: absolute; top: 0; bottom: 0; transform: translateX(-50%); z-index: 4; cursor: pointer; }
 
-.sr-cap-wrap { position: absolute; left: 0; right: 0; top: 13%; display: flex; justify-content: center; pointer-events: none; z-index: 3; }
-.sr-cap { position: absolute; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 0 18px; }
+.sr-cap-wrap { position: absolute; top: 13%; transform: translateX(-50%); display: flex; justify-content: center; pointer-events: none; z-index: 3; }
+.sr-cap { position: absolute; text-align: center; white-space: nowrap; display: flex; flex-direction: column; align-items: center; gap: 7px; }
 .sr-cap-eyebrow { font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: ${ACCENT}; font-weight: 600; }
-.sr-cap-title { font-size: 22px; font-weight: 300; color: #1A1A1A; letter-spacing: -0.02em; line-height: 1.15; }
+.sr-cap-title { font-size: 21px; font-weight: 300; color: #1A1A1A; letter-spacing: -0.02em; line-height: 1.15; }
 @media (max-width: 760px) { .sr-cap-title { font-size: 26px; } }
 .sr-cap-steady { opacity: 1; }
 .sr-cap-in  { animation: sr-cap-in 880ms cubic-bezier(.2,.7,.2,1) both; }
