@@ -66,7 +66,7 @@ export default function Showroom3DPage({ modelos }: { modelos: Modelo3D[] }) {
           <EmptyState onUpload={() => setUploadOpen(true)} />
         </div>
       ) : (
-        <ScrollGallery modelos={modelos} onOpen={setActive} onUpload={() => setUploadOpen(true)} />
+        <ScrollGallery modelos={modelos} onOpen={setActive} onUpload={() => setUploadOpen(true)} paused={!!active} />
       )}
 
       {active && (

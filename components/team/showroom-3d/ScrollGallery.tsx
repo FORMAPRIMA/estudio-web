@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { PerspectiveCamera, Environment, SoftShadows, useGLTF } from '@react-three/drei'
+import { PerspectiveCamera, Environment, ContactShadows, useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
 import { LIGHTING_PRESETS, DEFAULT_PRESET } from '@/lib/showroom'
 import type { LightingPreset, Modelo3D } from '@/lib/showroom'
@@ -47,11 +47,7 @@ function useNormalized(url: string) {
     root.position.z -= center.z
     root.position.y -= box.min.y
     root.traverse((o: any) => {
-      if (o.isMesh) {
-        o.castShadow = true
-        o.receiveShadow = true
-        if (o.geometry && !o.geometry.attributes.normal) o.geometry.computeVertexNormals()
-      }
+      if (o.isMesh && o.geometry && !o.geometry.attributes.normal) o.geometry.computeVertexNormals()
     })
     return { object: root, height: box.getSize(new THREE.Vector3()).y }
   }, [scene])
@@ -124,34 +120,23 @@ function Scene({
     if (p >= 1) onSettle()
   })
 
-  const span = FRAME.SEP * (slotCount - 1) + TARGET * 2
-
   return (
     <>
       <PerspectiveCamera ref={camRef} makeDefault fov={FRAME.FOV} position={camPos} />
 
-      {/* Penumbra suave (PCSS) como en el visor inmersivo */}
-      <SoftShadows size={64} samples={24} focus={0} />
-      <hemisphereLight args={['#ffffff', '#EDEAE2', 0.6]} />
-      {/* Luz clave que proyecta la sombra sobre el plano falso; ortho ancho para cubrir la fila */}
-      <directionalLight
-        castShadow
-        position={[-5, 8, 4.5]}
-        intensity={1.05}
-        shadow-mapSize={[2048, 2048]}
-        shadow-bias={-0.0002}
-        shadow-normalBias={0.025}
-      >
-        <orthographicCamera attach="shadow-camera" args={[-span / 2, span / 2, span / 2, -span / 2, 0.1, 40]} />
-      </directionalLight>
-      <directionalLight position={[5, 6, 4]} intensity={0.3} />
+      <hemisphereLight args={['#ffffff', '#EDEAE2', 0.7]} />
+      <directionalLight position={[3, 7, 5]} intensity={0.85} />
+      <directionalLight position={[-4, 3, -3]} intensity={0.3} />
       <Environment files={preset.environmentImage} environmentIntensity={preset.envIntensity} />
 
+      {/* Cada maqueta lleva su propia sombra de contacto DENTRO del grupo → se
+          desplaza con ella en el scroll (no se descuadra). */}
       {Array.from({ length: slotCount }, (_, i) => {
         const proj = modelos[fromStart + i]
         return proj ? (
           <group key={`o${i}`} ref={el => { outRefs.current[i] = el }} position={[xOf(i), 0, 0]}>
             <Suspense fallback={null}><Maqueta url={proj.glb_url} /></Suspense>
+            <ContactShadows position={[0, 0.01, 0]} scale={3.4} far={2.6} blur={2.6} opacity={preset.shadowOpacity} resolution={512} color="#1A1A1A" frames={Infinity} />
           </group>
         ) : null
       })}
@@ -160,15 +145,10 @@ function Scene({
         return proj ? (
           <group key={`i${i}`} ref={el => { inRefs.current[i] = el }} position={[xOf(i), -trans.dir * TRANS.ENTER_FROM, 0]}>
             <Suspense fallback={null}><Maqueta url={proj.glb_url} /></Suspense>
+            <ContactShadows position={[0, 0.01, 0]} scale={3.4} far={2.6} blur={2.6} opacity={preset.shadowOpacity} resolution={512} color="#1A1A1A" frames={Infinity} />
           </group>
         ) : null
       })}
-
-      {/* Suelo invisible que SOLO recibe la sombra → plano continuo con sombra proyectada */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
-        <planeGeometry args={[80, 80]} />
-        <shadowMaterial transparent opacity={preset.shadowOpacity} color="#000000" />
-      </mesh>
     </>
   )
 }
@@ -200,11 +180,12 @@ function useVisibleCount() {
 }
 
 export default function ScrollGallery({
-  modelos, onOpen, onUpload,
+  modelos, onOpen, onUpload, paused = false,
 }: {
   modelos: Modelo3D[]
   onOpen: (m: Modelo3D) => void
   onUpload: () => void
+  paused?: boolean
 }) {
   const N = modelos.length
   const visible = useVisibleCount()
@@ -224,14 +205,18 @@ export default function ScrollGallery({
   const preset = LIGHTING_PRESETS.find(p => p.id === presetId) ?? DEFAULT_PRESET
 
   // Posiciones X de las maquetas en pantalla (para textos y zonas de clic).
+  // ResizeObserver: realinea ante cualquier cambio de tamaño (incl. al volver del visor).
   useEffect(() => {
+    const el = stageRef.current
+    if (!el) return
     const recalc = () => {
-      const r = stageRef.current?.getBoundingClientRect()
-      if (r) setSlotX(slotScreenX(slotCount, r.width, r.height))
+      const r = el.getBoundingClientRect()
+      if (r.width) setSlotX(slotScreenX(slotCount, r.width, r.height))
     }
     recalc()
-    window.addEventListener('resize', recalc)
-    return () => window.removeEventListener('resize', recalc)
+    const ro = new ResizeObserver(recalc)
+    ro.observe(el)
+    return () => ro.disconnect()
   }, [slotCount])
 
   useEffect(() => { setPage(p => Math.min(p, pageCount - 1)) }, [pageCount])
@@ -294,7 +279,8 @@ export default function ScrollGallery({
 
       {/* Canvas único, transparente */}
       <Canvas
-        shadows
+        shadows={false}
+        frameloop={paused ? 'never' : 'always'}
         dpr={[1, 1.85]}
         gl={{ antialias: true, alpha: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: preset.exposure }}
         style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 1 }}
@@ -354,6 +340,7 @@ export default function ScrollGallery({
 const styles = `
 .sr-stage {
   position: relative; width: 100%; height: 100vh; overflow: hidden; user-select: none;
+  touch-action: none; overscroll-behavior: none;
   background: radial-gradient(90% 70% at 50% 6%, #FFFFFF 0%, #F6F4EF 46%, #ECE9E1 100%);
 }
 @media (max-width: 1023px) { .sr-stage { height: calc(100dvh - 56px); } }
