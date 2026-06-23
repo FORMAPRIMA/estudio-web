@@ -52,32 +52,22 @@ export default function Showroom3DPage({ modelos }: { modelos: Modelo3D[] }) {
     <div style={{ minHeight: '100%', background: '#F8F7F4' }}>
       <style>{styles}</style>
 
-      <div style={{ padding: '40px 48px', maxWidth: 1180, margin: '0 auto' }}>
-        {/* Cabecera */}
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 40, flexWrap: 'wrap', gap: 16 }}>
-          <div>
+      {/* Escaparate inmersivo a sangre completa (o estado vacío con cabecera) */}
+      {modelos.length === 0 ? (
+        <div style={{ padding: '40px 48px', maxWidth: 1180, margin: '0 auto' }}>
+          <div style={{ marginBottom: 40 }}>
             <p style={{ fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: '#1A1A1A80', marginBottom: 10 }}>
               Forma Prima · Showroom
             </p>
             <h1 style={{ fontSize: 34, fontWeight: 300, color: '#1A1A1A', margin: 0, letterSpacing: '-0.03em', lineHeight: 1 }}>
               Maquetas
             </h1>
-            <p style={{ fontSize: 13, color: '#1A1A1A70', marginTop: 12, fontWeight: 300, maxWidth: 460, lineHeight: 1.6 }}>
-              Explora las maquetas del estudio en 3D. Gira, acerca y descubre cada proyecto desde cualquier ángulo.
-            </p>
           </div>
-          <button onClick={() => setUploadOpen(true)} className="sr-btn-primary">
-            + Subir maqueta
-          </button>
-        </div>
-
-        {/* Galería */}
-        {modelos.length === 0 ? (
           <EmptyState onUpload={() => setUploadOpen(true)} />
-        ) : (
-          <ScrollGallery modelos={modelos} onOpen={setActive} />
-        )}
-      </div>
+        </div>
+      ) : (
+        <ScrollGallery modelos={modelos} onOpen={setActive} onUpload={() => setUploadOpen(true)} />
+      )}
 
       {active && (
         <ImmersiveViewer modelo={active} onClose={() => setActive(null)} />

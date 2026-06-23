@@ -2,36 +2,35 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { View, PerspectiveCamera, useGLTF } from '@react-three/drei'
+import { View, PerspectiveCamera, Environment, ContactShadows, useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
-import type { Modelo3D } from '@/lib/showroom'
+import { LIGHTING_PRESETS, DEFAULT_PRESET } from '@/lib/showroom'
+import type { LightingPreset, Modelo3D } from '@/lib/showroom'
 
 const ACCENT = '#D85A30'
 const TARGET = 2 // lado mayor del modelo normalizado (uds de mundo)
 
-// ── Calibración del escorzo (afinar viendo en vivo) ──────────────────────────
-const DESKTOP = {
-  MAX_ELEV: (15 * Math.PI) / 180, // escorzo vertical según posición en el scroll
-  MAX_AZIM: (16 * Math.PI) / 180, // escorzo lateral según columna
-  DIST: 4.0,
-  FOV: 32,
+// ── Calibración (afinar viendo en vivo) ──────────────────────────────────────
+const FRAME = {
+  FOV: 30,
+  DIST: 4.3,            // distancia cámara→maqueta
+  TARGET_Y: 0.72,       // punto al que mira la cámara (centro del encuadre)
+  PITCH: (7 * Math.PI) / 180,        // picada leve; azimut 0 = frontal
+  PARALLAX_AZ: (5 * Math.PI) / 180,  // giro máx. con el cursor (lateral)
+  PARALLAX_EL: (3 * Math.PI) / 180,  // giro máx. con el cursor (vertical)
+  IDLE: 0.018,          // amplitud de la respiración (flotar)
 }
-const MOBILE = {
-  DUR: 720,   // ms de la transición entre maquetas
-  UP: 3.4,    // cuánto sube la saliente hasta perderse por arriba
-  BACK: 1.1,  // cuánto retrocede en Z al salir
-  DOWN: 3.2,  // desde dónde entra la siguiente (por debajo)
-  CAM_Y: 1.32,
-  CAM_Z: 4.0,
-  LOOK_Y: 0.6,
-  FOV: 34,
-}
-
-function easeInOut(t: number) {
-  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
+const TRANS = {
+  DUR: 880,             // ms de la transición entre páginas
+  EXIT_UP: 3.8,         // cuánto sube la saliente hasta perderse
+  EXIT_BACK: 1.1,       // cuánto retrocede en Z al salir
+  ENTER_FROM: 3.8,      // desde dónde entra la siguiente
 }
 
-// Normaliza la maqueta: lado mayor = TARGET, base apoyada en y=0, centrada en XZ.
+const clamp01 = (t: number) => Math.max(0, Math.min(1, t))
+const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2)
+
+// Normaliza: lado mayor = TARGET, base en y=0, centrada en XZ.
 function useNormalized(url: string) {
   const { scene } = useGLTF(url, '/draco/')
   return useMemo(() => {
@@ -40,327 +39,350 @@ function useNormalized(url: string) {
     const size = box.getSize(new THREE.Vector3())
     const maxDim = Math.max(size.x, size.y, size.z) || 1
     root.scale.setScalar(TARGET / maxDim)
-
     box = new THREE.Box3().setFromObject(root)
     const center = box.getCenter(new THREE.Vector3())
     root.position.x -= center.x
     root.position.z -= center.z
     root.position.y -= box.min.y
-
     root.traverse((o: any) => {
       if (o.isMesh && o.geometry && !o.geometry.attributes.normal) o.geometry.computeVertexNormals()
     })
-    return { object: root, height: box.getSize(new THREE.Vector3()).y }
+    return root
   }, [scene])
 }
 
-function Lights() {
-  return (
-    <>
-      <hemisphereLight args={['#ffffff', '#EDEAE2', 0.9]} />
-      <directionalLight position={[4, 6, 4]} intensity={1.2} />
-      <directionalLight position={[-4, 2, -3]} intensity={0.4} />
-    </>
-  )
-}
-
-// ── Escena de un thumbnail (desktop): cámara dirigida por scroll + columna ────
-
-function ThumbScene({
-  url, col, track,
-}: {
-  url: string
-  col: number
-  track: React.MutableRefObject<HTMLDivElement | null>
-}) {
-  const { object, height } = useNormalized(url)
-  const targetY = height / 2
-  const camRef = useRef<THREE.PerspectiveCamera>(null)
-
-  useFrame(() => {
-    const el = track.current
-    const cam = camRef.current
-    if (!el || !cam) return
-    const r = el.getBoundingClientRect()
-    const vh = window.innerHeight || 1
-
-    // Centro vertical de la tarjeta en el viewport: 0 = arriba, 1 = abajo.
-    let cy = (r.top + r.height / 2) / vh
-    cy = Math.max(0, Math.min(1, cy))
-
-    // Abajo del viewport → cámara por encima (picado). Arriba → contrapicado.
-    const elev = (cy - 0.5) * 2 * DESKTOP.MAX_ELEV
-    // Columna izq. (col 0) se ve desde la derecha; der. (col 2) desde la izquierda.
-    const az = (1 - col) * DESKTOP.MAX_AZIM
-
-    const R = DESKTOP.DIST
-    const cosE = Math.cos(elev)
-    cam.position.set(R * cosE * Math.sin(az), targetY + R * Math.sin(elev), R * cosE * Math.cos(az))
-    cam.lookAt(0, targetY, 0)
-  })
-
-  return (
-    <>
-      <PerspectiveCamera ref={camRef} makeDefault fov={DESKTOP.FOV} />
-      <Lights />
-      <primitive object={object} />
-    </>
-  )
-}
-
-// ── Rejilla desktop: 3 columnas, un único Canvas compartido ───────────────────
-
-function DesktopGrid({ modelos, onOpen }: { modelos: Modelo3D[]; onOpen: (m: Modelo3D) => void }) {
-  const refs = useMemo(
-    () => Array.from({ length: modelos.length }, () => ({ current: null as HTMLDivElement | null })),
-    [modelos.length]
-  )
-  const [visible, setVisible] = useState<boolean[]>(() => modelos.map(() => false))
-
-  // Monta el contenido 3D de cada tarjeta solo cuando se acerca al viewport.
-  useEffect(() => {
-    const io = new IntersectionObserver(
-      entries => {
-        setVisible(prev => {
-          let next = prev
-          for (const e of entries) {
-            if (!e.isIntersecting) continue
-            const idx = Number((e.target as HTMLElement).dataset.idx)
-            if (!next[idx]) { next = next === prev ? [...prev] : next; next[idx] = true }
-          }
-          return next
-        })
-      },
-      { rootMargin: '300px' }
-    )
-    refs.forEach(r => r.current && io.observe(r.current))
-    return () => io.disconnect()
-  }, [refs])
-
-  return (
-    <>
-      <div className="sr-grid-3">
-        {modelos.map((m, i) => (
-          <div key={m.id} className="sr-card" onClick={() => onOpen(m)}>
-            <div className="sr-card-stage">
-              <div
-                className="sr-stage-view"
-                data-idx={i}
-                ref={el => { refs[i].current = el }}
-              />
-              <div className="sr-card-hint">Ver maqueta →</div>
-            </div>
-            <div style={{ padding: '16px 18px 18px' }}>
-              {m.proyecto && (
-                <p style={{ fontSize: 9.5, letterSpacing: '0.14em', textTransform: 'uppercase', color: ACCENT, fontWeight: 600, marginBottom: 6 }}>
-                  {m.proyecto}
-                </p>
-              )}
-              <p style={{ fontSize: 15, fontWeight: 400, color: '#1A1A1A', letterSpacing: '-0.01em', lineHeight: 1.3 }}>{m.nombre}</p>
-              {m.descripcion && (
-                <p style={{ fontSize: 12, color: '#1A1A1A70', fontWeight: 300, lineHeight: 1.5, marginTop: 6, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                  {m.descripcion}
-                </p>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Canvas único, fijo y transparente, sobre la rejilla. Cada View recorta su
-          región siguiendo a la tarjeta (getBoundingClientRect cada frame). */}
-      <Canvas
-        shadows={false}
-        dpr={[1, 1.75]}
-        gl={{ antialias: true, alpha: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.05 }}
-        style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 1 }}
-      >
-        {modelos.map((m, i) =>
-          visible[i] ? (
-            <View key={m.id} track={refs[i] as any}>
-              <Suspense fallback={null}>
-                <ThumbScene url={m.glb_url} col={i % 3} track={refs[i]} />
-              </Suspense>
-            </View>
-          ) : null
-        )}
-      </Canvas>
-    </>
-  )
-}
-
-// ── Móvil: una maqueta a pantalla, swipe paginado (estilo Stories) ────────────
-
-function StoryModel({ url }: { url: string }) {
-  const { object } = useNormalized(url)
+function Maqueta({ url }: { url: string }) {
+  const object = useNormalized(url)
   return <primitive object={object} />
 }
 
-function StoriesStage({
-  modelos, index, animRef, onSettle,
+type Trans = { fromStart: number; toStart: number; toPage: number; dir: number; start: number } | null
+
+// ── Escena de un slot (un viewport frontal) ───────────────────────────────────
+
+function SlotScene({
+  slot, modelos, baseStart, trans, preset, parallax,
 }: {
+  slot: number
   modelos: Modelo3D[]
-  index: number
-  animRef: React.MutableRefObject<{ active: boolean; from: number; to: number; start: number }>
-  onSettle: (to: number) => void
+  baseStart: number
+  trans: Trans
+  preset: LightingPreset
+  parallax: React.MutableRefObject<{ x: number; y: number }>
 }) {
   const camRef = useRef<THREE.PerspectiveCamera>(null)
-  const fromG = useRef<THREE.Group>(null)
-  const toG = useRef<THREE.Group>(null)
+  const outRef = useRef<THREE.Group>(null)
+  const inRef = useRef<THREE.Group>(null)
 
-  const anim = animRef.current
-  const fromIdx = anim.active ? anim.from : index
-  const toIdx = anim.active ? anim.to : null
+  const fromStart = trans ? trans.fromStart : baseStart
+  const outProj = modelos[fromStart + slot]
+  const inProj = trans ? modelos[trans.toStart + slot] : undefined
 
-  useFrame(() => {
-    camRef.current?.lookAt(0, MOBILE.LOOK_Y, 0)
-    const a = animRef.current
-    if (!a.active) {
-      if (fromG.current) fromG.current.position.set(0, 0, 0)
+  useFrame(state => {
+    const cam = camRef.current
+    if (cam) {
+      const az = parallax.current.x * FRAME.PARALLAX_AZ
+      const el = FRAME.PITCH + parallax.current.y * FRAME.PARALLAX_EL
+      const cosE = Math.cos(el)
+      cam.position.set(
+        FRAME.DIST * cosE * Math.sin(az),
+        FRAME.TARGET_Y + FRAME.DIST * Math.sin(el),
+        FRAME.DIST * cosE * Math.cos(az)
+      )
+      cam.lookAt(0, FRAME.TARGET_Y, 0)
+    }
+
+    if (!trans) {
+      // Respiración: flotar muy levemente.
+      if (outRef.current) outRef.current.position.set(0, Math.sin(state.clock.elapsedTime * 0.9 + slot) * FRAME.IDLE, 0)
       return
     }
-    const p = easeInOut(Math.min(1, (performance.now() - a.start) / MOBILE.DUR))
-    const dir = a.to > a.from ? 1 : -1
-    if (fromG.current) {
-      // Saliente: se va por arriba (next) o por abajo (prev) y retrocede en Z.
-      fromG.current.position.set(0, dir * p * MOBILE.UP, -p * MOBILE.BACK)
-    }
-    if (toG.current) {
-      // Entrante: aparece desde el borde opuesto y frena en el encuadre fijo.
-      toG.current.position.set(0, dir * (1 - p) * -MOBILE.DOWN, 0)
-    }
-    if (p >= 1) onSettle(a.to)
+    const p = easeInOut(clamp01((performance.now() - trans.start) / TRANS.DUR))
+    const dir = trans.dir
+    if (outRef.current) outRef.current.position.set(0, dir * p * TRANS.EXIT_UP, -p * TRANS.EXIT_BACK)
+    if (inRef.current) inRef.current.position.set(0, -dir * (1 - p) * TRANS.ENTER_FROM, 0)
   })
 
   return (
     <>
-      <PerspectiveCamera ref={camRef} makeDefault fov={MOBILE.FOV} position={[0, MOBILE.CAM_Y, MOBILE.CAM_Z]} />
-      <Lights />
-      <group ref={fromG}>
-        <Suspense fallback={null}>
-          <StoryModel url={modelos[fromIdx].glb_url} />
-        </Suspense>
-      </group>
-      {toIdx != null && (
-        <group ref={toG}>
-          <Suspense fallback={null}>
-            <StoryModel url={modelos[toIdx].glb_url} />
-          </Suspense>
+      <PerspectiveCamera ref={camRef} makeDefault fov={FRAME.FOV} />
+      <hemisphereLight args={['#ffffff', '#EDEAE2', 0.7]} />
+      <directionalLight position={[3, 6, 4]} intensity={0.85} />
+      <Environment files={preset.environmentImage} environmentIntensity={preset.envIntensity} />
+
+      {outProj && (
+        <group ref={outRef}>
+          <Suspense fallback={null}><Maqueta url={outProj.glb_url} /></Suspense>
         </group>
       )}
+      {inProj && (
+        <group ref={inRef}>
+          <Suspense fallback={null}><Maqueta url={inProj.glb_url} /></Suspense>
+        </group>
+      )}
+
+      <ContactShadows
+        position={[0, 0.005, 0]}
+        scale={3.2}
+        far={2.4}
+        blur={2.8}
+        opacity={preset.shadowOpacity}
+        resolution={512}
+        color="#1A1A1A"
+        frames={Infinity}
+      />
     </>
   )
 }
 
-function MobileStories({ modelos, onOpen }: { modelos: Modelo3D[]; onOpen: (m: Modelo3D) => void }) {
-  const [index, setIndex] = useState(0)
-  const animRef = useRef({ active: false, from: 0, to: 0, start: 0 })
-  const touchY = useRef(0)
+function TransitionDriver({ trans, onSettle }: { trans: Trans; onSettle: () => void }) {
+  useFrame(() => {
+    if (trans && performance.now() - trans.start >= TRANS.DUR) onSettle()
+  })
+  return null
+}
 
-  function go(dir: number) {
-    if (animRef.current.active) return
-    const to = index + dir
-    if (to < 0 || to >= modelos.length) return
-    animRef.current = { active: true, from: index, to, start: performance.now() }
-  }
+// ── Tipografía flotante de cada slot (crossfade en transición) ────────────────
 
-  function onSettle(to: number) {
-    animRef.current.active = false
-    setIndex(to)
-  }
-
-  const m = modelos[index]
-
+function Caption({ proj, variant }: { proj?: Modelo3D; variant: 'steady' | 'in' | 'out' }) {
+  if (!proj) return null
   return (
-    <div
-      className="sr-stories"
-      onTouchStart={e => { touchY.current = e.touches[0].clientY }}
-      onTouchEnd={e => {
-        const dy = touchY.current - e.changedTouches[0].clientY
-        if (dy > 45) go(1)
-        else if (dy < -45) go(-1)
-      }}
-      onWheel={e => { if (Math.abs(e.deltaY) > 12) go(e.deltaY > 0 ? 1 : -1) }}
-    >
-      <Canvas
-        shadows={false}
-        dpr={[1, 2]}
-        gl={{ antialias: true, alpha: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.05 }}
-        style={{ width: '100%', height: '100%', touchAction: 'none' }}
-      >
-        <StoriesStage modelos={modelos} index={index} animRef={animRef} onSettle={onSettle} />
-      </Canvas>
-
-      {/* Indicador de progreso */}
-      <div className="sr-dots">
-        {modelos.map((mm, i) => (
-          <span key={mm.id} className={`sr-dot ${i === index ? 'is-on' : ''}`} />
-        ))}
-      </div>
-
-      {/* Info + abrir */}
-      <div className="sr-story-info">
-        {m.proyecto && (
-          <span style={{ fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: ACCENT, fontWeight: 600 }}>{m.proyecto}</span>
-        )}
-        <div style={{ fontSize: 19, fontWeight: 400, color: '#1A1A1A', letterSpacing: '-0.01em', marginTop: 3 }}>{m.nombre}</div>
-        <button className="sr-story-open" onClick={() => onOpen(m)}>Ver en detalle →</button>
-      </div>
-
-      <div className="sr-story-hint">Desliza ↑</div>
+    <div className={`sr-cap sr-cap-${variant}`}>
+      {proj.proyecto && <span className="sr-cap-eyebrow">{proj.proyecto}</span>}
+      <span className="sr-cap-title">{proj.nombre}</span>
     </div>
   )
 }
 
-// ── Selector responsive ───────────────────────────────────────────────────────
+// ── Componente principal ──────────────────────────────────────────────────────
 
-function useIsMobile() {
-  const [mobile, setMobile] = useState(false)
+function useVisibleCount() {
+  const [n, setN] = useState(3)
   useEffect(() => {
-    const mq = window.matchMedia('(max-width: 760px)')
-    const on = () => setMobile(mq.matches)
-    on()
-    mq.addEventListener('change', on)
-    return () => mq.removeEventListener('change', on)
+    const calc = () => {
+      const w = window.innerWidth
+      setN(w < 760 ? 1 : w < 1024 ? 2 : 3)
+    }
+    calc()
+    window.addEventListener('resize', calc)
+    return () => window.removeEventListener('resize', calc)
   }, [])
-  return mobile
+  return n
 }
 
-export default function ScrollGallery({ modelos, onOpen }: { modelos: Modelo3D[]; onOpen: (m: Modelo3D) => void }) {
-  const isMobile = useIsMobile()
+export default function ScrollGallery({
+  modelos, onOpen, onUpload,
+}: {
+  modelos: Modelo3D[]
+  onOpen: (m: Modelo3D) => void
+  onUpload: () => void
+}) {
+  const N = modelos.length
+  const visible = useVisibleCount()
+  const slotCount = Math.min(visible, N)
+  const maxStart = Math.max(0, N - slotCount)
+  const pageCount = Math.max(1, Math.ceil(N / slotCount))
+  const startForPage = (p: number) => Math.min(p * slotCount, maxStart)
+
+  const [page, setPage] = useState(0)
+  const [presetId, setPresetId] = useState(DEFAULT_PRESET.id)
+  const [trans, setTrans] = useState<Trans>(null)
+  const busy = useRef(false)
+  const parallax = useRef({ x: 0, y: 0 })
+  const stageRef = useRef<HTMLDivElement>(null)
+
+  const preset = LIGHTING_PRESETS.find(p => p.id === presetId) ?? DEFAULT_PRESET
+
+  // Refs de los divs que cada View sigue. Se rehacen si cambia el nº de slots.
+  const refs = useMemo(
+    () => Array.from({ length: slotCount }, () => ({ current: null as HTMLDivElement | null })),
+    [slotCount]
+  )
+
+  // Resetea la página si el nº de slots cambió y se queda fuera de rango.
+  useEffect(() => { setPage(p => Math.min(p, pageCount - 1)) }, [pageCount])
+
+  const currentStart = startForPage(page)
+
+  function navigate(dir: number) {
+    if (busy.current || trans) return
+    const to = page + dir
+    if (to < 0 || to >= pageCount) return
+    busy.current = true
+    setTrans({ fromStart: currentStart, toStart: startForPage(to), toPage: to, dir, start: performance.now() })
+  }
+
+  function onSettle() {
+    if (!trans) return
+    setPage(trans.toPage)
+    setTrans(null)
+    busy.current = false
+  }
+
+  // Entradas: rueda, teclado y táctil.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowRight') navigate(1)
+      else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') navigate(-1)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
+  const touchY = useRef(0)
+
   return (
-    <>
+    <div
+      ref={stageRef}
+      className="sr-stage"
+      onWheel={e => { if (Math.abs(e.deltaY) > 8) navigate(e.deltaY > 0 ? 1 : -1) }}
+      onTouchStart={e => { touchY.current = e.touches[0].clientY }}
+      onTouchEnd={e => {
+        const dy = touchY.current - e.changedTouches[0].clientY
+        if (dy > 45) navigate(1)
+        else if (dy < -45) navigate(-1)
+      }}
+      onMouseMove={e => {
+        const r = stageRef.current?.getBoundingClientRect()
+        if (!r) return
+        parallax.current = {
+          x: ((e.clientX - r.left) / r.width) * 2 - 1,
+          y: -(((e.clientY - r.top) / r.height) * 2 - 1),
+        }
+      }}
+      onMouseLeave={() => { parallax.current = { x: 0, y: 0 } }}
+    >
       <style>{styles}</style>
-      {isMobile ? <MobileStories modelos={modelos} onOpen={onOpen} /> : <DesktopGrid modelos={modelos} onOpen={onOpen} />}
-    </>
+
+      {/* Fila de slots (seamless). Cada div lo sigue un View del canvas. */}
+      <div className="sr-row">
+        {Array.from({ length: slotCount }, (_, slot) => {
+          const cur = modelos[currentStart + slot]
+          const outProj = trans ? modelos[trans.fromStart + slot] : undefined
+          const inProj = trans ? modelos[trans.toStart + slot] : undefined
+          return (
+            <div
+              key={slot}
+              className="sr-slot"
+              style={{ cursor: cur ? 'pointer' : 'default' }}
+              onClick={() => { if (!trans && cur) onOpen(cur) }}
+            >
+              <div className="sr-slot-view" ref={el => { refs[slot].current = el }} />
+              <div className="sr-cap-wrap">
+                {trans ? (
+                  <>
+                    <Caption proj={outProj} variant="out" />
+                    <Caption proj={inProj} variant="in" />
+                  </>
+                ) : (
+                  <Caption proj={cur} variant="steady" />
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Canvas único, transparente, sobre los slots */}
+      <Canvas
+        shadows={false}
+        dpr={[1, 1.85]}
+        gl={{ antialias: true, alpha: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: preset.exposure }}
+        style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 1 }}
+      >
+        {refs.map((r, slot) => (
+          <View key={slot} track={r as any}>
+            <SlotScene slot={slot} modelos={modelos} baseStart={currentStart} trans={trans} preset={preset} parallax={parallax} />
+          </View>
+        ))}
+        <TransitionDriver trans={trans} onSettle={onSettle} />
+      </Canvas>
+
+      {/* Controles flotantes — arriba */}
+      <div className="sr-top">
+        <div className="sr-brand">
+          <span className="sr-brand-eyebrow">Forma Prima</span>
+          <span className="sr-brand-title">Proyectos</span>
+        </div>
+        <div className="sr-top-right">
+          <div className="sr-seg">
+            {LIGHTING_PRESETS.map(p => (
+              <button key={p.id} onClick={() => setPresetId(p.id)} className={`sr-seg-btn ${p.id === presetId ? 'is-active' : ''}`}>
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <button onClick={onUpload} className="sr-upload">+ Subir</button>
+        </div>
+      </div>
+
+      {/* Indicador de navegación — abajo */}
+      {pageCount > 1 && (
+        <div className="sr-nav">
+          <button className="sr-nav-arrow" disabled={page === 0} onClick={() => navigate(-1)} aria-label="Anterior">↑</button>
+          <div className="sr-nav-count">
+            <span className="sr-nav-cur">{String(page + 1).padStart(2, '0')}</span>
+            <span className="sr-nav-sep">/</span>
+            <span>{String(pageCount).padStart(2, '0')}</span>
+          </div>
+          <button className="sr-nav-arrow" disabled={page === pageCount - 1} onClick={() => navigate(1)} aria-label="Siguiente">↓</button>
+        </div>
+      )}
+      <div className="sr-explore-hint">Desliza para explorar</div>
+    </div>
   )
 }
 
 const styles = `
-.sr-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
-@media (max-width: 980px) { .sr-grid-3 { grid-template-columns: repeat(2, 1fr); } }
+.sr-stage {
+  position: relative; width: 100%; height: 100vh; overflow: hidden; user-select: none;
+  background:
+    radial-gradient(90% 70% at 50% 6%, #FFFFFF 0%, #F6F4EF 46%, #ECE9E1 100%);
+}
+@media (max-width: 1023px) { .sr-stage { height: calc(100dvh - 56px); } }
+.sr-stage::after { /* viñeteado sutil para profundidad cinematográfica */
+  content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 2;
+  box-shadow: inset 0 0 220px 30px rgba(26,26,26,0.07);
+}
 
-.sr-card-stage { position: relative; }
-.sr-stage-view { position: absolute; inset: 0; }
-.sr-card-hint { z-index: 2; }
+.sr-row { position: absolute; inset: 0; display: flex; z-index: 0; }
+.sr-slot { position: relative; flex: 1; height: 100%; }
+.sr-slot-view { position: absolute; inset: 0; }
 
-.sr-stories {
-  position: relative; width: 100%; height: calc(100vh - 220px); min-height: 460px;
-  border-radius: 14px; overflow: hidden;
-  background: radial-gradient(120% 100% at 50% 12%, #FFFFFF 0%, #F1EFE8 100%);
-  border: 1px solid #ECEAE3; touch-action: none; user-select: none;
-}
-.sr-dots { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; }
-.sr-dot { width: 6px; height: 6px; border-radius: 50%; background: #1A1A1A25; transition: all .3s ease; }
-.sr-dot.is-on { background: ${ACCENT}; width: 18px; border-radius: 4px; }
-.sr-story-info { position: absolute; left: 24px; bottom: 26px; max-width: 80%; }
-.sr-story-open {
-  margin-top: 12px; background: #1A1A1A; color: #fff; border: none; border-radius: 100px;
-  padding: 9px 18px; font-size: 12px; cursor: pointer; font-family: inherit;
-}
-.sr-story-hint {
-  position: absolute; right: 22px; bottom: 30px; font-size: 10px; letter-spacing: .14em;
-  text-transform: uppercase; color: #1A1A1A55; animation: sr-bob 1.8s ease-in-out infinite;
-}
-@keyframes sr-bob { 0%,100% { transform: translateY(0); opacity: .55; } 50% { transform: translateY(-5px); opacity: 1; } }
+.sr-cap-wrap { position: absolute; left: 0; right: 0; top: 13%; display: flex; justify-content: center; pointer-events: none; z-index: 3; }
+.sr-cap { position: absolute; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 0 18px; }
+.sr-cap-eyebrow { font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: ${ACCENT}; font-weight: 600; }
+.sr-cap-title { font-size: 22px; font-weight: 300; color: #1A1A1A; letter-spacing: -0.02em; line-height: 1.15; }
+@media (max-width: 760px) { .sr-cap-title { font-size: 26px; } }
+.sr-cap-steady { opacity: 1; }
+.sr-cap-in  { animation: sr-cap-in 880ms cubic-bezier(.2,.7,.2,1) both; }
+.sr-cap-out { animation: sr-cap-out 880ms cubic-bezier(.4,0,.2,1) both; }
+@keyframes sr-cap-in  { 0%,40% { opacity: 0; transform: translateY(14px); } 100% { opacity: 1; transform: none; } }
+@keyframes sr-cap-out { 0% { opacity: 1; } 60%,100% { opacity: 0; transform: translateY(-10px); } }
+
+.sr-top { position: absolute; top: 0; left: 0; right: 0; z-index: 5; display: flex; justify-content: space-between; align-items: flex-start; padding: 24px 30px; pointer-events: none; }
+.sr-top > * { pointer-events: auto; }
+.sr-brand { display: flex; flex-direction: column; gap: 3px; }
+.sr-brand-eyebrow { font-size: 9.5px; letter-spacing: 0.22em; text-transform: uppercase; color: #1A1A1A70; font-weight: 600; }
+.sr-brand-title { font-size: 16px; font-weight: 400; color: #1A1A1A; letter-spacing: -0.01em; }
+.sr-top-right { display: flex; align-items: center; gap: 10px; }
+
+.sr-seg { display: flex; gap: 2px; padding: 5px; border-radius: 100px; background: rgba(255,255,255,.6); backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,.8); box-shadow: 0 10px 30px -16px rgba(26,26,26,.5); }
+.sr-seg-btn { border: none; background: transparent; color: #1A1A1A80; font-size: 11.5px; padding: 7px 14px; border-radius: 100px; cursor: pointer; transition: all .2s ease; white-space: nowrap; font-family: inherit; }
+.sr-seg-btn:hover { color: #1A1A1A; }
+.sr-seg-btn.is-active { background: #1A1A1A; color: #fff; }
+.sr-upload { background: ${ACCENT}; color: #fff; border: none; border-radius: 100px; padding: 10px 18px; font-size: 12px; font-weight: 500; cursor: pointer; font-family: inherit; box-shadow: 0 10px 26px -12px ${ACCENT}; transition: filter .2s, transform .2s; }
+.sr-upload:hover { filter: brightness(1.06); transform: translateY(-1px); }
+
+.sr-nav { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 5; display: flex; align-items: center; gap: 16px; padding: 8px 10px; border-radius: 100px; background: rgba(255,255,255,.6); backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,.8); box-shadow: 0 14px 36px -18px rgba(26,26,26,.5); }
+.sr-nav-arrow { width: 34px; height: 34px; border-radius: 50%; border: none; background: transparent; color: #1A1A1A; font-size: 15px; cursor: pointer; transition: all .2s; line-height: 1; }
+.sr-nav-arrow:hover:not(:disabled) { background: #1A1A1A; color: #fff; }
+.sr-nav-arrow:disabled { opacity: .25; cursor: default; }
+.sr-nav-count { font-size: 12px; letter-spacing: .1em; color: #1A1A1A80; font-variant-numeric: tabular-nums; }
+.sr-nav-cur { color: #1A1A1A; font-weight: 600; }
+.sr-nav-sep { margin: 0 5px; color: #1A1A1A40; }
+
+.sr-explore-hint { position: absolute; bottom: 34px; right: 30px; z-index: 5; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #1A1A1A45; animation: sr-bob 2s ease-in-out infinite; }
+@media (max-width: 760px) { .sr-explore-hint { display: none; } }
+@keyframes sr-bob { 0%,100% { opacity: .45; } 50% { opacity: 1; } }
 `
