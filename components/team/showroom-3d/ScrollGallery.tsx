@@ -1,8 +1,8 @@
 'use client'
 
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
-import { PerspectiveCamera, Environment, useGLTF } from '@react-three/drei'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { PerspectiveCamera, Environment, Html, useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
 import { LIGHTING_PRESETS, DEFAULT_PRESET } from '@/lib/showroom'
 import type { LightingPreset, Modelo3D } from '@/lib/showroom'
@@ -64,7 +64,14 @@ function useNormalized(url: string) {
 // Maqueta PLANA, apoyada en y=0 (el efecto inclinado lo da el picado de la cámara).
 function Maqueta({ url }: { url: string }) {
   const { object } = useNormalized(url)
+  const invalidate = useThree(s => s.invalidate)
+  // En frameloop "demand", forzar un render al terminar de cargar el modelo.
+  useEffect(() => { invalidate() }, [object, invalidate])
   return <primitive object={object} />
+}
+
+function SlotLoader() {
+  return <Html center><div className="sr-slot-loader" /></Html>
 }
 
 // Sombra de contacto "falsa": una mancha radial suave bajo cada maqueta. Es
@@ -130,8 +137,6 @@ function Scene({
   const inMats = useRef<(THREE.Material | null)[]>([])
   const center = (slotCount - 1) / 2
   const xOf = (i: number) => (i - center) * FRAME.SEP
-  const spin = useRef(0)
-  const SPIN_SPEED = 0.12 // rad/s — giro lento en reposo (~50s por vuelta)
 
   const fromStart = trans ? trans.fromStart : currentStart
 
@@ -145,16 +150,12 @@ function Scene({
   const FADE = 1.8
   const fade = (y: number) => clamp01(1 - Math.abs(y) / FADE)
 
-  useFrame((_, delta) => {
+  useFrame(() => {
     camRef.current?.lookAt(0, FRAME.LOOK_Y, 0)
     const base = preset.shadowOpacity
-    // Giro lento solo en reposo; durante la transición se congela y retoma al aterrizar.
-    if (!trans) spin.current += delta * SPIN_SPEED
-    const a = spin.current
     if (!trans) {
       for (let i = 0; i < slotCount; i++) {
-        const g = outRefs.current[i]
-        if (g) { g.position.set(xOf(i), 0, 0); g.rotation.y = a }
+        outRefs.current[i]?.position.set(xOf(i), 0, 0)
         if (outMats.current[i]) outMats.current[i]!.opacity = base
       }
       return
@@ -163,12 +164,10 @@ function Scene({
     const dir = trans.dir
     for (let i = 0; i < slotCount; i++) {
       const oy = dir * p * TRANS.EXIT_UP
-      const og = outRefs.current[i]
-      if (og) { og.position.set(xOf(i), oy, -p * TRANS.EXIT_BACK); og.rotation.y = a }
+      outRefs.current[i]?.position.set(xOf(i), oy, -p * TRANS.EXIT_BACK)
       if (outMats.current[i]) outMats.current[i]!.opacity = base * fade(oy)
       const iy = -dir * (1 - p) * TRANS.ENTER_FROM
-      const ig = inRefs.current[i]
-      if (ig) { ig.position.set(xOf(i), iy, 0); ig.rotation.y = a }
+      inRefs.current[i]?.position.set(xOf(i), iy, 0)
       if (inMats.current[i]) inMats.current[i]!.opacity = base * fade(iy)
     }
     if (p >= 1) onSettle()
@@ -188,8 +187,10 @@ function Scene({
         const proj = modelos[fromStart + i]
         return proj ? (
           <group key={`o${i}`} ref={el => { outRefs.current[i] = el }} position={[xOf(i), 0, 0]}>
-            <Suspense fallback={null}><Maqueta url={proj.glb_url} /></Suspense>
-            <ShadowBlob opacity={preset.shadowOpacity} matRef={m => { outMats.current[i] = m }} size={blobSize} />
+            <Suspense fallback={<SlotLoader />}>
+              <Maqueta url={proj.glb_url} />
+              <ShadowBlob opacity={preset.shadowOpacity} matRef={m => { outMats.current[i] = m }} size={blobSize} />
+            </Suspense>
           </group>
         ) : null
       })}
@@ -197,8 +198,10 @@ function Scene({
         const proj = modelos[trans.toStart + i]
         return proj ? (
           <group key={`i${i}`} ref={el => { inRefs.current[i] = el }} position={[xOf(i), -trans.dir * TRANS.ENTER_FROM, 0]}>
-            <Suspense fallback={null}><Maqueta url={proj.glb_url} /></Suspense>
-            <ShadowBlob opacity={preset.shadowOpacity} matRef={m => { inMats.current[i] = m }} size={blobSize} />
+            <Suspense fallback={<SlotLoader />}>
+              <Maqueta url={proj.glb_url} />
+              <ShadowBlob opacity={preset.shadowOpacity} matRef={m => { inMats.current[i] = m }} size={blobSize} />
+            </Suspense>
           </group>
         ) : null
       })}
@@ -279,17 +282,22 @@ export default function ScrollGallery({
 
   // Precarga (en segundo plano) los GLB de las páginas vecinas → al hacer scroll
   // la maqueta ya está en caché y no se traba. useGLTF cachea por URL.
+  // Se RETRASA para que la página visible cargue primero (no competir por ancho de
+  // banda, clave en móvil). Solo precarga la página siguiente (la más probable).
   useEffect(() => {
-    const warm = (p: number) => {
-      if (p < 0 || p >= pageCount) return
-      const s = startForPage(p)
-      for (let i = 0; i < slotCount; i++) {
-        const u = modelos[s + i]?.glb_url
-        if (u) useGLTF.preload(u, '/draco/')
+    const t = setTimeout(() => {
+      const warm = (p: number) => {
+        if (p < 0 || p >= pageCount) return
+        const s = startForPage(p)
+        for (let i = 0; i < slotCount; i++) {
+          const u = modelos[s + i]?.glb_url
+          if (u) useGLTF.preload(u, '/draco/')
+        }
       }
-    }
-    warm(page + 1)
-    warm(page - 1)
+      warm(page + 1)
+      warm(page - 1)
+    }, 1500)
+    return () => clearTimeout(t)
   }, [page, slotCount, pageCount, modelos])
 
   function navigate(dir: number) {
@@ -349,7 +357,7 @@ export default function ScrollGallery({
       {/* Canvas único, transparente */}
       <Canvas
         shadows={false}
-        frameloop={paused ? 'never' : 'always'}
+        frameloop={paused ? 'never' : trans ? 'always' : 'demand'}
         dpr={isMobile ? [1, 1.4] : [1, 1.85]}
         gl={{ antialias: true, alpha: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: preset.exposure }}
         style={{
@@ -423,6 +431,9 @@ const styles = `
 }
 
 .sr-hit { position: absolute; top: 0; bottom: 0; transform: translateX(-50%); z-index: 4; cursor: pointer; }
+
+.sr-slot-loader { width: 28px; height: 28px; border-radius: 50%; border: 2px solid rgba(26,26,26,.12); border-top-color: ${ACCENT}; animation: sr-spin .8s linear infinite; }
+@keyframes sr-spin { to { transform: rotate(360deg); } }
 
 .sr-cap-wrap { position: absolute; top: 13%; transform: translateX(-50%); display: flex; justify-content: center; pointer-events: none; z-index: 3; }
 .sr-cap { position: absolute; text-align: center; white-space: nowrap; display: flex; flex-direction: column; align-items: center; gap: 7px; }
