@@ -90,7 +90,7 @@ function shadowTexture() {
 function ShadowBlob({ opacity, matRef, size }: { opacity: number; matRef: (m: THREE.Material | null) => void; size: [number, number] }) {
   const tex = useMemo(() => shadowTexture(), [])
   return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.012, 0.3]}>
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.012, 0]}>
       <planeGeometry args={size} />
       <meshBasicMaterial ref={matRef} map={tex} transparent opacity={opacity} depthWrite={false} toneMapped={false} />
     </mesh>
@@ -130,6 +130,8 @@ function Scene({
   const inMats = useRef<(THREE.Material | null)[]>([])
   const center = (slotCount - 1) / 2
   const xOf = (i: number) => (i - center) * FRAME.SEP
+  const spin = useRef(0)
+  const SPIN_SPEED = 0.12 // rad/s — giro lento en reposo (~50s por vuelta)
 
   const fromStart = trans ? trans.fromStart : currentStart
 
@@ -143,12 +145,16 @@ function Scene({
   const FADE = 1.8
   const fade = (y: number) => clamp01(1 - Math.abs(y) / FADE)
 
-  useFrame(() => {
+  useFrame((_, delta) => {
     camRef.current?.lookAt(0, FRAME.LOOK_Y, 0)
     const base = preset.shadowOpacity
+    // Giro lento solo en reposo; durante la transición se congela y retoma al aterrizar.
+    if (!trans) spin.current += delta * SPIN_SPEED
+    const a = spin.current
     if (!trans) {
       for (let i = 0; i < slotCount; i++) {
-        outRefs.current[i]?.position.set(xOf(i), 0, 0)
+        const g = outRefs.current[i]
+        if (g) { g.position.set(xOf(i), 0, 0); g.rotation.y = a }
         if (outMats.current[i]) outMats.current[i]!.opacity = base
       }
       return
@@ -157,10 +163,12 @@ function Scene({
     const dir = trans.dir
     for (let i = 0; i < slotCount; i++) {
       const oy = dir * p * TRANS.EXIT_UP
-      outRefs.current[i]?.position.set(xOf(i), oy, -p * TRANS.EXIT_BACK)
+      const og = outRefs.current[i]
+      if (og) { og.position.set(xOf(i), oy, -p * TRANS.EXIT_BACK); og.rotation.y = a }
       if (outMats.current[i]) outMats.current[i]!.opacity = base * fade(oy)
       const iy = -dir * (1 - p) * TRANS.ENTER_FROM
-      inRefs.current[i]?.position.set(xOf(i), iy, 0)
+      const ig = inRefs.current[i]
+      if (ig) { ig.position.set(xOf(i), iy, 0); ig.rotation.y = a }
       if (inMats.current[i]) inMats.current[i]!.opacity = base * fade(iy)
     }
     if (p >= 1) onSettle()
@@ -341,7 +349,7 @@ export default function ScrollGallery({
       {/* Canvas único, transparente */}
       <Canvas
         shadows={false}
-        frameloop={paused ? 'never' : trans ? 'always' : 'demand'}
+        frameloop={paused ? 'never' : 'always'}
         dpr={isMobile ? [1, 1.4] : [1, 1.85]}
         gl={{ antialias: true, alpha: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: preset.exposure }}
         style={{
@@ -406,12 +414,12 @@ const styles = `
 .sr-stage {
   position: relative; width: 100%; height: 100vh; overflow: hidden; user-select: none;
   touch-action: none; overscroll-behavior: none;
-  background: radial-gradient(90% 70% at 50% 6%, #FFFFFF 0%, #F6F4EF 46%, #ECE9E1 100%);
+  background: radial-gradient(120% 100% at 50% 0%, #FFFFFF 0%, #FFFFFF 55%, #F4F5F6 100%);
 }
 @media (max-width: 1023px) { .sr-stage { height: calc(100dvh - 56px); } }
 .sr-stage::after {
   content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 2;
-  box-shadow: inset 0 0 220px 30px rgba(26,26,26,0.07);
+  box-shadow: inset 0 0 240px 40px rgba(26,26,26,0.035);
 }
 
 .sr-hit { position: absolute; top: 0; bottom: 0; transform: translateX(-50%); z-index: 4; cursor: pointer; }
