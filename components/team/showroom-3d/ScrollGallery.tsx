@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { PerspectiveCamera, Environment, SoftShadows, useGLTF } from '@react-three/drei'
+import { PerspectiveCamera, Environment, useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
 import { LIGHTING_PRESETS, DEFAULT_PRESET } from '@/lib/showroom'
 import type { LightingPreset, Modelo3D } from '@/lib/showroom'
@@ -67,14 +67,32 @@ function Maqueta({ url }: { url: string }) {
   return <primitive object={object} />
 }
 
-// Suelo horizontal (como en el visor) a ras de la base, que SOLO recibe la sombra.
-// La opacidad se controla por frame (Scene) según la distancia al reposo → el plano
-// está transparente mientras su maqueta entra/sale, así no recibe la mancha de la otra.
-function ShadowFloor({ opacity, matRef, size }: { opacity: number; matRef: (m: THREE.ShadowMaterial | null) => void; size: [number, number] }) {
+// Sombra de contacto "falsa": una mancha radial suave bajo cada maqueta. Es
+// independiente por maqueta (no recibe la sombra de las demás) → cero banda, cero
+// recorte, cero contaminación, y sin shadow maps (más FPS). Textura generada una vez.
+let _shadowTex: THREE.CanvasTexture | null = null
+function shadowTexture() {
+  if (_shadowTex) return _shadowTex
+  const s = 256
+  const c = document.createElement('canvas')
+  c.width = c.height = s
+  const ctx = c.getContext('2d')!
+  const g = ctx.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2)
+  g.addColorStop(0, 'rgba(0,0,0,0.85)')
+  g.addColorStop(0.45, 'rgba(0,0,0,0.45)')
+  g.addColorStop(1, 'rgba(0,0,0,0)')
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, s, s)
+  _shadowTex = new THREE.CanvasTexture(c)
+  return _shadowTex
+}
+
+function ShadowBlob({ opacity, matRef, size }: { opacity: number; matRef: (m: THREE.Material | null) => void; size: [number, number] }) {
+  const tex = useMemo(() => shadowTexture(), [])
   return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.012, 0.3]}>
       <planeGeometry args={size} />
-      <shadowMaterial ref={matRef} transparent opacity={opacity} color="#000000" />
+      <meshBasicMaterial ref={matRef} map={tex} transparent opacity={opacity} depthWrite={false} toneMapped={false} />
     </mesh>
   )
 }
@@ -108,8 +126,8 @@ function Scene({
   const camRef = useRef<THREE.PerspectiveCamera>(null)
   const outRefs = useRef<(THREE.Group | null)[]>([])
   const inRefs = useRef<(THREE.Group | null)[]>([])
-  const outMats = useRef<(THREE.ShadowMaterial | null)[]>([])
-  const inMats = useRef<(THREE.ShadowMaterial | null)[]>([])
+  const outMats = useRef<(THREE.Material | null)[]>([])
+  const inMats = useRef<(THREE.Material | null)[]>([])
   const center = (slotCount - 1) / 2
   const xOf = (i: number) => (i - center) * FRAME.SEP
 
@@ -119,9 +137,11 @@ function Scene({
   const pitch = (FRAME.PITCH * Math.PI) / 180
   const camPos: [number, number, number] = [0, FRAME.LOOK_Y + FRAME.DIST * Math.sin(pitch), FRAME.DIST * Math.cos(pitch)]
 
-  // En móvil no hay maquetas vecinas → plano grande (sombra completa, sin recorte).
-  // En desktop, estrecho para no invadir el plano de las vecinas.
-  const floorSize: [number, number] = isMobile ? [16, 16] : [2.6, 6]
+  const blobSize: [number, number] = isMobile ? [4.6, 3.4] : [2.7, 2.4]
+
+  // La mancha se desvanece según la maqueta se aleja del reposo (despega/aterriza).
+  const FADE = 1.8
+  const fade = (y: number) => clamp01(1 - Math.abs(y) / FADE)
 
   useFrame(() => {
     camRef.current?.lookAt(0, FRAME.LOOK_Y, 0)
@@ -135,41 +155,24 @@ function Scene({
     }
     const p = easeInOut(clamp01((performance.now() - trans.start) / TRANS.DUR))
     const dir = trans.dir
-    // Sombra APAGADA durante el vuelo: se desvanece rápido al despegar (primer ~22%)
-    // y solo reaparece al aterrizar (último ~22%). En el grueso del scroll = 0 sombra,
-    // así NO puede aparecer la banda/mancha de contaminación entre planos.
-    const outOp = base * clamp01(1 - p / 0.22)
-    const inOp = base * clamp01((p - 0.78) / 0.22)
     for (let i = 0; i < slotCount; i++) {
-      outRefs.current[i]?.position.set(xOf(i), dir * p * TRANS.EXIT_UP, -p * TRANS.EXIT_BACK)
-      if (outMats.current[i]) outMats.current[i]!.opacity = outOp
-      inRefs.current[i]?.position.set(xOf(i), -dir * (1 - p) * TRANS.ENTER_FROM, 0)
-      if (inMats.current[i]) inMats.current[i]!.opacity = inOp
+      const oy = dir * p * TRANS.EXIT_UP
+      outRefs.current[i]?.position.set(xOf(i), oy, -p * TRANS.EXIT_BACK)
+      if (outMats.current[i]) outMats.current[i]!.opacity = base * fade(oy)
+      const iy = -dir * (1 - p) * TRANS.ENTER_FROM
+      inRefs.current[i]?.position.set(xOf(i), iy, 0)
+      if (inMats.current[i]) inMats.current[i]!.opacity = base * fade(iy)
     }
     if (p >= 1) onSettle()
   })
-
-  const shadowSize = isMobile ? 1024 : 2048
 
   return (
     <>
       <PerspectiveCamera ref={camRef} makeDefault fov={RENDER_FOV} position={camPos} />
 
-      {/* Penumbra suave (PCSS) — menos samples en móvil para más FPS */}
-      <SoftShadows size={70} samples={isMobile ? 16 : 26} focus={0} />
-      <hemisphereLight args={['#ffffff', '#EDEAE2', 0.5]} />
-      {/* Luz clave desde arriba-derecha-atrás → sombra suave en diagonal abajo-izquierda */}
-      <directionalLight
-        castShadow
-        position={[2.5, 6.5, -4]}
-        intensity={1.1}
-        shadow-mapSize={[shadowSize, shadowSize]}
-        shadow-bias={-0.0002}
-        shadow-normalBias={0.025}
-      >
-        <orthographicCamera attach="shadow-camera" args={[-5, 5, 5, -5, 0.1, 40]} />
-      </directionalLight>
-      <directionalLight position={[5, 6, 4]} intensity={0.3} />
+      <hemisphereLight args={['#ffffff', '#EDEAE2', 0.55]} />
+      <directionalLight position={[2.5, 6.5, -4]} intensity={1.0} />
+      <directionalLight position={[5, 6, 4]} intensity={0.35} />
       <Environment files={preset.environmentImage} environmentIntensity={preset.envIntensity} />
 
       {/* Cada maqueta lleva su sombra dentro de su grupo → se desplaza con ella. */}
@@ -178,7 +181,7 @@ function Scene({
         return proj ? (
           <group key={`o${i}`} ref={el => { outRefs.current[i] = el }} position={[xOf(i), 0, 0]}>
             <Suspense fallback={null}><Maqueta url={proj.glb_url} /></Suspense>
-            <ShadowFloor opacity={preset.shadowOpacity} matRef={m => { outMats.current[i] = m }} size={floorSize} />
+            <ShadowBlob opacity={preset.shadowOpacity} matRef={m => { outMats.current[i] = m }} size={blobSize} />
           </group>
         ) : null
       })}
@@ -187,7 +190,7 @@ function Scene({
         return proj ? (
           <group key={`i${i}`} ref={el => { inRefs.current[i] = el }} position={[xOf(i), -trans.dir * TRANS.ENTER_FROM, 0]}>
             <Suspense fallback={null}><Maqueta url={proj.glb_url} /></Suspense>
-            <ShadowFloor opacity={preset.shadowOpacity} matRef={m => { inMats.current[i] = m }} size={floorSize} />
+            <ShadowBlob opacity={preset.shadowOpacity} matRef={m => { inMats.current[i] = m }} size={blobSize} />
           </group>
         ) : null
       })}
@@ -337,7 +340,7 @@ export default function ScrollGallery({
 
       {/* Canvas único, transparente */}
       <Canvas
-        shadows
+        shadows={false}
         frameloop={paused ? 'never' : trans ? 'always' : 'demand'}
         dpr={isMobile ? [1, 1.4] : [1, 1.85]}
         gl={{ antialias: true, alpha: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: preset.exposure }}
