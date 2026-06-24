@@ -119,11 +119,6 @@ function Scene({
   const pitch = (FRAME.PITCH * Math.PI) / 180
   const camPos: [number, number, number] = [0, FRAME.LOOK_Y + FRAME.DIST * Math.sin(pitch), FRAME.DIST * Math.cos(pitch)]
 
-  // La sombra de un plano se desvanece según se aleja del reposo (evita la mancha
-  // de la maqueta de arriba sobre el plano de la que entra por debajo).
-  const FADE = 1.6
-  const fade = (y: number) => clamp01(1 - Math.abs(y) / FADE)
-
   // En móvil no hay maquetas vecinas → plano grande (sombra completa, sin recorte).
   // En desktop, estrecho para no invadir el plano de las vecinas.
   const floorSize: [number, number] = isMobile ? [16, 16] : [2.6, 6]
@@ -140,13 +135,16 @@ function Scene({
     }
     const p = easeInOut(clamp01((performance.now() - trans.start) / TRANS.DUR))
     const dir = trans.dir
+    // Sombra apagada durante el vuelo: la saliente se desvanece al despegar, la
+    // entrante se enciende en degradado acelerando al final (efecto "aterrizaje").
+    // En mitad de la transición ambas están casi apagadas → no hay mancha.
+    const outOp = base * (1 - p)
+    const inOp = base * p * p
     for (let i = 0; i < slotCount; i++) {
-      const oy = dir * p * TRANS.EXIT_UP
-      outRefs.current[i]?.position.set(xOf(i), oy, -p * TRANS.EXIT_BACK)
-      if (outMats.current[i]) outMats.current[i]!.opacity = base * fade(oy)
-      const iy = -dir * (1 - p) * TRANS.ENTER_FROM
-      inRefs.current[i]?.position.set(xOf(i), iy, 0)
-      if (inMats.current[i]) inMats.current[i]!.opacity = base * fade(iy)
+      outRefs.current[i]?.position.set(xOf(i), dir * p * TRANS.EXIT_UP, -p * TRANS.EXIT_BACK)
+      if (outMats.current[i]) outMats.current[i]!.opacity = outOp
+      inRefs.current[i]?.position.set(xOf(i), -dir * (1 - p) * TRANS.ENTER_FROM, 0)
+      if (inMats.current[i]) inMats.current[i]!.opacity = inOp
     }
     if (p >= 1) onSettle()
   })
