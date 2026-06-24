@@ -135,11 +135,11 @@ function Scene({
     }
     const p = easeInOut(clamp01((performance.now() - trans.start) / TRANS.DUR))
     const dir = trans.dir
-    // Sombra apagada durante el vuelo: la saliente se desvanece al despegar, la
-    // entrante se enciende en degradado acelerando al final (efecto "aterrizaje").
-    // En mitad de la transición ambas están casi apagadas → no hay mancha.
-    const outOp = base * (1 - p)
-    const inOp = base * p * p
+    // Sombra APAGADA durante el vuelo: se desvanece rápido al despegar (primer ~22%)
+    // y solo reaparece al aterrizar (último ~22%). En el grueso del scroll = 0 sombra,
+    // así NO puede aparecer la banda/mancha de contaminación entre planos.
+    const outOp = base * clamp01(1 - p / 0.22)
+    const inOp = base * clamp01((p - 0.78) / 0.22)
     for (let i = 0; i < slotCount; i++) {
       outRefs.current[i]?.position.set(xOf(i), dir * p * TRANS.EXIT_UP, -p * TRANS.EXIT_BACK)
       if (outMats.current[i]) outMats.current[i]!.opacity = outOp
