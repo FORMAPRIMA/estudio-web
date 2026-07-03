@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  joinQuiniela, upsertPrediccion, upsertPickCampeon, updatePichichi,
+  joinQuiniela, upsertPrediccion, upsertPickCampeon, upsertPickPichichi,
   updateResultado, updatePartidoEquipos, updateVentanaActiva, updatePagado,
   updateQuinielaConfig, logoutJugadorExterno,
 } from '@/app/actions/quiniela'
@@ -12,21 +12,32 @@ import QuinielaReglas from '@/components/quiniela/QuinielaReglas'
 import QuinielaOnboarding from '@/components/quiniela/QuinielaOnboarding'
 import QuinielaChat from '@/components/quiniela/QuinielaChat'
 import QuinielaStats from '@/components/quiniela/QuinielaStats'
+import { MatchBet, BolsaAdmin } from '@/components/team/quiniela/QuinielaBolsa'
+import QuinielaFaseModal from '@/components/team/quiniela/QuinielaFaseModal'
 import Confetti, { type ConfettiHandle } from '@/components/team/quiniela/Confetti'
 import {
   Q, FONT, QUINIELA_KEYFRAMES, labelStyle, pixelStyle, cardStyle,
   avatarColor, iniciales, posColor, MEDALLAS,
 } from '@/components/team/quiniela/theme'
 import {
-  PUNTOS_PARTIDO, PUNTOS_ESCALERA, PUNTOS_PICHICHI,
+  PUNTOS_PARTIDO, PUNTOS_ESCALERA, PUNTOS_PICHICHI_ESCALERA,
   VENTANA_LABELS, VENTANA_FASE_ELEGIBLE, FASE_LABELS, FASES_ORDEN,
   parseReparto, formatFechaPartido, prediccionBloqueada,
   getAperturaDeadlineMs, formatCountdown, BLOQUEO_PREDICCION_MS,
   calcPuntosPrediccion,
 } from '@/lib/quiniela/config'
 import type {
-  QuinielaEquipo, QuinielaPartido, QuinielaFase, VentanaCampeon,
+  QuinielaEquipo, QuinielaPartido, QuinielaFase, VentanaCampeon, QuinielaMercado,
 } from '@/lib/quiniela/config'
+
+// Ventana de pick activa → fase de eliminatoria que arranca (para el modal/labels)
+const VENTANA_FASE_ARRANCA: Record<VentanaCampeon, string> = {
+  apertura:      'el Mundial',
+  grupos:        'dieciseisavos',
+  dieciseisavos: 'octavos',
+  octavos:       'cuartos',
+  cuartos:       'semifinales',
+}
 
 type Tab = 'home' | 'partidos' | 'clasificacion' | 'escalera' | 'stats' | 'bar' | 'admin'
 type SaveState = 'sin_guardar' | 'guardando' | 'guardada' | 'error' | 'vacia'
@@ -68,6 +79,27 @@ export default function QuinielaPage({
   // Modal de picks urgentes: nada más entrar, mientras falte alguno y la ventana siga abierta
   const mostrarOnboarding = !!miJugadorId && aperturaAbierta && !onboardingCerrado
     && (!pickApertura || !miJugador?.pichichi)
+
+  // Modal BLOQUEANTE de nueva fase de eliminatorias (ventana de pick KO abierta):
+  // obliga a fijar campeón + goleador de la ventana antes de seguir.
+  const ventanaActivaCfg = data.config['ventana_activa']
+  const esVentanaKO = ventanaActivaCfg === 'grupos' || ventanaActivaCfg === 'dieciseisavos'
+    || ventanaActivaCfg === 'octavos' || ventanaActivaCfg === 'cuartos'
+  const miPickVentana = esVentanaKO ? data.misPicks.find(p => p.ventana === ventanaActivaCfg) : undefined
+  const miPichichiVentana = esVentanaKO ? data.misPicksPichichi.find(p => p.ventana === ventanaActivaCfg) : undefined
+  const mostrarFaseModal = !!miJugadorId && data.soyParticipante && esVentanaKO
+    && (!miPickVentana || !miPichichiVentana) && !mostrarOnboarding && data.featuresReady
+  const equiposElegiblesVentana = useMemo(() => {
+    if (!esVentanaKO) return []
+    const fase = VENTANA_FASE_ELEGIBLE[ventanaActivaCfg as VentanaCampeon]
+    if (!fase) return data.equipos
+    const ids = new Set<string>()
+    for (const p of data.partidos.filter(pt => pt.fase === fase)) {
+      if (p.equipo_local_id) ids.add(p.equipo_local_id)
+      if (p.equipo_visitante_id) ids.add(p.equipo_visitante_id)
+    }
+    return data.equipos.filter(e => ids.has(e.id))
+  }, [esVentanaKO, ventanaActivaCfg, data.partidos, data.equipos])
 
   // Refresco suave para que chat y resultados se actualicen solos
   useEffect(() => {
@@ -202,7 +234,7 @@ export default function QuinielaPage({
             <HomeTab data={data} equiposById={equiposById} miJugadorId={miJugadorId} miNombre={miNombre} bote={bote} ahora={ahora} setTab={setTab} />
           )}
           {tab === 'partidos' && (
-            <PartidosTab data={data} equiposById={equiposById} nombresById={nombresById} miJugadorId={miJugadorId} ahora={ahora} fireConfetti={fireConfetti} />
+            <PartidosTab data={data} equiposById={equiposById} nombresById={nombresById} miJugadorId={miJugadorId} ahora={ahora} fireConfetti={fireConfetti} onChanged={() => router.refresh()} />
           )}
           {tab === 'clasificacion' && (
             <ClasificacionTab data={data} bote={bote} reparto={reparto} miJugadorId={miJugadorId} equiposById={equiposById} />
@@ -272,6 +304,17 @@ export default function QuinielaPage({
           deadlineMs={deadlineApertura}
           ahora={ahora}
           onClose={() => setOnboardingCerrado(true)}
+          onChanged={() => router.refresh()}
+        />
+      )}
+      {mostrarFaseModal && (
+        <QuinielaFaseModal
+          faseLabel={VENTANA_FASE_ARRANCA[ventanaActivaCfg as VentanaCampeon]}
+          ventana={ventanaActivaCfg as VentanaCampeon}
+          equiposElegibles={equiposElegiblesVentana}
+          miPickCampeonId={miPickVentana?.equipo_id ?? null}
+          miPichichiNombre={miPichichiVentana?.nombre ?? null}
+          stake={data.bolsaStake}
           onChanged={() => router.refresh()}
         />
       )}
@@ -468,16 +511,26 @@ function EquipoLabel({ equipo, etiqueta, align = 'left' }: {
 
 // ── Tab: Partidos ─────────────────────────────────────────────────────────────
 
-function PartidosTab({ data, equiposById, nombresById, miJugadorId, ahora, fireConfetti }: {
+function PartidosTab({ data, equiposById, nombresById, miJugadorId, ahora, fireConfetti, onChanged }: {
   data: QuinielaData
   equiposById: Map<string, QuinielaEquipo>
   nombresById: Map<string, string>
   miJugadorId: string | null
   ahora: number
   fireConfetti: (n?: number) => void
+  onChanged: () => void
 }) {
-  const [fase, setFase] = useState<QuinielaFase>('grupos')
+  // Fase inicial: la primera con partidos aún por jugar (auto-avanza por ronda)
+  const faseInicial = FASES_ORDEN.find(f => data.partidos.some(p => p.fase === f && p.estado !== 'finalizado'))
+    ?? FASES_ORDEN[0]
+  const [fase, setFase] = useState<QuinielaFase>(faseInicial)
   const [diasAbiertos, setDiasAbiertos] = useState<Record<string, boolean>>({})
+
+  const miRow = data.leaderboard.find(r => r.jugador_id === miJugadorId)
+  const mercadosByPartido = useMemo(
+    () => new Map(data.mercados.map(m => [m.partido_id, m])),
+    [data.mercados]
+  )
 
   const partidos = data.partidos.filter(p => p.fase === fase)
   const visibles = partidos
@@ -499,6 +552,23 @@ function PartidosTab({ data, equiposById, nombresById, miJugadorId, ahora, fireC
 
   return (
     <div style={{ animation: 'q-slideUp .35s ease both' }}>
+      {/* Saldo para apuestas */}
+      {miRow && data.mercados.length > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+          background: 'linear-gradient(135deg,#0a1f2e,#101733)', border: '1px solid rgba(52,227,255,.3)',
+          borderRadius: 12, padding: '10px 13px', marginBottom: 12,
+        }}>
+          <span style={{ ...labelStyle, fontSize: 9, color: Q.cyan }}>🎰 SALDO PARA APOSTAR</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {miRow.fichas_en_juego > 0 && (
+              <span style={{ fontSize: 10, color: Q.gold }}>🎟️ {miRow.fichas_en_juego}</span>
+            )}
+            <span style={{ ...pixelStyle, fontSize: 13, color: Q.cyan }}>{Math.max(0, miRow.saldo)} pts</span>
+          </span>
+        </div>
+      )}
+
       {/* Progreso */}
       {miJugadorId && (
         <div style={{ ...cardStyle, padding: '13px 14px', marginBottom: 12 }}>
@@ -578,6 +648,9 @@ function PartidosTab({ data, equiposById, nombresById, miJugadorId, ahora, fireC
                     miJugadorId={miJugadorId}
                     ahora={ahora}
                     fireConfetti={fireConfetti}
+                    mercado={mercadosByPartido.get(p.id) ?? null}
+                    saldo={miRow ? Math.max(0, miRow.saldo) : 0}
+                    onChanged={onChanged}
                   />
                 ))}
               </div>
@@ -589,7 +662,7 @@ function PartidosTab({ data, equiposById, nombresById, miJugadorId, ahora, fireC
   )
 }
 
-function MatchCard({ partido, equiposById, nombresById, data, miJugadorId, ahora, fireConfetti }: {
+function MatchCard({ partido, equiposById, nombresById, data, miJugadorId, ahora, fireConfetti, mercado, saldo, onChanged }: {
   partido: QuinielaPartido
   equiposById: Map<string, QuinielaEquipo>
   nombresById: Map<string, string>
@@ -597,6 +670,9 @@ function MatchCard({ partido, equiposById, nombresById, data, miJugadorId, ahora
   miJugadorId: string | null
   ahora: number
   fireConfetti: (n?: number) => void
+  mercado: QuinielaData['mercados'][number] | null
+  saldo: number
+  onChanged: () => void
 }) {
   const local = partido.equipo_local_id ? equiposById.get(partido.equipo_local_id) : undefined
   const visitante = partido.equipo_visitante_id ? equiposById.get(partido.equipo_visitante_id) : undefined
@@ -835,6 +911,24 @@ function MatchCard({ partido, equiposById, nombresById, data, miJugadorId, ahora
           )}
         </div>
       )}
+
+      {/* 🎰 Apuesta del partido (La Bolsa) */}
+      {mercado && (
+        <MatchBet
+          mercado={mercado}
+          miApuesta={data.misApuestas.find(a => a.mercado_id === mercado.id) ?? null}
+          apuestasMercado={data.apuestasReveladas.filter(a => a.mercado_id === mercado.id)}
+          nombresById={nombresById}
+          miJugadorId={miJugadorId}
+          stake={data.bolsaStake}
+          saldo={saldo}
+          soyParticipante={data.soyParticipante}
+          locked={bloqueado}
+          settled={mercado.estado === 'liquidado'}
+          onChanged={onChanged}
+          fireConfetti={fireConfetti}
+        />
+      )}
     </div>
   )
 }
@@ -995,6 +1089,18 @@ function ClasificacionTab({ data, bote, reparto, miJugadorId, equiposById }: {
     return m
   }, [data.prediccionesReveladas])
 
+  // Apuestas reveladas (Bolsa) indexadas por jugador, para su historial
+  const apuestasByJugador = useMemo(() => {
+    const m = new Map<string, QuinielaData['apuestasReveladas']>()
+    for (const a of data.apuestasReveladas) {
+      if (!m.has(a.jugador_id)) m.set(a.jugador_id, [])
+      m.get(a.jugador_id)!.push(a)
+    }
+    return m
+  }, [data.apuestasReveladas])
+  const mercadosById = useMemo(() => new Map(data.mercados.map(m => [m.id, m])), [data.mercados])
+  const partidosById = useMemo(() => new Map(data.partidos.map(p => [p.id, p])), [data.partidos])
+
   return (
     <div style={{ animation: 'q-slideUp .35s ease both' }}>
       {/* Bote */}
@@ -1053,6 +1159,14 @@ function ClasificacionTab({ data, bote, reparto, miJugadorId, equiposById }: {
                   </div>
                   <div style={{ fontSize: 9, color: Q.textDimmer, marginTop: 1 }}>
                     P {row.puntos_partidos} · E {row.puntos_escalera} · 🎯 {row.exactos}
+                    {row.puntos_apuestas !== 0 && (
+                      <> · 🎰 <span style={{ color: row.puntos_apuestas > 0 ? Q.green : Q.red, fontWeight: 700 }}>
+                        {row.puntos_apuestas > 0 ? '+' : ''}{row.puntos_apuestas}
+                      </span></>
+                    )}
+                    {row.fichas_en_juego > 0 && (
+                      <span style={{ color: Q.gold }}> · 🎟️ {row.fichas_en_juego}</span>
+                    )}
                   </div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flex: 'none' }}>
@@ -1069,6 +1183,9 @@ function ClasificacionTab({ data, bote, reparto, miJugadorId, equiposById }: {
                 <DetalleJugador
                   finalizados={finalizados}
                   preds={predsByJugador.get(row.jugador_id)}
+                  apuestas={apuestasByJugador.get(row.jugador_id)}
+                  mercadosById={mercadosById}
+                  partidosById={partidosById}
                   equiposById={equiposById}
                 />
               )}
@@ -1083,14 +1200,24 @@ function ClasificacionTab({ data, bote, reparto, miJugadorId, equiposById }: {
   )
 }
 
-// Historial partido a partido de un jugador (solo partidos finalizados)
-function DetalleJugador({ finalizados, preds, equiposById }: {
+// Historial de un jugador: predicciones partido a partido + apuestas de La Bolsa
+function DetalleJugador({ finalizados, preds, apuestas, mercadosById, partidosById, equiposById }: {
   finalizados: QuinielaPartido[]
   preds: Map<string, QuinielaData['prediccionesReveladas'][number]> | undefined
+  apuestas: QuinielaData['apuestasReveladas'] | undefined
+  mercadosById: Map<string, QuinielaMercado>
+  partidosById: Map<string, QuinielaPartido>
   equiposById: Map<string, QuinielaEquipo>
 }) {
   const cod = (id: string | null) => (id && equiposById.get(id)?.codigo) || '¿?'
-  if (finalizados.length === 0) {
+
+  // Apuestas ordenadas por número de partido, con su mercado resuelto
+  const apuestasOrdenadas = (apuestas ?? [])
+    .map(a => ({ a, mercado: mercadosById.get(a.mercado_id), partido: partidosById.get(mercadosById.get(a.mercado_id)?.partido_id ?? '') }))
+    .filter(x => x.mercado && x.partido)
+    .sort((x, y) => x.partido!.numero - y.partido!.numero)
+
+  if (finalizados.length === 0 && apuestasOrdenadas.length === 0) {
     return (
       <div style={{ border: `1px solid ${Q.border}`, borderTop: 'none', borderRadius: '0 0 12px 12px', background: Q.cardAlt, padding: '12px 14px' }}>
         <p style={{ fontSize: 11, color: Q.textDim }}>Aún no hay partidos cerrados.</p>
@@ -1121,6 +1248,39 @@ function DetalleJugador({ finalizados, preds, equiposById }: {
           </div>
         )
       })}
+
+      {apuestasOrdenadas.length > 0 && (
+        <>
+          <p style={{ ...labelStyle, fontSize: 8, color: Q.purple, margin: '12px 0 4px' }}>🎰 LA BOLSA</p>
+          {apuestasOrdenadas.map(({ a, mercado, partido }) => {
+            const opt = mercado!.opciones.find(o => o.key === a.opcion)
+            const liquidado = mercado!.estado === 'liquidado'
+            const gano = liquidado && mercado!.opcion_ganadora === a.opcion
+            const neto = (a.payout ?? 0) - a.fichas
+            return (
+              <div key={a.id} style={{
+                display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'center',
+                padding: '7px 0', borderBottom: `1px solid ${Q.border}`, fontSize: 11,
+              }}>
+                <span style={{ color: Q.textSoft, minWidth: 0 }}>
+                  <span style={{ color: Q.textDim, marginRight: 6 }}>#{partido!.numero}</span>
+                  {mercado!.pregunta}
+                  <span style={{ color: Q.textMid }}> → {opt?.label || 'sin responder'}</span>
+                </span>
+                {liquidado ? (
+                  <span style={{ minWidth: 60, textAlign: 'right', fontWeight: 700, color: gano ? Q.green : Q.red }}>
+                    {gano ? `+${neto}` : `−${a.fichas}`}
+                  </span>
+                ) : (
+                  <span style={{ minWidth: 60, textAlign: 'right', fontWeight: 600, color: Q.gold }}>
+                    🎟️ {a.fichas}
+                  </span>
+                )}
+              </div>
+            )
+          })}
+        </>
+      )}
     </div>
   )
 }
@@ -1141,9 +1301,10 @@ function EscaleraTab({ data, equiposById, nombresById, miJugadorId, ahora, onCha
   const [pickError, setPickError] = useState('')
   const [isSavingPick, setIsSavingPick] = useState(false)
 
-  const miJugador = data.jugadores.find(j => j.id === miJugadorId)
-  const [pichichi, setPichichi] = useState(miJugador?.pichichi || '')
+  const ventanaActivaPichichi = data.misPicksPichichi.find(p => p.ventana === ventanaActiva)
+  const [pichichi, setPichichi] = useState(ventanaActivaPichichi?.nombre || '')
   const [pichichiState, setPichichiState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const pichichiGanadorNombre = (data.config['pichichi_ganador'] || '').trim().toLowerCase()
 
   const deadlineApertura = getAperturaDeadlineMs(data.config, data.partidos)
   const aperturaAbierta = deadlineApertura !== null && ahora < deadlineApertura
@@ -1170,10 +1331,11 @@ function EscaleraTab({ data, equiposById, nombresById, miJugadorId, ahora, onCha
     else { fireConfetti(70); onChanged() }
   }
 
-  async function handlePichichi() {
+  async function handlePichichi(ventana: VentanaCampeon) {
     setPichichiState('saving')
-    const result = await updatePichichi(pichichi)
-    setPichichiState('error' in result ? 'error' : 'saved')
+    const result = await upsertPickPichichi({ ventana, nombre: pichichi })
+    if ('error' in result) { setPichichiState('error'); setPickError(result.error) }
+    else { setPichichiState('saved'); fireConfetti(60); onChanged() }
   }
 
   if (!data.soyParticipante) {
@@ -1250,39 +1412,62 @@ function EscaleraTab({ data, equiposById, nombresById, miJugadorId, ahora, onCha
       </div>
       {pickError && <p style={{ fontSize: 11, color: Q.pink, marginTop: 10 }}>{pickError}</p>}
 
-      {/* Pichichi */}
-      <div style={{ ...cardStyle, padding: '14px 16px', marginTop: 16 }}>
-        <p style={{ ...labelStyle, color: Q.purple, marginBottom: 10 }}>
-          ⚽ BONUS PICHICHI · {PUNTOS_PICHICHI} PTS
-          {aperturaAbierta && (
-            <span style={{ color: Q.pink, marginLeft: 8, textTransform: 'none', letterSpacing: 0 }}>
-              🕐 {formatCountdown(cierreAperturaMs)}
-            </span>
-          )}
-        </p>
-        {!aperturaAbierta ? (
-          <p style={{ fontSize: 13, color: Q.text }}>
-            {miJugador?.pichichi
-              ? <>⚽ {miJugador.pichichi}</>
-              : <span style={{ color: Q.textDim }}>No elegiste pichichi (cerrado).</span>}
-          </p>
-        ) : (
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input
-              value={pichichi}
-              onChange={e => { setPichichi(e.target.value); setPichichiState('idle') }}
-              placeholder="Máximo goleador del Mundial…"
-              style={inputDark}
-            />
-            <button
-              onClick={handlePichichi}
-              disabled={pichichiState === 'saving'}
-              style={{ background: Q.green, color: '#06210f', border: 'none', borderRadius: 10, padding: '8px 14px', ...labelStyle, fontSize: 9, cursor: 'pointer' }}
-            >
-              {pichichiState === 'saving' ? '…' : pichichiState === 'saved' ? '✓' : 'GUARDAR'}
-            </button>
-          </div>
-        )}
+      {/* Escalera del pichichi */}
+      <div style={{ ...pixelStyle, fontSize: 11, color: Q.purple, margin: '18px 2px 4px', textShadow: '0 0 12px rgba(157,123,255,.4)' }}>⚽ ESCALERA DEL PICHICHI</div>
+      <p style={{ fontSize: 11, color: Q.textMid, margin: '0 2px 12px', lineHeight: 1.5 }}>
+        Como el campeón: un goleador por ventana, <strong style={{ color: Q.text }}>en paralelo y acumulable</strong>,
+        con puntos decrecientes. Se frena en cuartos. Solo editable en la ventana abierta.
+      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {VENTANAS.map(ventana => {
+          const miPickP = data.misPicksPichichi.find(p => p.ventana === ventana)
+          const activa = ventanaActiva === ventana && (ventana !== 'apertura' || aperturaAbierta)
+          const acierto = !!pichichiGanadorNombre && (miPickP?.nombre || '').trim().toLowerCase() === pichichiGanadorNombre
+          return (
+            <div key={ventana} style={{
+              background: acierto ? 'linear-gradient(135deg,#2a1f08,#231836)' : Q.card, borderRadius: 14, padding: '14px 16px',
+              border: `1px solid ${activa ? 'rgba(157,123,255,.5)' : acierto ? 'rgba(255,210,63,.4)' : Q.border}`,
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                <div style={{ minWidth: 0 }}>
+                  <p style={{ ...labelStyle, color: Q.textMid }}>
+                    {VENTANA_LABELS[ventana]}
+                    {activa && (
+                      <span style={{ color: Q.purple, marginLeft: 8, textTransform: 'none', letterSpacing: 0 }}>
+                        ● abierta{ventana === 'apertura' && ` · 🕐 ${formatCountdown(cierreAperturaMs)}`}
+                      </span>
+                    )}
+                  </p>
+                  <p style={{ fontSize: 14, marginTop: 6, color: Q.text }}>
+                    {miPickP
+                      ? <>⚽ {miPickP.nombre} {acierto && <strong style={{ color: Q.gold }}>✓ ¡Pichichi!</strong>}</>
+                      : <span style={{ color: Q.textDim }}>{activa ? 'Escribe tu goleador ↓' : 'Sin pick'}</span>}
+                  </p>
+                </div>
+                <span style={{ ...pixelStyle, fontSize: 9, whiteSpace: 'nowrap', color: acierto ? Q.gold : Q.textMid }}>
+                  {acierto ? `+${PUNTOS_PICHICHI_ESCALERA[ventana]}` : PUNTOS_PICHICHI_ESCALERA[ventana]}pts
+                </span>
+              </div>
+              {activa && (
+                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                  <input
+                    value={pichichi}
+                    onChange={e => { setPichichi(e.target.value); setPichichiState('idle') }}
+                    placeholder="Máximo goleador del Mundial…"
+                    style={inputDark}
+                  />
+                  <button
+                    onClick={() => handlePichichi(ventana)}
+                    disabled={pichichiState === 'saving' || !pichichi.trim()}
+                    style={{ background: Q.purple, color: '#1a1030', border: 'none', borderRadius: 10, padding: '8px 14px', ...labelStyle, fontSize: 9, cursor: 'pointer', opacity: pichichiState === 'saving' || !pichichi.trim() ? 0.6 : 1 }}
+                  >
+                    {pichichiState === 'saving' ? '…' : pichichiState === 'saved' ? '✓' : 'GUARDAR'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
 
       {/* Picks de la porra */}
@@ -1326,6 +1511,7 @@ function AdminTab({ data, equiposById, onChanged }: {
   const [fase, setFase] = useState<QuinielaFase>('grupos')
   const [monto, setMonto] = useState(data.config['monto_entrada'] || '20')
   const [pichichiGanador, setPichichiGanador] = useState(data.config['pichichi_ganador'] || '')
+  const [bolsaStake, setBolsaStake] = useState(data.config['bolsa_stake'] || '5')
   const ventanaActiva = data.config['ventana_activa'] || 'apertura'
 
   const partidos = data.partidos.filter(p => p.fase === fase)
@@ -1382,6 +1568,16 @@ function AdminTab({ data, equiposById, onChanged }: {
             >Guardar</button>
           </div>
         </div>
+        <div style={adminCardStyle}>
+          <p style={adminCardTitleStyle}>🎰 Bolsa · puntos por apuesta</p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input value={bolsaStake} onChange={e => setBolsaStake(e.target.value)} style={adminInputStyle} />
+            <button
+              onClick={async () => { await updateQuinielaConfig('bolsa_stake', bolsaStake); onChanged() }}
+              style={adminButtonStyle}
+            >Guardar</button>
+          </div>
+        </div>
       </div>
 
       {/* Pagos */}
@@ -1429,6 +1625,9 @@ function AdminTab({ data, equiposById, onChanged }: {
           ))}
         </div>
       </div>
+
+      {/* La Bolsa: resolver apuestas */}
+      <BolsaAdmin data={data} equiposById={equiposById} onChanged={onChanged} />
     </div>
   )
 }
