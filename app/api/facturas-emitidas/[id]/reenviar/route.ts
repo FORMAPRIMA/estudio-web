@@ -7,6 +7,8 @@ import { getEstudioConfig } from '@/app/actions/facturasEmitidas'
 import { FacturaEmitidaPDF } from '@/components/pdfs/FacturaEmitidaPDF'
 import type { FacturaPDFData } from '@/components/pdfs/FacturaEmitidaPDF'
 import { sendEmail, wrapEmail } from '@/lib/email'
+import { esSeccionNoCliente } from '@/lib/finanzas/costs'
+import { resolveProveedorDestino } from '@/lib/finanzas/proveedorDestino'
 import type { ExtraEmail } from '@/app/actions/emitirFactura'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -42,8 +44,10 @@ export async function POST(
         clientesAdicionales?: { nombre: string; apellidos: string | null; email: string | null; email_cc: string | null }[]
       }
 
-    if (!emailCliente?.trim() || !EMAIL_RE.test(emailCliente.trim())) {
-      return NextResponse.json({ error: 'Email del cliente inválido o requerido.' }, { status: 400 })
+    // El email del cliente solo se exige en facturas normales (no en márgenes a proveedor,
+    // donde el destinatario se resuelve en servidor). Si se aporta, debe ser válido.
+    if (emailCliente?.trim() && !EMAIL_RE.test(emailCliente.trim())) {
+      return NextResponse.json({ error: 'Email del cliente inválido.' }, { status: 400 })
     }
     if (!asunto?.trim()) {
       return NextResponse.json({ error: 'El asunto del correo es obligatorio.' }, { status: 400 })
@@ -58,6 +62,30 @@ export async function POST(
 
     if (error || !f) {
       return NextResponse.json({ error: 'Factura no encontrada' }, { status: 404 })
+    }
+
+    // ── Márgenes internos: el reenvío va SIEMPRE al proveedor, nunca al cliente ─
+    let seccionF: string | null = (f.seccion as string | null) ?? null
+    if (!seccionF && f.factura_origen_id) {
+      const { data: fSec } = await admin
+        .from('facturas').select('seccion').eq('id', f.factura_origen_id).maybeSingle()
+      seccionF = (fSec?.seccion as string | undefined) ?? null
+    }
+    const esPrivada = esSeccionNoCliente(seccionF)
+    let proveedorDestino: Awaited<ReturnType<typeof resolveProveedorDestino>> = null
+    if (esPrivada) {
+      proveedorDestino = await resolveProveedorDestino(admin, {
+        facturaOrigenId: f.factura_origen_id ?? null,
+        proyectoId:      f.proyecto_id ?? null,
+        seccion:         seccionF,
+      })
+      if (!proveedorDestino?.email) {
+        return NextResponse.json({
+          error: 'El proveedor de esta factura no tiene email registrado. Añádelo en Proveedores para poder enviársela.',
+        }, { status: 422 })
+      }
+    } else if (!emailCliente?.trim()) {
+      return NextResponse.json({ error: 'Email del cliente requerido.' }, { status: 400 })
     }
 
     // Fetch original invoice number if rectificativa
@@ -126,13 +154,20 @@ export async function POST(
     const toAdicional  = adicionales.map(c => c.email).filter((e): e is string => !!e?.trim()).map(e => e.trim())
     const ccAdicional  = adicionales.map(c => c.email_cc).filter((e): e is string => !!e?.trim()).map(e => e.trim())
 
-    const toList = [emailCliente.trim(), ...toExtra, ...toAdicional].filter(Boolean)
-    const cc     = [...PARTNERS_CC, ...ccExtra, ...ccAdicional]
-    const bcc    = bccExtra
+    // Márgenes internos: SOLO al proveedor (nunca cliente ni clientes adicionales).
+    const toList = esPrivada
+      ? [proveedorDestino!.email!.trim()]
+      : [emailCliente.trim(), ...toExtra, ...toAdicional].filter(Boolean)
+    const cc     = esPrivada
+      ? [...PARTNERS_CC, ...(proveedorDestino!.emailCc ? [proveedorDestino!.emailCc.trim()] : [])]
+      : [...PARTNERS_CC, ...ccExtra, ...ccAdicional]
+    const bcc    = esPrivada ? [] : bccExtra
 
     // ── Greeting ──────────────────────────────────────────────────────────────
-    const mainNombre = f.cliente_contacto?.trim() || f.cliente_nombre
-    const adicionalNombres = adicionales
+    const mainNombre = esPrivada
+      ? proveedorDestino!.nombre
+      : (f.cliente_contacto?.trim() || f.cliente_nombre)
+    const adicionalNombres = esPrivada ? [] : adicionales
       .map(c => [c.nombre, c.apellidos].filter(Boolean).join(' ').split(' ')[0])
       .filter(Boolean)
     const allNombres = [mainNombre, ...adicionalNombres]
@@ -204,7 +239,7 @@ export async function POST(
         ${config.banco_swift ? `<p style="margin:0;font-size:12px;color:#888888;font-family:'Courier New',monospace;">SWIFT/BIC: ${config.banco_swift}</p>` : ''}
       </div>` : ''}
 
-      ${includeCTA && f.proyecto_id ? `
+      ${includeCTA && f.proyecto_id && !esPrivada ? `
       <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:32px;">
         <tr>
           <td style="background:#1A1A1A;padding:24px 28px;">

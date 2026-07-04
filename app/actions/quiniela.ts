@@ -13,11 +13,12 @@ import {
   prediccionBloqueada,
   getAperturaDeadlineMs,
   PUNTOS_ESCALERA,
-  PUNTOS_PICHICHI,
+  PUNTOS_PICHICHI_ESCALERA,
   VENTANA_FASE_ELEGIBLE,
 } from '@/lib/quiniela/config'
-import { CHAT_EMOJIS } from '@/lib/quiniela/config'
+import { CHAT_EMOJIS, BOLSA_STAKE_DEFAULT } from '@/lib/quiniela/config'
 import { finalizarPartido } from '@/lib/quiniela/finalize'
+import { liquidarMercado, calcSaldoJugador } from '@/lib/quiniela/bolsa'
 import type {
   QuinielaEquipo,
   QuinielaPartido,
@@ -26,6 +27,10 @@ import type {
   QuinielaJugador,
   QuinielaComentario,
   QuinielaReaccion,
+  QuinielaMercado,
+  QuinielaApuesta,
+  QuinielaMercadoOpcion,
+  QuinielaPickPichichi,
   VentanaCampeon,
 } from '@/lib/quiniela/config'
 
@@ -97,6 +102,9 @@ export interface QuinielaLeaderboardRow {
   puntos_partidos: number
   puntos_escalera: number
   puntos_pichichi: number
+  puntos_apuestas: number
+  fichas_en_juego: number
+  saldo: number
   exactos: number
   aciertos_eliminatorias: number
 }
@@ -111,8 +119,22 @@ export interface QuinielaData {
   misPicks: QuinielaPickCampeon[]
   /** Picks de campeón de todos, visibles una vez arranca el Mundial */
   picksRevelados: QuinielaPickCampeon[]
+  /** Mis picks de pichichi (escalera por ventana) */
+  misPicksPichichi: QuinielaPickPichichi[]
+  /** Picks de pichichi de todos, visibles una vez arranca el Mundial */
+  picksPichichiRevelados: QuinielaPickPichichi[]
   leaderboard: QuinielaLeaderboardRow[]
   config: Record<string, string | null>
+  /** La Bolsa: mercados (una apuesta por partido) */
+  mercados: QuinielaMercado[]
+  /** Mis apuestas */
+  misApuestas: QuinielaApuesta[]
+  /** Apuestas de todos, reveladas cuando su partido se bloquea (1 h antes) */
+  apuestasReveladas: QuinielaApuesta[]
+  /** Importe fijo por apuesta */
+  bolsaStake: number
+  /** Las tablas de Bolsa + escalera de pichichi existen (migraciones aplicadas) */
+  featuresReady: boolean
   comentarios: QuinielaComentario[]
   reacciones: QuinielaReaccion[]
   /** Marcadores en vivo del cron (id de partido → marcador y minuto) */
@@ -129,17 +151,20 @@ export async function getQuinielaData(): Promise<QuinielaData | { error: string 
     const jugador = await getJugadorActual(admin)
     if (!fp && !jugador) return { error: 'SIN_SESION' }
 
-    const [equiposRes, partidosRes, jugadoresRes, prediccionesRes, picksRes, configRes, comentariosRes, reaccionesRes] =
+    const [equiposRes, partidosRes, jugadoresRes, prediccionesRes, picksRes, picksPichichiRes, configRes, comentariosRes, reaccionesRes, mercadosRes, apuestasRes] =
       await Promise.all([
         admin.from('quiniela_equipos').select('*').order('grupo').order('nombre'),
         admin.from('quiniela_partidos').select('*').order('numero'),
         admin.from('quiniela_jugadores').select('*').order('created_at'),
         admin.from('quiniela_predicciones').select('*'),
         admin.from('quiniela_picks_campeon').select('*'),
+        admin.from('quiniela_picks_pichichi').select('*'),
         admin.from('quiniela_config').select('*'),
-        // Chat: tolerante a que las tablas aún no existan (migración pendiente)
+        // Chat y Bolsa: tolerantes a que las tablas aún no existan (migración pendiente)
         admin.from('quiniela_comentarios').select('*').order('created_at', { ascending: false }).limit(300),
         admin.from('quiniela_reacciones').select('*'),
+        admin.from('quiniela_mercados').select('*'),
+        admin.from('quiniela_apuestas').select('*'),
       ])
 
     const firstError = equiposRes.error || partidosRes.error || jugadoresRes.error
@@ -151,10 +176,17 @@ export async function getQuinielaData(): Promise<QuinielaData | { error: string 
     const jugadores = (jugadoresRes.data ?? []) as QuinielaJugador[]
     const predicciones = (prediccionesRes.data ?? []) as QuinielaPrediccion[]
     const picks = (picksRes.data ?? []) as QuinielaPickCampeon[]
+    const picksPichichi = (picksPichichiRes.error ? [] : picksPichichiRes.data ?? []) as QuinielaPickPichichi[]
     const comentarios = (comentariosRes.error ? [] : comentariosRes.data ?? []) as QuinielaComentario[]
     const reacciones = (reaccionesRes.error ? [] : reaccionesRes.data ?? []) as QuinielaReaccion[]
+    const mercados = (mercadosRes.error ? [] : mercadosRes.data ?? []) as QuinielaMercado[]
+    const apuestas = (apuestasRes.error ? [] : apuestasRes.data ?? []) as QuinielaApuesta[]
     const config: Record<string, string | null> = {}
     for (const row of configRes.data ?? []) config[row.key] = row.value
+    const bolsaStake = parseInt(config['bolsa_stake'] || '', 10) || BOLSA_STAKE_DEFAULT
+    // ¿Migraciones de Bolsa + escalera de pichichi aplicadas? Si no, ocultamos
+    // esas funciones (evita que el modal de fase atrape sin tabla donde escribir).
+    const featuresReady = !mercadosRes.error && !apuestasRes.error && !picksPichichiRes.error
 
     // Marcadores en vivo (escritos por el cron); se ignoran si tienen más de 15 min
     let liveScores: Record<string, { gl: number; gv: number; minuto: string }> = {}
@@ -180,16 +212,27 @@ export async function getQuinielaData(): Promise<QuinielaData | { error: string 
     const misPredicciones = predicciones.filter(p => p.jugador_id === miJugadorId)
     const prediccionesReveladas = predicciones.filter(p => bloqueados.has(p.partido_id))
 
+    // Bolsa: apuestas ajenas reveladas cuando su partido se bloquea
+    const mercadoPartido = new Map(mercados.map(m => [m.id, m.partido_id]))
+    const misApuestas = apuestas.filter(a => a.jugador_id === miJugadorId)
+    const apuestasReveladas = apuestas.filter(a => {
+      const pid = mercadoPartido.get(a.mercado_id)
+      return pid != null && bloqueados.has(pid)
+    })
+
     const misPicks = picks.filter(p => p.jugador_id === miJugadorId)
+    const misPicksPichichi = picksPichichi.filter(p => p.jugador_id === miJugadorId)
     const deadlineApertura = getAperturaDeadlineMs(config, partidos)
     const aperturaAbierta = config['ventana_activa'] === 'apertura'
       && deadlineApertura !== null && ahora < deadlineApertura
     const picksRevelados = aperturaAbierta ? misPicks : picks
+    const picksPichichiRevelados = aperturaAbierta ? misPicksPichichi : picksPichichi
 
     // ── Leaderboard ──
     const campeonId = config['campeon_id']
     const pichichiGanador = (config['pichichi_ganador'] || '').trim().toLowerCase()
     const partidosById = new Map(partidos.map(p => [p.id, p]))
+    const mercadoLiquidado = new Map(mercados.map(m => [m.id, m.estado === 'liquidado']))
 
     const leaderboard: QuinielaLeaderboardRow[] = jugadores.map(jug => {
       const prefs = predicciones.filter(p => p.jugador_id === jug.id)
@@ -208,17 +251,34 @@ export async function getQuinielaData(): Promise<QuinielaData | { error: string 
           if (pick.equipo_id === campeonId) puntosEscalera += PUNTOS_ESCALERA[pick.ventana]
         }
       }
-      const puntosPichichi =
-        pichichiGanador && (jug.pichichi || '').trim().toLowerCase() === pichichiGanador
-          ? PUNTOS_PICHICHI : 0
+      let puntosPichichi = 0
+      if (pichichiGanador) {
+        for (const pk of picksPichichi.filter(p => p.jugador_id === jug.id)) {
+          if ((pk.nombre || '').trim().toLowerCase() === pichichiGanador) {
+            puntosPichichi += PUNTOS_PICHICHI_ESCALERA[pk.ventana]
+          }
+        }
+      }
+
+      // La Bolsa: neto de apuestas liquidadas; fichas comprometidas en las vivas
+      let puntosApuestas = 0, fichasEnJuego = 0
+      for (const a of apuestas.filter(x => x.jugador_id === jug.id)) {
+        if (mercadoLiquidado.get(a.mercado_id)) puntosApuestas += (a.payout ?? 0) - a.fichas
+        else fichasEnJuego += a.fichas
+      }
+
+      const total = puntosPartidos + puntosEscalera + puntosPichichi + puntosApuestas
       return {
         jugador_id: jug.id,
         nombre: jug.nombre,
         pagado: jug.pagado,
-        total: puntosPartidos + puntosEscalera + puntosPichichi,
+        total,
         puntos_partidos: puntosPartidos,
         puntos_escalera: puntosEscalera,
         puntos_pichichi: puntosPichichi,
+        puntos_apuestas: puntosApuestas,
+        fichas_en_juego: fichasEnJuego,
+        saldo: total - fichasEnJuego,
         exactos,
         aciertos_eliminatorias: aciertosElim,
       }
@@ -235,7 +295,9 @@ export async function getQuinielaData(): Promise<QuinielaData | { error: string 
       equipos, partidos, jugadores,
       misPredicciones, prediccionesReveladas,
       misPicks, picksRevelados,
+      misPicksPichichi, picksPichichiRevelados,
       leaderboard, config,
+      mercados, misApuestas, apuestasReveladas, bolsaStake, featuresReady,
       comentarios, reacciones,
       liveScores,
       miJugadorId,
@@ -467,11 +529,67 @@ export async function updatePichichi(nombre: string): Promise<{ success: true } 
       return { error: 'El pick de Pichichi ya está cerrado.' }
     }
 
+    const limpio = nombre.trim()
     const { error } = await admin
       .from('quiniela_jugadores')
-      .update({ pichichi: nombre.trim() || null })
+      .update({ pichichi: limpio || null })
       .eq('id', jugador.id)
     if (error) return { error: error.message }
+
+    // Espejo en la escalera (ventana de apertura)
+    if (limpio) {
+      await admin.from('quiniela_picks_pichichi')
+        .upsert({ jugador_id: jugador.id, ventana: 'apertura', nombre: limpio }, { onConflict: 'jugador_id,ventana' })
+    } else {
+      await admin.from('quiniela_picks_pichichi')
+        .delete().eq('jugador_id', jugador.id).eq('ventana', 'apertura')
+    }
+
+    revalidateQuiniela()
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
+/** Pick de pichichi por ventana (escalera, en paralelo al campeón). */
+export async function upsertPickPichichi(data: {
+  ventana: VentanaCampeon
+  nombre: string
+}): Promise<{ success: true } | { error: string }> {
+  try {
+    const admin = createAdminClient()
+    const jugador = await getJugadorActual(admin)
+    if (!jugador) return { error: 'No estás dentro de la porra.' }
+
+    const nombre = data.nombre.trim()
+    if (!nombre) return { error: 'Escribe el nombre del goleador.' }
+    if (nombre.length > 60) return { error: 'Nombre demasiado largo.' }
+
+    const { data: configRow } = await admin
+      .from('quiniela_config').select('value').eq('key', 'ventana_activa').single()
+    if (configRow?.value !== data.ventana) {
+      return { error: 'Esta ventana de pichichi no está activa.' }
+    }
+    if (data.ventana === 'apertura') {
+      const deadline = await getAperturaDeadline(admin)
+      if (deadline && deadline <= Date.now()) {
+        return { error: 'La ventana de pichichi de apertura ya está cerrada.' }
+      }
+    }
+
+    const { error } = await admin.from('quiniela_picks_pichichi').upsert({
+      jugador_id: jugador.id,
+      ventana: data.ventana,
+      nombre,
+    }, { onConflict: 'jugador_id,ventana' })
+    if (error) return { error: error.message }
+
+    // Mantener sincronizado el campo legacy para la apertura
+    if (data.ventana === 'apertura') {
+      await admin.from('quiniela_jugadores').update({ pichichi: nombre }).eq('id', jugador.id)
+    }
+
     revalidateQuiniela()
     return { success: true }
   } catch (err) {
@@ -646,7 +764,7 @@ export async function updatePagado(
 }
 
 export async function updateQuinielaConfig(
-  key: 'monto_entrada' | 'reparto' | 'pichichi_ganador' | 'apertura_deadline',
+  key: 'monto_entrada' | 'reparto' | 'pichichi_ganador' | 'apertura_deadline' | 'bolsa_stake',
   value: string
 ): Promise<{ success: true } | { error: string }> {
   try {
@@ -655,6 +773,138 @@ export async function updateQuinielaConfig(
     const { error } = await admin.from('quiniela_config')
       .upsert({ key, value: value.trim() || null }, { onConflict: 'key' })
     if (error) return { error: error.message }
+    revalidateQuiniela()
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
+// ── La Bolsa (mini-apuestas) ──────────────────────────────────────────────────
+
+/**
+ * Reserva la apuesta (bloquea las fichas) ANTES de revelar la pregunta.
+ * Crea la apuesta con opción pendiente (''); el jugador elige luego su respuesta
+ * con placeApuesta. Si no llega a elegir, pierde igualmente las fichas.
+ */
+export async function abrirApuesta(data: {
+  mercadoId: string
+}): Promise<{ success: true } | { error: string }> {
+  try {
+    const admin = createAdminClient()
+    const jugador = await getJugadorActual(admin)
+    if (!jugador) return { error: 'No estás dentro de la porra.' }
+
+    const { data: mercado, error: mErr } = await admin
+      .from('quiniela_mercados').select('estado, partido_id').eq('id', data.mercadoId).single()
+    if (mErr || !mercado) return { error: 'Apuesta no encontrada.' }
+    if (mercado.estado === 'liquidado') return { error: 'Esta apuesta ya está resuelta.' }
+
+    const { data: partido } = await admin
+      .from('quiniela_partidos').select('fecha_hora').eq('id', mercado.partido_id).single()
+    if (!partido) return { error: 'Partido no encontrado.' }
+    if (prediccionBloqueada(partido.fecha_hora)) {
+      return { error: 'Las apuestas se cierran 1 h antes del partido.' }
+    }
+
+    // Si ya tiene apuesta en este mercado, no hay nada que reservar
+    const { data: existente } = await admin
+      .from('quiniela_apuestas').select('id')
+      .eq('jugador_id', jugador.id).eq('mercado_id', data.mercadoId).maybeSingle()
+    if (existente) return { success: true }
+
+    const { data: cfg } = await admin
+      .from('quiniela_config').select('value').eq('key', 'bolsa_stake').maybeSingle()
+    const stake = parseInt(cfg?.value || '', 10) || BOLSA_STAKE_DEFAULT
+
+    const saldo = await calcSaldoJugador(admin, jugador.id)
+    if (saldo < stake) {
+      return { error: `No tienes saldo suficiente: necesitas ${stake} pts y tienes ${Math.max(0, saldo)}.` }
+    }
+
+    const { error } = await admin.from('quiniela_apuestas').insert({
+      jugador_id: jugador.id,
+      mercado_id: data.mercadoId,
+      opcion: '',          // pendiente de elegir
+      fichas: stake,
+      payout: null,
+    })
+    if (error) return { error: error.message }
+
+    revalidateQuiniela()
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
+/** Coloca o cambia la apuesta del jugador en un mercado (una por partido). */
+export async function placeApuesta(data: {
+  mercadoId: string
+  opcion: string
+}): Promise<{ success: true } | { error: string }> {
+  try {
+    const admin = createAdminClient()
+    const jugador = await getJugadorActual(admin)
+    if (!jugador) return { error: 'No estás dentro de la porra.' }
+
+    const { data: mercado, error: mErr } = await admin
+      .from('quiniela_mercados').select('*').eq('id', data.mercadoId).single()
+    if (mErr || !mercado) return { error: 'Apuesta no encontrada.' }
+    if (mercado.estado === 'liquidado') return { error: 'Esta apuesta ya está resuelta.' }
+
+    const opciones = (mercado.opciones ?? []) as QuinielaMercadoOpcion[]
+    if (!opciones.some(o => o.key === data.opcion)) return { error: 'Opción no válida.' }
+
+    const { data: partido } = await admin
+      .from('quiniela_partidos').select('fecha_hora').eq('id', mercado.partido_id).single()
+    if (!partido) return { error: 'Partido no encontrado.' }
+    if (prediccionBloqueada(partido.fecha_hora)) {
+      return { error: 'Las apuestas se cierran 1 h antes del partido.' }
+    }
+
+    const { data: cfg } = await admin
+      .from('quiniela_config').select('value').eq('key', 'bolsa_stake').maybeSingle()
+    const stake = parseInt(cfg?.value || '', 10) || BOLSA_STAKE_DEFAULT
+
+    // Solo se exige saldo al abrir una apuesta nueva; cambiar de opción no cuesta más
+    const { data: existente } = await admin
+      .from('quiniela_apuestas').select('id')
+      .eq('jugador_id', jugador.id).eq('mercado_id', data.mercadoId).maybeSingle()
+    if (!existente) {
+      const saldo = await calcSaldoJugador(admin, jugador.id)
+      if (saldo < stake) {
+        return { error: `No tienes saldo suficiente: necesitas ${stake} pts y tienes ${Math.max(0, saldo)}.` }
+      }
+    }
+
+    const { error } = await admin.from('quiniela_apuestas').upsert({
+      jugador_id: jugador.id,
+      mercado_id: data.mercadoId,
+      opcion: data.opcion,
+      fichas: stake,
+      payout: null,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'jugador_id,mercado_id' })
+    if (error) return { error: error.message }
+
+    revalidateQuiniela()
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
+/** Resuelve un mercado (solo partner). Repite para corregir una resolución. */
+export async function liquidarMercadoAdmin(data: {
+  mercadoId: string
+  opcionGanadora: string
+}): Promise<{ success: true } | { error: string }> {
+  try {
+    await requirePartner()
+    const admin = createAdminClient()
+    const result = await liquidarMercado(admin, data.mercadoId, data.opcionGanadora)
+    if ('error' in result) return result
     revalidateQuiniela()
     return { success: true }
   } catch (err) {

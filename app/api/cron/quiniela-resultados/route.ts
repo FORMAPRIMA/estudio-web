@@ -3,6 +3,7 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { fetchEspnScoreboard, matchEvento } from '@/lib/quiniela/espn'
 import { finalizarPartido } from '@/lib/quiniela/finalize'
+import { avanzarFasesCompletas } from '@/lib/quiniela/advance'
 import type { QuinielaEquipo, QuinielaPartido } from '@/lib/quiniela/config'
 
 // Vercel Cron — cada 2 min (vercel.json). Marcadores en vivo + cierre automático
@@ -103,10 +104,19 @@ export async function GET(req: NextRequest) {
       : null,
   }, { onConflict: 'key' })
 
+  // Si se cerró algún partido, comprobar si con ello se completó una fase y, en
+  // tal caso, avanzar automáticamente a la siguiente (bracket + ventana de
+  // campeón/pichichi + borrador de apuestas de La Bolsa + aviso al partner).
+  let avances: Awaited<ReturnType<typeof avanzarFasesCompletas>>['avances'] = []
   if (resumen.finalizados > 0) {
+    try {
+      avances = (await avanzarFasesCompletas(admin)).avances
+    } catch (err) {
+      resumen.errores.push(`avance de fase: ${err instanceof Error ? err.message : 'desconocido'}`)
+    }
     revalidatePath('/quiniela')
     revalidatePath('/team/apps/quiniela')
   }
 
-  return NextResponse.json({ ok: true, candidatos: candidatos.length, ...resumen })
+  return NextResponse.json({ ok: true, candidatos: candidatos.length, ...resumen, avances })
 }

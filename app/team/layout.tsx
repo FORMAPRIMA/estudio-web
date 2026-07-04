@@ -165,6 +165,12 @@ const ALL_NAV: (NavItem & { roles: FpRole[] })[] = [
     roles: ['fp_team', 'fp_manager', 'fp_partner', 'fp_biz_dev'],
   },
   {
+    href: '/team/apps/urban-analyst',
+    label: 'Urban Analyst',
+    roles: ['fp_partner'],
+    isSubItem: true,
+  },
+  {
     href: '/team/apps/design-hunter',
     label: 'Design Hunter',
     roles: ['fp_team', 'fp_manager', 'fp_partner', 'fp_biz_dev'],

@@ -32,7 +32,7 @@ export const LIGHTING_PRESETS: LightingPreset[] = [
     environmentImage: '/hdri/studio_small_09_2k.hdr',
     exposure: 1.0,
     envIntensity: 1.0,
-    shadowOpacity: 0.55,
+    shadowOpacity: 0.45,
   },
   {
     id: 'calido',
@@ -40,7 +40,7 @@ export const LIGHTING_PRESETS: LightingPreset[] = [
     environmentImage: '/hdri/brown_photostudio_02_2k.hdr',
     exposure: 1.0,
     envIntensity: 0.95,
-    shadowOpacity: 0.62,
+    shadowOpacity: 0.5,
   },
   {
     id: 'brillante',
@@ -48,7 +48,7 @@ export const LIGHTING_PRESETS: LightingPreset[] = [
     environmentImage: '/hdri/studio_small_09_2k.hdr',
     exposure: 1.28,
     envIntensity: 1.3,
-    shadowOpacity: 0.38,
+    shadowOpacity: 0.32,
   },
 ]
 

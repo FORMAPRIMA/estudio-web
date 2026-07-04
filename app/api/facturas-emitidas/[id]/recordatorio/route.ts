@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sendEmail, wrapEmail } from '@/lib/email'
+import { esSeccionNoCliente } from '@/lib/finanzas/costs'
+import { resolveProveedorDestino } from '@/lib/finanzas/proveedorDestino'
 
 export async function POST(
   _req: NextRequest,
@@ -25,7 +27,7 @@ export async function POST(
       .from('facturas_emitidas')
       .select(`
         id, numero_completo, fecha_emision, cliente_nombre, cliente_contacto,
-        cliente_id, proyecto_nombre, total, base_imponible, tipo_iva, cuota_iva,
+        cliente_id, proyecto_id, proyecto_nombre, seccion, factura_origen_id, total, base_imponible, tipo_iva, cuota_iva,
         condiciones_pago, iban, forma_pago,
         clientes(id, email, email_cc)
       `)
@@ -36,14 +38,38 @@ export async function POST(
       return NextResponse.json({ error: 'Factura no encontrada.' }, { status: 404 })
     }
 
+    // ── Guard CRÍTICO: márgenes internos JAMÁS reciben recordatorio al cliente ─
+    let seccionF: string | null = (factura.seccion as string | null) ?? null
+    if (!seccionF && factura.factura_origen_id) {
+      const { data: fSec } = await admin
+        .from('facturas').select('seccion').eq('id', factura.factura_origen_id).maybeSingle()
+      seccionF = (fSec?.seccion as string | undefined) ?? null
+    }
+    // Márgenes internos: el recordatorio va al PROVEEDOR, nunca al cliente.
+    const esPrivada = esSeccionNoCliente(seccionF)
+    let proveedorDestino: Awaited<ReturnType<typeof resolveProveedorDestino>> = null
+    if (esPrivada) {
+      proveedorDestino = await resolveProveedorDestino(admin, {
+        facturaOrigenId: factura.factura_origen_id ?? null,
+        proyectoId:      factura.proyecto_id ?? null,
+        seccion:         seccionF,
+      })
+      if (!proveedorDestino?.email) {
+        return NextResponse.json({ error: 'El proveedor de esta factura no tiene email registrado.' }, { status: 422 })
+      }
+    }
+
     const cliente = (factura.clientes as unknown as { email: string | null; email_cc: string | null } | null)
-    const toEmail = cliente?.email ?? null
+    const toEmail = esPrivada ? proveedorDestino!.email : (cliente?.email ?? null)
 
     if (!toEmail) {
       return NextResponse.json({ error: 'El cliente no tiene email registrado.' }, { status: 400 })
     }
 
-    const recipientName = factura.cliente_contacto || factura.cliente_nombre || 'Cliente'
+    const ccEmail = esPrivada ? (proveedorDestino!.emailCc ?? undefined) : (cliente?.email_cc ?? undefined)
+    const recipientName = esPrivada
+      ? proveedorDestino!.nombre
+      : (factura.cliente_contacto || factura.cliente_nombre || 'Cliente')
     const projectLabel  = factura.proyecto_nombre
       ? ` para el proyecto <strong>${factura.proyecto_nombre}</strong>`
       : ''
@@ -105,7 +131,7 @@ export async function POST(
 
     const result = await sendEmail({
       to:      toEmail,
-      cc:      cliente?.email_cc ?? undefined,
+      cc:      ccEmail,
       subject,
       html:    wrapEmail(emailBody),
     })

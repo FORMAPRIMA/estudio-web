@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { calcTotals, formatNumeroCompleto } from '@/lib/facturasUtils'
+import { SECCION_ORDER } from '@/lib/finanzas/costs'
 export { calcTotals, formatNumeroCompleto }
 
 const PATH = '/team/finanzas/facturacion/emitidas'
@@ -45,6 +46,7 @@ export interface CreateFacturaInput {
   cliente_direccion?: string | null
   proyecto_id?:     string | null
   proyecto_nombre?: string | null
+  seccion?:         string | null
   items:            FacturaItem[]
   tipo_iva:         number
   tipo_irpf?:       number | null
@@ -139,6 +141,7 @@ export async function createFacturaEmitida(
         cliente_direccion: input.cliente_direccion ?? null,
         proyecto_id:       input.proyecto_id ?? null,
         proyecto_nombre:   input.proyecto_nombre ?? null,
+        seccion:           input.seccion ?? null,
         items:             input.items,
         tipo_iva:          input.tipo_iva,
         tipo_irpf:         input.tipo_irpf ?? null,
@@ -327,6 +330,173 @@ export async function updateFacturaEmitida(
   }
 }
 
+// ── Asignación de proyecto + sección (impacta contabilidad) ───────────────────
+
+function revalidateProyecto(proyectoId?: string | null) {
+  if (!proyectoId) return
+  revalidatePath(`/team/finanzas/facturacion/control/${proyectoId}`)
+  revalidatePath(`/team/finanzas/operativas/proyectos/${proyectoId}`)
+}
+
+// Maps facturas_emitidas.estado → facturas.status (para la fila de contabilidad)
+const ESTADO_TO_FACTURA_STATUS: Record<string, string> = {
+  borrador: 'acordada_contrato',
+  enviada:  'enviada',
+  pagada:   'pagada',
+  anulada:  'impagada',
+}
+
+/** Secciones reales de un proyecto (de proyecto_fases → catalogo_fases.seccion). */
+export async function getSeccionesProyecto(proyectoId: string): Promise<string[]> {
+  try {
+    const admin = createAdminClient()
+    const { data } = await admin
+      .from('proyecto_fases')
+      .select('catalogo_fases(seccion)')
+      .eq('proyecto_id', proyectoId)
+
+    type Row = { catalogo_fases: { seccion: string | null } | { seccion: string | null }[] | null }
+    const found = new Set<string>()
+    for (const row of (data ?? []) as Row[]) {
+      const cf = row.catalogo_fases
+      if (!cf) continue
+      const arr = Array.isArray(cf) ? cf : [cf]
+      for (const c of arr) if (c?.seccion) found.add(c.seccion)
+    }
+
+    const ordered: string[] = SECCION_ORDER.filter(s => found.has(s))
+    for (const s of Array.from(found)) if (!ordered.includes(s)) ordered.push(s)
+    // Si el proyecto no tiene fases todavía, ofrecer la lista canónica
+    return ordered.length > 0 ? ordered : [...SECCION_ORDER]
+  } catch {
+    return [...SECCION_ORDER]
+  }
+}
+
+/**
+ * Asigna (o reasigna) proyecto + sección a una factura emitida y lo refleja en
+ * contabilidad creando/sincronizando una fila en `facturas`.
+ * - Pasar `proyectoId = null` deshace la asignación (borra la fila auto-creada).
+ * - Nunca borra ni mueve filas de `facturas` que vengan de un contrato.
+ */
+export async function asignarProyectoSeccion(
+  emitidaId: string,
+  proyectoId: string | null,
+  seccion: string | null,
+): Promise<{ success: true; proyecto_nombre: string | null; seccion: string | null } | { error: string }> {
+  try {
+    await requirePartner()
+    const admin = createAdminClient()
+
+    const { data: emitida, error: emErr } = await admin
+      .from('facturas_emitidas')
+      .select('id, base_imponible, estado, factura_origen_id, cliente_id, numero_completo')
+      .eq('id', emitidaId)
+      .single()
+    if (emErr || !emitida) return { error: emErr?.message ?? 'Factura no encontrada.' }
+
+    // ── Deshacer asignación ──────────────────────────────────────────────────
+    if (!proyectoId) {
+      if (emitida.factura_origen_id) {
+        const { data: origen } = await admin
+          .from('facturas')
+          .select('id, creada_desde_emitida, proyecto_id')
+          .eq('id', emitida.factura_origen_id)
+          .maybeSingle()
+        if (origen?.creada_desde_emitida) {
+          await admin.from('facturas').delete().eq('id', origen.id)
+          revalidateProyecto(origen.proyecto_id)
+        }
+        // Filas de contrato: se dejan intactas, solo se desvincula la emitida.
+      }
+      const { error: upErr } = await admin
+        .from('facturas_emitidas')
+        .update({ proyecto_id: null, proyecto_nombre: null, seccion: null, factura_origen_id: null })
+        .eq('id', emitidaId)
+      if (upErr) return { error: upErr.message }
+      revalidatePath(PATH)
+      revalidatePath('/team/finanzas/facturacion/control')
+      revalidatePath('/team/finanzas/operativas/proyectos')
+      return { success: true, proyecto_nombre: null, seccion: null }
+    }
+
+    // ── Asignar / reasignar ──────────────────────────────────────────────────
+    const { data: proy } = await admin
+      .from('proyectos')
+      .select('id, nombre, codigo')
+      .eq('id', proyectoId)
+      .single()
+    const proyectoNombre = proy
+      ? `${proy.codigo ? proy.codigo + ' · ' : ''}${proy.nombre}`
+      : null
+
+    const status   = ESTADO_TO_FACTURA_STATUS[emitida.estado] ?? 'acordada_contrato'
+    const monto    = emitida.base_imponible ?? 0
+    const concepto = `Factura ${emitida.numero_completo}${seccion ? ' · ' + seccion : ''}`
+
+    let facturaId = emitida.factura_origen_id as string | null
+
+    if (facturaId) {
+      const { data: origen } = await admin
+        .from('facturas')
+        .select('id, creada_desde_emitida, proyecto_id')
+        .eq('id', facturaId)
+        .maybeSingle()
+      if (origen?.creada_desde_emitida) {
+        // Fila auto-creada: se puede mover proyecto/sección/monto/status
+        await admin
+          .from('facturas')
+          .update({ proyecto_id: proyectoId, seccion: seccion ?? '', monto, status, concepto })
+          .eq('id', origen.id)
+        if (origen.proyecto_id && origen.proyecto_id !== proyectoId) revalidateProyecto(origen.proyecto_id)
+      } else if (origen) {
+        // Fila de contrato: solo ajustamos la etiqueta de sección, nunca el importe/estado
+        if (seccion) await admin.from('facturas').update({ seccion }).eq('id', origen.id)
+      } else {
+        facturaId = null // el vínculo apuntaba a una fila inexistente: recrear
+      }
+    }
+
+    if (!facturaId) {
+      const { data: nueva, error: insErr } = await admin
+        .from('facturas')
+        .insert({
+          proyecto_id:          proyectoId,
+          seccion:              seccion ?? '',
+          concepto,
+          monto,
+          status,
+          clientes_ids:         emitida.cliente_id ? [emitida.cliente_id] : [],
+          creada_desde_emitida: true,
+          factura_emitida_id:   emitidaId,
+        })
+        .select('id')
+        .single()
+      if (insErr) return { error: insErr.message }
+      facturaId = nueva.id
+    }
+
+    const { error: upErr } = await admin
+      .from('facturas_emitidas')
+      .update({
+        proyecto_id:       proyectoId,
+        proyecto_nombre:   proyectoNombre,
+        seccion:           seccion ?? null,
+        factura_origen_id: facturaId,
+      })
+      .eq('id', emitidaId)
+    if (upErr) return { error: upErr.message }
+
+    revalidatePath(PATH)
+    revalidatePath('/team/finanzas/facturacion/control')
+    revalidatePath('/team/finanzas/operativas/proyectos')
+    revalidateProyecto(proyectoId)
+    return { success: true, proyecto_nombre: proyectoNombre, seccion: seccion ?? null }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
 export async function deleteFacturaEmitida(
   id: string
 ): Promise<{ success: true } | { error: string }> {
@@ -334,7 +504,25 @@ export async function deleteFacturaEmitida(
     await requirePartner()
     const admin = createAdminClient()
 
-    // Clear the back-reference in facturas before deleting (avoids FK constraint)
+    // If this emitida spawned its own accounting row (creada_desde_emitida),
+    // remove that row too. Contract-origin facturas are NEVER deleted here.
+    const { data: emitida } = await admin
+      .from('facturas_emitidas')
+      .select('factura_origen_id')
+      .eq('id', id)
+      .single()
+    if (emitida?.factura_origen_id) {
+      const { data: origen } = await admin
+        .from('facturas')
+        .select('id, creada_desde_emitida')
+        .eq('id', emitida.factura_origen_id)
+        .maybeSingle()
+      if (origen?.creada_desde_emitida) {
+        await admin.from('facturas').delete().eq('id', origen.id)
+      }
+    }
+
+    // Clear any remaining back-reference in contract facturas (avoids FK constraint)
     await admin
       .from('facturas')
       .update({ factura_emitida_id: null })

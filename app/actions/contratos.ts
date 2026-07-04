@@ -138,6 +138,53 @@ export async function createContrato(
   }
 }
 
+// Asocia un contrato suelto a un lead o cliente (desde el tablero, sin editor).
+// Rellena los datos del cliente igual que al crearlo desde un contacto.
+export async function asociarContrato(
+  id: string,
+  contactoId: string,
+  source: 'lead' | 'cliente'
+): Promise<{ success: true } | { error: string }> {
+  try {
+    await requirePartner()
+    const admin = createAdminClient()
+
+    const table = source === 'lead' ? 'leads' : 'clientes'
+    const { data: contacto } = await admin
+      .from(table)
+      .select('nombre, apellidos, empresa, nif_cif, email, telefono, direccion, ciudad, codigo_postal, pais')
+      .eq('id', contactoId)
+      .single()
+
+    const patch: Record<string, unknown> = {
+      lead_id:    source === 'lead'    ? contactoId : null,
+      cliente_id: source === 'cliente' ? contactoId : null,
+    }
+    if (contacto) {
+      const fullName = [contacto.nombre, contacto.apellidos].filter(Boolean).join(' ')
+      Object.assign(patch, {
+        cliente_nombre:    contacto.empresa ? fullName : contacto.nombre,
+        cliente_apellidos: contacto.apellidos ?? null,
+        cliente_empresa:   contacto.empresa   ?? null,
+        cliente_nif:       contacto.nif_cif   ?? null,
+        cliente_email:     contacto.email     ?? null,
+        cliente_telefono:  contacto.telefono  ?? null,
+        cliente_direccion: contacto.direccion ?? null,
+        cliente_ciudad:    contacto.ciudad    ?? null,
+        cliente_cp:        (contacto as any).codigo_postal ?? null,
+        cliente_pais:      contacto.pais      ?? null,
+      })
+    }
+
+    const { error } = await admin.from('contratos').update(patch).eq('id', id)
+    if (error) return { error: error.message }
+    revalidatePath(PATH)
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
 export async function updateContrato(
   id: string,
   data: Partial<{

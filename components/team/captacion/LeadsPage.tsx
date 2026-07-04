@@ -3,7 +3,8 @@
 import { useState, useMemo, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { updateLead, deleteLead } from '@/app/actions/leads'
-import { createPropuesta } from '@/app/actions/propuestas'
+import { createPropuesta, deletePropuesta, asociarPropuesta } from '@/app/actions/propuestas'
+import { createContrato, deleteContrato, asociarContrato } from '@/app/actions/contratos'
 import { createEspacio } from '@/app/actions/espacios'
 import { ETAPA_LABEL, type Etapa } from '@/lib/espacio/theme'
 
@@ -58,9 +59,18 @@ export interface ContratoLite {
   lead_id:     string | null
   cliente_id:  string | null
   propuesta_id:string | null
+  cliente_nombre: string | null
   fecha_envio: string | null
   fecha_firma: string | null
   created_at:  string
+}
+
+export interface ClienteLite {
+  id:        string
+  nombre:    string | null
+  apellidos: string | null
+  empresa:   string | null
+  email:     string | null
 }
 
 interface Lead {
@@ -497,6 +507,145 @@ function LeadCard({
   )
 }
 
+// ── Tarjeta suelta (propuesta / contrato sin lead) ───────────────────────────────
+
+function StandaloneCard({
+  kind,
+  propuesta,
+  contrato,
+  onAbrir,
+  onEnviar,
+  onAsociar,
+  onEliminar,
+  busy,
+}: {
+  kind: 'propuesta' | 'contrato'
+  propuesta?: PropuestaLite
+  contrato?: ContratoLite
+  onAbrir: () => void
+  onEnviar?: () => void
+  onAsociar: () => void
+  onEliminar: () => void
+  busy: boolean
+}) {
+  const numero = kind === 'propuesta' ? propuesta!.numero : contrato!.numero
+  const status = (kind === 'propuesta' ? propuesta!.status : contrato!.status) ?? 'borrador'
+  const titulo = kind === 'propuesta'
+    ? (propuesta!.titulo || 'Propuesta sin lead')
+    : (contrato!.cliente_nombre || 'Contrato sin lead')
+  const meta = kind === 'propuesta'
+    ? (PROP_STATUS[status] ?? PROP_STATUS.borrador)
+    : (CONTRATO_STATUS[status] ?? CONTRATO_STATUS.borrador)
+  const accent = kind === 'propuesta' ? '#E8913A' : '#378ADD'
+
+  return (
+    <div style={{ background: '#fff', border: '1px dashed #D8D5CC', borderLeft: `3px solid ${accent}`, borderRadius: 8, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ cursor: 'pointer' }} onClick={onAbrir}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: '#1A1A1A', lineHeight: 1.3 }}>{titulo}</div>
+        <div style={{ fontSize: 10, color: '#BBB', marginTop: 2, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Sin lead asociado</div>
+      </div>
+      <div style={{ fontSize: 11, color: '#555', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <strong style={{ fontWeight: 600 }}>{numero && numero !== 'BORRADOR' ? numero : (kind === 'propuesta' ? 'Propuesta' : 'Contrato')}</strong>
+        <span style={{ fontSize: 9, fontWeight: 600, color: meta.color, background: meta.bg, padding: '1px 6px', borderRadius: 8 }}>{meta.label}</span>
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 2 }}>
+        <button onClick={onAbrir} style={{ ...CARD_BTN, background: '#F0EEE8', color: '#555' }}>
+          {kind === 'propuesta' ? 'Editar' : 'Contrato'}
+        </button>
+        <button onClick={onAsociar} disabled={busy} style={{ ...CARD_BTN, background: '#FDF3EE', color: '#D85A30' }} title="Asociar a un lead o cliente">
+          Asociar
+        </button>
+        {kind === 'propuesta' && status === 'borrador' && onEnviar && (
+          <button onClick={onEnviar} disabled={busy} style={{ ...CARD_BTN, background: '#378ADD', color: '#fff' }}>
+            {busy ? 'Enviando…' : 'Enviar'}
+          </button>
+        )}
+        <button onClick={onEliminar} disabled={busy} style={{ ...CARD_BTN, background: 'transparent', color: '#C0392B', marginLeft: 'auto' }} title="Eliminar">
+          Eliminar
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Modal: asociar artefacto suelto a lead o cliente ─────────────────────────────
+
+function AsociarModal({
+  kind,
+  leads,
+  clientes,
+  onPick,
+  onClose,
+  busy,
+}: {
+  kind: 'propuesta' | 'contrato'
+  leads: Lead[]
+  clientes: ClienteLite[]
+  onPick: (contactoId: string, source: 'lead' | 'cliente') => void
+  onClose: () => void
+  busy: boolean
+}) {
+  const [q, setQ] = useState('')
+  const norm = (s: string) => s.toLowerCase()
+  const match = (parts: (string | null)[]) => {
+    if (!q.trim()) return true
+    const hay = norm(parts.filter(Boolean).join(' '))
+    return q.toLowerCase().split(/\s+/).every(t => hay.includes(t))
+  }
+  const leadsF = leads.filter(l => l.estado_lead !== 'perdido' && match([l.nombre, l.apellidos, l.empresa, l.email]))
+  const clientesF = clientes.filter(c => match([c.nombre, c.apellidos, c.empresa, c.email]))
+
+  const Row = ({ nombre, sub, onClick }: { nombre: string; sub: string | null; onClick: () => void }) => (
+    <button
+      onClick={onClick}
+      disabled={busy}
+      style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 12px', background: '#fff', border: 'none', borderBottom: '1px solid #F0EEE8', cursor: busy ? 'default' : 'pointer', fontFamily: 'inherit' }}
+    >
+      <div style={{ fontSize: 13, fontWeight: 600, color: '#1A1A1A' }}>{nombre || 'Sin nombre'}</div>
+      {sub && <div style={{ fontSize: 11, color: '#999' }}>{sub}</div>}
+    </button>
+  )
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 20px', zIndex: 120, overflowY: 'auto' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 10, padding: 24, width: '100%', maxWidth: 460 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+          <h2 style={{ fontSize: 17, fontWeight: 400, margin: 0 }}>Asociar {kind === 'propuesta' ? 'propuesta' : 'contrato'}</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: '#CCC', lineHeight: 1 }}>×</button>
+        </div>
+        <p style={{ fontSize: 12, color: '#999', margin: '0 0 14px' }}>Elige un lead o cliente. Se rellenarán sus datos automáticamente.</p>
+        <input
+          autoFocus
+          placeholder="Buscar por nombre, empresa o email…"
+          value={q}
+          onChange={e => setQ(e.target.value)}
+          style={{ ...FIELD, fontSize: 14, marginBottom: 14 }}
+        />
+        <div style={{ maxHeight: 360, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div>
+            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#BBB', margin: '0 0 6px' }}>Leads ({leadsF.length})</p>
+            <div style={{ border: '1px solid #F0EEE8', borderRadius: 6, overflow: 'hidden' }}>
+              {leadsF.length === 0 && <p style={{ fontSize: 12, color: '#BBB', margin: 0, padding: '9px 12px' }}>Sin coincidencias.</p>}
+              {leadsF.map(l => (
+                <Row key={l.id} nombre={[l.nombre, l.apellidos].filter(Boolean).join(' ')} sub={l.empresa || l.email} onClick={() => onPick(l.id, 'lead')} />
+              ))}
+            </div>
+          </div>
+          <div>
+            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#BBB', margin: '0 0 6px' }}>Clientes ({clientesF.length})</p>
+            <div style={{ border: '1px solid #F0EEE8', borderRadius: 6, overflow: 'hidden' }}>
+              {clientesF.length === 0 && <p style={{ fontSize: 12, color: '#BBB', margin: 0, padding: '9px 12px' }}>Sin coincidencias.</p>}
+              {clientesF.map(c => (
+                <Row key={c.id} nombre={[c.nombre, c.apellidos].filter(Boolean).join(' ')} sub={c.empresa || c.email} onClick={() => onPick(c.id, 'cliente')} />
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Página principal (Kanban) ───────────────────────────────────────────────────
 
 export default function LeadsPage({
@@ -504,11 +653,13 @@ export default function LeadsPage({
   espacios = [],
   propuestas = [],
   contratos = [],
+  clientes = [],
 }: {
   leads: Lead[]
   espacios?: EspacioLite[]
   propuestas?: PropuestaLite[]
   contratos?: ContratoLite[]
+  clientes?: ClienteLite[]
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
@@ -518,6 +669,7 @@ export default function LeadsPage({
   // Modales
   const [editLead, setEditLead] = useState<Lead | null>(null)
   const [logEspacio, setLogEspacio] = useState<EspacioLite | null>(null)
+  const [asociar, setAsociar] = useState<{ kind: 'propuesta' | 'contrato'; id: string } | null>(null)
   const [showNuevo, setShowNuevo] = useState(false)
   const [nuevoNombre, setNuevoNombre] = useState('')
   const [nuevoEmail, setNuevoEmail] = useState('')
@@ -557,7 +709,12 @@ export default function LeadsPage({
   const visibles = leads.filter(l => showPerdidos ? l.estado_lead === 'perdido' : l.estado_lead !== 'perdido')
   const perdidosCount = leads.filter(l => l.estado_lead === 'perdido').length
 
-  const cardsByColumn: Record<Columna, CardData[]> = { leads: [], propuestas: [], contratos: [], ganados: [] }
+  type BoardCard =
+    | { kind: 'lead'; lead: Lead; data: CardData }
+    | { kind: 'propuesta'; propuesta: PropuestaLite }
+    | { kind: 'contrato'; contrato: ContratoLite }
+
+  const cardsByColumn: Record<Columna, BoardCard[]> = { leads: [], propuestas: [], contratos: [], ganados: [] }
   for (const lead of visibles) {
     const data: CardData = {
       lead,
@@ -565,7 +722,24 @@ export default function LeadsPage({
       propuesta: propuestaByLead.get(lead.id),
       contrato:  contratoByLead.get(lead.id),
     }
-    cardsByColumn[columna(lead)].push(data)
+    cardsByColumn[columna(lead)].push({ kind: 'lead', lead, data })
+  }
+
+  // Propuestas y contratos sin lead → tarjetas sueltas en su columna.
+  // (El tablero es el único hogar de estos artefactos; sin esto, los ligados a
+  //  un cliente o creados sueltos no aparecerían en ninguna parte.)
+  if (!showPerdidos) {
+    const propsConContrato = new Set(
+      contratos.filter(c => !c.lead_id && c.propuesta_id).map(c => c.propuesta_id as string)
+    )
+    for (const p of propuestas) {
+      if (p.lead_id || propsConContrato.has(p.id)) continue
+      cardsByColumn.propuestas.push({ kind: 'propuesta', propuesta: p })
+    }
+    for (const c of contratos) {
+      if (c.lead_id) continue
+      cardsByColumn[c.status === 'firmado' ? 'ganados' : 'contratos'].push({ kind: 'contrato', contrato: c })
+    }
   }
 
   // ── Acciones ──────────────────────────────────────────────────────────────
@@ -609,6 +783,50 @@ export default function LeadsPage({
       setBusyId(null)
       refresh()
     }
+  }
+
+  const handleCrearPropuestaSuelta = async () => {
+    setBusyId('nueva-propuesta')
+    const res = await createPropuesta()
+    setBusyId(null)
+    if ('id' in res) router.push(`/team/captacion/propuestas/${res.id}`)
+    else alert(res.error)
+  }
+
+  const handleCrearContratoSuelto = async () => {
+    setBusyId('nuevo-contrato')
+    const res = await createContrato()
+    setBusyId(null)
+    if ('id' in res) router.push(`/team/captacion/contratos/${res.id}`)
+    else alert(res.error)
+  }
+
+  const handleEliminarPropuesta = async (id: string) => {
+    if (!confirm('¿Eliminar esta propuesta definitivamente?')) return
+    setBusyId(id)
+    await deletePropuesta(id)
+    setBusyId(null)
+    refresh()
+  }
+
+  const handleEliminarContrato = async (id: string) => {
+    if (!confirm('¿Eliminar este contrato definitivamente?')) return
+    setBusyId(id)
+    await deleteContrato(id)
+    setBusyId(null)
+    refresh()
+  }
+
+  const handleAsociar = async (contactoId: string, source: 'lead' | 'cliente') => {
+    if (!asociar) return
+    setBusyId(asociar.id)
+    const res = asociar.kind === 'propuesta'
+      ? await asociarPropuesta(asociar.id, contactoId, source)
+      : await asociarContrato(asociar.id, contactoId, source)
+    setBusyId(null)
+    if ('error' in res) { alert(res.error); return }
+    setAsociar(null)
+    refresh()
   }
 
   const handleCrearEspacio = async (lead: Lead) => {
@@ -688,28 +906,72 @@ export default function LeadsPage({
               <div key={col.key} style={{ flex: '1 1 0', minWidth: 270, background: '#F8F7F4', borderRadius: 10, padding: 12, border: '1px solid #EFEDE7' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, paddingBottom: 8, borderBottom: `2px solid ${col.accent}` }}>
                   <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#444' }}>{col.label}</span>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: col.accent }}>{cards.length}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {(col.key === 'propuestas' || col.key === 'contratos') && (
+                      <button
+                        onClick={col.key === 'propuestas' ? handleCrearPropuestaSuelta : handleCrearContratoSuelto}
+                        disabled={busyId === (col.key === 'propuestas' ? 'nueva-propuesta' : 'nuevo-contrato')}
+                        title={col.key === 'propuestas' ? 'Nueva propuesta sin lead' : 'Nuevo contrato sin lead'}
+                        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, borderRadius: 5, border: 'none', background: col.accent, color: '#fff', cursor: 'pointer', fontFamily: 'inherit', fontSize: 15, fontWeight: 600, lineHeight: 1, padding: 0 }}
+                      >
+                        +
+                      </button>
+                    )}
+                    <span style={{ fontSize: 11, fontWeight: 700, color: col.accent }}>{cards.length}</span>
+                  </div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {cards.length === 0 && (
                     <p style={{ fontSize: 11, color: '#BBB', textAlign: 'center', padding: '16px 0', margin: 0 }}>—</p>
                   )}
-                  {cards.map(data => (
-                    <LeadCard
-                      key={data.lead.id}
-                      data={data}
-                      busy={busyId === data.lead.id || pending}
-                      onOpenLead={() => setEditLead(data.lead)}
-                      onVerPortal={() => data.espacio && window.open(`/espacio/${data.espacio.token}`, '_blank')}
-                      onCrearEspacio={() => handleCrearEspacio(data.lead)}
-                      onCrearPropuesta={() => handleCrearPropuesta(data.lead)}
-                      onEnviarPropuesta={() => data.propuesta && handleEnviarPropuesta(data.propuesta.id, data.lead.id)}
-                      onAbrirPropuesta={() => data.propuesta && router.push(`/team/captacion/propuestas/${data.propuesta.id}`)}
-                      onAbrirContrato={() => data.contrato && router.push(`/team/captacion/contratos/${data.contrato.id}`)}
-                      onMarcarPerdido={() => handleMarcarPerdido(data.lead)}
-                      onVerLogs={() => data.espacio && setLogEspacio(data.espacio)}
-                    />
-                  ))}
+                  {cards.map(card => {
+                    if (card.kind === 'lead') {
+                      const data = card.data
+                      return (
+                        <LeadCard
+                          key={data.lead.id}
+                          data={data}
+                          busy={busyId === data.lead.id || pending}
+                          onOpenLead={() => setEditLead(data.lead)}
+                          onVerPortal={() => data.espacio && window.open(`/espacio/${data.espacio.token}`, '_blank')}
+                          onCrearEspacio={() => handleCrearEspacio(data.lead)}
+                          onCrearPropuesta={() => handleCrearPropuesta(data.lead)}
+                          onEnviarPropuesta={() => data.propuesta && handleEnviarPropuesta(data.propuesta.id, data.lead.id)}
+                          onAbrirPropuesta={() => data.propuesta && router.push(`/team/captacion/propuestas/${data.propuesta.id}`)}
+                          onAbrirContrato={() => data.contrato && router.push(`/team/captacion/contratos/${data.contrato.id}`)}
+                          onMarcarPerdido={() => handleMarcarPerdido(data.lead)}
+                          onVerLogs={() => data.espacio && setLogEspacio(data.espacio)}
+                        />
+                      )
+                    }
+                    if (card.kind === 'propuesta') {
+                      const p = card.propuesta
+                      return (
+                        <StandaloneCard
+                          key={`p-${p.id}`}
+                          kind="propuesta"
+                          propuesta={p}
+                          busy={busyId === p.id || pending}
+                          onAbrir={() => router.push(`/team/captacion/propuestas/${p.id}`)}
+                          onEnviar={() => handleEnviarPropuesta(p.id, p.id)}
+                          onAsociar={() => setAsociar({ kind: 'propuesta', id: p.id })}
+                          onEliminar={() => handleEliminarPropuesta(p.id)}
+                        />
+                      )
+                    }
+                    const c = card.contrato
+                    return (
+                      <StandaloneCard
+                        key={`c-${c.id}`}
+                        kind="contrato"
+                        contrato={c}
+                        busy={busyId === c.id || pending}
+                        onAbrir={() => router.push(`/team/captacion/contratos/${c.id}`)}
+                        onAsociar={() => setAsociar({ kind: 'contrato', id: c.id })}
+                        onEliminar={() => handleEliminarContrato(c.id)}
+                      />
+                    )
+                  })}
                 </div>
               </div>
             )
@@ -719,6 +981,18 @@ export default function LeadsPage({
 
       {/* Modal: accesos (etapa actual + histórico) */}
       {logEspacio && <AccesosModal espacio={logEspacio} onClose={() => setLogEspacio(null)} />}
+
+      {/* Modal: asociar artefacto suelto a lead/cliente */}
+      {asociar && (
+        <AsociarModal
+          kind={asociar.kind}
+          leads={leads}
+          clientes={clientes}
+          busy={busyId === asociar.id}
+          onPick={handleAsociar}
+          onClose={() => setAsociar(null)}
+        />
+      )}
 
       {/* Modal: editar lead */}
       {editLead && (

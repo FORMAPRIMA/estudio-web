@@ -2,6 +2,17 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 
 export async function middleware(request: NextRequest) {
+  // ── Dominio público (formaprima.es): la raíz muestra el teaser WIP ──────────────
+  // internal.formaprima.es y el resto de hosts mantienen el comportamiento normal.
+  const host = (request.headers.get('host') || '').toLowerCase()
+  const isPublicApex = host === 'formaprima.es' || host === 'www.formaprima.es'
+  // Solo reescribimos la navegación (GET). Las peticiones POST de los Server
+  // Actions (p.ej. el formulario de contacto del teaser) deben llegar al route
+  // handler sin reescribir, o Next.js no resuelve la acción y se cuelga.
+  if (isPublicApex && request.nextUrl.pathname === '/' && request.method === 'GET') {
+    return NextResponse.rewrite(new URL('/wip', request.url))
+  }
+
   let supabaseResponse = NextResponse.next({
     request,
   })
@@ -79,6 +90,7 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    '/',
     '/area-privada/:path*',
     '/team/:path*',
   ],

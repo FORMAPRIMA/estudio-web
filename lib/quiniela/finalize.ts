@@ -5,6 +5,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { calcPuntosPrediccion } from '@/lib/quiniela/config'
 import type { QuinielaPartido } from '@/lib/quiniela/config'
+import { liquidarMercadosAuto } from '@/lib/quiniela/bolsa'
 
 export async function finalizarPartido(
   admin: SupabaseClient,
@@ -52,6 +53,9 @@ export async function finalizarPartido(
     await admin.from('quiniela_config')
       .upsert({ key: 'campeon_id', value: equipoQuePasaId }, { onConflict: 'key' })
   }
+
+  // La Bolsa: liquidar mercados de auto-liquidación de este partido (penaltis…)
+  await liquidarMercadosAuto(admin, partido.id, golesLocal, golesVisitante)
 
   return { success: true }
 }

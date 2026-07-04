@@ -84,6 +84,42 @@ export async function createPropuesta(
   }
 }
 
+// Asocia una propuesta suelta a un lead o cliente (desde el tablero, sin editor).
+// Rellena el título si aún no lo tiene, igual que al crearla desde un contacto.
+export async function asociarPropuesta(
+  id: string,
+  contactoId: string,
+  source: 'lead' | 'cliente'
+): Promise<{ success: true } | { error: string }> {
+  try {
+    await requirePartner()
+    const admin = createAdminClient()
+
+    const table = source === 'lead' ? 'leads' : 'clientes'
+    const { data: contacto } = await admin
+      .from(table).select('nombre, apellidos').eq('id', contactoId).single()
+    const { data: current } = await admin
+      .from('propuestas').select('titulo').eq('id', id).single()
+
+    const patch: Record<string, unknown> = {
+      lead_id:    source === 'lead'    ? contactoId : null,
+      cliente_id: source === 'cliente' ? contactoId : null,
+    }
+    if (contacto && !current?.titulo) {
+      patch.titulo = contacto.nombre
+        ? `Proyecto ${[contacto.nombre, contacto.apellidos].filter(Boolean).join(' ')}`
+        : null
+    }
+
+    const { error } = await admin.from('propuestas').update(patch).eq('id', id)
+    if (error) return { error: error.message }
+    revalidatePath(PATH)
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
 export async function updatePropuesta(
   id: string,
   data: Partial<{

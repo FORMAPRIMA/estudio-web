@@ -20,6 +20,20 @@ export const SECCIONES_PRIVADAS: string[] = [
   'Margen de mobiliario',
 ]
 
+/** Margen de obra → se factura a la constructora del proyecto (proyectos.constructor_id) */
+export const SECCION_CONSTRUCTORA = 'Margen prorrateado de obra'
+/** Margen de mobiliario → se factura al proveedor de muebles (facturas.proveedor_id) */
+export const SECCION_MOBILIARIO = 'Margen de mobiliario'
+
+/**
+ * Secciones cuya factura JAMÁS debe enviarse al cliente: se factura a un proveedor
+ * (constructora o proveedor de muebles), no al cliente. CRÍTICO para no filtrar
+ * márgenes internos. Usado como guard en todos los endpoints de envío.
+ */
+export function esSeccionNoCliente(seccion: string | null | undefined): boolean {
+  return !!seccion && SECCIONES_PRIVADAS.includes(seccion)
+}
+
 const IVA = 0.21
 
 /**

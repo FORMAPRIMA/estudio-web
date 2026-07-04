@@ -9,6 +9,8 @@ import { FacturaEmitidaPDF } from '@/components/pdfs/FacturaEmitidaPDF'
 import type { FacturaPDFData } from '@/components/pdfs/FacturaEmitidaPDF'
 import { calcTotals } from '@/lib/facturasUtils'
 import { sendEmail, wrapEmail } from '@/lib/email'
+import { esSeccionNoCliente } from '@/lib/finanzas/costs'
+import { resolveProveedorDestino } from '@/lib/finanzas/proveedorDestino'
 import type { ExtraEmail } from '@/app/actions/emitirFactura'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -39,7 +41,32 @@ export async function POST(req: NextRequest) {
       clientesAdicionales?: { nombre: string; apellidos: string | null; email: string | null; email_cc: string | null }[]
     }
 
-    if (!emailCliente?.trim() || !EMAIL_RE.test(emailCliente.trim())) {
+    // ── Sección de la factura: define destinatario (cliente vs proveedor) ─────
+    const adminGuard = createAdminClient()
+    let seccionEnvio: string | null = input.seccion ?? null
+    if (!seccionEnvio && input.factura_origen_id) {
+      const { data: fSec } = await adminGuard
+        .from('facturas').select('seccion').eq('id', input.factura_origen_id).maybeSingle()
+      seccionEnvio = (fSec?.seccion as string | undefined) ?? null
+    }
+    const esPrivada = esSeccionNoCliente(seccionEnvio)
+
+    // ── Resolver destinatario ─────────────────────────────────────────────────
+    // Márgenes internos → SIEMPRE al proveedor (constructora / proveedor de muebles),
+    // NUNCA al cliente. El email se resuelve en servidor desde la BD de proveedores.
+    let proveedorDestino: Awaited<ReturnType<typeof resolveProveedorDestino>> = null
+    if (esPrivada) {
+      proveedorDestino = await resolveProveedorDestino(adminGuard, {
+        facturaOrigenId: input.factura_origen_id ?? null,
+        proyectoId:      input.proyecto_id ?? null,
+        seccion:         seccionEnvio,
+      })
+      if (!proveedorDestino?.email) {
+        return NextResponse.json({
+          error: 'El proveedor de esta factura no tiene email registrado. Añádelo en Proveedores para poder enviársela.',
+        }, { status: 422 })
+      }
+    } else if (!emailCliente?.trim() || !EMAIL_RE.test(emailCliente.trim())) {
       return NextResponse.json({ error: 'Email del cliente inválido o requerido.' }, { status: 400 })
     }
 
@@ -119,19 +146,29 @@ export async function POST(req: NextRequest) {
     const toAdicional = adicionales.map(c => c.email).filter((e): e is string => !!e?.trim()).map(e => e.trim())
     const ccAdicional = adicionales.map(c => c.email_cc).filter((e): e is string => !!e?.trim()).map(e => e.trim())
 
-    const toList = [emailCliente.trim(), ...toExtra, ...toAdicional].filter(Boolean)
-    const cc     = [...PARTNERS_CC, ...ccExtra, ...ccAdicional]
-    const bcc    = bccExtra
+    // Para márgenes internos: SOLO al proveedor (nunca cliente ni clientes adicionales).
+    const toList = esPrivada
+      ? [proveedorDestino!.email!.trim()]
+      : [emailCliente.trim(), ...toExtra, ...toAdicional].filter(Boolean)
+    const cc     = esPrivada
+      ? [...PARTNERS_CC, ...(proveedorDestino!.emailCc ? [proveedorDestino!.emailCc.trim()] : [])]
+      : [...PARTNERS_CC, ...ccExtra, ...ccAdicional]
+    const bcc    = esPrivada ? [] : bccExtra
 
-    // ── 6. Greeting — include all client first names ─────────────────────────
-    const mainNombre = input.cliente_contacto?.trim() || input.cliente_nombre
-    const adicionalNombres = adicionales
-      .map(c => [c.nombre, c.apellidos].filter(Boolean).join(' ').split(' ')[0]) // first name only
-      .filter(Boolean)
-    const allNombres = [mainNombre, ...adicionalNombres]
-    const saludoNombre = allNombres.length > 1
-      ? allNombres.slice(0, -1).join(', ') + ' y ' + allNombres[allNombres.length - 1]
-      : allNombres[0]
+    // ── 6. Greeting ──────────────────────────────────────────────────────────
+    let saludoNombre: string
+    if (esPrivada) {
+      saludoNombre = proveedorDestino!.nombre
+    } else {
+      const mainNombre = input.cliente_contacto?.trim() || input.cliente_nombre
+      const adicionalNombres = adicionales
+        .map(c => [c.nombre, c.apellidos].filter(Boolean).join(' ').split(' ')[0]) // first name only
+        .filter(Boolean)
+      const allNombres = [mainNombre, ...adicionalNombres]
+      saludoNombre = allNombres.length > 1
+        ? allNombres.slice(0, -1).join(', ') + ' y ' + allNombres[allNombres.length - 1]
+        : allNombres[0]
+    }
 
     // ── 7. Email body ───────────────────────────────────────────────────────
     const itemsRows = input.items.map(item => `
@@ -141,21 +178,32 @@ export async function POST(req: NextRequest) {
         <td style="padding:9px 0;border-bottom:1px solid #F0EEE8;font-size:13px;color:#3A3A3A;text-align:right;white-space:nowrap;padding-left:16px;font-weight:600;">${eur(item.subtotal)}</td>
       </tr>`).join('')
 
-    const bodyHtml = `
+    const refProyectoFase = input.proyecto_nombre && seccion
+      ? `, correspondiente a <strong style="color:#1A1A1A;">${seccion}</strong> del proyecto <strong style="color:#1A1A1A;">${input.proyecto_nombre}</strong>`
+      : input.proyecto_nombre
+      ? `, correspondiente al proyecto <strong style="color:#1A1A1A;">${input.proyecto_nombre}</strong>`
+      : seccion
+      ? `, correspondiente a <strong style="color:#1A1A1A;">${seccion}</strong>`
+      : ''
+
+    const introHtml = esPrivada
+      ? `
+      <p style="margin:0 0 22px;font-size:22px;font-weight:300;color:#1A1A1A;line-height:1.3;">Estimados ${saludoNombre},</p>
+
+      <p style="margin:0 0 28px;font-size:14px;color:#555555;line-height:1.75;">
+        Les informamos de la emisión de la factura <strong style="color:#1A1A1A;">${numero_completo}</strong>${refProyectoFase}.
+        Adjuntamos el documento PDF con el detalle completo. Rogamos procedan a su abono según los datos de pago indicados.
+      </p>`
+      : `
       <p style="margin:0 0 22px;font-size:22px;font-weight:300;color:#1A1A1A;line-height:1.3;">Estimado/a ${saludoNombre},</p>
 
       <p style="margin:0 0 28px;font-size:14px;color:#555555;line-height:1.75;">
-        Nos complace enviarle adjunta la factura <strong style="color:#1A1A1A;">${numero_completo}</strong>${
-          input.proyecto_nombre && seccion
-            ? `, correspondiente a la fase de <strong style="color:#1A1A1A;">${seccion}</strong> del proyecto <strong style="color:#1A1A1A;">${input.proyecto_nombre}</strong>`
-            : input.proyecto_nombre
-            ? `, correspondiente al proyecto <strong style="color:#1A1A1A;">${input.proyecto_nombre}</strong>`
-            : seccion
-            ? `, correspondiente a la fase de <strong style="color:#1A1A1A;">${seccion}</strong>`
-            : ''
-        }.
+        Nos complace enviarle adjunta la factura <strong style="color:#1A1A1A;">${numero_completo}</strong>${refProyectoFase}.
         Encontrará el detalle completo en el documento PDF adjunto.
-      </p>
+      </p>`
+
+    const bodyHtml = `
+      ${introHtml}
 
       <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:4px;">
         <thead>
@@ -201,7 +249,7 @@ export async function POST(req: NextRequest) {
         ${config.banco_swift ? `<p style="margin:0;font-size:12px;color:#888888;font-family:'Courier New',monospace;">SWIFT/BIC: ${config.banco_swift}</p>` : ''}
       </div>` : ''}
 
-      ${includeCTA && input.proyecto_id ? `
+      ${includeCTA && input.proyecto_id && !esPrivada ? `
       <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:32px;">
         <tr>
           <td style="background:#1A1A1A;padding:24px 28px;">
@@ -226,7 +274,9 @@ export async function POST(req: NextRequest) {
       to:      toList,
       cc,
       ...(bcc.length && { bcc }),
-      subject: `Facturación Forma Prima — ¡Aquí tienes tu factura! · ${input.proyecto_nombre ?? numero_completo}`,
+      subject: esPrivada
+        ? `Forma Prima — Factura ${numero_completo}${input.proyecto_nombre ? ` · ${input.proyecto_nombre}` : ''}`
+        : `Facturación Forma Prima — ¡Aquí tienes tu factura! · ${input.proyecto_nombre ?? numero_completo}`,
       html:    wrapEmail(bodyHtml),
       attachments: [{ filename: `Factura-${numero_completo}.pdf`, content: pdfBuffer }],
     })

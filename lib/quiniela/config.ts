@@ -70,6 +70,43 @@ export interface QuinielaReaccion {
 
 export const CHAT_EMOJIS = ['⚽', '🔥', '😂', '👏', '😭', '🍺']
 
+// ── La Bolsa (mini-apuestas) ─────────────────────────────────────────────────
+
+export interface QuinielaMercadoOpcion {
+  key: string
+  label: string
+  mult: number
+}
+
+export interface QuinielaMercado {
+  id: string
+  partido_id: string
+  pregunta: string
+  subtitulo: string | null
+  opciones: QuinielaMercadoOpcion[]
+  estado: 'abierto' | 'cerrado' | 'liquidado'
+  opcion_ganadora: string | null
+  auto: boolean
+  regla: string | null
+}
+
+export interface QuinielaApuesta {
+  id: string
+  jugador_id: string
+  mercado_id: string
+  opcion: string
+  fichas: number
+  payout: number | null
+}
+
+/** Importe fijo por apuesta si no hay config `bolsa_stake`. */
+export const BOLSA_STAKE_DEFAULT = 5
+
+/** Premio bruto devuelto al acertar (incluye lo apostado). Redondeo al entero. */
+export function calcPayout(fichas: number, mult: number): number {
+  return Math.round(fichas * mult)
+}
+
 export interface QuinielaJugador {
   id: string
   nombre: string
@@ -99,6 +136,24 @@ export const PUNTOS_ESCALERA: Record<VentanaCampeon, number> = {
 }
 
 export const PUNTOS_PICHICHI = 15
+
+// Escalera del pichichi: como la del campeón, un pick por ventana, en paralelo
+// y acumulable, con puntos decrecientes. Se frena en cuartos (no hay ventana
+// más allá: en semis/final ya sería demasiado fácil acertar).
+export const PUNTOS_PICHICHI_ESCALERA: Record<VentanaCampeon, number> = {
+  apertura:      15,
+  grupos:        10,
+  dieciseisavos: 7,
+  octavos:       4,
+  cuartos:       2,
+}
+
+export interface QuinielaPickPichichi {
+  id: string
+  jugador_id: string
+  ventana: VentanaCampeon
+  nombre: string
+}
 
 // Las predicciones se cierran 1 hora antes del kickoff
 export const BLOQUEO_PREDICCION_MS = 60 * 60 * 1000

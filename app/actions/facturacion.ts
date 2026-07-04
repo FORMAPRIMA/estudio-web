@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { calcTotals, formatNumeroCompleto } from '@/lib/facturasUtils'
+import { SECCIONES_PRIVADAS, SECCION_CONSTRUCTORA } from '@/lib/finanzas/costs'
 
 async function requirePartner() {
   const supabase = await createClient()
@@ -214,7 +215,7 @@ export async function emitirFacturaDesdeContrato(
       .select(`
         id, concepto, monto, seccion, proyecto_id, clientes_ids, proveedor_id,
         proyectos(
-          id, nombre, codigo, direccion,
+          id, nombre, codigo, direccion, constructor_id,
           proyectoCliente:clientes!cliente_id(
             id, nombre, apellidos, empresa,
             nif_cif, direccion_facturacion, ciudad, codigo_postal
@@ -243,12 +244,29 @@ export async function emitirFacturaDesdeContrato(
 
     const proyecto = f.proyectos as unknown as {
       id: string; nombre: string; codigo: string | null; direccion: string | null
+      constructor_id: string | null
       proyectoCliente: ClienteData | null
     } | null
 
-    const proveedorId: string | null = (f as unknown as { proveedor_id?: string | null }).proveedor_id ?? null
+    // ── Resolver proveedor según sección (CRÍTICO) ────────────────────────────
+    // Secciones privadas (márgenes) JAMÁS se facturan al cliente:
+    //  - "Margen prorrateado de obra" → constructora del proyecto (constructor_id)
+    //  - "Margen de mobiliario"       → proveedor de muebles (factura.proveedor_id)
+    const seccion: string = f.seccion
+    const esSeccionPrivada = SECCIONES_PRIVADAS.includes(seccion)
+    let proveedorId: string | null = (f as unknown as { proveedor_id?: string | null }).proveedor_id ?? null
+    if (seccion === SECCION_CONSTRUCTORA && !proveedorId) {
+      proveedorId = proyecto?.constructor_id ?? null
+    }
+    if (esSeccionPrivada && !proveedorId) {
+      return {
+        error: seccion === SECCION_CONSTRUCTORA
+          ? 'Esta factura es "Margen prorrateado de obra" y debe facturarse a la constructora. Asigna una constructora al proyecto antes de emitirla.'
+          : 'Esta factura es "Margen de mobiliario" y debe facturarse al proveedor de muebles. Asigna el proveedor a la factura antes de emitirla.',
+      }
+    }
 
-    // ── Billing recipient: proveedor (constructor) OR clients ─────────────────
+    // ── Billing recipient: proveedor (constructor/muebles) OR clients ─────────
     let cliente: ClienteData | null = null
     let clienteLabel = 'Cliente por definir'
 
@@ -357,6 +375,7 @@ export async function emitirFacturaDesdeContrato(
         proyecto_nombre:   proyecto
           ? `${proyecto.codigo ? proyecto.codigo + ' · ' : ''}${proyecto.nombre}`
           : null,
+        seccion:           f.seccion,
         items,
         tipo_iva,
         base_imponible:    totals.base_imponible,

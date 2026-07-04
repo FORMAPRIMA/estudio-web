@@ -6,8 +6,11 @@ import {
   updateFacturaEmitida,
   deleteFacturaEmitida,
   updateEstudioConfig,
+  createFacturaEmitida,
   getClientesDelProyecto,
   getPartnerCCEmails,
+  asignarProyectoSeccion,
+  getSeccionesProyecto,
   type FacturaItem,
   type CreateFacturaInput,
   type ClienteDelProyecto,
@@ -15,6 +18,7 @@ import {
 } from '@/app/actions/facturasEmitidas'
 import type { ExtraEmail } from '@/app/actions/emitirFactura'
 import { calcTotals } from '@/lib/facturasUtils'
+import { esSeccionNoCliente } from '@/lib/finanzas/costs'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -31,6 +35,7 @@ interface FacturaEmitida {
   cliente_direccion:    string | null
   proyecto_id:          string | null
   proyecto_nombre:      string | null
+  seccion:              string | null
   items:                FacturaItem[]
   tipo_iva:             number
   base_imponible:       number
@@ -350,6 +355,9 @@ function CreateModal({
   const today = new Date().toISOString().split('T')[0]
 
   const isEdit = !!editData
+  // CRÍTICO: facturas de márgenes internos jamás se envían al cliente
+  const seccionEfectiva = editData?.seccion ?? prefill?.seccion ?? null
+  const bloqueadaParaCliente = esSeccionNoCliente(seccionEfectiva)
 
   // For edit mode: look up the client record and original invoice number
   const editClienteLookup = editData?.cliente_id
@@ -537,6 +545,15 @@ function CreateModal({
     }
   }
 
+  const buildCreateInput = (): CreateFacturaInput => ({
+    ...buildInput(),
+    serie,
+    seccion:             seccionEfectiva,
+    factura_origen_id:   prefill?.facturaOrigenId ?? null,
+    es_rectificativa:    esRectificativa,
+    factura_original_id: null,
+  })
+
   const validateEdit = (): string | null => {
     const clienteNombre = clienteEmpresa.trim() || clienteContacto.trim()
     if (!emisorNombre.trim()) return 'Configura primero los datos de empresa en Facturación → Información empresa.'
@@ -562,7 +579,8 @@ function CreateModal({
   const handleSaveAndResend = async () => {
     const err = validateEdit()
     if (err) { setError(err); return }
-    if (!emailCliente.trim()) { setError('Introduce el email del cliente para el envío.'); return }
+    // En márgenes internos el destinatario (proveedor) lo resuelve el servidor.
+    if (!bloqueadaParaCliente && !emailCliente.trim()) { setError('Introduce el email del cliente para el envío.'); return }
     if (!resendAsunto.trim()) { setError('El asunto del correo es obligatorio.'); return }
     setLoading(true); setError(null)
 
@@ -600,31 +618,13 @@ function CreateModal({
     e.preventDefault()
     if (!emisorNombre.trim()) { setError('Configura primero los datos de empresa en Facturación → Información empresa.'); return }
     const clienteNombre = clienteEmpresa.trim() || clienteContacto.trim()
-    if (!clienteNombre) { setError('El nombre del cliente o razón social es obligatorio.'); return }
+    if (!clienteNombre) { setError(bloqueadaParaCliente ? 'El nombre del proveedor / razón social es obligatorio.' : 'El nombre del cliente o razón social es obligatorio.'); return }
     if (items.every(i => i.subtotal === 0)) { setError('Añade al menos una línea con importe.'); return }
-    if (!emailCliente.trim()) { setError('Introduce el email del cliente para el envío.'); return }
+    // Márgenes internos: el envío va al proveedor; el servidor resuelve su email.
+    if (!bloqueadaParaCliente && !emailCliente.trim()) { setError('Introduce el email del cliente para el envío.'); return }
 
     setLoading(true); setError(null)
-    const input: CreateFacturaInput = {
-      serie, fecha_emision: fechaEmision,
-      fecha_operacion: fechaOperacion || null,
-      emisor_nombre: emisorNombre, emisor_nif: emisorNif,
-      emisor_direccion: emisorDireccion, emisor_ciudad: emisorCiudad || null,
-      emisor_cp: emisorCp || null, emisor_email: emisorEmail || null,
-      emisor_telefono: emisorTelefono || null,
-      cliente_id: clienteId || null, cliente_nombre: clienteNombre,
-      cliente_contacto: clienteEmpresa.trim() ? clienteContacto.trim() || null : null,
-      cliente_nif: clienteNif || null, cliente_direccion: clienteDireccion || null,
-      proyecto_id: proyectoId || null, proyecto_nombre: proyectoNombre || null,
-      items, tipo_iva: tipoIva, tipo_irpf: tipoIrpf,
-      notas: notas || null, mencion_legal: mencionLegal || null,
-      iban: iban || null, forma_pago: formaPago || null,
-      condiciones_pago: condicionesPago || null,
-      es_rectificativa: esRectificativa,
-      factura_original_id: null,
-      motivo_rectificacion: motivoRectificacion || null,
-      factura_origen_id: prefill?.facturaOrigenId ?? null,
-    }
+    const input = buildCreateInput()
 
     const res = await fetch('/api/facturas-emitidas/emit', {
       method: 'POST',
@@ -648,6 +648,19 @@ function CreateModal({
     const result = await res.json()
     setLoading(false)
     if (!res.ok || 'error' in result) { setError(result.error ?? 'Error desconocido'); return }
+    onCreated()
+  }
+
+  // ── Create (margen interno): emitir SIN enviar al cliente ──────────────────
+  const handleEmitSinEnviar = async () => {
+    if (!emisorNombre.trim()) { setError('Configura primero los datos de empresa en Facturación → Información empresa.'); return }
+    const clienteNombre = clienteEmpresa.trim() || clienteContacto.trim()
+    if (!clienteNombre) { setError('El nombre del proveedor / razón social es obligatorio.'); return }
+    if (items.every(i => i.subtotal === 0)) { setError('Añade al menos una línea con importe.'); return }
+    setLoading(true); setError(null)
+    const result = await createFacturaEmitida(buildCreateInput())
+    setLoading(false)
+    if ('error' in result) { setError(result.error); return }
     onCreated()
   }
 
@@ -744,6 +757,15 @@ function CreateModal({
 
         {/* Form */}
         <form id="factura-form" onSubmit={handleSubmit} style={{ flex: 1, overflowY: 'auto', padding: '28px 28px 0' }}>
+
+          {bloqueadaParaCliente && (
+            <div style={{ marginBottom: 22, padding: '12px 16px', background: '#FEF2F2', border: '1px solid #F4D6D2', borderRadius: 6, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+              <span style={{ fontSize: 16, lineHeight: 1 }}>🔒</span>
+              <p style={{ margin: 0, fontSize: 11.5, color: '#B42318', lineHeight: 1.5 }}>
+                <strong>Margen interno{seccionEfectiva ? ` · ${seccionEfectiva}` : ''}.</strong> Esta factura se emite y se envía <strong>al proveedor</strong> (constructora / proveedor de muebles), nunca al cliente. Los datos de facturación son los del proveedor y el correo irá a su email registrado.
+              </p>
+            </div>
+          )}
 
           {/* ── Identificación ────────────────────────────── */}
           <div style={section()}>
@@ -1114,7 +1136,7 @@ function CreateModal({
           {isEdit && showResendForm && (
             <div style={{ marginTop: 28, paddingTop: 24, borderTop: '2px solid #D85A30' }}>
               <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#D85A30', marginBottom: 14 }}>
-                Correo de corrección al cliente
+                {bloqueadaParaCliente ? 'Correo de corrección al proveedor' : 'Correo de corrección al cliente'}
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div>
@@ -1179,7 +1201,7 @@ function CreateModal({
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = '#D0CEC9'; (e.currentTarget as HTMLElement).style.color = previewing ? '#AAA' : '#555' }}>
                 {previewing ? 'Generando…' : 'Preview PDF'}
               </button>
-              {!showResendForm && (
+              {(!showResendForm || bloqueadaParaCliente) && (
                 <button type="button" onClick={handleSave} disabled={loading}
                   style={{ height: 36, padding: '0 20px', background: 'none', border: `1px solid ${loading ? '#DDD' : '#1A1A1A'}`, cursor: loading ? 'not-allowed' : 'pointer', fontSize: 11, fontWeight: 600, color: loading ? '#AAA' : '#1A1A1A', letterSpacing: '0.06em', textTransform: 'uppercase', opacity: loading ? 0.7 : 1 }}
                   onMouseEnter={e => { if (!loading) { (e.currentTarget as HTMLElement).style.background = '#F8F7F4' } }}
@@ -1190,10 +1212,15 @@ function CreateModal({
               <button type="button"
                 onClick={showResendForm ? handleSaveAndResend : () => { setShowResendForm(true); setTimeout(() => document.getElementById('resend-form-anchor')?.scrollIntoView({ behavior: 'smooth' }), 50) }}
                 disabled={loading}
+                title={bloqueadaParaCliente ? 'Margen interno — se envía al proveedor, nunca al cliente' : undefined}
                 style={{ height: 36, padding: '0 22px', background: loading ? '#888' : '#D85A30', color: '#fff', border: 'none', cursor: loading ? 'not-allowed' : 'pointer', fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', opacity: loading ? 0.7 : 1 }}
                 onMouseEnter={e => { if (!loading) (e.currentTarget as HTMLElement).style.background = '#B84D28' }}
                 onMouseLeave={e => { if (!loading) (e.currentTarget as HTMLElement).style.background = '#D85A30' }}>
-                {loading ? 'Enviando…' : showResendForm ? 'Confirmar y enviar' : 'Guardar y reenviar →'}
+                {loading
+                  ? 'Enviando…'
+                  : showResendForm
+                  ? (bloqueadaParaCliente ? 'Confirmar y enviar al proveedor' : 'Confirmar y enviar')
+                  : (bloqueadaParaCliente ? '🔒 Guardar y reenviar al proveedor' : 'Guardar y reenviar →')}
               </button>
             </>
           ) : (
@@ -1208,12 +1235,27 @@ function CreateModal({
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = '#D0CEC9'; (e.currentTarget as HTMLElement).style.color = previewing ? '#AAA' : '#555' }}>
                 {previewing ? 'Generando…' : 'Preview PDF'}
               </button>
-              <button type="submit" form="factura-form" disabled={loading}
-                style={{ height: 36, padding: '0 24px', background: loading ? '#888' : '#1A1A1A', color: '#fff', border: 'none', cursor: loading ? 'not-allowed' : 'pointer', fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', opacity: loading ? 0.7 : 1 }}
-                onMouseEnter={e => { if (!loading) (e.currentTarget as HTMLElement).style.background = '#D85A30' }}
-                onMouseLeave={e => { if (!loading) (e.currentTarget as HTMLElement).style.background = '#1A1A1A' }}>
-                {loading ? 'Enviando…' : 'Emitir y enviar al cliente'}
-              </button>
+              {bloqueadaParaCliente ? (
+                <>
+                  <button type="button" onClick={handleEmitSinEnviar} disabled={loading}
+                    title="Crea la factura sin enviar ningún correo"
+                    style={{ height: 36, padding: '0 16px', background: 'none', border: '1px solid #D0CEC9', cursor: loading ? 'not-allowed' : 'pointer', fontSize: 11, color: '#555', letterSpacing: '0.06em', textTransform: 'uppercase', opacity: loading ? 0.6 : 1 }}>
+                    Solo emitir
+                  </button>
+                  <button type="submit" form="factura-form" disabled={loading}
+                    title="Margen interno — se envía al proveedor, nunca al cliente"
+                    style={{ height: 36, padding: '0 22px', background: loading ? '#888' : '#B84D28', color: '#fff', border: 'none', cursor: loading ? 'not-allowed' : 'pointer', fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', opacity: loading ? 0.7 : 1 }}>
+                    {loading ? 'Enviando…' : '🔒 Emitir y enviar al proveedor'}
+                  </button>
+                </>
+              ) : (
+                <button type="submit" form="factura-form" disabled={loading}
+                  style={{ height: 36, padding: '0 24px', background: loading ? '#888' : '#1A1A1A', color: '#fff', border: 'none', cursor: loading ? 'not-allowed' : 'pointer', fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', opacity: loading ? 0.7 : 1 }}
+                  onMouseEnter={e => { if (!loading) (e.currentTarget as HTMLElement).style.background = '#D85A30' }}
+                  onMouseLeave={e => { if (!loading) (e.currentTarget as HTMLElement).style.background = '#1A1A1A' }}>
+                  {loading ? 'Enviando…' : 'Emitir y enviar al cliente'}
+                </button>
+              )}
             </>
           )}
           </div>
@@ -1465,6 +1507,7 @@ export interface PrefillData {
   proyectoId:        string
   proyectoNombre:    string
   proyectoDireccion: string
+  seccion:           string
   emisorNombre:      string
   emisorNif:        string
   emisorDireccion:  string
@@ -1476,6 +1519,130 @@ export interface PrefillData {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
+
+// ── AsignarProyectoCell ───────────────────────────────────────────────────────
+
+function AsignarProyectoCell({
+  factura, proyectos, onAssigned,
+}: {
+  factura:    FacturaEmitida
+  proyectos:  Proyecto[]
+  onAssigned: (id: string, proyectoId: string | null, proyectoNombre: string | null, seccion: string | null) => void
+}) {
+  const [open,        setOpen]        = useState(false)
+  const [coords,      setCoords]      = useState<{ top: number; left: number } | null>(null)
+  const [proyectoId,  setProyectoId]  = useState(factura.proyecto_id ?? '')
+  const [seccion,     setSeccion]     = useState(factura.seccion ?? '')
+  const [secciones,   setSecciones]   = useState<string[]>([])
+  const [loadingSecs, setLoadingSecs] = useState(false)
+  const [saving,      setSaving]      = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [open])
+
+  // Cargar secciones del proyecto seleccionado
+  useEffect(() => {
+    if (!open || !proyectoId) { setSecciones([]); return }
+    let cancelled = false
+    setLoadingSecs(true)
+    getSeccionesProyecto(proyectoId).then(secs => {
+      if (cancelled) return
+      setSecciones(secs)
+      setLoadingSecs(false)
+    })
+    return () => { cancelled = true }
+  }, [open, proyectoId])
+
+  const openEditor = (e: React.MouseEvent) => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    setCoords({ top: rect.bottom + 4, left: Math.min(rect.left, window.innerWidth - 300) })
+    setProyectoId(factura.proyecto_id ?? '')
+    setSeccion(factura.seccion ?? '')
+    setOpen(true)
+  }
+
+  const handleSave = async () => {
+    if (!proyectoId || !seccion) return
+    setSaving(true)
+    const res = await asignarProyectoSeccion(factura.id, proyectoId, seccion)
+    setSaving(false)
+    if ('error' in res) { alert(`Error: ${res.error}`); return }
+    onAssigned(factura.id, proyectoId, res.proyecto_nombre, res.seccion)
+    setOpen(false)
+  }
+
+  const handleRemove = async () => {
+    if (!confirm('¿Quitar la asignación de proyecto? Se eliminará su línea de la contabilidad del proyecto.')) return
+    setSaving(true)
+    const res = await asignarProyectoSeccion(factura.id, null, null)
+    setSaving(false)
+    if ('error' in res) { alert(`Error: ${res.error}`); return }
+    onAssigned(factura.id, null, null, null)
+    setOpen(false)
+  }
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      {factura.proyecto_nombre ? (
+        <button type="button" onClick={openEditor}
+          style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-start', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left', maxWidth: 220 }}>
+          <span style={{ fontSize: 11, color: '#555', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>{factura.proyecto_nombre}</span>
+          {factura.seccion && (
+            esSeccionNoCliente(factura.seccion) ? (
+              <span title="A proveedor · no enviar al cliente" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#DC2626', background: '#FEF2F2', border: '1px solid #F4D6D2', padding: '1px 6px', borderRadius: 3 }}>🔒 {factura.seccion}</span>
+            ) : (
+              <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#D85A30', background: '#FDF0EC', padding: '1px 6px', borderRadius: 3 }}>{factura.seccion}</span>
+            )
+          )}
+        </button>
+      ) : (
+        <button type="button" onClick={openEditor}
+          style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.04em', color: '#888', background: 'none', border: '1px dashed #CCC', borderRadius: 3, padding: '3px 9px', cursor: 'pointer' }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = '#D85A30'; (e.currentTarget as HTMLElement).style.color = '#D85A30' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = '#CCC'; (e.currentTarget as HTMLElement).style.color = '#888' }}>
+          + Asignar
+        </button>
+      )}
+
+      {open && coords && (
+        <div style={{ position: 'fixed', top: coords.top, left: coords.left, zIndex: 200, width: 284, background: '#fff', border: '1px solid #C8C5BE', boxShadow: '0 10px 30px rgba(0,0,0,0.14)', borderRadius: 8, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div>
+            <label style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', display: 'block', marginBottom: 5 }}>Proyecto</label>
+            <ProyectoCombobox proyectos={proyectos} value={proyectoId} onChange={id => { setProyectoId(id); setSeccion('') }} />
+          </div>
+          <div>
+            <label style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', display: 'block', marginBottom: 5 }}>Sección</label>
+            <select value={seccion} onChange={e => setSeccion(e.target.value)} disabled={!proyectoId || loadingSecs}
+              style={{ width: '100%', height: 34, padding: '0 10px', border: '1px solid #E8E6E0', background: proyectoId ? '#fff' : '#F8F7F4', fontSize: 12, color: seccion ? '#1A1A1A' : '#AAA', borderRadius: 4, cursor: proyectoId ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}>
+              <option value="">{loadingSecs ? 'Cargando…' : 'Seleccionar sección…'}</option>
+              {secciones.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
+            <button type="button" onClick={handleSave} disabled={saving || !proyectoId || !seccion}
+              style={{ flex: 1, height: 32, background: (saving || !proyectoId || !seccion) ? '#CCC' : '#1A1A1A', color: '#fff', border: 'none', borderRadius: 4, fontSize: 11, fontWeight: 600, letterSpacing: '0.04em', cursor: (saving || !proyectoId || !seccion) ? 'default' : 'pointer', fontFamily: 'inherit' }}>
+              {saving ? 'Guardando…' : 'Guardar'}
+            </button>
+            {factura.proyecto_id && (
+              <button type="button" onClick={handleRemove} disabled={saving}
+                style={{ height: 32, padding: '0 12px', background: 'none', color: '#DC2626', border: '1px solid #F0D0CC', borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                Quitar
+              </button>
+            )}
+          </div>
+          <p style={{ fontSize: 9, color: '#BBB', lineHeight: 1.4, margin: 0 }}>
+            Se reflejará en la contabilidad del proyecto con la base imponible ({eur(factura.base_imponible)}).
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function FacturasEmitidasPage({
   facturas: initial,
@@ -1526,6 +1693,12 @@ export default function FacturasEmitidasPage({
   const handleEstadoUpdate = async (id: string, estado: string) => {
     setFacturas(prev => prev.map(f => f.id === id ? { ...f, estado } : f))
     await updateFacturaEmitidaEstado(id, estado)
+  }
+
+  const handleAssigned = (id: string, proyectoId: string | null, proyectoNombre: string | null, seccion: string | null) => {
+    setFacturas(prev => prev.map(f =>
+      f.id === id ? { ...f, proyecto_id: proyectoId, proyecto_nombre: proyectoNombre, seccion } : f
+    ))
   }
 
   const handleDelete = async (id: string, num: string) => {
@@ -1673,7 +1846,9 @@ export default function FacturasEmitidasPage({
                       <span style={{ fontWeight: 500 }}>{f.cliente_nombre}</span>
                       {f.cliente_nif && <span style={{ fontSize: 10, color: '#AAA', marginLeft: 6 }}>{f.cliente_nif}</span>}
                     </td>
-                    <td style={{ ...TD, color: '#888', fontSize: 11 }}>{f.proyecto_nombre ?? '—'}</td>
+                    <td style={TD}>
+                      <AsignarProyectoCell factura={f} proyectos={proyectos} onAssigned={handleAssigned} />
+                    </td>
                     <td style={{ ...TD, textAlign: 'right', color: '#555' }}>{eur(f.base_imponible)}</td>
                     <td style={{ ...TD, textAlign: 'right', fontWeight: 600 }}>{eur(f.total)}</td>
                     <td style={TD}>
