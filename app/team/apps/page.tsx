@@ -26,7 +26,7 @@ export default async function AppsPage() {
       </p>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
-        {profile.rol === 'fp_partner' && (
+        {['fp_partner', 'fp_manager'].includes(profile.rol) && (
           <Link href="/team/apps/urban-analyst" style={{ textDecoration: 'none' }}>
             <div
               className="apps-card"

@@ -11,7 +11,7 @@ export default async function Page({ params }: { params: { id: string } }) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
   const { data: profile } = await supabase.from('profiles').select('rol').eq('id', user.id).single()
-  if (!profile || profile.rol !== 'fp_partner') redirect('/team/apps')
+  if (!profile || ['fp_partner','fp_manager'].indexOf(profile.rol) === -1) redirect('/team/apps')
 
   const full = await getUrbanAssetFull(params.id)
   if (!full) notFound()

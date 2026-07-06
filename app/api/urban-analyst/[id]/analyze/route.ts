@@ -38,7 +38,7 @@ export async function POST(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Sin sesión' }, { status: 401 })
   const { data: profile } = await supabase.from('profiles').select('rol').eq('id', user.id).single()
-  if (!profile || profile.rol !== 'fp_partner') {
+  if (!profile || ['fp_partner','fp_manager'].indexOf(profile.rol) === -1) {
     return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
   }
 

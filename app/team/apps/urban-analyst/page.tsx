@@ -12,7 +12,7 @@ export default async function Page() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
   const { data: profile } = await supabase.from('profiles').select('rol').eq('id', user.id).single()
-  if (!profile || profile.rol !== 'fp_partner') redirect('/team/apps')
+  if (!profile || ['fp_partner','fp_manager'].indexOf(profile.rol) === -1) redirect('/team/apps')
 
   const admin = createAdminClient()
   const [{ data: assets }, { data: normas }] = await Promise.all([

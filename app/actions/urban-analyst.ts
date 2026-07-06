@@ -1,6 +1,6 @@
 'use server'
 
-// Server Actions de Urban Analyst (/team/apps/urban-analyst) — solo fp_partner.
+// Server Actions de Urban Analyst (/team/apps/urban-analyst) — fp_partner y fp_manager.
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
@@ -15,7 +15,7 @@ async function requirePartner(): Promise<string> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Sin sesión activa.')
   const { data: profile } = await supabase.from('profiles').select('rol').eq('id', user.id).single()
-  if (!profile || profile.rol !== 'fp_partner') throw new Error('Sin permisos.')
+  if (!profile || ['fp_partner','fp_manager'].indexOf(profile.rol) === -1) throw new Error('Sin permisos.')
   return user.id
 }
 
