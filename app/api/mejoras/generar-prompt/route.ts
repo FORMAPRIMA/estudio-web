@@ -61,8 +61,7 @@ por el equipo y generar un prompt preciso y accionable para un asistente de IA d
 
 ### Gastos y facturas (/team/gastos) — todos los roles FP
 - ScannerPage: components/team/finanzas/ScannerPage.tsx (mode 'partner' = vista completa, 'personal' = drop-off solo gastos propios), app/api/scan-ticket/route.ts
-- Autocrop de fotos: lib/gastos/autocrop.ts (jscanify + OpenCV, carga bajo demanda)
-- Export ZIP/Excel: lib/gastos/exportZip.ts
+- Export ZIP/Excel: lib/gastos/exportZip.ts (mes | trimestre | selección de ids; agrupa por carpetas de mes); períodos en lib/gastos/period.ts
 
 ### Finanzas — fp_partner
 - Conciliación: components/team/finanzas/ReconciliationPage.tsx; scoring compartido en lib/finanzas/reconciliation.ts (matching automático al guardar scans, tolerancia importe ±0,02)

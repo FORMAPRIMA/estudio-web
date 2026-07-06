@@ -13,7 +13,6 @@ import {
   type ExpenseScan,
   type OrphanScanFile,
 } from '@/app/actions/expense-scans'
-import { autocropImage } from '@/lib/gastos/autocrop'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -814,8 +813,6 @@ interface BatchItem {
   photoUrl:    string | null
   error:       string | null
   skip:        boolean
-  croppedFile: File | null     // recorte automático (jscanify), si se consiguió
-  useOriginal: boolean
   // form fields
   tipo:        ExpenseType
   monto:       string
@@ -852,8 +849,6 @@ function BatchUploadModal({ proyectos, onClose, onSaved, preloaded, title }: {
       photoUrl:    p.url,
       error:       null,
       skip:        false,
-      croppedFile: null,
-      useOriginal: false,
       tipo:        'otro' as ExpenseType,
       monto:       '',
       moneda:      'EUR',
@@ -883,8 +878,6 @@ function BatchUploadModal({ proyectos, onClose, onSaved, preloaded, title }: {
     photoUrl:    null,
     error:       null,
     skip:        false,
-    croppedFile: null,
-    useOriginal: false,
     tipo:        'otro',
     monto:       '',
     moneda:      'EUR',
@@ -904,35 +897,12 @@ function BatchUploadModal({ proyectos, onClose, onSaved, preloaded, title }: {
     const newItems = files.map(makeItem)
     setItems(prev => [...prev, ...newItems])
     e.target.value = ''
-
-    // Recorte automático en segundo plano (solo imágenes)
-    for (const item of newItems) {
-      if (!item.file || !item.file.type.startsWith('image/')) continue
-      const file = item.file
-      autocropImage(file).then(cropped => {
-        if (!cropped) return
-        setItems(prev => prev.map(i =>
-          i.id === item.id && i.status === 'idle'
-            ? { ...i, croppedFile: cropped, preview: i.useOriginal ? i.preview : URL.createObjectURL(cropped) }
-            : i
-        ))
-      }).catch(() => {})
-    }
   }
 
   const removeItem = (id: string) => setItems(prev => prev.filter(i => i.id !== id))
 
   const updateItem = (id: string, patch: Partial<BatchItem>) =>
     setItems(prev => prev.map(i => i.id === id ? { ...i, ...patch } : i))
-
-  const toggleOriginal = (item: BatchItem) => {
-    if (!item.croppedFile || !item.file) return
-    const useOriginal = !item.useOriginal
-    updateItem(item.id, {
-      useOriginal,
-      preview: URL.createObjectURL(useOriginal ? item.file : item.croppedFile),
-    })
-  }
 
   const processAll = async () => {
     if (items.length === 0) return
@@ -944,9 +914,8 @@ function BatchUploadModal({ proyectos, onClose, onSaved, preloaded, title }: {
       // 1. Upload (se salta si el archivo ya está en Storage — recuperación)
       if (!uploadedUrl) {
         updateItem(item.id, { status: 'uploading' })
-        const fileToUpload = (!item.useOriginal && item.croppedFile) ? item.croppedFile : item.file!
         const fd = new FormData()
-        fd.append('photo', fileToUpload)
+        fd.append('photo', item.file!)
         let upRes: { url: string } | { error: string }
         try {
           const upFetch = await fetch('/api/expense-scans/upload', { method: 'POST', body: fd })
@@ -1003,8 +972,6 @@ function BatchUploadModal({ proyectos, onClose, onSaved, preloaded, title }: {
                 photoUrl:    finalUrl,
                 error:       null,
                 skip:        false,
-                croppedFile: null,
-                useOriginal: false,
                 tipo:        (TIPOS.includes(d.tipo) ? d.tipo : 'otro') as ExpenseType,
                 monto:        d.monto != null ? String(d.monto) : '',
                 moneda:       d.moneda ?? 'EUR',
@@ -1164,7 +1131,7 @@ function BatchUploadModal({ proyectos, onClose, onSaved, preloaded, title }: {
                       {item.name}
                     </p>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                      {item.status === 'idle' && <span style={{ fontSize: 10, color: '#AAA' }}>En cola{item.croppedFile && !item.useOriginal ? ' · ✂ recortado' : ''}</span>}
+                      {item.status === 'idle' && <span style={{ fontSize: 10, color: '#AAA' }}>En cola</span>}
                       {item.status === 'uploading' && <><Spinner size={10} /><span style={{ fontSize: 10, color: '#888' }}>Subiendo…</span></>}
                       {item.status === 'analyzing' && <><Spinner size={10} /><span style={{ fontSize: 10, color: '#92400E' }}>Analizando con IA…</span></>}
                       {(item.status === 'done' || item.status === 'saved') && <span style={{ fontSize: 10, color: cfg.color, background: cfg.bg, padding: '1px 6px', borderRadius: 4 }}>{cfg.icon} {cfg.label}</span>}
@@ -1176,13 +1143,6 @@ function BatchUploadModal({ proyectos, onClose, onSaved, preloaded, title }: {
 
                   {/* Actions */}
                   <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                    {stage === 'select' && item.croppedFile && (
-                      <button
-                        onClick={() => toggleOriginal(item)}
-                        title={item.useOriginal ? 'Usar la versión recortada' : 'Usar la foto original sin recortar'}
-                        style={{ fontSize: 10, padding: '3px 8px', background: 'none', border: '1px solid #E8E6E0', borderRadius: 4, cursor: 'pointer', color: '#555' }}
-                      >{item.useOriginal ? '✂ Recortar' : '↩ Original'}</button>
-                    )}
                     {stage === 'review' && (item.status === 'done' || item.status === 'error') && (
                       <button
                         onClick={() => setExpandedId(isExpanded ? null : item.id)}
@@ -1425,10 +1385,6 @@ function CaptureModal({ proyectos, onClose, onSaved }: {
 
   const [preview, setPreview]   = useState<string | null>(null)
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
-  const [cropping, setCropping]   = useState(false)
-  const [originalFile, setOriginalFile] = useState<File | null>(null)
-  const [croppedFile, setCroppedFile]   = useState<File | null>(null)
-  const [usingOriginal, setUsingOriginal] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [scanning, setScanning]   = useState(false)
   const [saving, setSaving]       = useState(false)
@@ -1465,28 +1421,14 @@ function CaptureModal({ proyectos, onClose, onSaved }: {
 
   const handleFile = async (file: File) => {
     setError(null)
-    setOriginalFile(file)
     setPreview(URL.createObjectURL(file))
 
-    // 1. Recorte automático del documento (solo imágenes)
-    let fileToUpload = file
-    if (file.type.startsWith('image/')) {
-      setCropping(true)
-      const cropped = await autocropImage(file).catch(() => null)
-      setCropping(false)
-      if (cropped) {
-        setCroppedFile(cropped)
-        setPreview(URL.createObjectURL(cropped))
-        fileToUpload = cropped
-      }
-    }
-
-    // 2. Upload photo
-    const url = await uploadFile(fileToUpload)
+    // 1. Upload photo
+    const url = await uploadFile(file)
     if (!url) return
     setPhotoUrl(url)
 
-    // 3. Run AI scan
+    // 2. Run AI scan
     setScanning(true)
     try {
       const scanRes = await fetch('/api/scan-ticket', {
@@ -1511,18 +1453,6 @@ function CaptureModal({ proyectos, onClose, onSaved }: {
       // AI failed silently — user can fill in manually
     }
     setScanning(false)
-  }
-
-  // Alternar entre la foto original y el recorte automático (re-sube la elegida,
-  // los datos ya extraídos se conservan)
-  const handleToggleOriginal = async () => {
-    if (!originalFile || !croppedFile) return
-    const useOriginal = !usingOriginal
-    const file = useOriginal ? originalFile : croppedFile
-    setUsingOriginal(useOriginal)
-    setPreview(URL.createObjectURL(file))
-    const url = await uploadFile(file)
-    if (url) setPhotoUrl(url)
   }
 
   const handleSave = async () => {
@@ -1593,23 +1523,15 @@ function CaptureModal({ proyectos, onClose, onSaved }: {
           <div style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', border: '1px solid #E8E6E0', maxHeight: 220 }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={preview} alt="" style={{ width: '100%', maxHeight: 220, objectFit: 'contain', background: '#F8F7F4' }} />
-            {(cropping || uploading || scanning) && (
+            {(uploading || scanning) && (
               <div style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.85)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                 <Spinner />
                 <p style={{ fontSize: 12, color: '#555', margin: 0 }}>
-                  {cropping ? 'Recortando documento…' : uploading ? 'Subiendo foto…' : 'Leyendo con IA…'}
+                  {uploading ? 'Subiendo foto…' : 'Leyendo con IA…'}
                 </p>
               </div>
             )}
           </div>
-          {croppedFile && !cropping && !uploading && (
-            <button
-              onClick={handleToggleOriginal}
-              style={{ marginTop: 6, fontSize: 10, padding: '3px 10px', background: 'none', border: '1px solid #E8E6E0', borderRadius: 4, cursor: 'pointer', color: '#888' }}
-            >
-              {usingOriginal ? '✂ Usar recorte automático' : '↩ Usar foto original'}
-            </button>
-          )}
         </div>
       )}
 
