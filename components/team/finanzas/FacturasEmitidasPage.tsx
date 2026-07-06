@@ -1297,7 +1297,7 @@ function EstadoBadge({ estado, id, onUpdate }: { estado: string; id: string; onU
 // ── BatchPDFModal ─────────────────────────────────────────────────────────────
 
 function BatchPDFModal({ facturas, onClose }: { facturas: FacturaEmitida[]; onClose: () => void }) {
-  const [selectedIds,    setSelectedIds]    = useState<Set<string>>(() => new Set(facturas.map(f => f.id)))
+  const [selectedIds,    setSelectedIds]    = useState<Set<string>>(() => new Set())
   const [mesFilter,      setMesFilter]      = useState('')
   const [proyectoFilter, setProyectoFilter] = useState('')
   const [loading,        setLoading]        = useState(false)
@@ -1324,6 +1324,13 @@ function BatchPDFModal({ facturas, onClose }: { facturas: FacturaEmitida[]; onCl
 
   const allVisibleSelected = visible.length > 0 && visible.every(f => selectedIds.has(f.id))
 
+  // Lo que realmente se descarga: intersección de lo visible/filtrado y lo marcado.
+  // Así, filtrar por mes/proyecto acota la descarga aunque haya selección de otras vistas.
+  const downloadIds = useMemo(
+    () => visible.filter(f => selectedIds.has(f.id)).map(f => f.id),
+    [visible, selectedIds]
+  )
+
   const toggleVisible = () => {
     setSelectedIds(prev => {
       const next = new Set(prev)
@@ -1340,13 +1347,13 @@ function BatchPDFModal({ facturas, onClose }: { facturas: FacturaEmitida[]; onCl
   })
 
   const handleDownload = async () => {
-    if (selectedIds.size === 0) return
+    if (downloadIds.length === 0) return
     setLoading(true); setError(null)
     try {
       const res = await fetch('/api/facturas-emitidas/batch-pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+        body: JSON.stringify({ ids: downloadIds }),
       })
       if (!res.ok) {
         const j = await res.json().catch(() => ({}))
@@ -1466,8 +1473,8 @@ function BatchPDFModal({ facturas, onClose }: { facturas: FacturaEmitida[]; onCl
         {/* Footer */}
         <div style={{ padding: '16px 28px', borderTop: '1px solid #F0EEE8', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <div>
-            <span style={{ fontSize: 13, fontWeight: 600, color: '#1A1A1A' }}>{selectedIds.size}</span>
-            <span style={{ fontSize: 12, color: '#AAA', marginLeft: 4 }}>factura{selectedIds.size !== 1 ? 's' : ''} seleccionada{selectedIds.size !== 1 ? 's' : ''}</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#1A1A1A' }}>{downloadIds.length}</span>
+            <span style={{ fontSize: 12, color: '#AAA', marginLeft: 4 }}>factura{downloadIds.length !== 1 ? 's' : ''} a descargar</span>
             {error && <p style={{ margin: '4px 0 0', fontSize: 11, color: '#DC2626' }}>{error}</p>}
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
@@ -1477,10 +1484,10 @@ function BatchPDFModal({ facturas, onClose }: { facturas: FacturaEmitida[]; onCl
             </button>
             <button
               onClick={handleDownload}
-              disabled={selectedIds.size === 0 || loading}
-              style={{ height: 38, padding: '0 24px', background: selectedIds.size === 0 ? '#DDD' : '#1A1A1A', color: '#fff', border: 'none', fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: selectedIds.size === 0 ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: loading ? 0.7 : 1 }}
-              onMouseEnter={e => { if (selectedIds.size > 0 && !loading) (e.currentTarget as HTMLElement).style.background = '#D85A30' }}
-              onMouseLeave={e => { if (selectedIds.size > 0 && !loading) (e.currentTarget as HTMLElement).style.background = '#1A1A1A' }}
+              disabled={downloadIds.length === 0 || loading}
+              style={{ height: 38, padding: '0 24px', background: downloadIds.length === 0 ? '#DDD' : '#1A1A1A', color: '#fff', border: 'none', fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: downloadIds.length === 0 ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: loading ? 0.7 : 1 }}
+              onMouseEnter={e => { if (downloadIds.length > 0 && !loading) (e.currentTarget as HTMLElement).style.background = '#D85A30' }}
+              onMouseLeave={e => { if (downloadIds.length > 0 && !loading) (e.currentTarget as HTMLElement).style.background = '#1A1A1A' }}
             >
               {loading ? 'Generando…' : '↓ Descargar ZIP'}
             </button>
@@ -1891,10 +1898,10 @@ export default function FacturasEmitidasPage({
         )}
       </div>
 
-      {/* Batch PDF modal */}
+      {/* Batch PDF modal — hereda los filtros activos de la página */}
       {showBatchPDF && (
         <BatchPDFModal
-          facturas={facturas}
+          facturas={filtered}
           onClose={() => setShowBatchPDF(false)}
         />
       )}
