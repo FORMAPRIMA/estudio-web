@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { validateGestorToken } from '@/lib/gestor/auth'
+import { periodFilter } from '@/lib/gastos/period'
 import GestorPortal, { type GastoRow, type FacturaRow, type StatementRow, type TransactionRow } from '@/components/gestor/GestorPortal'
 
 export const metadata = { title: 'Portal de gestoría · Forma Prima' }
@@ -12,7 +13,7 @@ export default async function Page({
   searchParams,
 }: {
   params: { token: string }
-  searchParams: { vista?: string; year?: string; month?: string; extracto?: string }
+  searchParams: { vista?: string; year?: string; month?: string; quarter?: string; extracto?: string }
 }) {
   const admin = createAdminClient()
   const tokenRow = await validateGestorToken(admin, params.token)
@@ -36,8 +37,9 @@ export default async function Page({
   const vista: Vista = (['gastos', 'facturas', 'conciliacion'].includes(searchParams.vista ?? '')
     ? searchParams.vista
     : 'gastos') as Vista
-  const year  = searchParams.year  ? parseInt(searchParams.year,  10) : now.getFullYear()
-  const month = searchParams.month ? parseInt(searchParams.month, 10) : now.getMonth() + 1
+  const year    = searchParams.year  ? parseInt(searchParams.year,  10) : now.getFullYear()
+  const month   = searchParams.month ? parseInt(searchParams.month, 10) : now.getMonth() + 1
+  const quarter = searchParams.quarter ? parseInt(searchParams.quarter, 10) : null
 
   let gastos: GastoRow[] = []
   let facturas: FacturaRow[] = []
@@ -46,13 +48,10 @@ export default async function Page({
   let selectedStatementId: string | null = null
 
   if (vista === 'gastos') {
-    const from    = `${year}-${String(month).padStart(2, '0')}-01`
-    const lastDay = new Date(year, month, 0).getDate()
-    const to      = `${year}-${String(month).padStart(2, '0')}-${lastDay}`
     const { data } = await admin
       .from('expense_scans')
       .select('id, foto_url, fecha_ticket, monto, moneda, tipo, proveedor, nif_proveedor, descripcion, created_at, proyecto:proyectos!proyecto_id(nombre)')
-      .or(`and(fecha_ticket.gte.${from},fecha_ticket.lte.${to}),and(fecha_ticket.is.null,created_at.gte.${from}T00:00:00,created_at.lte.${to}T23:59:59)`)
+      .or(periodFilter(quarter ? { year, quarter } : { year, month }))
       .order('fecha_ticket', { ascending: true, nullsFirst: false })
       .order('created_at',   { ascending: true })
     gastos = (data ?? []) as unknown as GastoRow[]
@@ -98,6 +97,7 @@ export default async function Page({
       vista={vista}
       year={year}
       month={month}
+      quarter={quarter}
       gastos={gastos}
       facturas={facturas}
       statements={statements}

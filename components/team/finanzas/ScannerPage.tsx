@@ -20,12 +20,14 @@ import { autocropImage } from '@/lib/gastos/autocrop'
 interface Proyecto { id: string; nombre: string; codigo: string | null }
 
 interface Props {
-  initialScans:  ExpenseScan[]
-  proyectos:     Proyecto[]
-  initialYear:   number
-  initialMonth:  number
+  initialScans:   ExpenseScan[]
+  proyectos:      Proyecto[]
+  initialYear:    number
+  initialMonth:   number
+  /** Si viene, la vista está en modo trimestre (1-4); si no, modo mes. */
+  initialQuarter?: number | null
   /** 'partner' = vista completa · 'personal' = drop-off, solo gastos propios */
-  mode:          'partner' | 'personal'
+  mode:           'partner' | 'personal'
 }
 
 // ── Config ─────────────────────────────────────────────────────────────────────
@@ -112,7 +114,7 @@ function ScanThumb({ url, size = 56 }: { url: string | null; size?: number }) {
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
-export default function ScannerPage({ initialScans, proyectos, initialYear, initialMonth, mode }: Props) {
+export default function ScannerPage({ initialScans, proyectos, initialYear, initialMonth, initialQuarter, mode }: Props) {
   // inject spin keyframe once
   if (typeof document !== 'undefined' && !document.getElementById('scanner-spin-style')) {
     const s = document.createElement('style')
@@ -127,6 +129,14 @@ export default function ScannerPage({ initialScans, proyectos, initialYear, init
   const [scans, setScans]     = useState<ExpenseScan[]>(() => sortScans(initialScans))
   const year  = initialYear
   const month = initialMonth
+
+  // ── Período: mes o trimestre ────────────────────────────────────────────────
+  const periodMode: 'mes' | 'trimestre' = initialQuarter ? 'trimestre' : 'mes'
+  const currentQuarter = initialQuarter ?? Math.floor((month - 1) / 3) + 1
+
+  // ── Selección de gastos para descarga ───────────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [isExporting, setIsExporting] = useState(false)
 
   const [activeTab, setActiveTab]       = useState<'mes' | 'recientes'>('mes')
   const [recentScans, setRecentScans]   = useState<ExpenseScan[]>([])
@@ -210,16 +220,36 @@ export default function ScannerPage({ initialScans, proyectos, initialYear, init
       router.push(`/team/gastos?year=${y}&month=${m}`)
     })
   }
-
-  const prevMonth = () => {
-    const d = new Date(year, month - 2, 1)
-    loadMonth(d.getFullYear(), d.getMonth() + 1)
+  const loadQuarter = (y: number, q: number) => {
+    startNavigation(() => {
+      router.push(`/team/gastos?year=${y}&quarter=${q}`)
+    })
   }
-  const nextMonth = () => {
-    const d = new Date(year, month, 1)
-    const now = new Date()
-    if (d > now) return
-    loadMonth(d.getFullYear(), d.getMonth() + 1)
+
+  // Toggle mes ↔ trimestre (ancla el mes al 1er mes del trimestre y viceversa)
+  const switchToMes       = () => loadMonth(year, periodMode === 'trimestre' ? (currentQuarter - 1) * 3 + 1 : month)
+  const switchToTrimestre = () => loadQuarter(year, currentQuarter)
+
+  const prevPeriod = () => {
+    if (periodMode === 'trimestre') {
+      let q = currentQuarter - 1, y = year
+      if (q < 1) { q = 4; y -= 1 }
+      loadQuarter(y, q)
+    } else {
+      const d = new Date(year, month - 2, 1)
+      loadMonth(d.getFullYear(), d.getMonth() + 1)
+    }
+  }
+  const nextPeriod = () => {
+    if (periodMode === 'trimestre') {
+      let q = currentQuarter + 1, y = year
+      if (q > 4) { q = 1; y += 1 }
+      loadQuarter(y, q)
+    } else {
+      const d = new Date(year, month, 1)
+      if (d > new Date()) return
+      loadMonth(d.getFullYear(), d.getMonth() + 1)
+    }
   }
 
   // ── Optimistic delete ──────────────────────────────────────────────────────
@@ -228,6 +258,7 @@ export default function ScannerPage({ initialScans, proyectos, initialYear, init
     if (!confirm('¿Eliminar este gasto?')) return
     setScans(prev => prev.filter(s => s.id !== id))
     setRecentScans(prev => prev.filter(s => s.id !== id))
+    setSelectedIds(prev => { const next = new Set(prev); next.delete(id); return next })
     const res = await deleteExpenseScan(id)
     if ('error' in res) {
       alert(res.error)
@@ -281,9 +312,59 @@ export default function ScannerPage({ initialScans, proyectos, initialYear, init
 
   // ── Export ─────────────────────────────────────────────────────────────────
 
+  // Descarga del período visible completo (mes o trimestre)
   const handleExport = () => {
-    window.open(`/api/expense-scans/export?year=${year}&month=${month}`, '_blank')
+    const q = periodMode === 'trimestre'
+      ? `year=${year}&quarter=${currentQuarter}`
+      : `year=${year}&month=${month}`
+    window.open(`/api/expense-scans/export?${q}`, '_blank')
   }
+
+  // Descarga solo los gastos seleccionados (POST porque los ids pueden ser muchos)
+  const handleExportSelection = async () => {
+    if (selectedIds.size === 0) return
+    setIsExporting(true)
+    try {
+      const res = await fetch('/api/expense-scans/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+      })
+      if (!res.ok) { alert('No se pudo generar el ZIP.'); return }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'gastos_seleccion.zip'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch {
+      alert('Error de red al generar el ZIP.')
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
+  // Selección
+  const toggleSelected = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+  const allVisibleSelected = filteredScans.length > 0 && filteredScans.every(s => selectedIds.has(s.id))
+  const toggleSelectAll = () => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (allVisibleSelected) filteredScans.forEach(s => next.delete(s.id))
+      else                    filteredScans.forEach(s => next.add(s.id))
+      return next
+    })
+  }
+  const clearSelection = () => setSelectedIds(new Set())
 
   // ── Backfill hora_ticket ───────────────────────────────────────────────────
   const [backfilling, setBackfilling] = useState(false)
@@ -322,6 +403,12 @@ export default function ScannerPage({ initialScans, proyectos, initialYear, init
 
   const now = new Date()
   const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1
+  const nowQuarter = Math.floor(now.getMonth() / 3) + 1
+  const isCurrentQuarter = year === now.getFullYear() && currentQuarter === nowQuarter
+  const isCurrentPeriod = periodMode === 'trimestre' ? isCurrentQuarter : isCurrentMonth
+  const periodLabel = periodMode === 'trimestre'
+    ? `${currentQuarter}º trimestre ${year}`
+    : `${MESES_ES[month - 1]} ${year}`
 
   return (
     <div style={{ maxWidth: 720, margin: '0 auto', padding: '28px 16px', fontFamily: 'inherit' }}>
@@ -402,17 +489,31 @@ export default function ScannerPage({ initialScans, proyectos, initialYear, init
       </div>
       )}
 
-      {/* ── Month navigation ────────────────────────────────────────────────── */}
+      {/* ── Period navigation ───────────────────────────────────────────────── */}
       {isPartner && activeTab === 'mes' && (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-        <button onClick={prevMonth} disabled={isNavigating} style={{ background: 'none', border: '1px solid #E8E6E0', borderRadius: 6, padding: '6px 12px', cursor: 'pointer', fontSize: 14, color: '#555', opacity: isNavigating ? 0.5 : 1 }}>←</button>
-        <span style={{ fontSize: 14, fontWeight: 500, color: isNavigating ? '#AAA' : '#1A1A1A', minWidth: 140, textAlign: 'center' }}>
-          {isNavigating ? 'Cargando…' : `${MESES_ES[month - 1]} ${year}`}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+        {/* Toggle mes / trimestre */}
+        <div style={{ display: 'flex', border: '1px solid #E8E6E0', borderRadius: 6, overflow: 'hidden' }}>
+          {([['mes', 'Mes'], ['trimestre', 'Trimestre']] as const).map(([m, label]) => {
+            const active = periodMode === m
+            return (
+              <button
+                key={m}
+                onClick={() => { if (!active) (m === 'mes' ? switchToMes() : switchToTrimestre()) }}
+                disabled={isNavigating}
+                style={{ padding: '6px 12px', background: active ? '#1A1A1A' : '#fff', color: active ? '#fff' : '#555', border: 'none', cursor: active ? 'default' : 'pointer', fontSize: 12, fontWeight: active ? 700 : 500 }}
+              >{label}</button>
+            )
+          })}
+        </div>
+        <button onClick={prevPeriod} disabled={isNavigating} style={{ background: 'none', border: '1px solid #E8E6E0', borderRadius: 6, padding: '6px 12px', cursor: 'pointer', fontSize: 14, color: '#555', opacity: isNavigating ? 0.5 : 1 }}>←</button>
+        <span style={{ fontSize: 14, fontWeight: 500, color: isNavigating ? '#AAA' : '#1A1A1A', minWidth: 150, textAlign: 'center' }}>
+          {isNavigating ? 'Cargando…' : periodLabel}
         </span>
         <button
-          onClick={nextMonth}
-          disabled={isCurrentMonth}
-          style={{ background: 'none', border: '1px solid #E8E6E0', borderRadius: 6, padding: '6px 12px', cursor: isCurrentMonth ? 'default' : 'pointer', fontSize: 14, color: isCurrentMonth ? '#CCC' : '#555' }}
+          onClick={nextPeriod}
+          disabled={isCurrentPeriod}
+          style={{ background: 'none', border: '1px solid #E8E6E0', borderRadius: 6, padding: '6px 12px', cursor: isCurrentPeriod ? 'default' : 'pointer', fontSize: 14, color: isCurrentPeriod ? '#CCC' : '#555' }}
         >→</button>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
           {backfillMsg && (
@@ -435,9 +536,10 @@ export default function ScannerPage({ initialScans, proyectos, initialYear, init
           </button>
           <button
             onClick={handleExport}
+            title={periodMode === 'trimestre' ? 'Descarga el trimestre completo (una carpeta por mes)' : 'Descarga el mes completo'}
             style={{ padding: '7px 14px', background: '#1A1A1A', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 600, letterSpacing: '0.04em' }}
           >
-            ↓ Exportar ZIP
+            ↓ Exportar {periodMode === 'trimestre' ? 'trimestre' : 'mes'}
           </button>
         </div>
       </div>
@@ -532,6 +634,37 @@ export default function ScannerPage({ initialScans, proyectos, initialYear, init
         </div>
       )}
 
+      {/* ── Selection toolbar (solo partner) ────────────────────────────────── */}
+      {isPartner && filteredScans.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: '#555', cursor: 'pointer', userSelect: 'none' }}>
+            <input
+              type="checkbox"
+              checked={allVisibleSelected}
+              onChange={toggleSelectAll}
+              style={{ width: 16, height: 16, accentColor: '#D85A30', cursor: 'pointer' }}
+            />
+            Seleccionar todo ({filteredScans.length})
+          </label>
+          {selectedIds.size > 0 && (
+            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 12, color: '#888' }}>{selectedIds.size} seleccionado{selectedIds.size !== 1 ? 's' : ''}</span>
+              <button
+                onClick={clearSelection}
+                style={{ padding: '6px 10px', background: 'none', color: '#888', border: '1px solid #E8E6E0', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 500 }}
+              >Limpiar</button>
+              <button
+                onClick={handleExportSelection}
+                disabled={isExporting}
+                style={{ padding: '7px 14px', background: '#D85A30', color: '#fff', border: 'none', borderRadius: 6, cursor: isExporting ? 'default' : 'pointer', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', opacity: isExporting ? 0.6 : 1 }}
+              >
+                {isExporting ? '⏳ Generando…' : `↓ Descargar selección (${selectedIds.size})`}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── List ────────────────────────────────────────────────────────────── */}
       {!isPartner && scans.length > 0 && (
         <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#AAA', margin: '0 0 10px' }}>
@@ -553,7 +686,16 @@ export default function ScannerPage({ initialScans, proyectos, initialYear, init
           {filteredScans.map(scan => {
             const cfg = TIPO_CONFIG[scan.tipo] ?? TIPO_CONFIG.otro
             return (
-              <div key={scan.id} style={{ display: 'flex', gap: 12, padding: '14px 16px', background: '#fff', border: '1px solid #E8E6E0', borderRadius: 10 }}>
+              <div key={scan.id} style={{ display: 'flex', gap: 12, padding: '14px 16px', background: selectedIds.has(scan.id) ? '#FFF7ED' : '#fff', border: `1px solid ${selectedIds.has(scan.id) ? '#FED7AA' : '#E8E6E0'}`, borderRadius: 10 }}>
+                {/* Checkbox de selección (solo partner) */}
+                {isPartner && (
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(scan.id)}
+                    onChange={() => toggleSelected(scan.id)}
+                    style={{ width: 16, height: 16, accentColor: '#D85A30', cursor: 'pointer', alignSelf: 'center', flexShrink: 0 }}
+                  />
+                )}
                 {/* Thumbnail */}
                 <div
                   onClick={() => { if (!isPdfUrl(scan.foto_url)) setLightbox(scan.foto_url) }}

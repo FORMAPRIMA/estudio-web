@@ -57,6 +57,7 @@ interface Props {
   vista: 'gastos' | 'facturas' | 'conciliacion'
   year: number
   month: number
+  quarter: number | null
   gastos: GastoRow[]
   facturas: FacturaRow[]
   statements: StatementRow[]
@@ -95,7 +96,7 @@ function fmtDate(d: string | null) {
 }
 
 export default function GestorPortal({
-  token, label, vista, year, month,
+  token, label, vista, year, month, quarter,
   gastos, facturas, statements, transactions, selectedStatementId,
 }: Props) {
   const base = `/gestor/${token}`
@@ -105,11 +106,36 @@ export default function GestorPortal({
     return `${base}?${sp.toString()}`
   }
 
-  // Navegación de mes (gastos)
-  const prevDate = new Date(year, month - 2, 1)
-  const nextDate = new Date(year, month, 1)
+  // ── Navegación de período (mes o trimestre) para gastos ──────────────────────
   const now = new Date()
-  const hasNext = nextDate <= now
+  const periodMode: 'mes' | 'trimestre' = quarter ? 'trimestre' : 'mes'
+  const currentQuarter = quarter ?? Math.floor((month - 1) / 3) + 1
+  const nowQuarter = Math.floor(now.getMonth() / 3) + 1
+
+  let prevHref: string
+  let nextHref: string | null
+  let periodLabel: string
+
+  if (periodMode === 'trimestre') {
+    let pq = currentQuarter - 1, py = year; if (pq < 1) { pq = 4; py -= 1 }
+    let nq = currentQuarter + 1, ny = year; if (nq > 4) { nq = 1; ny += 1 }
+    const isCurrent = year === now.getFullYear() && currentQuarter === nowQuarter
+    prevHref    = href({ vista: 'gastos', year: py, quarter: pq })
+    nextHref    = isCurrent ? null : href({ vista: 'gastos', year: ny, quarter: nq })
+    periodLabel = `${currentQuarter}º trimestre ${year}`
+  } else {
+    const prevDate = new Date(year, month - 2, 1)
+    const nextDate = new Date(year, month, 1)
+    prevHref    = href({ vista: 'gastos', year: prevDate.getFullYear(), month: prevDate.getMonth() + 1 })
+    nextHref    = nextDate <= now ? href({ vista: 'gastos', year: nextDate.getFullYear(), month: nextDate.getMonth() + 1 }) : null
+    periodLabel = `${MESES_ES[month - 1]} ${year}`
+  }
+
+  const toggleMesHref       = href({ vista: 'gastos', year, month: periodMode === 'trimestre' ? (currentQuarter - 1) * 3 + 1 : month })
+  const toggleTrimestreHref = href({ vista: 'gastos', year, quarter: currentQuarter })
+  const gastosZipHref = periodMode === 'trimestre'
+    ? `/api/gestor/${token}/gastos-zip?year=${year}&quarter=${currentQuarter}`
+    : `/api/gestor/${token}/gastos-zip?year=${year}&month=${month}`
 
   // Totales de gastos por divisa
   const totalesGastos = Object.entries(
@@ -168,20 +194,27 @@ export default function GestorPortal({
         {vista === 'gastos' && (
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-              <a href={href({ vista: 'gastos', year: prevDate.getFullYear(), month: prevDate.getMonth() + 1 })}
+              {/* Toggle mes / trimestre */}
+              <div style={{ display: 'flex', border: '1px solid #E8E6E0', borderRadius: 6, overflow: 'hidden' }}>
+                <a href={toggleMesHref}
+                   style={{ padding: '6px 12px', fontSize: 12, fontWeight: periodMode === 'mes' ? 700 : 500, textDecoration: 'none', background: periodMode === 'mes' ? '#1A1A1A' : '#fff', color: periodMode === 'mes' ? '#fff' : '#555' }}>Mes</a>
+                <a href={toggleTrimestreHref}
+                   style={{ padding: '6px 12px', fontSize: 12, fontWeight: periodMode === 'trimestre' ? 700 : 500, textDecoration: 'none', background: periodMode === 'trimestre' ? '#1A1A1A' : '#fff', color: periodMode === 'trimestre' ? '#fff' : '#555' }}>Trimestre</a>
+              </div>
+              <a href={prevHref}
                  style={{ padding: '6px 12px', border: '1px solid #E8E6E0', borderRadius: 6, fontSize: 14, color: '#555', textDecoration: 'none', background: '#fff' }}>←</a>
-              <span style={{ fontSize: 14, fontWeight: 500, color: '#1A1A1A', minWidth: 140, textAlign: 'center' }}>
-                {MESES_ES[month - 1]} {year}
+              <span style={{ fontSize: 14, fontWeight: 500, color: '#1A1A1A', minWidth: 150, textAlign: 'center' }}>
+                {periodLabel}
               </span>
-              {hasNext ? (
-                <a href={href({ vista: 'gastos', year: nextDate.getFullYear(), month: nextDate.getMonth() + 1 })}
+              {nextHref ? (
+                <a href={nextHref}
                    style={{ padding: '6px 12px', border: '1px solid #E8E6E0', borderRadius: 6, fontSize: 14, color: '#555', textDecoration: 'none', background: '#fff' }}>→</a>
               ) : (
                 <span style={{ padding: '6px 12px', border: '1px solid #F0EEE8', borderRadius: 6, fontSize: 14, color: '#DDD' }}>→</span>
               )}
               {gastos.length > 0 && (
                 <a
-                  href={`/api/gestor/${token}/gastos-zip?year=${year}&month=${month}`}
+                  href={gastosZipHref}
                   style={{ marginLeft: 'auto', padding: '8px 16px', background: '#1A1A1A', color: '#fff', borderRadius: 6, fontSize: 11, fontWeight: 600, textDecoration: 'none', letterSpacing: '0.04em' }}
                 >↓ Descargar ZIP (Excel + fotos)</a>
               )}
@@ -202,7 +235,7 @@ export default function GestorPortal({
 
             {gastos.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '60px 20px', border: '2px dashed #E8E6E0', borderRadius: 12, background: '#fff' }}>
-                <p style={{ fontSize: 13, color: '#888', margin: 0 }}>Sin gastos registrados en {MESES_ES[month - 1]} {year}.</p>
+                <p style={{ fontSize: 13, color: '#888', margin: 0 }}>Sin gastos registrados en {periodLabel}.</p>
               </div>
             ) : (
               <div style={{ background: '#fff', border: '1px solid #E8E6E0', borderRadius: 10, overflow: 'hidden' }}>
