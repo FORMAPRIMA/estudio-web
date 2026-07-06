@@ -3,7 +3,8 @@
 import { useState, useTransition, useRef, useEffect } from 'react'
 import type { CSSProperties } from 'react'
 import { useRouter } from 'next/navigation'
-import { createFactura, updateFactura, deleteFactura, updateClienteBilling, aplazarFactura, emitirFacturaDesdeContrato } from '@/app/actions/facturacion'
+import { createFactura, updateFactura, deleteFactura, updateClienteBilling, aplazarFactura, emitirFacturaDesdeContrato, updateMobiliarioLiquidado } from '@/app/actions/facturacion'
+import { SECCION_MOBILIARIO } from '@/lib/finanzas/costs'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -25,6 +26,7 @@ interface Factura {
   monto: number; fecha_emision: string | null; fecha_pago_acordada: string | null
   fecha_cobro: string | null; status: string; notas: string | null
   factura_emitida_id: string | null; clientes_ids: string[]; proveedor_id: string | null
+  margen_estimado_pct: number | null
 }
 
 interface ConstructorInfo {
@@ -78,6 +80,7 @@ const INPUT: CSSProperties = {
 
 export default function FacturacionProyectoDetalle({
   proyecto, cliente: initialCliente, facturas: initialFacturas, secciones, todosClientes, constructor,
+  comprasMobiliario, mobiliarioLiquidado: initialLiquidado,
 }: {
   proyecto: ProyectoInfo
   cliente: ClienteInfo | null
@@ -85,9 +88,12 @@ export default function FacturacionProyectoDetalle({
   secciones: string[]
   todosClientes: ClienteInfo[]
   constructor: ConstructorInfo | null
+  comprasMobiliario: number
+  mobiliarioLiquidado: boolean
 }) {
   const router = useRouter()
   const [facturas, setFacturas] = useState(initialFacturas)
+  const [mobiliarioLiquidado, setMobiliarioLiquidado] = useState(initialLiquidado)
   const [cliente, setCliente] = useState(initialCliente)
   const [editingCliente, setEditingCliente] = useState(false)
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
@@ -111,7 +117,7 @@ export default function FacturacionProyectoDetalle({
 
   const commitCell = (id: string, field: string, rawValue: string) => {
     setEditCell(null)
-    const numericFields = ['monto']
+    const numericFields = ['monto', 'margen_estimado_pct']
     const value = numericFields.includes(field)
       ? parseFloat(rawValue.replace(',', '.')) || 0
       : rawValue || null
@@ -154,6 +160,7 @@ export default function FacturacionProyectoDetalle({
           factura_emitida_id: null,
           clientes_ids: data.proveedor_id ? [] : data.clientes_ids,
           proveedor_id: data.proveedor_id ?? null,
+          margen_estimado_pct: null,
         }])
         router.refresh()
       }
@@ -206,6 +213,25 @@ export default function FacturacionProyectoDetalle({
       f.id === facturaId ? { ...f, factura_emitida_id: result.id } : f
     ))
     router.push('/team/finanzas/facturacion/emitidas')
+  }
+
+  const handleMove = (facturaId: string, nuevaSeccion: string) => {
+    setFacturas(prev => prev.map(f =>
+      f.id === facturaId ? { ...f, seccion: nuevaSeccion } : f
+    ))
+    startTransition(async () => {
+      await updateFactura(facturaId, proyecto.id, { seccion: nuevaSeccion })
+      router.refresh()
+    })
+  }
+
+  const handleToggleLiquidado = () => {
+    const next = !mobiliarioLiquidado
+    setMobiliarioLiquidado(next)
+    startTransition(async () => {
+      await updateMobiliarioLiquidado(proyecto.id, next)
+      router.refresh()
+    })
   }
 
   const handleAplazar = (facturaId: string, nuevaFecha: string) => {
@@ -356,6 +382,18 @@ export default function FacturacionProyectoDetalle({
           const secCobrado  = secFacturas.filter(f => f.status === 'pagada').reduce((s, f) => s + f.monto, 0)
           const isAdding    = addingSeccion === seccion
 
+          const showClienteCol = todosClientes.length > 1 || !!constructor
+          const isMobiliario   = seccion === SECCION_MOBILIARIO
+          const colCount       = 8 + (showClienteCol ? 1 : 0) + (isMobiliario ? 1 : 0)
+
+          // Depósito de mobiliario: suplido cobrado − compras = margen
+          const margenEstimado    = secFacturas.reduce((s, f) => s + f.monto * ((f.margen_estimado_pct ?? 0) / 100), 0)
+          const presupuestoCompra = secTotal - margenEstimado           // lo que esperas gastar en muebles
+          const margenReal        = secTotal - comprasMobiliario         // lo que queda del depósito
+          const consumoPct        = presupuestoCompra > 0
+            ? Math.round((comprasMobiliario / presupuestoCompra) * 100)
+            : (comprasMobiliario > 0 ? 100 : 0)
+
           return (
             <section key={seccion}>
               {/* Section header */}
@@ -365,7 +403,9 @@ export default function FacturacionProyectoDetalle({
                 </p>
                 {secTotal > 0 && (
                   <>
-                    <span style={{ fontSize: 11, color: '#AAA' }}>€ {fmtE0.format(secTotal)} contratado</span>
+                    <span style={{ fontSize: 11, color: '#AAA' }}>
+                      € {fmtE0.format(secTotal)} {isMobiliario ? 'suplido' : 'contratado'}
+                    </span>
                     {secCobrado > 0 && (
                       <span style={{ fontSize: 11, color: '#1D9E75', fontWeight: 500 }}>€ {fmtE0.format(secCobrado)} cobrado</span>
                     )}
@@ -378,11 +418,14 @@ export default function FacturacionProyectoDetalle({
                   <thead>
                     <tr style={{ background: '#1A1A1A' }}>
                       <th style={{ ...TH, textAlign: 'left' }}>Concepto</th>
-                      {(todosClientes.length > 1 || !!constructor) && (
+                      {showClienteCol && (
                         <th style={{ ...TH, textAlign: 'left', width: 140 }}>Destinatario</th>
                       )}
                       <th style={{ ...TH, textAlign: 'left', width: 130 }}>N.º Factura</th>
-                      <th style={{ ...TH, textAlign: 'right', width: 140 }}>Monto</th>
+                      <th style={{ ...TH, textAlign: 'right', width: 140 }}>{isMobiliario ? 'Suplido' : 'Monto'}</th>
+                      {isMobiliario && (
+                        <th style={{ ...TH, textAlign: 'right', width: 110 }} title="Interno — nunca se envía al cliente">% Margen est.</th>
+                      )}
                       <th style={{ ...TH, textAlign: 'center', width: 130 }}>F. acordada</th>
                       <th style={{ ...TH, textAlign: 'center', width: 110 }}>F. emisión</th>
                       <th style={{ ...TH, textAlign: 'center', width: 100 }}>F. cobro</th>
@@ -401,6 +444,8 @@ export default function FacturacionProyectoDetalle({
                         emitiendo={emitiendo === f.id}
                         todosClientes={todosClientes}
                         constructor={constructor}
+                        showMargenPct={isMobiliario}
+                        secciones={secciones}
                         onToggleExpand={() => setExpandedIds(prev => {
                           const next = new Set(prev)
                           next.has(f.id) ? next.delete(f.id) : next.add(f.id)
@@ -415,13 +460,14 @@ export default function FacturacionProyectoDetalle({
                         onDelete={() => handleDelete(f.id)}
                         onEmitir={() => handleEmitir(f.id)}
                         onAplazar={(date) => handleAplazar(f.id, date)}
+                        onMove={(sec) => handleMove(f.id, sec)}
                         onClientesChange={(ids) => handleClientesFactura(f.id, ids)}
                         onProveedorChange={(id) => handleProveedorFactura(f.id, id)}
                       />
                     ))}
                     {secFacturas.length === 0 && !isAdding && (
                       <tr>
-                        <td colSpan={(todosClientes.length > 1 || !!constructor) ? 9 : 8} style={{ ...TD, textAlign: 'center', color: '#CCC', fontStyle: 'italic', borderBottom: 'none' }}>
+                        <td colSpan={colCount} style={{ ...TD, textAlign: 'center', color: '#CCC', fontStyle: 'italic', borderBottom: 'none' }}>
                           Sin facturas en esta sección
                         </td>
                       </tr>
@@ -450,15 +496,31 @@ export default function FacturacionProyectoDetalle({
                   </div>
                 )}
 
-                {/* Section total footer */}
-                {secFacturas.length > 1 && (
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 32, padding: '10px 16px', background: '#F8F7F4', borderTop: '2px solid #E8E6E0' }}>
-                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#888' }}>Total sección</span>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: '#1A1A1A', fontVariantNumeric: 'tabular-nums', minWidth: 100, textAlign: 'right' }}>
-                      € {fmtE0.format(secTotal)}
-                    </span>
-                    <div style={{ width: (todosClientes.length > 1 || !!constructor) ? 180 : 40 }} />
-                  </div>
+                {/* Mobiliario: depósito y liquidación */}
+                {isMobiliario && secFacturas.length > 0 ? (
+                  <MobiliarioDeposito
+                    suplido={secTotal}
+                    margenEstimado={margenEstimado}
+                    presupuestoCompra={presupuestoCompra}
+                    compras={comprasMobiliario}
+                    margenReal={margenReal}
+                    consumoPct={consumoPct}
+                    liquidado={mobiliarioLiquidado}
+                    onToggleLiquidado={handleToggleLiquidado}
+                    proyectoId={proyecto.id}
+                    router={router}
+                  />
+                ) : (
+                  /* Section total footer */
+                  secFacturas.length > 1 && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 32, padding: '10px 16px', background: '#F8F7F4', borderTop: '2px solid #E8E6E0' }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#888' }}>Total sección</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: '#1A1A1A', fontVariantNumeric: 'tabular-nums', minWidth: 100, textAlign: 'right' }}>
+                        € {fmtE0.format(secTotal)}
+                      </span>
+                      <div style={{ width: showClienteCol ? 180 : 40 }} />
+                    </div>
+                  )
                 )}
               </div>
             </section>
@@ -720,9 +782,10 @@ function ClienteMultiSelect({
 
 function FacturaRow({
   factura, editCell, editingStatus, expanded, emitiendo, todosClientes, constructor,
+  showMargenPct, secciones,
   onToggleExpand, onEditCell, onCommitCell, onCancelEdit,
   onEditStatus, onCommitStatus, onCancelStatus, onDelete,
-  onEmitir, onAplazar, onClientesChange, onProveedorChange,
+  onEmitir, onAplazar, onMove, onClientesChange, onProveedorChange,
 }: {
   factura: Factura
   editCell: { id: string; field: string } | null
@@ -731,6 +794,8 @@ function FacturaRow({
   emitiendo: boolean
   todosClientes: ClienteInfo[]
   constructor: ConstructorInfo | null
+  showMargenPct: boolean
+  secciones: string[]
   onToggleExpand: () => void
   onEditCell: (field: string) => void
   onCommitCell: (field: string, val: string) => void
@@ -741,11 +806,13 @@ function FacturaRow({
   onDelete: () => void
   onEmitir: () => void
   onAplazar: (date: string) => void
+  onMove: (seccion: string) => void
   onClientesChange: (ids: string[]) => void
   onProveedorChange: (id: string | null) => void
 }) {
   const rowRouter = useRouter()
   const showClienteCol = todosClientes.length > 1 || !!constructor
+  const colCount = 8 + (showClienteCol ? 1 : 0) + (showMargenPct ? 1 : 0)
   const meta = STATUS_META[factura.status] ?? STATUS_META.acordada_contrato
   const isActive = (field: string) => editCell?.id === factura.id && editCell.field === field
 
@@ -861,6 +928,36 @@ function FacturaRow({
         <td style={{ ...TD }}><InlineText field="numero_factura" value={factura.numero_factura} width={110} /></td>
         {/* Monto */}
         <td style={{ ...TD, textAlign: 'right' }}><InlineNum field="monto" value={factura.monto} /></td>
+        {/* % Margen estimado (interno, solo mobiliario) */}
+        {showMargenPct && (
+          <td style={{ ...TD, textAlign: 'right' }}>
+            {isActive('margen_estimado_pct') ? (
+              <input
+                autoFocus
+                type="number"
+                min={0}
+                max={100}
+                defaultValue={factura.margen_estimado_pct ?? ''}
+                onBlur={e => onCommitCell('margen_estimado_pct', e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') onCommitCell('margen_estimado_pct', (e.target as HTMLInputElement).value)
+                  if (e.key === 'Escape') onCancelEdit()
+                }}
+                style={{ ...INPUT, width: 68, textAlign: 'right' }}
+              />
+            ) : (
+              <span
+                onClick={() => onEditCell('margen_estimado_pct')}
+                title="Margen estimado interno · nunca se envía al cliente · click para editar"
+                style={{ cursor: 'pointer', padding: '2px 4px', borderRadius: 3, display: 'inline-block', minWidth: 44, fontVariantNumeric: 'tabular-nums', color: factura.margen_estimado_pct != null ? '#B8860B' : '#CCC' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#FFF8E8' }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+              >
+                {factura.margen_estimado_pct != null ? `${factura.margen_estimado_pct} %` : '—'}
+              </span>
+            )}
+          </td>
+        )}
         {/* Fecha acordada */}
         <td style={{ ...TD, textAlign: 'center' }}><InlineDate field="fecha_pago_acordada" value={factura.fecha_pago_acordada} /></td>
         {/* Fecha emisión */}
@@ -935,7 +1032,7 @@ function FacturaRow({
       {/* Expanded row */}
       {expanded && (
         <tr style={{ background: '#FAFAF8' }}>
-          <td colSpan={showClienteCol ? 9 : 8} style={{ padding: '10px 16px 14px 44px', borderBottom: '1px solid #F0EEE8' }}>
+          <td colSpan={colCount} style={{ padding: '10px 16px 14px 44px', borderBottom: '1px solid #F0EEE8' }}>
             {/* Cobrable actions banner */}
             {factura.status === 'cobrable' && !factura.factura_emitida_id && (
               <div style={{ marginBottom: 12, padding: '12px 16px', background: '#EBF4FF', border: '1px solid #BFDBFE', borderRadius: 6, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
@@ -981,10 +1078,127 @@ function FacturaRow({
                 </span>
               )}
             </div>
+            {/* Mover a otra sección */}
+            {secciones.length > 1 && (
+              <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 10, fontWeight: 600, color: '#AAA', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Mover a:</span>
+                <select
+                  value=""
+                  onChange={e => { if (e.target.value) onMove(e.target.value) }}
+                  style={{ ...INPUT, cursor: 'pointer', fontSize: 11, padding: '4px 8px', maxWidth: 220 }}
+                >
+                  <option value="">Elegir sección…</option>
+                  {secciones.filter(s => s !== factura.seccion).map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </td>
         </tr>
       )}
     </>
+  )
+}
+
+// ── Mobiliario: depósito y liquidación ──────────────────────────────────────────
+
+function MobiliarioDeposito({
+  suplido, margenEstimado, presupuestoCompra, compras, margenReal, consumoPct,
+  liquidado, onToggleLiquidado, proyectoId, router,
+}: {
+  suplido: number
+  margenEstimado: number
+  presupuestoCompra: number
+  compras: number
+  margenReal: number
+  consumoPct: number
+  liquidado: boolean
+  onToggleLiquidado: () => void
+  proyectoId: string
+  router: ReturnType<typeof useRouter>
+}) {
+  const estado = liquidado ? 'liquidado' : compras > 0 ? 'ejecucion' : 'estimado'
+  const estadoMeta = {
+    estimado:  { label: 'Estimado',     color: '#B8860B', bg: '#FFF8E8' },
+    ejecucion: { label: 'En ejecución', color: '#378ADD', bg: '#EEF4FD' },
+    liquidado: { label: 'Liquidado',    color: '#1D9E75', bg: '#EEF8F4' },
+  }[estado]
+  const margenEfectivo = liquidado ? margenReal : margenEstimado
+  const sobrepasado    = compras > presupuestoCompra && presupuestoCompra > 0
+  const barPct         = Math.min(consumoPct, 100)
+
+  return (
+    <div style={{ padding: '16px 18px', background: '#FBFAF7', borderTop: '2px solid #E8E6E0' }}>
+      {/* Cabecera: estado + acción */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#555' }}>
+          Depósito de mobiliario
+        </span>
+        <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: estadoMeta.color, background: estadoMeta.bg, padding: '3px 8px', borderRadius: 4 }}>
+          {estadoMeta.label}
+        </span>
+        <span style={{ fontSize: 10, color: '#B8860B', background: '#FFF8E8', padding: '3px 8px', borderRadius: 4 }}>
+          🔒 Interno — no se envía al cliente
+        </span>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+          <button
+            onClick={() => router.push(`/team/finanzas/operativas/proyectos/${proyectoId}`)}
+            style={{ background: 'none', border: '1px solid #E8E6E0', borderRadius: 5, cursor: 'pointer', fontSize: 10, color: '#888', padding: '5px 12px' }}
+          >
+            Registrar compras →
+          </button>
+          <button
+            onClick={onToggleLiquidado}
+            style={{ background: liquidado ? 'none' : '#1D9E75', border: liquidado ? '1px solid #E8E6E0' : 'none', borderRadius: 5, cursor: 'pointer', fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', color: liquidado ? '#888' : '#fff', padding: '5px 14px' }}
+          >
+            {liquidado ? 'Reabrir liquidación' : 'Liquidar mobiliario'}
+          </button>
+        </div>
+      </div>
+
+      {/* Métricas */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 0, background: '#fff', border: '1px solid #E8E6E0', borderRadius: 8, overflow: 'hidden' }}>
+        <DepBox label="Suplido cobrado"  value={`€ ${fmtE0.format(suplido)}`} />
+        <DepBox label="Compras" value={`€ ${fmtE0.format(compras)}`} color={sobrepasado ? '#E53E3E' : undefined} />
+        <DepBox
+          label={liquidado ? 'Margen real' : 'Margen estimado'}
+          value={`€ ${fmtE0.format(margenEfectivo)}`}
+          color={margenEfectivo >= 0 ? '#1D9E75' : '#E53E3E'}
+        />
+        <DepBox
+          label={liquidado ? 'Margen previsto' : 'Margen real hasta ahora'}
+          value={`€ ${fmtE0.format(liquidado ? margenEstimado : margenReal)}`}
+          color="#888"
+          last
+        />
+      </div>
+
+      {/* Burn-down */}
+      <div style={{ marginTop: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#888', marginBottom: 4 }}>
+          <span>Consumo del presupuesto de compra (€ {fmtE0.format(presupuestoCompra)} previsto)</span>
+          <span style={{ color: sobrepasado ? '#E53E3E' : '#888', fontWeight: 600 }}>{consumoPct}%</span>
+        </div>
+        <div style={{ height: 6, background: '#F0EEE8', borderRadius: 3, overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${barPct}%`, background: sobrepasado ? '#E53E3E' : consumoPct > 85 ? '#E8913A' : '#1D9E75', transition: 'width 0.4s ease' }} />
+        </div>
+        {sobrepasado && !liquidado && (
+          <p style={{ fontSize: 11, color: '#E53E3E', margin: '8px 0 0' }}>
+            ⚠ Las compras superan el presupuesto estimado — el margen real (€ {fmtE0.format(margenReal)}) está por debajo del estimado (€ {fmtE0.format(margenEstimado)}). Revisa antes de liquidar.
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function DepBox({ label, value, color, last }: { label: string; value: string; color?: string; last?: boolean }) {
+  return (
+    <div style={{ padding: '12px 16px', borderRight: last ? 'none' : '1px solid #F0EEE8' }}>
+      <p style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#BBB', margin: '0 0 4px' }}>{label}</p>
+      <p style={{ fontSize: 16, fontWeight: 400, color: color ?? '#1A1A1A', margin: 0, fontVariantNumeric: 'tabular-nums' }}>{value}</p>
+    </div>
   )
 }
 

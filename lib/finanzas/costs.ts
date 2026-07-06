@@ -8,7 +8,7 @@ export const SECCION_ORDER = [
   'Obra',
   'Margen prorrateado de obra',
   'Interiorismo',
-  'Margen de mobiliario',
+  'Compra de mobiliario',
   'Post venta',
 ] as const
 
@@ -17,13 +17,20 @@ export type Seccion = (typeof SECCION_ORDER)[number]
 /** Secciones que NUNCA deben ser visibles para el cliente */
 export const SECCIONES_PRIVADAS: string[] = [
   'Margen prorrateado de obra',
-  'Margen de mobiliario',
 ]
 
 /** Margen de obra → se factura a la constructora del proyecto (proyectos.constructor_id) */
 export const SECCION_CONSTRUCTORA = 'Margen prorrateado de obra'
-/** Margen de mobiliario → se factura al proveedor de muebles (facturas.proveedor_id) */
-export const SECCION_MOBILIARIO = 'Margen de mobiliario'
+/**
+ * Compra de mobiliario → depósito pass-through por proyecto: entran suplidos
+ * cobrados al cliente (facturables con normalidad) y salen las compras de
+ * mobiliario (costos_variables con categoría CATEGORIA_MOBILIARIO). El margen se
+ * calcula (suplidos − compras); el % estimado es interno y jamás sale al cliente.
+ */
+export const SECCION_MOBILIARIO = 'Compra de mobiliario'
+
+/** Categoría de costo variable que cuenta como compra de mobiliario del depósito */
+export const CATEGORIA_MOBILIARIO = 'Compra de mobiliario'
 
 /**
  * Secciones cuya factura JAMÁS debe enviarse al cliente: se factura a un proveedor

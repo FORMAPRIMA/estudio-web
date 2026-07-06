@@ -602,8 +602,20 @@ No modificar sin entender el flujo de envelopes y el sistema de autenticación J
 `ClientPortalGate.tsx` verifica el token antes de renderizar. No confundir con el flujo `/area-privada` (que sí usa Auth).
 
 ### 🟡 `SECCIONES_PRIVADAS` en `lib/finanzas/costs.ts`
-Las secciones `'Margen prorrateado de obra'` y `'Margen de mobiliario'` nunca deben
-mostrarse al cliente. Verificar siempre al añadir nuevas vistas de facturación.
+La sección `'Margen prorrateado de obra'` nunca debe mostrarse al cliente (se factura a
+la constructora). Verificar siempre al añadir nuevas vistas de facturación.
+
+### 🟡 `'Compra de mobiliario'` — depósito pass-through con margen (`SECCION_MOBILIARIO`)
+Antes `'Margen de mobiliario'` (sección privada facturada al proveedor). Ahora es un
+**depósito por proyecto**: entran los **suplidos** cobrados al cliente (facturables con
+normalidad, NO privados) y salen las **compras de mobiliario** (`costos_variables` con
+categoría `CATEGORIA_MOBILIARIO = 'Compra de mobiliario'`). El **margen = suplidos −
+compras**; nunca es una factura. Cada factura de suplido tiene `facturas.margen_estimado_pct`
+(INTERNO — jamás sale al cliente ni al portal ni a `facturas_emitidas`/PDF). La previsión
+usa `suplido × %` hasta que se **liquida** (`proyectos.mobiliario_liquidado`), momento en
+que se congela el margen real. En el P&L el mobiliario aporta **margen neto**, no el suplido
+bruto (evita duplicar ingresos). En la facturación por proyecto se puede **mover facturas
+entre secciones** ("Mover a…" en la fila expandida).
 
 ### 🟡 Propuesta: `calcPropuesta()` en `lib/propuestas/config.ts`
 Los honorarios se calculan sobre el PEM (Presupuesto de Ejecución Material) con splits

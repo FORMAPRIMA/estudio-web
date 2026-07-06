@@ -6,7 +6,7 @@ import { historicalCostPerHour } from '@/lib/finanzas/salaryHistory'
 import type { SalaryRecord } from '@/lib/finanzas/salaryHistory'
 import { repercusionAt } from '@/lib/finanzas/fixedCostHistory'
 import type { FixedCostRecord } from '@/lib/finanzas/fixedCostHistory'
-import { calcRepercusion, SECCION_ORDER } from '@/lib/finanzas/costs'
+import { calcRepercusion, SECCION_ORDER, SECCION_MOBILIARIO, CATEGORIA_MOBILIARIO } from '@/lib/finanzas/costs'
 
 export default async function Page({ params }: { params: { id: string } }) {
   const supabase = await createClient()
@@ -185,6 +185,34 @@ export default async function Page({ params }: { params: { id: string } }) {
     }
   }
 
+  // ── Mobiliario: pass-through con margen ──────────────────────────────────────
+  // El suplido bruto NO es ingreso del estudio; solo cuenta el margen (estimado
+  // mientras no se liquide, real al liquidar). Evita inflar la rentabilidad.
+  const pctMap = new Map<string, number>()
+  const { data: pctRows } = await admin
+    .from('facturas').select('id, margen_estimado_pct').eq('proyecto_id', params.id)
+  for (const r of (pctRows ?? [])) {
+    const v = (r as { margen_estimado_pct?: number | null }).margen_estimado_pct
+    if (v != null) pctMap.set(r.id, Number(v))
+  }
+  let mobiliarioLiquidado = false
+  const { data: liqRow } = await admin
+    .from('proyectos').select('mobiliario_liquidado').eq('id', params.id).maybeSingle()
+  if (liqRow) mobiliarioLiquidado = Boolean((liqRow as { mobiliario_liquidado?: boolean }).mobiliario_liquidado)
+
+  const mobFacturas  = (facturas ?? []).filter(f => f.seccion === SECCION_MOBILIARIO)
+  const mobEstimado  = mobFacturas.reduce((s, f) => s + f.monto * ((pctMap.get(f.id) ?? 0) / 100), 0)
+  const mobCompras   = ((costosVariablesProyecto ?? []) as unknown as { categoria: string; monto: number }[])
+    .filter(c => c.categoria === CATEGORIA_MOBILIARIO)
+    .reduce((s, c) => s + Number(c.monto ?? 0), 0)
+  const mobSuplido   = mobFacturas.reduce((s, f) => s + f.monto, 0)
+  const mobReal      = mobSuplido - mobCompras
+  const mobEfectivo  = mobiliarioLiquidado ? mobReal : mobEstimado
+  const mobEstimadoCobrado = mobFacturas.filter(f => f.status === 'pagada')
+    .reduce((s, f) => s + f.monto * ((pctMap.get(f.id) ?? 0) / 100), 0)
+  const mobSuplidoCobrado  = mobFacturas.filter(f => f.status === 'pagada').reduce((s, f) => s + f.monto, 0)
+  const mobEfectivoCobrado = mobiliarioLiquidado ? Math.max(0, mobSuplidoCobrado - mobCompras) : mobEstimadoCobrado
+
   // Aggregate billing by section
   const STATUS_ORDER = ['acordada_contrato', 'cobrable', 'enviada', 'pagada', 'impagada']
   type SeccionStats = { seccion: string; monto: number; cobrado: number; count: number; statuses: string[] }
@@ -199,6 +227,11 @@ export default async function Page({ params }: { params: { id: string } }) {
       statuses: [...prev.statuses, f.status],
     })
   }
+  // El mobiliario aporta su margen neto, no el suplido bruto
+  const mobStats = bySectionMap.get(SECCION_MOBILIARIO)
+  if (mobStats) {
+    bySectionMap.set(SECCION_MOBILIARIO, { ...mobStats, monto: mobEfectivo, cobrado: mobEfectivoCobrado })
+  }
 
   const billingBySec = Array.from(bySectionMap.values()).sort((a, b) => {
     const ia = SECCION_ORDER.indexOf(a.seccion as never)
@@ -206,8 +239,12 @@ export default async function Page({ params }: { params: { id: string } }) {
     return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib)
   })
 
-  const totalAcordado = (facturas ?? []).reduce((s, f) => s + f.monto, 0)
-  const totalCobrado  = (facturas ?? []).filter(f => f.status === 'pagada').reduce((s, f) => s + f.monto, 0)
+  const totalAcordado = (facturas ?? [])
+    .filter(f => f.seccion !== SECCION_MOBILIARIO)
+    .reduce((s, f) => s + f.monto, 0) + mobEfectivo
+  const totalCobrado  = (facturas ?? [])
+    .filter(f => f.seccion !== SECCION_MOBILIARIO && f.status === 'pagada')
+    .reduce((s, f) => s + f.monto, 0) + mobEfectivoCobrado
 
   const costBySec = Array.from(bySeccion.entries())
     .map(([seccion, s]) => ({ seccion, horas: s.horas, costo: s.costo }))

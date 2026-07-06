@@ -3,7 +3,9 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import FacturacionProyectoDetalle from '@/components/team/finanzas/FacturacionProyectoDetalle'
 
-const SECCION_ORDER = ['Anteproyecto', 'Proyecto de ejecución', 'Obra', 'Margen prorrateado de obra', 'Interiorismo', 'Margen de mobiliario', 'Post venta']
+import { CATEGORIA_MOBILIARIO, SECCION_MOBILIARIO } from '@/lib/finanzas/costs'
+
+const SECCION_ORDER = ['Anteproyecto', 'Proyecto de ejecución', 'Obra', 'Margen prorrateado de obra', 'Interiorismo', 'Compra de mobiliario', 'Post venta']
 
 export default async function Page({ params }: { params: { id: string } }) {
   const supabase = await createClient()
@@ -36,17 +38,31 @@ export default async function Page({ params }: { params: { id: string } }) {
   // Try to select clientes_ids; if the column doesn't exist yet (migration pending),
   // fall back to the base query so facturas still appear.
   const BASE_SELECT = 'id, seccion, concepto, numero_factura, monto, fecha_emision, fecha_pago_acordada, fecha_cobro, status, notas, factura_emitida_id, created_at'
-  const [facturasResult, { data: proyectoClientes }] = await Promise.all([
+  const [facturasResult, { data: proyectoClientes }, { data: comprasMobRows }] = await Promise.all([
     admin
       .from('facturas')
-      .select(`${BASE_SELECT}, clientes_ids, proveedor_id`)
+      .select(`${BASE_SELECT}, clientes_ids, proveedor_id, margen_estimado_pct`)
       .eq('proyecto_id', params.id)
       .order('created_at'),
     admin
       .from('proyecto_clientes')
       .select('clientes(id, nombre, apellidos, empresa, email, email_cc, telefono, telefono_alt, nif_cif, direccion_facturacion, ciudad, codigo_postal, pais)')
       .eq('proyecto_id', params.id),
+    admin
+      .from('costos_variables')
+      .select('monto')
+      .eq('proyecto_id', params.id)
+      .eq('categoria', CATEGORIA_MOBILIARIO),
   ])
+
+  // Total de compras de mobiliario que vacían el depósito del proyecto
+  const comprasMobiliario = (comprasMobRows ?? []).reduce((s, c) => s + Number(c.monto ?? 0), 0)
+
+  // Estado de liquidación — tolerante a que la columna no exista aún (migración pendiente)
+  let mobiliarioLiquidado = false
+  const { data: liqRow } = await admin
+    .from('proyectos').select('mobiliario_liquidado').eq('id', params.id).maybeSingle()
+  if (liqRow) mobiliarioLiquidado = Boolean((liqRow as { mobiliario_liquidado?: boolean }).mobiliario_liquidado)
 
   // Fall back if clientes_ids column is missing (migration not yet applied)
   let facturas = facturasResult.data
@@ -77,7 +93,7 @@ export default async function Page({ params }: { params: { id: string } }) {
   const companionSecciones: string[] = []
   const activeSecciones = new Set([...uniqueSecciones, ...facturaSecciones])
   if (activeSecciones.has('Obra'))        companionSecciones.push('Margen prorrateado de obra')
-  if (activeSecciones.has('Interiorismo')) companionSecciones.push('Margen de mobiliario')
+  if (activeSecciones.has('Interiorismo')) companionSecciones.push(SECCION_MOBILIARIO)
 
   const allSecciones = Array.from(new Set([...uniqueSecciones, ...facturaSecciones, ...companionSecciones]))
     .sort((a, b) => {
@@ -151,8 +167,11 @@ export default async function Page({ params }: { params: { id: string } }) {
         factura_emitida_id:  (f as Record<string, unknown>).factura_emitida_id as string | null ?? null,
         clientes_ids:        ((f as Record<string, unknown>).clientes_ids as string[] | null) ?? [],
         proveedor_id:        ((f as Record<string, unknown>).proveedor_id as string | null) ?? null,
+        margen_estimado_pct: ((f as Record<string, unknown>).margen_estimado_pct as number | null) ?? null,
       }))}
       secciones={allSecciones}
+      comprasMobiliario={comprasMobiliario}
+      mobiliarioLiquidado={mobiliarioLiquidado}
       todosClientes={todosClientes}
       constructor={constructor ? {
         id:              constructor.id,

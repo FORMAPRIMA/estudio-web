@@ -73,6 +73,7 @@ export async function updateFactura(
   proyectoId: string,
   data: Partial<{
     concepto:            string
+    seccion:             string
     numero_factura:      string | null
     monto:               number
     fecha_emision:       string | null
@@ -82,6 +83,7 @@ export async function updateFactura(
     notas:               string | null
     clientes_ids:        string[]
     proveedor_id:        string | null
+    margen_estimado_pct: number | null
   }>
 ): Promise<{ success: true } | { error: string }> {
   try {
@@ -165,6 +167,29 @@ export async function updateClienteBilling(
     if (error) return { error: error.message }
     revalidatePath('/team/finanzas/facturacion/control')
     revalidatePath('/team/clientes/base-datos')
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
+// ── Mobiliario: liquidación del depósito ───────────────────────────────────────
+// Congela/reabre el margen real (suplidos − compras) del proyecto. Mientras es
+// false, la previsión de caja usa el margen estimado; al liquidar, el real.
+
+export async function updateMobiliarioLiquidado(
+  proyectoId: string,
+  liquidado: boolean
+): Promise<{ success: true } | { error: string }> {
+  try {
+    await requirePartner()
+    const admin = createAdminClient()
+    const { error } = await admin
+      .from('proyectos')
+      .update({ mobiliario_liquidado: liquidado })
+      .eq('id', proyectoId)
+    if (error) return { error: error.message }
+    revalidateBoth(proyectoId)
     return { success: true }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
