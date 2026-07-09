@@ -59,6 +59,11 @@ por el equipo y generar un prompt preciso y accionable para un asistente de IA d
 - Tablas: design_hunter_viajes, design_hunter_entries (media_urls text[])
 - Bucket Storage: design-hunter (público)
 
+### Control de obra (/team/apps/control-obra) — SOLO fp_partner
+- Control económico de obra por proyecto (baseline congelado vs cambios). components/team/control-obra/ControlObraPage.tsx, app/actions/control-obra.ts, lib/control-obra/domain.ts
+- Tabs: Partidas (baseline vs actual, estado igual/modificada/nueva/eliminada, proveedor por partida, vista coste/cliente) · Proveedores y pagos (comprometido/pagado/pendiente + libro de pagos) · Tesorería (depósitos del cliente, balance = depósitos con IVA − pagos) · Vista cliente (modo presentación, sin coste/margen/proveedores) · Histórico
+- Tablas: obra_control_obras, obra_control_partidas, obra_control_proveedores, obra_control_pagos, obra_control_depositos, obra_control_log. Seed inicial: obra Claudio Coello 38
+
 ### Gastos y facturas (/team/gastos) — todos los roles FP
 - ScannerPage: components/team/finanzas/ScannerPage.tsx (mode 'partner' = vista completa, 'personal' = drop-off solo gastos propios), app/api/scan-ticket/route.ts
 - Export ZIP/Excel: lib/gastos/exportZip.ts (mes | trimestre | selección de ids; agrupa por carpetas de mes); períodos en lib/gastos/period.ts

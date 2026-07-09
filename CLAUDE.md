@@ -251,6 +251,13 @@ Aplicaciones internas. Acceso: todos los roles FP.
   - Soporta multiselección, cámara directa (`capture="environment"`), thumbnails de vídeo (primer frame), lightbox fullscreen, vista "Stories" tipo Instagram
   - `lib/design-hunter.ts` — tipos + `isVideoUrl()`
 
+- **Control de obra** (`/team/apps/control-obra`) — **SOLO `fp_partner`** — `components/team/control-obra/ControlObraPage.tsx`
+  - Control económico de obra por proyecto. Parte de un **baseline congelado** (presupuesto firmado) y registra los cambios encima (subidas de precio, cantidades, partidas nuevas, partidas no ejecutadas), con motivo interno y comentario para el cliente.
+  - 5 tabs: **Partidas** (baseline vs actual, estado igual/modificada/nueva/eliminada, **proveedor por partida**, toggle coste/cliente) · **Proveedores y pagos** (comprometido/pagado/pendiente + libro de pagos) · **Tesorería** (depósitos del cliente y balance = depósitos con IVA − pagos a proveedores) · **Vista cliente** (modo presentación limpio: solo su presupuesto y los cambios; sin coste/margen/proveedores/tesorería) · **Histórico**
+  - `lib/control-obra/domain.ts` — tipos + helpers (`ceilCent` redondeo al céntimo, `autoPucl`, cálculos de importe/balance)
+  - `app/actions/control-obra.ts` — todas las mutaciones (`requirePartner()`)
+  - Tablas `obra_control_*` (obras, partidas, proveedores, pagos, depositos, log). Solo `service_role` (RLS sin políticas). Seed inicial: **Casa Claudio Coello 38** (baseline 14/01/2026, 11 capítulos, 259 partidas)
+
 ### 5.9 Marketing (`/team/marketing`) — `fp_partner`, `fp_biz_dev`
 Gestión de contenido para redes sociales.
 
@@ -458,6 +465,7 @@ Registro de horas por proyecto y fase. Todos los roles FP.
 /team/perfil                Perfil personal
 /team/apps                  Índice de apps
 /team/apps/design-hunter    Design Hunter (inspiración/referencias)
+/team/apps/control-obra     Control económico de obra (solo fp_partner)
 /team/marketing             Índice de marketing
 /team/marketing/post-manager          Kanban de posts por red social
 /team/marketing/time-tracker-sections Time tracker de secciones (en desarrollo)
