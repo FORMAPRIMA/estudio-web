@@ -123,7 +123,8 @@ function PartidasTab({ obra, partidas, proveedores, vista, run, totals }: {
   totals: { base: number; act: number }
 }) {
   const [q, setQ] = useState('')
-  const [collapsed, setCollapsed] = useState<Set<number>>(new Set())
+  const [capCol, setCapCol] = useState<Set<number>>(new Set())
+  const [subCol, setSubCol] = useState<Set<string>>(new Set())
   const [editing, setEditing] = useState<Partida | null>(null)
   const [creating, setCreating] = useState(false)
 
@@ -131,17 +132,55 @@ function PartidasTab({ obra, partidas, proveedores, vista, run, totals }: {
 
   const grouped = useMemo(() => {
     const ql = q.trim().toLowerCase()
-    const chapters = new Map<number, { nombre: string; items: Partida[] }>()
+    const caps = new Map<number, { nombre: string; subs: Map<string, { nombre: string; items: Partida[] }> }>()
     for (const p of partidas) {
       if (ql && !p.codigo.toLowerCase().includes(ql) && !p.descripcion.toLowerCase().includes(ql)) continue
-      if (!chapters.has(p.capitulo_num)) chapters.set(p.capitulo_num, { nombre: p.capitulo_nombre, items: [] })
-      chapters.get(p.capitulo_num)!.items.push(p)
+      if (!caps.has(p.capitulo_num)) caps.set(p.capitulo_num, { nombre: p.capitulo_nombre, subs: new Map() })
+      const cap = caps.get(p.capitulo_num)!
+      if (!cap.subs.has(p.subcapitulo_codigo)) cap.subs.set(p.subcapitulo_codigo, { nombre: p.subcapitulo_nombre, items: [] })
+      cap.subs.get(p.subcapitulo_codigo)!.items.push(p)
     }
-    return Array.from(chapters.entries()).sort((a, b) => a[0] - b[0])
+    return Array.from(caps.entries()).sort((a, b) => a[0] - b[0]).map(([num, cap]) => ({
+      num, nombre: cap.nombre,
+      subs: Array.from(cap.subs.entries()).map(([code, s]) => ({ code, nombre: s.nombre, items: s.items })),
+    }))
   }, [partidas, q])
 
-  const toggle = (n: number) => setCollapsed((s) => { const x = new Set(s); x.has(n) ? x.delete(n) : x.add(n); return x })
+  const searching = q.trim().length > 0
+  const toggleCap = (n: number) => setCapCol((s) => { const x = new Set(s); x.has(n) ? x.delete(n) : x.add(n); return x })
+  const toggleSub = (c: string) => setSubCol((s) => { const x = new Set(s); x.has(c) ? x.delete(c) : x.add(c); return x })
   const dif = totals.act - totals.base
+
+  const partidaRow = (p: Partida) => {
+    const act = importeActual(p, vista); const base = importeBase(p, vista); const d = act - base
+    const pu = vista === 'coste' ? p.puc : p.pucl; const puBase = vista === 'coste' ? p.base_puc : p.base_pucl
+    const est = ESTADO_COLOR[p.estado]
+    return (
+      <div key={p.id} onClick={() => setEditing(p)} style={{
+        ...gridRow(GRID), padding: '7px 16px 7px 28px', borderTop: `1px solid ${C.borderSoft}`, cursor: 'pointer',
+        background: est.bg, alignItems: 'center',
+        textDecoration: p.estado === 'eliminada' ? 'line-through' : 'none',
+        opacity: p.estado === 'eliminada' ? 0.6 : 1,
+      }}>
+        <span style={{ fontSize: 11, color: C.muted, fontVariantNumeric: 'tabular-nums', display: 'flex', alignItems: 'center', gap: 5 }}>
+          <span style={{ width: 7, height: 7, borderRadius: 2, background: est.dot, flexShrink: 0 }} />{p.codigo}
+        </span>
+        <span style={{ fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.descripcion}>
+          {p.descripcion}
+          <span style={{ color: C.faint, fontSize: 10.5 }}> · {provName(p.proveedor_id)}</span>
+        </span>
+        <span style={{ fontSize: 11, color: C.faint }}>{p.unidad}</span>
+        <span style={{ textAlign: 'right', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{fmtNum(p.qty)}</span>
+        <span style={{ textAlign: 'right', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{fmtEUR(pu ?? 0, true)}</span>
+        <span style={{ textAlign: 'right', fontSize: 12, fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>{fmtEUR(act)}</span>
+        <span style={{ textAlign: 'right', fontSize: 11, color: C.faint, fontVariantNumeric: 'tabular-nums' }}>{p.estado === 'nueva' ? '—' : fmtEUR(puBase ?? 0, true)}</span>
+        <span style={{ textAlign: 'right', fontSize: 11, color: C.faint, fontVariantNumeric: 'tabular-nums' }}>{p.estado === 'nueva' ? '—' : fmtEUR(base)}</span>
+        <span style={{ textAlign: 'right', fontSize: 11, fontWeight: 600, color: varColor(d), fontVariantNumeric: 'tabular-nums' }}>
+          {Math.abs(d) < 0.5 ? '—' : `${d > 0 ? '+' : ''}${fmtEUR(d)}${base ? ` · ${fmtPct(d / base)}` : ''}`}
+        </span>
+      </div>
+    )
+  }
 
   return (
     <>
@@ -167,49 +206,47 @@ function PartidasTab({ obra, partidas, proveedores, vista, run, totals }: {
           <span style={{ textAlign: 'right' }}>Variación</span>
         </div>
 
-        {grouped.map(([num, ch]) => {
-          const chBase = ch.items.reduce((s, p) => s + importeBase(p, vista), 0)
-          const chAct = ch.items.reduce((s, p) => s + importeActual(p, vista), 0)
+        {grouped.map((ch) => {
+          const chItems = ch.subs.flatMap((s) => s.items)
+          const chBase = chItems.reduce((s, p) => s + importeBase(p, vista), 0)
+          const chAct = chItems.reduce((s, p) => s + importeActual(p, vista), 0)
           const chDif = chAct - chBase
-          const isOpen = !collapsed.has(num)
+          const capOpen = searching || !capCol.has(ch.num)
           return (
-            <div key={num}>
-              <div onClick={() => toggle(num)} style={{ ...gridRow(GRID), background: '#F3F1EC', borderTop: `1px solid ${C.border}`, cursor: 'pointer', padding: '9px 16px', alignItems: 'center' }}>
-                <span style={{ fontSize: 12, fontWeight: 600 }}>{isOpen ? '▾' : '▸'} {num}</span>
-                <span style={{ fontSize: 12, fontWeight: 600, textTransform: 'capitalize' }}>{ch.nombre.toLowerCase()}</span>
-                <span /><span /><span /><span style={{ textAlign: 'right', fontSize: 12, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{fmtEUR(chAct)}</span>
+            <div key={ch.num}>
+              {/* Capítulo */}
+              <div onClick={() => toggleCap(ch.num)} style={{ ...gridRow(GRID), background: '#ECE8E0', borderTop: `1px solid ${C.border}`, cursor: 'pointer', padding: '10px 16px', alignItems: 'center' }}>
+                <span style={{ fontSize: 12.5, fontWeight: 700 }}>{capOpen ? '▾' : '▸'} {ch.num}</span>
+                <span style={{ fontSize: 12.5, fontWeight: 700, textTransform: 'capitalize' }}>{ch.nombre.toLowerCase()}</span>
+                <span /><span /><span /><span style={{ textAlign: 'right', fontSize: 12.5, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtEUR(chAct)}</span>
                 <span /><span style={{ textAlign: 'right', fontSize: 11, color: C.faint, fontVariantNumeric: 'tabular-nums' }}>{fmtEUR(chBase)}</span>
-                <span style={{ textAlign: 'right', fontSize: 11, fontWeight: 600, color: varColor(chDif), fontVariantNumeric: 'tabular-nums' }}>
+                <span style={{ textAlign: 'right', fontSize: 11, fontWeight: 700, color: varColor(chDif), fontVariantNumeric: 'tabular-nums' }}>
                   {Math.abs(chDif) < 0.5 ? '—' : (chDif > 0 ? '+' : '') + fmtEUR(chDif)}
                 </span>
               </div>
-              {isOpen && ch.items.map((p) => {
-                const act = importeActual(p, vista); const base = importeBase(p, vista); const d = act - base
-                const pu = vista === 'coste' ? p.puc : p.pucl; const puBase = vista === 'coste' ? p.base_puc : p.base_pucl
-                const est = ESTADO_COLOR[p.estado]
+
+              {capOpen && ch.subs.map((sub) => {
+                const sBase = sub.items.reduce((s, p) => s + importeBase(p, vista), 0)
+                const sAct = sub.items.reduce((s, p) => s + importeActual(p, vista), 0)
+                const sDif = sAct - sBase
+                const subOpen = searching || !subCol.has(sub.code)
+                const nCambios = sub.items.filter((p) => p.estado !== 'igual').length
                 return (
-                  <div key={p.id} onClick={() => setEditing(p)} style={{
-                    ...gridRow(GRID), padding: '7px 16px', borderTop: `1px solid ${C.borderSoft}`, cursor: 'pointer',
-                    background: est.bg, alignItems: 'center',
-                    textDecoration: p.estado === 'eliminada' ? 'line-through' : 'none',
-                    opacity: p.estado === 'eliminada' ? 0.6 : 1,
-                  }}>
-                    <span style={{ fontSize: 11, color: C.muted, fontVariantNumeric: 'tabular-nums', display: 'flex', alignItems: 'center', gap: 5 }}>
-                      <span style={{ width: 7, height: 7, borderRadius: 2, background: est.dot, flexShrink: 0 }} />{p.codigo}
-                    </span>
-                    <span style={{ fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.descripcion}>
-                      {p.descripcion}
-                      <span style={{ color: C.faint, fontSize: 10.5 }}> · {provName(p.proveedor_id)}</span>
-                    </span>
-                    <span style={{ fontSize: 11, color: C.faint }}>{p.unidad}</span>
-                    <span style={{ textAlign: 'right', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{fmtNum(p.qty)}</span>
-                    <span style={{ textAlign: 'right', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{fmtEUR(pu ?? 0, true)}</span>
-                    <span style={{ textAlign: 'right', fontSize: 12, fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>{fmtEUR(act)}</span>
-                    <span style={{ textAlign: 'right', fontSize: 11, color: C.faint, fontVariantNumeric: 'tabular-nums' }}>{p.estado === 'nueva' ? '—' : fmtEUR(puBase ?? 0, true)}</span>
-                    <span style={{ textAlign: 'right', fontSize: 11, color: C.faint, fontVariantNumeric: 'tabular-nums' }}>{p.estado === 'nueva' ? '—' : fmtEUR(base)}</span>
-                    <span style={{ textAlign: 'right', fontSize: 11, fontWeight: 600, color: varColor(d), fontVariantNumeric: 'tabular-nums' }}>
-                      {Math.abs(d) < 0.5 ? '—' : `${d > 0 ? '+' : ''}${fmtEUR(d)}${base ? ` · ${fmtPct(d / base)}` : ''}`}
-                    </span>
+                  <div key={sub.code}>
+                    {/* Subcapítulo */}
+                    <div onClick={() => toggleSub(sub.code)} style={{ ...gridRow(GRID), background: '#F5F3EE', borderTop: `1px solid ${C.borderSoft}`, cursor: 'pointer', padding: '7px 16px 7px 16px', alignItems: 'center' }}>
+                      <span style={{ fontSize: 10.5, color: C.faint, fontVariantNumeric: 'tabular-nums' }}>{subOpen ? '▾' : '▸'} {sub.code}</span>
+                      <span style={{ fontSize: 12, fontWeight: 600, textTransform: 'capitalize' }}>
+                        {sub.nombre.toLowerCase()}
+                        {nCambios > 0 && <span style={{ marginLeft: 8, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.05em', color: C.accent, fontWeight: 600 }}>{nCambios} cambio{nCambios > 1 ? 's' : ''}</span>}
+                      </span>
+                      <span /><span /><span /><span style={{ textAlign: 'right', fontSize: 12, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{fmtEUR(sAct)}</span>
+                      <span /><span style={{ textAlign: 'right', fontSize: 10.5, color: C.faint, fontVariantNumeric: 'tabular-nums' }}>{fmtEUR(sBase)}</span>
+                      <span style={{ textAlign: 'right', fontSize: 10.5, fontWeight: 600, color: varColor(sDif), fontVariantNumeric: 'tabular-nums' }}>
+                        {Math.abs(sDif) < 0.5 ? '—' : (sDif > 0 ? '+' : '') + fmtEUR(sDif)}
+                      </span>
+                    </div>
+                    {subOpen && sub.items.map(partidaRow)}
                   </div>
                 )
               })}
@@ -527,12 +564,11 @@ function TesoreriaTab({ obraId, depositos, pagos, totCoste, run }: {
 function ClienteResumen({ partidas, totBase, totAct, onPresent }: {
   partidas: Partida[]; totBase: number; totAct: number; onPresent: () => void
 }) {
-  const cambiadas = partidas.filter((p) => p.estado !== 'igual')
   return (
     <>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
         <p style={{ fontSize: 12.5, color: C.muted, maxWidth: 640, margin: 0 }}>
-          Vista limpia para enseñar al cliente. Solo muestra su presupuesto (con margen) y los cambios con el comentario que hayas escrito para él. No aparece coste, margen, proveedores ni tesorería.
+          Vista limpia para enseñar al cliente. Muestra el presupuesto (con margen) agrupado por capítulos y subcapítulos, con el precio anterior, el nuevo y la explicación de cada cambio. No aparece coste, margen, proveedores ni tesorería.
         </p>
         <button onClick={onPresent} style={btnPrimary}>▶ Modo presentación</button>
       </div>
@@ -541,15 +577,21 @@ function ClienteResumen({ partidas, totBase, totAct, onPresent }: {
   )
 }
 
+const CLI_GRID = 'minmax(0,1fr) 130px 130px'
+
 function ClienteBody({ partidas, totBase, totAct }: { partidas: Partida[]; totBase: number; totAct: number }) {
   const dif = totAct - totBase
   const porCap = useMemo(() => {
-    const m = new Map<number, { nombre: string; items: Partida[] }>()
+    const m = new Map<number, { nombre: string; subs: Map<string, { nombre: string; items: Partida[] }> }>()
     partidas.filter((p) => p.estado !== 'igual').forEach((p) => {
-      if (!m.has(p.capitulo_num)) m.set(p.capitulo_num, { nombre: p.capitulo_nombre, items: [] })
-      m.get(p.capitulo_num)!.items.push(p)
+      if (!m.has(p.capitulo_num)) m.set(p.capitulo_num, { nombre: p.capitulo_nombre, subs: new Map() })
+      const c = m.get(p.capitulo_num)!
+      if (!c.subs.has(p.subcapitulo_codigo)) c.subs.set(p.subcapitulo_codigo, { nombre: p.subcapitulo_nombre, items: [] })
+      c.subs.get(p.subcapitulo_codigo)!.items.push(p)
     })
-    return Array.from(m.entries()).sort((a, b) => a[0] - b[0])
+    return Array.from(m.entries()).sort((a, b) => a[0] - b[0]).map(([num, c]) => ({
+      num, nombre: c.nombre, subs: Array.from(c.subs.entries()).map(([code, s]) => ({ code, nombre: s.nombre, items: s.items })),
+    }))
   }, [partidas])
 
   return (
@@ -561,33 +603,57 @@ function ClienteBody({ partidas, totBase, totAct }: { partidas: Partida[]; totBa
       </div>
 
       {porCap.length === 0 && <p style={{ fontSize: 13, color: C.muted }}>No hay cambios respecto al presupuesto inicial.</p>}
-      {porCap.map(([num, ch]) => (
-        <div key={num} style={{ marginBottom: 22 }}>
-          <h3 style={{ fontSize: 13, fontWeight: 600, textTransform: 'capitalize', marginBottom: 10, paddingBottom: 6, borderBottom: `1px solid ${C.border}` }}>{num}. {ch.nombre.toLowerCase()}</h3>
-          {ch.items.map((p) => {
-            const act = baseImporteCliente(p) === 0 && p.estado === 'nueva' ? importeCliente(p) : importeCliente(p)
-            const base = baseImporteCliente(p)
-            const d = (p.estado === 'eliminada' ? 0 : act) - base
-            const tag = p.estado === 'nueva' ? 'Añadido' : p.estado === 'eliminada' ? 'Retirado' : 'Modificado'
-            return (
-              <div key={p.id} style={{ display: 'flex', gap: 16, padding: '10px 0', borderBottom: `1px solid ${C.borderSoft}` }}>
-                <div style={{ flex: 1 }}>
-                  <p style={{ fontSize: 13, fontWeight: 500, margin: 0 }}>
-                    {p.descripcion}
-                    <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.accent, marginLeft: 8 }}>{tag}</span>
-                  </p>
-                  {p.nota_cliente
-                    ? <p style={{ fontSize: 12, color: C.muted, margin: '4px 0 0', lineHeight: 1.5 }}>{p.nota_cliente}</p>
-                    : <p style={{ fontSize: 12, color: C.faint, margin: '4px 0 0', fontStyle: 'italic' }}>—</p>}
-                </div>
-                <div style={{ textAlign: 'right', minWidth: 130, fontVariantNumeric: 'tabular-nums' }}>
-                  <p style={{ fontSize: 14, fontWeight: 600, color: varColor(d), margin: 0 }}>{Math.abs(d) < 0.5 ? '—' : `${d > 0 ? '+' : ''}${fmtEUR(d)}`}</p>
-                </div>
+
+      {porCap.map((ch) => {
+        const chDif = ch.subs.flatMap((s) => s.items).reduce((s, p) => s + ((p.estado === 'eliminada' ? 0 : importeCliente(p)) - baseImporteCliente(p)), 0)
+        return (
+          <div key={ch.num} style={{ marginBottom: 30 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingBottom: 8, borderBottom: `2px solid ${C.ink}`, marginBottom: 4 }}>
+              <h3 style={{ fontSize: 15, fontWeight: 600, textTransform: 'capitalize', margin: 0 }}>{ch.num}. {ch.nombre.toLowerCase()}</h3>
+              <span style={{ fontSize: 13, fontWeight: 700, color: varColor(chDif), fontVariantNumeric: 'tabular-nums' }}>
+                {Math.abs(chDif) < 0.5 ? '—' : `${chDif > 0 ? '+' : ''}${fmtEUR(chDif)}`}
+              </span>
+            </div>
+
+            {/* cabecera de columnas */}
+            <div style={{ ...gridRow(CLI_GRID), padding: '8px 4px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.faint, fontWeight: 600 }}>
+              <span>Concepto</span><span style={{ textAlign: 'right' }}>Anterior</span><span style={{ textAlign: 'right' }}>Nuevo</span>
+            </div>
+
+            {ch.subs.map((sub) => (
+              <div key={sub.code}>
+                <p style={{ fontSize: 11.5, fontWeight: 600, textTransform: 'capitalize', color: C.muted, margin: '10px 0 2px', padding: '0 4px' }}>{sub.nombre.toLowerCase()}</p>
+                {sub.items.map((p) => {
+                  const ant = baseImporteCliente(p)
+                  const nue = p.estado === 'eliminada' ? 0 : importeCliente(p)
+                  const d = nue - ant
+                  const tag = p.estado === 'nueva' ? 'Añadido' : p.estado === 'eliminada' ? 'No se ejecuta' : 'Modificado'
+                  const tagColor = p.estado === 'nueva' ? '#3B7DD8' : p.estado === 'eliminada' ? '#C0492B' : C.accent
+                  return (
+                    <div key={p.id} style={{ ...gridRow(CLI_GRID), padding: '10px 4px', borderTop: `1px solid ${C.borderSoft}`, alignItems: 'start' }}>
+                      <div>
+                        <p style={{ fontSize: 13, fontWeight: 500, margin: 0 }}>
+                          {p.descripcion}
+                          <span style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: tagColor, marginLeft: 8, fontWeight: 600 }}>{tag}</span>
+                        </p>
+                        {p.nota_cliente
+                          ? <p style={{ fontSize: 12, color: C.muted, margin: '3px 0 0', lineHeight: 1.5 }}>{p.nota_cliente}</p>
+                          : <p style={{ fontSize: 11.5, color: C.faint, margin: '3px 0 0', fontStyle: 'italic' }}>Sin comentario</p>}
+                      </div>
+                      <span style={{ textAlign: 'right', fontSize: 13, color: C.faint, fontVariantNumeric: 'tabular-nums', textDecoration: p.estado === 'eliminada' ? 'line-through' : 'none' }}>
+                        {p.estado === 'nueva' ? '—' : fmtEUR(ant)}
+                      </span>
+                      <span style={{ textAlign: 'right', fontSize: 13, fontWeight: 600, color: varColor(d), fontVariantNumeric: 'tabular-nums' }}>
+                        {p.estado === 'eliminada' ? '—' : fmtEUR(nue)}
+                      </span>
+                    </div>
+                  )
+                })}
               </div>
-            )
-          })}
-        </div>
-      ))}
+            ))}
+          </div>
+        )
+      })}
     </div>
   )
 }
