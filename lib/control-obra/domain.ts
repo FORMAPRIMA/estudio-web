@@ -153,6 +153,45 @@ export function fmtFecha(f: string | null, texto: string | null = null): string 
   return texto || '—'
 }
 
+// ── Presentación cliente (pantalla + PDF, misma fuente) ─────────────
+export interface CambioCliente {
+  descripcion: string
+  estado: EstadoPartida
+  ant: number
+  nue: number
+  dif: number
+  pct: number | null // null = no aplica (nueva); -1 = retirada (−100%)
+  nota: string | null
+}
+export interface SubCliente { codigo: string; nombre: string; items: CambioCliente[] }
+export interface CapCliente { num: number; nombre: string; dif: number; subs: SubCliente[] }
+
+export function buildCambiosCliente(partidas: Partida[]): CapCliente[] {
+  const m = new Map<number, { nombre: string; subs: Map<string, { nombre: string; items: CambioCliente[] }> }>()
+  for (const p of partidas) {
+    if (p.estado === 'igual') continue
+    const ant = baseImporteCliente(p)
+    const nue = p.estado === 'eliminada' ? 0 : importeCliente(p)
+    const dif = nue - ant
+    const cambio: CambioCliente = {
+      descripcion: p.descripcion, estado: p.estado, ant, nue, dif,
+      pct: p.estado === 'eliminada' ? -1 : p.estado === 'nueva' ? null : ant > 0 ? dif / ant : null,
+      nota: p.nota_cliente,
+    }
+    if (!m.has(p.capitulo_num)) m.set(p.capitulo_num, { nombre: p.capitulo_nombre, subs: new Map() })
+    const c = m.get(p.capitulo_num)!
+    if (!c.subs.has(p.subcapitulo_codigo)) c.subs.set(p.subcapitulo_codigo, { nombre: p.subcapitulo_nombre, items: [] })
+    c.subs.get(p.subcapitulo_codigo)!.items.push(cambio)
+  }
+  return Array.from(m.entries()).sort((a, b) => a[0] - b[0]).map(([num, c]) => ({
+    num, nombre: c.nombre,
+    dif: Array.from(c.subs.values()).flatMap((s) => s.items).reduce((s, i) => s + i.dif, 0),
+    subs: Array.from(c.subs.entries()).map(([codigo, s]) => ({ codigo, nombre: s.nombre, items: s.items })),
+  }))
+}
+
+export const tagCambio = (e: EstadoPartida) => (e === 'nueva' ? 'Añadido' : e === 'eliminada' ? 'No se ejecuta' : 'Modificado')
+
 export const ESTADO_COLOR: Record<EstadoPartida, { bg: string; label: string; dot: string }> = {
   igual:      { bg: 'transparent', label: 'Sin cambios', dot: '#C9C6BE' },
   modificada: { bg: '#FBF3E1',     label: 'Modificada',  dot: '#E0A82E' },

@@ -6,7 +6,7 @@ import {
   type ObraData, type Partida, type Proveedor, type Vista, type EstadoPartida,
   importeCoste, importeCliente, baseImporteCoste, baseImporteCliente, importeActual, importeBase,
   presupuestoProveedor, pagadoProveedor, totalDepositos, totalPagos, balanceTesoreria,
-  autoPucl, fmtEUR, fmtNum, fmtPct, fmtFecha, ESTADO_COLOR,
+  autoPucl, fmtEUR, fmtNum, fmtPct, fmtFecha, ESTADO_COLOR, buildCambiosCliente, tagCambio,
 } from '@/lib/control-obra/domain'
 import {
   updatePartida, resetPartida, setPartidaEliminada, createPartida,
@@ -22,7 +22,17 @@ const C = {
   green: '#3D8B5F', red: '#C0492B',
 }
 const parseNum = (v: string): number => {
-  const n = parseFloat(String(v).replace(/\./g, '').replace(',', '.'))
+  let s = String(v ?? '').trim().replace(/\s/g, '')
+  if (!s) return 0
+  const hasComma = s.includes(','), hasDot = s.includes('.')
+  if (hasComma && hasDot) {
+    // el último separador que aparece es el decimal
+    s = s.lastIndexOf(',') > s.lastIndexOf('.') ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '')
+  } else if (hasComma) {
+    s = s.replace(',', '.')
+  }
+  // solo punto (o ninguno): se trata como decimal — "1.16" → 1.16
+  const n = parseFloat(s)
   return isNaN(n) ? 0 : n
 }
 const varColor = (d: number) => (Math.abs(d) < 0.005 ? C.faint : d > 0 ? C.red : C.green)
@@ -570,29 +580,21 @@ function ClienteResumen({ partidas, totBase, totAct, onPresent }: {
         <p style={{ fontSize: 12.5, color: C.muted, maxWidth: 640, margin: 0 }}>
           Vista limpia para enseñar al cliente. Muestra el presupuesto (con margen) agrupado por capítulos y subcapítulos, con el precio anterior, el nuevo y la explicación de cada cambio. No aparece coste, margen, proveedores ni tesorería.
         </p>
-        <button onClick={onPresent} style={btnPrimary}>▶ Modo presentación</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <a href="/api/control-obra/cliente-pdf" target="_blank" rel="noopener noreferrer" style={{ ...btnGhost, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>⤓ Exportar PDF</a>
+          <button onClick={onPresent} style={btnPrimary}>▶ Modo presentación</button>
+        </div>
       </div>
       <ClienteBody partidas={partidas} totBase={totBase} totAct={totAct} />
     </>
   )
 }
 
-const CLI_GRID = 'minmax(0,1fr) 130px 130px'
+const CLI_GRID = 'minmax(0,1fr) 105px 105px 130px'
 
 function ClienteBody({ partidas, totBase, totAct }: { partidas: Partida[]; totBase: number; totAct: number }) {
   const dif = totAct - totBase
-  const porCap = useMemo(() => {
-    const m = new Map<number, { nombre: string; subs: Map<string, { nombre: string; items: Partida[] }> }>()
-    partidas.filter((p) => p.estado !== 'igual').forEach((p) => {
-      if (!m.has(p.capitulo_num)) m.set(p.capitulo_num, { nombre: p.capitulo_nombre, subs: new Map() })
-      const c = m.get(p.capitulo_num)!
-      if (!c.subs.has(p.subcapitulo_codigo)) c.subs.set(p.subcapitulo_codigo, { nombre: p.subcapitulo_nombre, items: [] })
-      c.subs.get(p.subcapitulo_codigo)!.items.push(p)
-    })
-    return Array.from(m.entries()).sort((a, b) => a[0] - b[0]).map(([num, c]) => ({
-      num, nombre: c.nombre, subs: Array.from(c.subs.entries()).map(([code, s]) => ({ code, nombre: s.nombre, items: s.items })),
-    }))
-  }, [partidas])
+  const porCap = useMemo(() => buildCambiosCliente(partidas), [partidas])
 
   return (
     <div>
@@ -604,56 +606,52 @@ function ClienteBody({ partidas, totBase, totAct }: { partidas: Partida[]; totBa
 
       {porCap.length === 0 && <p style={{ fontSize: 13, color: C.muted }}>No hay cambios respecto al presupuesto inicial.</p>}
 
-      {porCap.map((ch) => {
-        const chDif = ch.subs.flatMap((s) => s.items).reduce((s, p) => s + ((p.estado === 'eliminada' ? 0 : importeCliente(p)) - baseImporteCliente(p)), 0)
-        return (
-          <div key={ch.num} style={{ marginBottom: 30 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingBottom: 8, borderBottom: `2px solid ${C.ink}`, marginBottom: 4 }}>
-              <h3 style={{ fontSize: 15, fontWeight: 600, textTransform: 'capitalize', margin: 0 }}>{ch.num}. {ch.nombre.toLowerCase()}</h3>
-              <span style={{ fontSize: 13, fontWeight: 700, color: varColor(chDif), fontVariantNumeric: 'tabular-nums' }}>
-                {Math.abs(chDif) < 0.5 ? '—' : `${chDif > 0 ? '+' : ''}${fmtEUR(chDif)}`}
-              </span>
-            </div>
-
-            {/* cabecera de columnas */}
-            <div style={{ ...gridRow(CLI_GRID), padding: '8px 4px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.faint, fontWeight: 600 }}>
-              <span>Concepto</span><span style={{ textAlign: 'right' }}>Anterior</span><span style={{ textAlign: 'right' }}>Nuevo</span>
-            </div>
-
-            {ch.subs.map((sub) => (
-              <div key={sub.code}>
-                <p style={{ fontSize: 11.5, fontWeight: 600, textTransform: 'capitalize', color: C.muted, margin: '10px 0 2px', padding: '0 4px' }}>{sub.nombre.toLowerCase()}</p>
-                {sub.items.map((p) => {
-                  const ant = baseImporteCliente(p)
-                  const nue = p.estado === 'eliminada' ? 0 : importeCliente(p)
-                  const d = nue - ant
-                  const tag = p.estado === 'nueva' ? 'Añadido' : p.estado === 'eliminada' ? 'No se ejecuta' : 'Modificado'
-                  const tagColor = p.estado === 'nueva' ? '#3B7DD8' : p.estado === 'eliminada' ? '#C0492B' : C.accent
-                  return (
-                    <div key={p.id} style={{ ...gridRow(CLI_GRID), padding: '10px 4px', borderTop: `1px solid ${C.borderSoft}`, alignItems: 'start' }}>
-                      <div>
-                        <p style={{ fontSize: 13, fontWeight: 500, margin: 0 }}>
-                          {p.descripcion}
-                          <span style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: tagColor, marginLeft: 8, fontWeight: 600 }}>{tag}</span>
-                        </p>
-                        {p.nota_cliente
-                          ? <p style={{ fontSize: 12, color: C.muted, margin: '3px 0 0', lineHeight: 1.5 }}>{p.nota_cliente}</p>
-                          : <p style={{ fontSize: 11.5, color: C.faint, margin: '3px 0 0', fontStyle: 'italic' }}>Sin comentario</p>}
-                      </div>
-                      <span style={{ textAlign: 'right', fontSize: 13, color: C.faint, fontVariantNumeric: 'tabular-nums', textDecoration: p.estado === 'eliminada' ? 'line-through' : 'none' }}>
-                        {p.estado === 'nueva' ? '—' : fmtEUR(ant)}
-                      </span>
-                      <span style={{ textAlign: 'right', fontSize: 13, fontWeight: 600, color: varColor(d), fontVariantNumeric: 'tabular-nums' }}>
-                        {p.estado === 'eliminada' ? '—' : fmtEUR(nue)}
-                      </span>
-                    </div>
-                  )
-                })}
-              </div>
-            ))}
+      {porCap.map((ch) => (
+        <div key={ch.num} style={{ marginBottom: 30 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingBottom: 8, borderBottom: `2px solid ${C.ink}`, marginBottom: 4 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 600, textTransform: 'capitalize', margin: 0 }}>{ch.num}. {ch.nombre.toLowerCase()}</h3>
+            <span style={{ fontSize: 13, fontWeight: 700, color: varColor(ch.dif), fontVariantNumeric: 'tabular-nums' }}>
+              {Math.abs(ch.dif) < 0.5 ? '—' : `${ch.dif > 0 ? '+' : ''}${fmtEUR(ch.dif)}`}
+            </span>
           </div>
-        )
-      })}
+
+          {/* cabecera de columnas */}
+          <div style={{ ...gridRow(CLI_GRID), padding: '8px 4px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.faint, fontWeight: 600 }}>
+            <span>Concepto</span><span style={{ textAlign: 'right' }}>Anterior</span><span style={{ textAlign: 'right' }}>Nuevo</span><span style={{ textAlign: 'right' }}>Variación</span>
+          </div>
+
+          {ch.subs.map((sub) => (
+            <div key={sub.codigo}>
+              <p style={{ fontSize: 11.5, fontWeight: 600, textTransform: 'capitalize', color: C.muted, margin: '10px 0 2px', padding: '0 4px' }}>{sub.nombre.toLowerCase()}</p>
+              {sub.items.map((it, i) => {
+                const tagColor = it.estado === 'nueva' ? '#3B7DD8' : it.estado === 'eliminada' ? '#C0492B' : C.accent
+                return (
+                  <div key={i} style={{ ...gridRow(CLI_GRID), padding: '10px 4px', borderTop: `1px solid ${C.borderSoft}`, alignItems: 'start' }}>
+                    <div>
+                      <p style={{ fontSize: 13, fontWeight: 500, margin: 0 }}>
+                        {it.descripcion}
+                        <span style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: tagColor, marginLeft: 8, fontWeight: 600 }}>{tagCambio(it.estado)}</span>
+                      </p>
+                      {it.nota
+                        ? <p style={{ fontSize: 12, color: C.muted, margin: '3px 0 0', lineHeight: 1.5 }}>{it.nota}</p>
+                        : <p style={{ fontSize: 11.5, color: C.faint, margin: '3px 0 0', fontStyle: 'italic' }}>Sin comentario</p>}
+                    </div>
+                    <span style={{ textAlign: 'right', fontSize: 13, color: C.faint, fontVariantNumeric: 'tabular-nums', textDecoration: it.estado === 'eliminada' ? 'line-through' : 'none' }}>
+                      {it.estado === 'nueva' ? '—' : fmtEUR(it.ant)}
+                    </span>
+                    <span style={{ textAlign: 'right', fontSize: 13, fontWeight: 600, color: varColor(it.dif), fontVariantNumeric: 'tabular-nums' }}>
+                      {it.estado === 'eliminada' ? '—' : fmtEUR(it.nue)}
+                    </span>
+                    <span style={{ textAlign: 'right', fontSize: 12, fontWeight: 600, color: varColor(it.dif), fontVariantNumeric: 'tabular-nums' }}>
+                      {it.estado === 'nueva' ? 'Nueva' : it.estado === 'eliminada' ? '−100%' : it.pct != null ? `${it.dif > 0 ? '+' : ''}${fmtEUR(it.dif)} · ${fmtPct(it.pct)}` : '—'}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          ))}
+        </div>
+      ))}
     </div>
   )
 }
@@ -670,7 +668,10 @@ function PresentacionCliente({ partidas, totBase, totAct, obra, onClose }: {
             <h1 style={{ fontSize: 30, fontWeight: 300, letterSpacing: '-0.02em', margin: '4px 0 0' }}>{obra}</h1>
             <p style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>Estado económico de la obra</p>
           </div>
-          <button onClick={onClose} style={btnGhost}>✕ Salir</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <a href="/api/control-obra/cliente-pdf" target="_blank" rel="noopener noreferrer" style={{ ...btnGhost, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>⤓ Exportar PDF</a>
+            <button onClick={onClose} style={btnGhost}>✕ Salir</button>
+          </div>
         </div>
         <ClienteBody partidas={partidas} totBase={totBase} totAct={totAct} />
       </div>
