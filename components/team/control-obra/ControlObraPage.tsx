@@ -294,6 +294,9 @@ function EditDrawer({ partida, proveedores, vista, run, onClose }: {
   run: (fn: () => Promise<{ success: true } | { error: string }>, after?: () => void) => void
   onClose: () => void
 }) {
+  const [desc, setDesc] = useState(partida.descripcion ?? '')
+  const [detalle, setDetalle] = useState(partida.detalle ?? '')
+  const [unidad, setUnidad] = useState(partida.unidad ?? '')
   const [qty, setQty] = useState(String(partida.qty ?? ''))
   const [puc, setPuc] = useState(String(partida.puc ?? ''))
   const [margin, setMargin] = useState(String(partida.margin ?? 1.16))
@@ -312,15 +315,20 @@ function EditDrawer({ partida, proveedores, vista, run, onClose }: {
   const cliVe = trasladar ? impCli : baseCl
 
   const save = () => run(() => updatePartida(partida.id, {
+    descripcion: desc, detalle, unidad,
     qty: nQty, puc: nPuc, margin: nMargin, pucl: nPucl, pucl_auto: puclAuto, trasladar_cliente: trasladar,
     proveedor_id: prov || null, motivo_interno: motivo || null, nota_cliente: nota || null,
   }), onClose)
 
   return (
     <Drawer onClose={onClose} title={partida.codigo} subtitle={partida.descripcion} badge={ESTADO_COLOR[partida.estado]}>
-      {partida.detalle && <p style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginBottom: 16 }}>{partida.detalle}</p>}
+      <Field label="Descripción"><input value={desc} onChange={(e) => setDesc(e.target.value)} style={inputStyle} /></Field>
+      <Field label="Detalle"><textarea value={detalle} onChange={(e) => setDetalle(e.target.value)} rows={2} style={{ ...inputStyle, resize: 'vertical' }} placeholder="Descripción larga / especificación…" /></Field>
 
-      <Field label="Cantidad" suffix={partida.unidad || ''}><input value={qty} onChange={(e) => setQty(e.target.value)} style={inputStyle} /></Field>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <Field label="Cantidad" flex><input value={qty} onChange={(e) => setQty(e.target.value)} style={inputStyle} /></Field>
+        <Field label="Unidad" flex><input value={unidad} onChange={(e) => setUnidad(e.target.value)} style={inputStyle} /></Field>
+      </div>
       <Field label="Precio unitario coste"><input value={puc} onChange={(e) => setPuc(e.target.value)} style={inputStyle} /></Field>
       <Field label="Margen (×)"><input value={margin} onChange={(e) => setMargin(e.target.value)} style={inputStyle} /></Field>
       <Field label="Precio unitario cliente">

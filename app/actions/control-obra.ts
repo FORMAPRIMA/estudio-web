@@ -66,6 +66,9 @@ async function logEvent(
 export async function updatePartida(
   id: string,
   patch: {
+    descripcion?: string
+    detalle?: string | null
+    unidad?: string | null
     qty?: number | null
     puc?: number | null
     margin?: number
@@ -85,6 +88,14 @@ export async function updatePartida(
     const p = prev as Partida
 
     const next: Record<string, unknown> = { ...patch, modified_at: new Date().toISOString() }
+
+    // Normalizar campos de texto
+    if (patch.descripcion !== undefined) {
+      if (!patch.descripcion.trim()) return { error: 'La descripción no puede quedar vacía.' }
+      next.descripcion = patch.descripcion.trim()
+    }
+    if (patch.detalle !== undefined) next.detalle = patch.detalle?.trim() || null
+    if (patch.unidad !== undefined) next.unidad = patch.unidad?.trim() || null
 
     // Estado: nueva se conserva; si difiere del baseline → modificada; si vuelve al baseline → igual
     if (p.estado !== 'nueva' && p.estado !== 'eliminada') {
