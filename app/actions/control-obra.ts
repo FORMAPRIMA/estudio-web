@@ -71,6 +71,7 @@ export async function updatePartida(
     margin?: number
     pucl?: number | null
     pucl_auto?: boolean
+    trasladar_cliente?: boolean
     proveedor_id?: string | null
     motivo_interno?: string | null
     nota_cliente?: string | null
@@ -124,7 +125,7 @@ export async function resetPartida(id: string): Promise<Result> {
       .from('obra_control_partidas')
       .update({
         qty: p.base_qty, puc: p.base_puc, pucl: p.base_pucl, margin: 1.16,
-        pucl_auto: true, estado: 'igual', motivo_interno: null, nota_cliente: null,
+        pucl_auto: true, estado: 'igual', trasladar_cliente: true, motivo_interno: null, nota_cliente: null,
         modified_at: null,
       })
       .eq('id', id)
@@ -183,6 +184,7 @@ export async function createPartida(data: {
   puc: number
   margin: number
   pucl: number
+  trasladar_cliente?: boolean
   proveedor_id?: string | null
   motivo_interno?: string | null
   nota_cliente?: string | null
@@ -208,6 +210,7 @@ export async function createPartida(data: {
       base_qty: null, base_puc: null, base_pucl: null,
       qty: data.qty, puc: data.puc, margin: data.margin, pucl: data.pucl, pucl_auto: true,
       estado: 'nueva',
+      trasladar_cliente: data.trasladar_cliente ?? true,
       proveedor_id: data.proveedor_id || null,
       motivo_interno: data.motivo_interno?.trim() || null,
       nota_cliente: data.nota_cliente?.trim() || null,

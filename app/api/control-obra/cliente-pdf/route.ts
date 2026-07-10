@@ -3,7 +3,7 @@ import { renderToBuffer } from '@react-pdf/renderer'
 import { createElement } from 'react'
 import { createClient } from '@/lib/supabase/server'
 import { getObraData } from '@/app/actions/control-obra'
-import { buildCambiosCliente, baseImporteCliente, importeCliente, fmtFecha } from '@/lib/control-obra/domain'
+import { buildCambiosCliente, clienteTotales, fmtFecha } from '@/lib/control-obra/domain'
 import { ControlObraClientePDF } from '@/components/pdfs/ControlObraClientePDF'
 
 export const dynamic = 'force-dynamic'
@@ -19,8 +19,7 @@ export async function GET() {
     const data = await getObraData()
     if (!data) return NextResponse.json({ error: 'Obra no inicializada' }, { status: 404 })
 
-    const totBase = data.partidas.reduce((s, p) => s + baseImporteCliente(p), 0)
-    const totAct = data.partidas.reduce((s, p) => s + importeCliente(p), 0)
+    const { base: totBase, actual: totAct } = clienteTotales(data.partidas)
 
     const buffer = await renderToBuffer(
       createElement(ControlObraClientePDF, {

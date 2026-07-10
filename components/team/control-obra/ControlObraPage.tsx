@@ -6,7 +6,7 @@ import {
   type ObraData, type Partida, type Proveedor, type Vista, type EstadoPartida,
   importeCoste, importeCliente, baseImporteCoste, baseImporteCliente, importeActual, importeBase,
   presupuestoProveedor, pagadoProveedor, totalDepositos, totalPagos, balanceTesoreria,
-  autoPucl, fmtEUR, fmtNum, fmtPct, fmtFecha, ESTADO_COLOR, buildCambiosCliente, tagCambio,
+  autoPucl, fmtEUR, fmtNum, fmtPct, fmtFecha, ESTADO_COLOR, buildCambiosCliente, tagCambio, clienteTotales,
 } from '@/lib/control-obra/domain'
 import {
   updatePartida, resetPartida, setPartidaEliminada, createPartida,
@@ -61,9 +61,11 @@ export default function ControlObraPage({ data }: { data: ObraData }) {
   const totActCoste = useMemo(() => partidas.reduce((s, p) => s + importeCoste(p), 0), [partidas])
   const totBaseCli = useMemo(() => partidas.reduce((s, p) => s + baseImporteCliente(p), 0), [partidas])
   const totActCli = useMemo(() => partidas.reduce((s, p) => s + importeCliente(p), 0), [partidas])
+  // Totales de cara al cliente (respetan trasladar_cliente): pueden diferir del interno
+  const cliTot = useMemo(() => clienteTotales(partidas), [partidas])
 
   if (presentacion) {
-    return <PresentacionCliente partidas={partidas} totBase={totBaseCli} totAct={totActCli} obra={obra.nombre} onClose={() => setPresentacion(false)} />
+    return <PresentacionCliente partidas={partidas} totBase={cliTot.base} totAct={cliTot.actual} obra={obra.nombre} onClose={() => setPresentacion(false)} />
   }
 
   const tabs: { id: Tab; label: string }[] = [
@@ -115,7 +117,7 @@ export default function ControlObraPage({ data }: { data: ObraData }) {
         {tab === 'proveedores' && <ProveedoresTab obraId={obra.id} partidas={partidas} proveedores={proveedores} pagos={pagos} run={run} />}
         {tab === 'tesoreria' && <TesoreriaTab obraId={obra.id} depositos={depositos} pagos={pagos} totCoste={totActCoste} run={run} />}
         {tab === 'cliente' && (
-          <ClienteResumen partidas={partidas} totBase={totBaseCli} totAct={totActCli} onPresent={() => setPresentacion(true)} />
+          <ClienteResumen partidas={partidas} totBase={cliTot.base} totAct={cliTot.actual} onPresent={() => setPresentacion(true)} />
         )}
         {tab === 'historico' && <HistoricoTab log={log} />}
       </div>
@@ -177,6 +179,9 @@ function PartidasTab({ obra, partidas, proveedores, vista, run, totals }: {
         </span>
         <span style={{ fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.descripcion}>
           {p.descripcion}
+          {p.trasladar_cliente === false && p.estado !== 'igual' && (
+            <span title="Cambio no trasladado al cliente" style={{ marginLeft: 6, fontSize: 8.5, color: C.accent, border: `1px solid ${C.accent}55`, borderRadius: 3, padding: '1px 4px', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>interno</span>
+          )}
           <span style={{ color: C.faint, fontSize: 10.5 }}> · {provName(p.proveedor_id)}</span>
         </span>
         <span style={{ fontSize: 11, color: C.faint }}>{p.unidad}</span>
@@ -297,14 +302,17 @@ function EditDrawer({ partida, proveedores, vista, run, onClose }: {
   const [prov, setProv] = useState(partida.proveedor_id ?? '')
   const [motivo, setMotivo] = useState(partida.motivo_interno ?? '')
   const [nota, setNota] = useState(partida.nota_cliente ?? '')
+  const [trasladar, setTrasladar] = useState(partida.trasladar_cliente)
 
   const nQty = parseNum(qty), nPuc = parseNum(puc), nMargin = parseNum(margin) || 1
   const nPucl = puclAuto ? autoPucl(nPuc, nMargin) : parseNum(pucl)
   const impCoste = nQty * nPuc, impCli = nQty * nPucl
   const baseC = baseImporteCoste(partida), baseCl = baseImporteCliente(partida)
+  const deltaCoste = impCoste - baseC
+  const cliVe = trasladar ? impCli : baseCl
 
   const save = () => run(() => updatePartida(partida.id, {
-    qty: nQty, puc: nPuc, margin: nMargin, pucl: nPucl, pucl_auto: puclAuto,
+    qty: nQty, puc: nPuc, margin: nMargin, pucl: nPucl, pucl_auto: puclAuto, trasladar_cliente: trasladar,
     proveedor_id: prov || null, motivo_interno: motivo || null, nota_cliente: nota || null,
   }), onClose)
 
@@ -332,9 +340,30 @@ function EditDrawer({ partida, proveedores, vista, run, onClose }: {
       </Field>
 
       {/* Cálculo en vivo */}
-      <div style={{ background: '#FAF9F6', border: `1px solid ${C.border}`, borderRadius: 6, padding: 12, margin: '4px 0 16px', fontSize: 12 }}>
+      <div style={{ background: '#FAF9F6', border: `1px solid ${C.border}`, borderRadius: 6, padding: 12, margin: '4px 0 14px', fontSize: 12 }}>
         <Row l="Importe coste" v={fmtEUR(impCoste, true)} base={partida.estado === 'nueva' ? null : fmtEUR(baseC, true)} d={impCoste - baseC} />
-        <Row l="Importe cliente" v={fmtEUR(impCli, true)} base={partida.estado === 'nueva' ? null : fmtEUR(baseCl, true)} d={impCli - baseCl} />
+        <Row l="Importe cliente (interno)" v={fmtEUR(impCli, true)} base={partida.estado === 'nueva' ? null : fmtEUR(baseCl, true)} d={impCli - baseCl} />
+        <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 6, paddingTop: 6, display: 'flex', justifyContent: 'space-between' }}>
+          <span style={{ color: C.muted }}>El cliente ve / paga</span>
+          <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{fmtEUR(cliVe, true)}</span>
+        </div>
+      </div>
+
+      {/* Trasladar al cliente */}
+      <div style={{ border: `1px solid ${trasladar ? C.border : '#E7B8AE'}`, background: trasladar ? '#fff' : '#FCF3F0', borderRadius: 6, padding: 12, marginBottom: 14 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', fontSize: 12.5, fontWeight: 600 }}>
+          <input type="checkbox" checked={trasladar} onChange={(e) => setTrasladar(e.target.checked)} />
+          Trasladar este cambio al cliente
+        </label>
+        <p style={{ fontSize: 11, color: C.muted, margin: '7px 0 0', lineHeight: 1.5 }}>
+          {trasladar
+            ? 'El cliente verá el nuevo precio en su vista y presupuesto.'
+            : deltaCoste < -0.5
+              ? `El cliente sigue pagando ${fmtEUR(baseCl, true)} (precio inicial). El ahorro de ${fmtEUR(-deltaCoste, true)} queda para nosotros.`
+              : deltaCoste > 0.5
+                ? `Asumimos el sobrecoste de ${fmtEUR(deltaCoste, true)}. El cliente sigue pagando ${fmtEUR(baseCl, true)} (precio inicial).`
+                : 'El cliente sigue viendo el precio inicial; el cambio no se refleja en su vista.'}
+        </p>
       </div>
 
       <Field label="Motivo interno"><textarea value={motivo} onChange={(e) => setMotivo(e.target.value)} rows={2} style={{ ...inputStyle, resize: 'vertical' }} placeholder="Notas internas del cambio…" /></Field>
@@ -371,6 +400,7 @@ function NuevaPartidaModal({ obra, partidas, proveedores, run, onClose }: {
   const [codigo, setCodigo] = useState(''), [desc, setDesc] = useState(''), [detalle, setDetalle] = useState('')
   const [unidad, setUnidad] = useState(''), [qty, setQty] = useState('1'), [puc, setPuc] = useState('')
   const [margin, setMargin] = useState('1.16'), [prov, setProv] = useState(''), [motivo, setMotivo] = useState(''), [nota, setNota] = useState('')
+  const [trasladar, setTrasladar] = useState(true)
 
   const nPuc = parseNum(puc), nMargin = parseNum(margin) || 1, nQty = parseNum(qty)
   const pucl = autoPucl(nPuc, nMargin)
@@ -380,7 +410,7 @@ function NuevaPartidaModal({ obra, partidas, proveedores, run, onClose }: {
     obra_id: obra.id, capitulo_num: cap, capitulo_nombre: capitulos.find((c) => c[0] === cap)?.[1] ?? '',
     subcapitulo_codigo: sub, subcapitulo_nombre: subList.find((s) => s[0] === sub)?.[1] ?? '',
     codigo: codigo.trim() || `${sub}.NUEVA`, descripcion: desc, detalle, unidad,
-    qty: nQty, puc: nPuc, margin: nMargin, pucl, proveedor_id: prov || null, motivo_interno: motivo, nota_cliente: nota,
+    qty: nQty, puc: nPuc, margin: nMargin, pucl, trasladar_cliente: trasladar, proveedor_id: prov || null, motivo_interno: motivo, nota_cliente: nota,
   }), onClose)
 
   return (
@@ -419,6 +449,15 @@ function NuevaPartidaModal({ obra, partidas, proveedores, run, onClose }: {
       </Field>
       <Field label="Motivo interno"><input value={motivo} onChange={(e) => setMotivo(e.target.value)} style={inputStyle} /></Field>
       <Field label="Comentario para el cliente"><input value={nota} onChange={(e) => setNota(e.target.value)} style={inputStyle} /></Field>
+      <div style={{ border: `1px solid ${trasladar ? C.border : '#E7B8AE'}`, background: trasladar ? '#fff' : '#FCF3F0', borderRadius: 6, padding: 12, margin: '4px 0 8px' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', fontSize: 12.5, fontWeight: 600 }}>
+          <input type="checkbox" checked={trasladar} onChange={(e) => setTrasladar(e.target.checked)} />
+          Trasladar al cliente
+        </label>
+        <p style={{ fontSize: 11, color: C.muted, margin: '7px 0 0', lineHeight: 1.5 }}>
+          {trasladar ? 'El cliente verá esta partida nueva en su presupuesto.' : 'Partida interna: la asumimos nosotros y el cliente no la ve.'}
+        </p>
+      </div>
       <button onClick={create} style={{ ...btnPrimary, width: '100%', marginTop: 8 }}>Crear partida</button>
     </Drawer>
   )

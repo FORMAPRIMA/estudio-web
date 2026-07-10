@@ -31,6 +31,7 @@ export interface Partida {
   pucl: number | null
   pucl_auto: boolean
   estado: EstadoPartida
+  trasladar_cliente: boolean
   proveedor_id: string | null
   motivo_interno: string | null
   nota_cliente: string | null
@@ -166,10 +167,23 @@ export interface CambioCliente {
 export interface SubCliente { codigo: string; nombre: string; items: CambioCliente[] }
 export interface CapCliente { num: number; nombre: string; dif: number; subs: SubCliente[] }
 
+/** Importe que el cliente ve como "nuevo" (respeta si el cambio se traslada o no). */
+export function clienteNuevoImporte(p: Partida): number {
+  if (p.trasladar_cliente === false) return baseImporteCliente(p) // no se traslada → sigue como el inicial
+  return p.estado === 'eliminada' ? 0 : importeCliente(p)
+}
+/** Totales de cara al cliente (el "actual" respeta trasladar_cliente). */
+export function clienteTotales(partidas: Partida[]) {
+  return {
+    base: partidas.reduce((s, p) => s + baseImporteCliente(p), 0),
+    actual: partidas.reduce((s, p) => s + clienteNuevoImporte(p), 0),
+  }
+}
+
 export function buildCambiosCliente(partidas: Partida[]): CapCliente[] {
   const m = new Map<number, { nombre: string; subs: Map<string, { nombre: string; items: CambioCliente[] }> }>()
   for (const p of partidas) {
-    if (p.estado === 'igual') continue
+    if (p.estado === 'igual' || p.trasladar_cliente === false) continue // no se muestran los cambios no trasladados
     const ant = baseImporteCliente(p)
     const nue = p.estado === 'eliminada' ? 0 : importeCliente(p)
     const dif = nue - ant
