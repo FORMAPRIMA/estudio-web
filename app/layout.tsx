@@ -9,16 +9,24 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://formaprima.es'),
   title: {
     default: 'Forma Prima — Arquitectura & Interiorismo',
     template: '%s — Forma Prima',
   },
   description:
-    'Estudio de arquitectura e interiorismo con base en Ciudad de México. Proyectos residenciales, comerciales y de hospitalidad.',
-  keywords: ['arquitectura', 'interiorismo', 'diseño', 'México', 'Forma Prima'],
-  icons: {
-    apple: '/apple-touch-icon.png',
+    'Forma Prima es un estudio de arquitectura e interiorismo en Madrid. Proyecto, obra y experiencias inmersivas: del anteproyecto a la entrega, con criterio y tecnología propia.',
+  keywords: ['arquitectura', 'interiorismo', 'estudio de arquitectura', 'Madrid', 'reforma', 'diseño', 'Forma Prima'],
+  icons: { apple: '/apple-touch-icon.png' },
+  openGraph: {
+    type: 'website',
+    siteName: 'Forma Prima',
+    locale: 'es_ES',
+    url: 'https://formaprima.es',
+    title: 'Forma Prima — Arquitectura & Interiorismo',
+    description: 'Estudio de arquitectura e interiorismo en Madrid. Proyecto, obra y experiencias inmersivas.',
   },
+  twitter: { card: 'summary_large_image', title: 'Forma Prima — Arquitectura & Interiorismo' },
 }
 
 export default function RootLayout({

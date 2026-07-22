@@ -6,7 +6,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { sendEmail, wrapEmail } from '@/lib/email'
 import { crearEspacioCore, enviarCorreoBienvenida } from '@/lib/espacio/create'
 import { revalidatePath } from 'next/cache'
-import type { WebProyecto } from '@/lib/web-publica'
+import { slugifyProyecto, type WebProyecto, type ProyectoMedia } from '@/lib/web-publica'
 
 const PATH = '/team/marketing/web-publica'
 
@@ -20,7 +20,7 @@ async function requireMarketing() {
   if (!profile || !['fp_partner', 'fp_biz_dev'].includes(profile.rol)) throw new Error('Sin permisos.')
 }
 
-const SELECT = 'id, nombre, ubicacion, anio, nota, hero_url, hero_mobile_url, galeria, orden, activo, created_at'
+const SELECT = 'id, nombre, ubicacion, anio, nota, hero_url, hero_mobile_url, galeria, orden, activo, created_at, slug, descripcion_es, descripcion_en, tipologia_es, tipologia_en, superficie, glb_url, media'
 
 function mapRow(r: any): WebProyecto {
   return {
@@ -35,7 +35,43 @@ function mapRow(r: any): WebProyecto {
     orden:      r.orden ?? 0,
     activo:     r.activo ?? true,
     created_at: r.created_at,
+    slug:           r.slug ?? null,
+    descripcion_es: r.descripcion_es ?? null,
+    descripcion_en: r.descripcion_en ?? null,
+    tipologia_es:   r.tipologia_es ?? null,
+    tipologia_en:   r.tipologia_en ?? null,
+    superficie:     r.superficie ?? null,
+    glb_url:        r.glb_url ?? null,
+    media:          Array.isArray(r.media) ? (r.media as ProyectoMedia[]) : [],
   }
+}
+
+// Slug único para un proyecto (a partir del nombre).
+async function uniqueProyectoSlug(admin: ReturnType<typeof createAdminClient>, base: string, exceptId?: string): Promise<string> {
+  const slug = slugifyProyecto(base)
+  for (let i = 0; i < 50; i++) {
+    const candidate = i === 0 ? slug : `${slug}-${i + 1}`
+    const { data } = await admin.from('web_proyectos').select('id').eq('slug', candidate).maybeSingle()
+    if (!data || data.id === exceptId) return candidate
+  }
+  return `${slug}-${Date.now()}`
+}
+
+/** Lectura pública para la parrilla del sitio real (solo activos, con slug). */
+export async function getProyectosSite(): Promise<WebProyecto[]> {
+  const admin = createAdminClient()
+  const { data, error } = await admin.from('web_proyectos').select(SELECT)
+    .eq('activo', true).order('orden', { ascending: true }).order('created_at', { ascending: true })
+  if (error) { console.error('[web-publica] getProyectosSite:', error.message); return [] }
+  return (data ?? []).map(mapRow)
+}
+
+/** Detalle público de un proyecto por slug. */
+export async function getProyectoBySlug(slug: string): Promise<WebProyecto | null> {
+  const admin = createAdminClient()
+  const { data, error } = await admin.from('web_proyectos').select(SELECT).eq('slug', slug).eq('activo', true).maybeSingle()
+  if (error || !data) return null
+  return mapRow(data)
 }
 
 // ── Lectura ─────────────────────────────────────────────────────────────────
@@ -127,6 +163,15 @@ export async function updateWebProyecto(
     hero_mobile_url?: string | null
     galeria?: string[]
     activo?: boolean
+    descripcion_es?: string | null
+    descripcion_en?: string | null
+    tipologia_es?: string | null
+    tipologia_en?: string | null
+    superficie?: string | null
+    glb_url?: string | null
+    media?: ProyectoMedia[]
+    /** Regenera el slug desde el nombre (útil para proyectos aún sin slug). */
+    regenerarSlug?: boolean
   }
 ): Promise<{ success: true } | { error: string }> {
   try {
@@ -141,11 +186,27 @@ export async function updateWebProyecto(
     if (data.hero_mobile_url !== undefined) patch.hero_mobile_url = data.hero_mobile_url
     if (data.galeria !== undefined)   patch.galeria = data.galeria
     if (data.activo !== undefined)    patch.activo = data.activo
+    if (data.descripcion_es !== undefined) patch.descripcion_es = data.descripcion_es
+    if (data.descripcion_en !== undefined) patch.descripcion_en = data.descripcion_en
+    if (data.tipologia_es !== undefined)   patch.tipologia_es = data.tipologia_es
+    if (data.tipologia_en !== undefined)   patch.tipologia_en = data.tipologia_en
+    if (data.superficie !== undefined)     patch.superficie = data.superficie
+    if (data.glb_url !== undefined)        patch.glb_url = data.glb_url
+    if (data.media !== undefined)          patch.media = data.media
+
+    // Slug: se genera desde el nombre si se pide o si aún no tiene uno.
+    if (data.regenerarSlug && data.nombre?.trim()) {
+      patch.slug = await uniqueProyectoSlug(admin, data.nombre, id)
+    } else if (data.nombre?.trim()) {
+      const { data: cur } = await admin.from('web_proyectos').select('slug').eq('id', id).maybeSingle()
+      if (!cur?.slug) patch.slug = await uniqueProyectoSlug(admin, data.nombre, id)
+    }
 
     const { error } = await admin.from('web_proyectos').update(patch).eq('id', id)
     if (error) return { error: error.message }
     revalidatePath(PATH)
     revalidatePath('/wip')
+    revalidatePath('/proyectos')
     return { success: true }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
