@@ -179,6 +179,7 @@ Reglas: lo extraído de un plano/ficha oficial se etiqueta como lectura visual [
         const cuadro = computeCuadroUrbanistico({
           parcelArea: snapshot.parcelArea,
           builtArea: snapshot.builtArea,
+          builtAreaComputable: snapshot.builtAreaComputable ?? snapshot.builtArea,
           huellaM2: snapshot.huellaM2,
           plantasExistentes: snapshot.plantasExistentes,
           alturaExistenteM: snapshot.alturaExistenteM,

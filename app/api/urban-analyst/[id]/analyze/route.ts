@@ -301,6 +301,7 @@ export async function POST(
       const cuadro = computeCuadroUrbanistico({
         parcelArea,
         builtArea: catastroPatch.built_area,
+        builtAreaComputable,
         huellaM2: footprintTotal,
         plantasExistentes: floorsMax,
         alturaExistenteM,

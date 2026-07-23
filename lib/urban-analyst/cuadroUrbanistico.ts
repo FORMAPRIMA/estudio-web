@@ -66,6 +66,7 @@ export interface CuadroUrbanistico {
   inputs_snapshot?: {
     parcelArea: number | null
     builtArea: number | null
+    builtAreaComputable?: number | null
     huellaM2: number | null
     plantasExistentes: number | null
     alturaExistenteM: number | null
@@ -95,6 +96,9 @@ export interface CuadroHit {
 export interface CuadroInput {
   parcelArea: number | null
   builtArea: number | null
+  /** Superficie que computa a edificabilidad (bruto − garaje/trastero). Se usa
+   *  para «estado actual» y remanente, en coherencia con el motor de edificabilidad. */
+  builtAreaComputable?: number | null
   huellaM2: number | null
   plantasExistentes: number | null
   alturaExistenteM: number | null      // cartografía municipal (EDIFICIOS_ALTURAS)
@@ -113,6 +117,10 @@ export function computeCuadroUrbanistico(input: CuadroInput): CuadroUrbanistico 
     parcelArea, builtArea, huellaM2, plantasExistentes, alturaExistenteM,
     usoCatastral, normaZonal, nzRow, plantasCondiciones, hits, valoresExternos = [],
   } = input
+  // Superficie computable a edificabilidad (bruto − garaje/trastero). Es la que
+  // usan «estado actual» y el remanente, para casar con el tab de Edificabilidad.
+  const construidaComp = input.builtAreaComputable ?? builtArea
+  const descuentoNoComputable = builtArea != null && construidaComp != null ? Math.round(builtArea - construidaComp) : 0
 
   const advertencias: string[] = []
   const fuentes: string[] = ['Catastro (INSPIRE/OVC)', 'Geoportal Ayto. Madrid (sin valor jurídico)']
@@ -254,11 +262,11 @@ export function computeCuadroUrbanistico(input: CuadroInput): CuadroUrbanistico 
 
   const estadoActual: Record<string, FilaCuadro['estado_actual']> = {
     edificabilidad: {
-      valor: builtArea != null
-        ? `${fmt(builtArea)} m²c${parcelArea ? ` (${fmtDec(builtArea / parcelArea)} m²c/m²s)` : ''}`
+      valor: construidaComp != null
+        ? `${fmt(construidaComp)} m²c${parcelArea ? ` (${fmtDec(construidaComp / parcelArea)} m²c/m²s)` : ''}${descuentoNoComputable > 0 ? ` · computable (−${fmt(descuentoNoComputable)} m² garaje/trastero de ${fmt(builtArea!)} m²)` : ''}`
         : null,
-      valor_num: builtArea != null && parcelArea ? round2(builtArea / parcelArea) : null,
-      fuente: 'Catastro (construida, inferido)',
+      valor_num: construidaComp != null && parcelArea ? round2(construidaComp / parcelArea) : null,
+      fuente: 'Catastro (construida computable, inferido)',
     },
     ocupacion: {
       valor: ocupacionActualPct != null ? `${fmtDec(ocupacionActualPct)} % (${fmt(huellaM2!)} m² de huella)` : null,
@@ -290,8 +298,8 @@ export function computeCuadroUrbanistico(input: CuadroInput): CuadroUrbanistico 
   }
 
   const potencial: Record<string, string | null> = {}
-  if (edificabilidadMaxM2c != null && builtArea != null) {
-    const rem = edificabilidadMaxM2c - builtArea
+  if (edificabilidadMaxM2c != null && construidaComp != null) {
+    const rem = edificabilidadMaxM2c - construidaComp
     potencial.edificabilidad = rem >= 0
       ? `+${fmt(rem)} m²c de remanente teórico`
       : `agotada — exceso de ${fmt(Math.abs(rem))} m²c sobre la teórica (posible fuera de ordenación relativa)`
@@ -349,15 +357,15 @@ export function computeCuadroUrbanistico(input: CuadroInput): CuadroUrbanistico 
     ambitos_prevalentes: ambitosNombres,
     filas,
     inputs_snapshot: {
-      parcelArea, builtArea, huellaM2, plantasExistentes, alturaExistenteM,
+      parcelArea, builtArea, builtAreaComputable: construidaComp, huellaM2, plantasExistentes, alturaExistenteM,
       usoCatastral, normaZonal, normaZonalDenominacion: input.normaZonalDenominacion,
       plantasCondiciones,
     },
     sintesis: {
       edificabilidad_max_m2c: edificabilidadMaxM2c,
-      construida_m2c: builtArea != null ? Math.round(builtArea) : null,
-      remanente_m2c: edificabilidadMaxM2c != null && builtArea != null
-        ? Math.round(edificabilidadMaxM2c - builtArea) : null,
+      construida_m2c: construidaComp != null ? Math.round(construidaComp) : null,
+      remanente_m2c: edificabilidadMaxM2c != null && construidaComp != null
+        ? Math.round(edificabilidadMaxM2c - construidaComp) : null,
       ocupacion_max_m2: ocupacionMaxM2,
       plantas_max: plantasMax,
     },
