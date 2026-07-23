@@ -21,7 +21,7 @@ import type {
 import { TIPOS_ESCENARIO } from '@/lib/urban-analyst/types'
 import type { VolumenCapazResult } from '@/lib/urban-analyst/volumenCapaz'
 import type { CuadroUrbanistico } from '@/lib/urban-analyst/cuadroUrbanistico'
-import type { AreaMovimientoResult, TipoLindero } from '@/lib/urban-analyst/areaMovimiento'
+import type { AreaMovimientoResult, LinderoPatch } from '@/lib/urban-analyst/areaMovimiento'
 import type { ProductoResult } from '@/lib/urban-analyst/producto'
 import type { MercadoZona } from '@/lib/urban-analyst/mercado'
 import { computeChecklist, type ChecklistItem, type ChecklistEstado } from '@/lib/urban-analyst/checklist'
@@ -137,11 +137,11 @@ export default function UrbanAssetDetalle({ initial }: { initial: UrbanAssetFull
   // Reclasificación manual de un lindero desde el gemelo 3D: recalcula el
   // área de movimiento en servidor y actualiza el cuadro en memoria (mapa,
   // KPIs y tab Cuadro se refrescan por props)
-  const handleLinderoChange = useCallback(async (key: string, tipo: TipoLindero) => {
+  const handleLinderoChange = useCallback(async (key: string, patch: LinderoPatch) => {
     const res = await fetch(`/api/urban-analyst/${asset.id}/linderos`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key, tipo }),
+      body: JSON.stringify({ key, ...patch }),
     })
     if (!res.ok) return
     const { area_movimiento } = await res.json() as { area_movimiento: AreaMovimientoResult }
@@ -317,6 +317,9 @@ export default function UrbanAssetDetalle({ initial }: { initial: UrbanAssetFull
                 volumen_max_m2c: areaMovimiento.volumen_max_m2c,
                 restriccion: areaMovimiento.restriccion_vinculante,
                 linderos: areaMovimiento.linderos || [],
+                niveles: areaMovimiento.niveles || null,
+                tipos_personalizados: areaMovimiento.tipos_personalizados || [],
+                altura_piso_m: areaMovimiento.altura_piso_m ?? null,
               } : null,
             } : null}
             auto3D={asset.status === 'completado'}

@@ -6,7 +6,7 @@ import {
   geocodeDireccion, refcatFromCoords, coordsFromRefcat,
   getParcelData, getBuildingData, getBuildingParts, getInmueblesCount, getConstruidaDesglose, combineDesgloses, getParcelasVecinas, translateCurrentUse,
 } from '@/lib/urban-analyst/catastro'
-import { computeAreaMovimiento, type LinderoInfo, type TipoLindero } from '@/lib/urban-analyst/areaMovimiento'
+import { computeAreaMovimiento, type LinderoInfo, type LinderoOverride, type TipoPersonalizado } from '@/lib/urban-analyst/areaMovimiento'
 import { queryAllServices, queryCondicionesBandas, extractNormaZonal, queryAlturaEdificioEnParcela } from '@/lib/urban-analyst/geoportal'
 import { computeEdificabilidad } from '@/lib/urban-analyst/edificabilidad'
 import { computeCuadroUrbanistico, nzCandidatos } from '@/lib/urban-analyst/cuadroUrbanistico'
@@ -328,9 +328,19 @@ export async function POST(
             const { data: prevCuadro } = await admin
               .from('urban_analysis').select('content')
               .eq('asset_id', params.id).eq('kind', 'cuadro_urbanistico').maybeSingle()
-            const prevLinderos = ((prevCuadro?.content as { area_movimiento?: { linderos?: LinderoInfo[] } } | null)?.area_movimiento?.linderos) || []
-            const overrides: Record<string, TipoLindero> = {}
-            for (const l of prevLinderos) if (l.override) overrides[l.key] = l.tipo
+            const prevAm = (prevCuadro?.content as { area_movimiento?: { linderos?: LinderoInfo[]; tipos_personalizados?: TipoPersonalizado[] } } | null)?.area_movimiento
+            const prevLinderos = prevAm?.linderos || []
+            const overrides: Record<string, LinderoOverride> = {}
+            for (const l of prevLinderos) {
+              if (!l.override) continue
+              overrides[l.key] = {
+                tipo: l.tipo,
+                nombre: l.nombre ?? null,
+                retranqueo_m: l.retranqueo_override ? (l.retranqueo_m ?? null) : null,
+                regla_altura: l.regla_altura ?? null,
+              }
+            }
+            const tiposPersonalizados = prevAm?.tipos_personalizados || []
 
             // bbox ampliado ~25 m para capturar las vecinas completas
             const margen = 25 / 111320
@@ -346,10 +356,15 @@ export async function POST(
               retranqueoFrente: nzRow!.retranqueo_frente_m,
               retranqueoLateral: nzRow!.retranqueo_lateral_m,
               retranqueoTestero: nzRow!.retranqueo_testero_m,
+              factorAlturaFrente: nzRow!.retranqueo_frente_factor_h ?? null,
+              factorAlturaLateral: nzRow!.retranqueo_lateral_factor_h ?? null,
+              factorAlturaTestero: nzRow!.retranqueo_testero_factor_h ?? null,
+              alturaPisoM: nzRow!.altura_piso_m,
               ocupacionPct: nzRow!.ocupacion_pct,
               coefEdificabilidad: nzRow!.coef_edificabilidad,
               plantasMax: cuadro.sintesis.plantas_max ?? nzRow!.altura_max_plantas,
               construidaComputable: builtAreaComputable,
+              tiposPersonalizados,
             })
           }
         } catch (movErr) {

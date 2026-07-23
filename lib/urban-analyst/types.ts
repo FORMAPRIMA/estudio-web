@@ -146,6 +146,10 @@ export interface NormaZonal {
   retranqueo_frente_m: number | null
   retranqueo_lateral_m: number | null
   retranqueo_testero_m: number | null
+  // Factor de crecimiento del retranqueo con la altura: retranqueo ≥ max(base, factor·H)
+  retranqueo_frente_factor_h?: number | null
+  retranqueo_lateral_factor_h?: number | null
+  retranqueo_testero_factor_h?: number | null
   altura_piso_m: number | null
   altura_piso_pb_m: number | null      // altura mínima de piso en planta baja (NZ 1: 3,60 m)
   altura_libre_min_m: number | null

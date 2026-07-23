@@ -12,7 +12,7 @@ import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { bbox, centroid } from '@/lib/urban-analyst/geometry'
 import type { GeoJSONGeometry } from '@/lib/urban-analyst/types'
-import type { LinderoInfo, TipoLindero } from '@/lib/urban-analyst/areaMovimiento'
+import type { LinderoInfo, TipoLindero, LinderoPatch, TipoPersonalizado, NivelMovimiento, ReglaAltura } from '@/lib/urban-analyst/areaMovimiento'
 import type { UAMode } from './uaTheme'
 
 const IGN_BASE = 'https://www.ign.es/wmts/ign-base?layer=IGNBaseTodo&style=default&tilematrixset=GoogleMapsCompatible&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image/jpeg&TileMatrix={z}&TileCol={x}&TileRow={y}'
@@ -41,6 +41,7 @@ interface TwinPalette {
   linderoFrente: string
   linderoLateral: string
   linderoTestero: string
+  linderoCustom: string
 }
 
 // MapLibre necesita hexadecimales reales (no CSS vars)
@@ -60,6 +61,7 @@ const TWIN_PAL: Record<UAMode, TwinPalette> = {
     linderoFrente: '#3E7BFA',
     linderoLateral: '#2F9E6E',
     linderoTestero: '#9A5CF0',
+    linderoCustom: '#D8942F',
   },
   dark: {
     bg: '#0B0D11',
@@ -76,6 +78,7 @@ const TWIN_PAL: Record<UAMode, TwinPalette> = {
     linderoFrente: '#6E9BFF',
     linderoLateral: '#52C588',
     linderoTestero: '#B07FFF',
+    linderoCustom: '#F0A840',
   },
 }
 
@@ -83,12 +86,14 @@ const LINDERO_LABEL: Record<TipoLindero, string> = {
   frente: 'Frente a vía',
   lateral: 'Lindero lateral',
   testero: 'Testero',
+  custom: 'Personalizado',
 }
 
 const linderoColorExpr = (p: TwinPalette) => ([
   'match', ['get', 'tipo'],
   'frente', p.linderoFrente,
   'testero', p.linderoTestero,
+  'custom', p.linderoCustom,
   p.linderoLateral,
 ] as never)
 
@@ -109,6 +114,11 @@ export interface Volumen3D {
     restriccion: string | null
     /** Aristas del perímetro clasificadas (clicables en 3D para reclasificar). */
     linderos?: LinderoInfo[]
+    /** Huellas por planta cuando hay retranqueo variable con la altura (escalonado). */
+    niveles?: NivelMovimiento[] | null
+    /** Paleta de tipos de lindero personalizados del activo. */
+    tipos_personalizados?: TipoPersonalizado[]
+    altura_piso_m?: number | null
   } | null
 }
 
@@ -124,8 +134,8 @@ interface Props {
   currentRefcats?: string[]
   /** Si se pasa, el clic en el mapa 2D ofrece añadir la parcela al activo. */
   onAddParcela?: (refcat: string, direccion: string) => Promise<void>
-  /** Si se pasa, el clic en un lindero (3D) permite reclasificarlo y recalcular el volumen capaz. */
-  onLinderoChange?: (key: string, tipo: TipoLindero) => Promise<void>
+  /** Si se pasa, el clic en un lindero (3D) permite editarlo y recalcular el volumen capaz. */
+  onLinderoChange?: (key: string, patch: LinderoPatch) => Promise<void>
   /** Registra una función que captura la maqueta 3D en vista casi cenital (PNG dataURL) para el informe. */
   onRegisterCapture?: (fn: (() => Promise<string | null>) | null) => void
 }
@@ -145,23 +155,45 @@ function buildCapazFc(volumen: Volumen3D) {
     .map((b) => ({
       type: 'Feature' as const,
       geometry: b.geometry,
-      properties: { tipo: 'banda', altura: (b.plantas || 0) * ALTURA_PLANTA_M, coef_z: b.coef_z, plantas: b.plantas, remanente: b.remanente_m2c } as Record<string, unknown>,
+      properties: { tipo: 'banda', base: 0, altura: (b.plantas || 0) * ALTURA_PLANTA_M, coef_z: b.coef_z, plantas: b.plantas, remanente: b.remanente_m2c } as Record<string, unknown>,
     }))
   // Normas por coeficiente (sin bandas COEF_Z): la envolvente es el área de
   // movimiento (parcela − retranqueos) extruida a las plantas permitidas
   if (features.length === 0 && volumen.movimiento) {
     const m = volumen.movimiento
-    features.push({
-      type: 'Feature' as const,
-      geometry: m.geometry,
-      properties: {
-        tipo: 'movimiento',
-        altura: (m.plantas || 2) * ALTURA_PLANTA_M,
-        plantas: m.plantas,
-        volumen_max: m.volumen_max_m2c,
-        restriccion: m.restriccion,
-      } as Record<string, unknown>,
-    } as never)
+    const alturaPiso = m.altura_piso_m && m.altura_piso_m > 0 ? m.altura_piso_m : ALTURA_PLANTA_M
+    // Retranqueo variable con la altura → una huella por planta (escalonado)
+    if (m.niveles && m.niveles.length > 0) {
+      for (const n of m.niveles) {
+        if (!n.geometry || n.area_m2 <= 0) continue
+        features.push({
+          type: 'Feature' as const,
+          geometry: n.geometry,
+          properties: {
+            tipo: 'movimiento',
+            base: n.base_m,
+            altura: n.base_m + n.altura_m,
+            plantas: m.plantas,
+            planta: n.planta,
+            volumen_max: m.volumen_max_m2c,
+            restriccion: m.restriccion,
+          } as Record<string, unknown>,
+        } as never)
+      }
+    } else {
+      features.push({
+        type: 'Feature' as const,
+        geometry: m.geometry,
+        properties: {
+          tipo: 'movimiento',
+          base: 0,
+          altura: (m.plantas || 2) * alturaPiso,
+          plantas: m.plantas,
+          volumen_max: m.volumen_max_m2c,
+          restriccion: m.restriccion,
+        } as Record<string, unknown>,
+      } as never)
+    }
   }
   return { type: 'FeatureCollection' as const, features }
 }
@@ -172,9 +204,209 @@ function buildLinderosFc(volumen: Volumen3D | null | undefined) {
     features: (volumen?.movimiento?.linderos || []).map((l) => ({
       type: 'Feature' as const,
       geometry: { type: 'LineString' as const, coordinates: [l.a, l.b] },
-      properties: { key: l.key, tipo: l.tipo, longitud: l.longitud_m, override: l.override },
+      properties: {
+        key: l.key, tipo: l.tipo, longitud: l.longitud_m, override: l.override,
+        nombre: l.nombre || '', retranqueo_m: l.retranqueo_m ?? null,
+        retranqueo_override: l.retranqueo_override ? 1 : 0,
+        regla_altura: l.regla_altura ? JSON.stringify(l.regla_altura) : '',
+      },
     })),
   }
+}
+
+interface LinderoProps {
+  key: string
+  tipo: TipoLindero
+  longitud: number
+  override: boolean
+  nombre: string
+  retranqueo_m: number | null
+  retranqueo_override: number
+  regla_altura: string
+}
+
+/** Formulario de edición de un lindero (dentro del popup del 3D). */
+function buildLinderoForm(opts: {
+  p: LinderoProps
+  pal: TwinPalette
+  palette: TipoPersonalizado[]
+  plantas: number | null
+  alturaPiso: number
+  apply: (patch: LinderoPatch) => Promise<void>
+  close: () => void
+}): HTMLElement {
+  const { p, pal, palette, plantas, alturaPiso, apply, close } = opts
+  const colorDe: Record<TipoLindero, string> = {
+    frente: pal.linderoFrente, lateral: pal.linderoLateral, testero: pal.linderoTestero, custom: pal.linderoCustom,
+  }
+  const reglaPrev = (() => { try { return p.regla_altura ? JSON.parse(p.regla_altura) as ReglaAltura : null } catch { return null } })()
+
+  // Estado local del formulario
+  const st = {
+    tipo: p.tipo as TipoLindero,
+    nombre: p.nombre || 'Personalizado',
+    modoRetr: (p.retranqueo_override ? (p.retranqueo_m === 0 ? 'adosar' : 'manual') : 'norma') as 'norma' | 'adosar' | 'manual',
+    retr: p.retranqueo_m ?? 0,
+    varia: reglaPrev != null,
+    base: reglaPrev?.base_m ?? (p.retranqueo_m || 3),
+    factor: reglaPrev?.factor_h ?? 0.5,
+  }
+
+  const el = document.createElement('div')
+  el.style.cssText = 'font-family:inherit;font-size:11px;line-height:1.5;min-width:220px;max-width:250px'
+  const H = (plantas || 0) * alturaPiso
+
+  const render = () => {
+    el.innerHTML = ''
+    const head = document.createElement('div')
+    head.innerHTML = `<div style="font-weight:600;color:var(--ua-brand);letter-spacing:.08em;text-transform:uppercase;font-size:9px;margin-bottom:2px">Lindero · ${p.longitud} m</div>
+      <div style="color:var(--ua-sub);margin-bottom:8px">${p.override ? 'Editado a mano' : 'Clasificado automáticamente'}</div>`
+    el.appendChild(head)
+
+    // ── Tipo ──
+    const lblTipo = document.createElement('div')
+    lblTipo.style.cssText = 'font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--ua-sub);margin-bottom:4px'
+    lblTipo.textContent = 'Tipo de lindero'
+    el.appendChild(lblTipo)
+    const tipos = document.createElement('div')
+    tipos.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px'
+    for (const t of ['frente', 'lateral', 'testero', 'custom'] as TipoLindero[]) {
+      const activo = t === st.tipo
+      const b = document.createElement('button')
+      b.innerHTML = `<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${colorDe[t]};margin-right:5px;vertical-align:-1px"></span>${LINDERO_LABEL[t]}`
+      b.style.cssText = `padding:5px 8px;font-size:10px;border-radius:4px;cursor:pointer;font-weight:${activo ? 700 : 400};background:${activo ? 'var(--ua-glass)' : 'transparent'};color:var(--ua-txt);border:1px solid ${activo ? colorDe[t] : 'var(--ua-edge)'}`
+      b.onclick = () => { st.tipo = t; render() }
+      tipos.appendChild(b)
+    }
+    el.appendChild(tipos)
+
+    // Nombre (solo custom) + paleta reutilizable
+    if (st.tipo === 'custom') {
+      const nombreIn = document.createElement('input')
+      nombreIn.value = st.nombre
+      nombreIn.placeholder = 'Nombre del lindero'
+      nombreIn.style.cssText = 'width:100%;box-sizing:border-box;padding:5px 7px;font-size:11px;border-radius:4px;border:1px solid var(--ua-edge);background:var(--ua-bg);color:var(--ua-txt);margin-bottom:6px'
+      nombreIn.oninput = () => { st.nombre = nombreIn.value }
+      el.appendChild(nombreIn)
+      if (palette.length > 0) {
+        const chips = document.createElement('div')
+        chips.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px'
+        for (const tp of palette) {
+          const c = document.createElement('button')
+          c.textContent = tp.nombre
+          c.title = 'Reutilizar este tipo'
+          c.style.cssText = 'padding:3px 7px;font-size:9.5px;border-radius:10px;cursor:pointer;background:transparent;color:var(--ua-sub);border:1px solid var(--ua-edge)'
+          c.onclick = () => {
+            st.nombre = tp.nombre
+            if (tp.retranqueo_m != null) { st.modoRetr = tp.retranqueo_m === 0 ? 'adosar' : 'manual'; st.retr = tp.retranqueo_m }
+            if (tp.regla_altura) { st.varia = true; st.base = tp.regla_altura.base_m; st.factor = tp.regla_altura.factor_h }
+            render()
+          }
+          chips.appendChild(c)
+        }
+        el.appendChild(chips)
+      }
+    }
+
+    // ── Retranqueo ──
+    const lblR = document.createElement('div')
+    lblR.style.cssText = 'font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--ua-sub);margin:2px 0 4px'
+    lblR.textContent = 'Retranqueo a rasante'
+    el.appendChild(lblR)
+    const modos = document.createElement('div')
+    modos.style.cssText = 'display:flex;flex-direction:column;gap:3px;margin-bottom:8px'
+    const mkRadio = (val: 'norma' | 'adosar' | 'manual', label: string) => {
+      const row = document.createElement('label')
+      row.style.cssText = 'display:flex;align-items:center;gap:6px;cursor:pointer;font-size:10.5px;color:var(--ua-txt)'
+      const r = document.createElement('input')
+      r.type = 'radio'; r.name = 'modoRetr'; r.checked = st.modoRetr === val
+      r.onchange = () => { st.modoRetr = val; render() }
+      row.appendChild(r)
+      const span = document.createElement('span'); span.textContent = label; row.appendChild(span)
+      if (val === 'manual') {
+        const inp = document.createElement('input')
+        inp.type = 'number'; inp.min = '0'; inp.step = '0.5'; inp.value = String(st.retr)
+        inp.disabled = st.modoRetr !== 'manual'
+        inp.style.cssText = 'width:56px;padding:2px 5px;font-size:10.5px;border-radius:4px;border:1px solid var(--ua-edge);background:var(--ua-bg);color:var(--ua-txt)'
+        inp.oninput = () => { st.retr = parseFloat(inp.value) || 0 }
+        row.appendChild(inp)
+        const m = document.createElement('span'); m.textContent = 'm'; m.style.color = 'var(--ua-sub)'; row.appendChild(m)
+      }
+      modos.appendChild(row)
+    }
+    mkRadio('norma', 'Según la norma zonal')
+    mkRadio('adosar', 'Adosar (sin retranqueo, 0 m)')
+    mkRadio('manual', 'A mano:')
+    el.appendChild(modos)
+
+    // ── Regla por altura ──
+    const varRow = document.createElement('label')
+    varRow.style.cssText = 'display:flex;align-items:center;gap:6px;cursor:pointer;font-size:10.5px;color:var(--ua-txt);margin-bottom:4px'
+    const varChk = document.createElement('input')
+    varChk.type = 'checkbox'; varChk.checked = st.varia
+    varChk.onchange = () => { st.varia = varChk.checked; render() }
+    varRow.appendChild(varChk)
+    const varSpan = document.createElement('span'); varSpan.textContent = 'El retranqueo crece con la altura'; varRow.appendChild(varSpan)
+    el.appendChild(varRow)
+    if (st.varia) {
+      const box = document.createElement('div')
+      box.style.cssText = 'display:flex;gap:8px;align-items:center;margin:2px 0 4px;font-size:10px;color:var(--ua-sub)'
+      const mkNum = (label: string, val: number, step: string, on: (v: number) => void) => {
+        const wrap = document.createElement('span'); wrap.style.cssText = 'display:flex;align-items:center;gap:3px'
+        wrap.appendChild(document.createTextNode(label))
+        const inp = document.createElement('input')
+        inp.type = 'number'; inp.min = '0'; inp.step = step; inp.value = String(val)
+        inp.style.cssText = 'width:52px;padding:2px 5px;font-size:10.5px;border-radius:4px;border:1px solid var(--ua-edge);background:var(--ua-bg);color:var(--ua-txt)'
+        inp.oninput = () => { on(parseFloat(inp.value) || 0); previewUpd() }
+        wrap.appendChild(inp)
+        return wrap
+      }
+      box.appendChild(mkNum('base', st.base, '0.5', (v) => { st.base = v }))
+      box.appendChild(mkNum('· factor ×H', st.factor, '0.1', (v) => { st.factor = v }))
+      el.appendChild(box)
+      const preview = document.createElement('div')
+      preview.style.cssText = 'font-size:9.5px;color:var(--ua-sub);opacity:.85;margin-bottom:6px'
+      el.appendChild(preview)
+      const previewUpd = () => {
+        const r = Math.max(st.base, st.factor * H)
+        preview.textContent = `A ${plantas ?? '?'} plantas (~${Math.round(H)} m): retranqueo ≈ ${Math.round(r * 10) / 10} m`
+      }
+      previewUpd()
+    }
+
+    // ── Acciones ──
+    const acc = document.createElement('div')
+    acc.style.cssText = 'display:flex;gap:6px;margin-top:6px'
+    const aplicar = document.createElement('button')
+    aplicar.textContent = 'Aplicar'
+    aplicar.style.cssText = 'flex:1;padding:6px 10px;font-size:10.5px;font-weight:600;border-radius:4px;cursor:pointer;background:var(--ua-brand);color:#fff;border:none'
+    aplicar.onclick = async () => {
+      acc.querySelectorAll('button').forEach((b) => { (b as HTMLButtonElement).disabled = true })
+      aplicar.textContent = 'Recalculando…'
+      const patch: LinderoPatch = { tipo: st.tipo }
+      if (st.tipo === 'custom') patch.nombre = st.nombre
+      patch.retranqueo_m = st.modoRetr === 'norma' ? null : (st.modoRetr === 'adosar' ? 0 : st.retr)
+      patch.regla_altura = st.varia && st.factor > 0 ? { base_m: st.base, factor_h: st.factor } : null
+      try { await apply(patch) } finally { close() }
+    }
+    acc.appendChild(aplicar)
+    if (p.override) {
+      const auto = document.createElement('button')
+      auto.textContent = 'Auto'
+      auto.title = 'Volver a la clasificación automática'
+      auto.style.cssText = 'padding:6px 10px;font-size:10.5px;border-radius:4px;cursor:pointer;background:transparent;color:var(--ua-sub);border:1px solid var(--ua-edge)'
+      auto.onclick = async () => {
+        acc.querySelectorAll('button').forEach((b) => { (b as HTMLButtonElement).disabled = true })
+        auto.textContent = '…'
+        try { await apply({ reset: true }) } finally { close() }
+      }
+      acc.appendChild(auto)
+    }
+    el.appendChild(acc)
+  }
+
+  render()
+  return el
 }
 
 export default function UrbanAssetMap({ geometry, lat, lng, volumen, auto3D, mode = 'light', currentRefcats, onAddParcela, onLinderoChange, onRegisterCapture }: Props) {
@@ -202,6 +434,9 @@ export default function UrbanAssetMap({ geometry, lat, lng, volumen, auto3D, mod
   onLinderoChangeRef.current = onLinderoChange
   const modeRef = useRef(mode)
   modeRef.current = mode
+  // Datos del área de movimiento para el formulario del popup (paleta, plantas, altura de piso)
+  const movimientoRef = useRef(volumen?.movimiento || null)
+  movimientoRef.current = volumen?.movimiento || null
 
   const stopOrbit = useCallback(() => {
     if (orbitTimerRef.current != null) {
@@ -327,6 +562,7 @@ export default function UrbanAssetMap({ geometry, lat, lng, volumen, auto3D, mod
         layout: { visibility: 'none' },
         paint: {
           'fill-extrusion-color': P0.capaz,
+          'fill-extrusion-base': ['coalesce', ['get', 'base'], 0],
           'fill-extrusion-height': ['get', 'altura'],
           'fill-extrusion-opacity': P0.capazOpacity,
           'fill-extrusion-vertical-gradient': true,
@@ -349,42 +585,20 @@ export default function UrbanAssetMap({ geometry, lat, lng, volumen, auto3D, mod
       map.on('click', 'linderos-hit', (e) => {
         const f = e.features?.[0]
         if (!f || !onLinderoChangeRef.current) return
-        const p = f.properties as { key: string; tipo: TipoLindero; longitud: number; override: boolean }
+        const p = f.properties as LinderoProps
         const pal = TWIN_PAL[modeRef.current]
-        const colorDe: Record<TipoLindero, string> = { frente: pal.linderoFrente, lateral: pal.linderoLateral, testero: pal.linderoTestero }
-
-        const el = document.createElement('div')
-        el.style.cssText = 'font-family:inherit;font-size:11px;line-height:1.5;min-width:190px'
-        el.innerHTML = `
-          <div style="font-weight:600;color:var(--ua-brand);letter-spacing:.08em;text-transform:uppercase;font-size:9px;margin-bottom:2px">Lindero · ${p.longitud} m</div>
-          <div style="color:var(--ua-sub);margin-bottom:7px">${LINDERO_LABEL[p.tipo]}${p.override ? ' · <span style="opacity:.7">manual</span>' : ' · <span style="opacity:.7">heurístico</span>'}</div>`
-        const estado = document.createElement('div')
-        estado.style.cssText = 'display:flex;flex-direction:column;gap:4px'
-        for (const t of ['frente', 'lateral', 'testero'] as TipoLindero[]) {
-          const btn = document.createElement('button')
-          const activo = t === p.tipo
-          btn.innerHTML = `<span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${colorDe[t]};margin-right:7px;vertical-align:-1px"></span>${LINDERO_LABEL[t]}`
-          btn.style.cssText = `padding:6px 10px;font-size:10.5px;text-align:left;border-radius:4px;cursor:pointer;font-weight:${activo ? 700 : 400};` +
-            `background:${activo ? 'var(--ua-glass)' : 'transparent'};color:var(--ua-txt);border:1px solid ${activo ? colorDe[t] : 'var(--ua-edge)'}`
-          btn.onclick = async () => {
-            if (t === p.tipo) { popup.remove(); return }
-            estado.querySelectorAll('button').forEach((b) => { b.disabled = true; b.style.opacity = '0.5' })
-            btn.textContent = 'Recalculando volumen…'
-            btn.style.opacity = '1'
-            try { await onLinderoChangeRef.current?.(p.key, t) } finally { popup.remove() }
-          }
-          estado.appendChild(btn)
-        }
-        el.appendChild(estado)
-        const nota = document.createElement('div')
-        nota.style.cssText = 'font-size:9px;color:var(--ua-sub);opacity:.75;margin-top:6px'
-        nota.textContent = 'El retranqueo del tipo elegido se aplica al volumen capaz.'
-        el.appendChild(nota)
-
-        const popup = new maplibregl.Popup({ closeButton: true, className: 'ua-popup' })
-          .setLngLat(e.lngLat)
-          .setDOMContent(el)
-          .addTo(map)
+        const mov = movimientoRef.current
+        const popup = new maplibregl.Popup({ closeButton: true, className: 'ua-popup' }).setLngLat(e.lngLat)
+        const el = buildLinderoForm({
+          p,
+          pal,
+          palette: mov?.tipos_personalizados || [],
+          plantas: mov?.plantas ?? null,
+          alturaPiso: mov?.altura_piso_m && mov.altura_piso_m > 0 ? mov.altura_piso_m : ALTURA_PLANTA_M,
+          apply: async (patch) => { await onLinderoChangeRef.current?.(p.key, patch) },
+          close: () => popup.remove(),
+        })
+        popup.setDOMContent(el).addTo(map)
       })
       map.on('mouseenter', 'linderos-hit', () => { map.getCanvas().style.cursor = 'pointer' })
       map.on('mouseleave', 'linderos-hit', () => { map.getCanvas().style.cursor = '' })
