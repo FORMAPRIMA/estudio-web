@@ -21,7 +21,9 @@ export interface UrbanAsset {
   lng: number | null
   parcel_geometry: GeoJSONGeometry | null
   parcel_area: number | null
-  built_area: number | null
+  built_area: number | null                    // m² construidos brutos (Catastro)
+  built_area_computable: number | null         // m²c que computan a edificabilidad (bruto − garaje/trastero)
+  built_area_desglose: ConstruidaDesglose | null
   cadastral_use: string | null
   year_built: number | null
   num_inmuebles: number | null
@@ -40,6 +42,24 @@ export interface UrbanAsset {
   error_msg: string | null
   analyzed_at: string | null
   created_at: string
+}
+
+// Desglose de la superficie construida por uso (elementos constructivos de
+// Catastro, DNPRC). Base para descontar de la edificabilidad lo que no computa
+// (garaje y trastero/almacén anejo). Es una estimación [INFERIDO]: la regla
+// jurídica exacta (art. 6.5.3 PGOUM) tiene matices que Catastro no refleja.
+export interface ConstruidaDesglose {
+  total_m2: number | null                      // suma de elementos leídos (≈ superficie construida)
+  computable_m2: number | null                 // total − no computable
+  no_computable_m2: number                     // garaje + trastero (+ almacén anejo)
+  aparcamiento_m2: number
+  trastero_m2: number
+  almacen_m2: number
+  almacen_computa: boolean                      // true si el almacén es el uso dominante (nave productiva) → computa
+  por_uso: { uso: string; m2: number; computa: boolean }[]
+  inmuebles_totales: number | null
+  inmuebles_muestreados: number
+  incompleto: boolean                           // true si se muestreó solo una parte de los inmuebles
 }
 
 export type HitCategoria =
@@ -75,7 +95,7 @@ export interface UrbanRedFlag {
 export interface UrbanAnalysisRow {
   id: string
   asset_id: string
-  kind: 'edificabilidad' | 'memo' | 'volumen_capaz' | 'documentos_oficiales'
+  kind: 'edificabilidad' | 'memo' | 'volumen_capaz' | 'documentos_oficiales' | 'cuadro_urbanistico' | 'producto'
   content: Record<string, unknown>
   model: string | null
   created_at: string
@@ -111,12 +131,28 @@ export interface UrbanDocument {
 }
 
 export interface NormaZonal {
-  codigo: string
+  codigo: string                       // admite grado y nivel: '8', '8.1', '8.1.a'
   nombre: string
   tipologia: string | null
   uso_cualificado: string | null
-  coef_edificabilidad: number | null
-  altura_max_plantas: number | null
+  coef_edificabilidad: number | null   // m²c/m²s
+  formula_c: number | null             // C de E = S × Z × C (NZ 1; Z = COEF_Z del plano CE)
+  altura_max_plantas: number | null    // plantas sobre rasante
+  // Matriz completa de parámetros (NNUU PGOUM 97) — NULL = sin verificar
+  ocupacion_pct: number | null
+  plantas_bajo_rasante: number | null
+  altura_cornisa_m: number | null
+  altura_max_m: number | null
+  retranqueo_frente_m: number | null
+  retranqueo_lateral_m: number | null
+  retranqueo_testero_m: number | null
+  altura_piso_m: number | null
+  altura_piso_pb_m: number | null      // altura mínima de piso en planta baja (NZ 1: 3,60 m)
+  altura_libre_min_m: number | null
+  parcela_minima_m2: number | null
+  frente_minimo_m: number | null
+  regimen_usos: { cualificado?: string; compatibles?: string; autorizables?: string; prohibidos?: string; texto?: string } | null
+  fuente_articulo: string | null       // ej. 'arts. 8.8.5-8.8.9 NNUU PGOUM 97'
   condiciones: string | null
   notas: string | null
   verificado: boolean
@@ -139,7 +175,7 @@ export interface GeoJSONMultiPolygon {
 export type GeoJSONGeometry = GeoJSONPolygon | GeoJSONMultiPolygon
 
 // ── Resultado del cálculo determinista de edificabilidad ─────────────────────
-export type MetodoEdificabilidad = 'coeficiente' | 'volumetrico' | 'no_calculable'
+export type MetodoEdificabilidad = 'coeficiente' | 'formula_volumetrica' | 'volumetrico' | 'no_calculable'
 
 export interface EdificabilidadResult {
   calculable: boolean
@@ -148,10 +184,15 @@ export interface EdificabilidadResult {
   coef_verificado: boolean
   superficie_parcela: number | null           // m² — dato oficial Catastro
   edificabilidad_teorica: number | null       // m²c — parcela × coef (hipótesis si coef no verificado)
-  superficie_construida_existente: number | null // m²c — Catastro (inferido: incluye no computables)
+  superficie_construida_existente: number | null // m²c — Catastro bruto (incluye no computables)
+  superficie_construida_computable: number | null // m²c que computan (bruto − garaje/trastero)
+  construida_desglose?: ConstruidaDesglose | null // desglose por uso usado en el descuento
   edificabilidad_remanente: number | null
   ratio_agotamiento: number | null            // 0..1+
-  // Método volumétrico (zonas sin coeficiente: NZ 1/2/3/4/11)
+  // Método fórmula volumétrica (NZ 1: E = S × Z × C, Z del plano CE por banda)
+  formula_c?: number | null                   // C aplicado
+  formula_desglose?: { coef_z: string; area_m2: number; plantas: number | null; m2c: number | null }[]
+  // Método volumétrico (zonas sin coeficiente: NZ 2/3/4/11 y NZ 1 sin bandas)
   envolvente_min: number | null               // m²c — suelo de la horquilla (lo construido consolida)
   envolvente_max: number | null               // m²c — techo: huella × plantas permitidas
   huella_m2: number | null                    // huella del edificio (WFS BU, inferido)

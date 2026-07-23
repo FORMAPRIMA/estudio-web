@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getObraData } from '@/app/actions/control-obra'
+import { canAccessControlObra } from '@/lib/control-obra/domain'
 import ControlObraPage from '@/components/team/control-obra/ControlObraPage'
 
 export const metadata = { title: 'Control de obra' }
@@ -11,7 +12,7 @@ export default async function Page() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
   const { data: profile } = await supabase.from('profiles').select('rol').eq('id', user.id).single()
-  if (!profile || profile.rol !== 'fp_partner') redirect('/team/apps')
+  if (!profile || !canAccessControlObra(profile.rol, user.email)) redirect('/team/apps')
 
   const data = await getObraData()
   if (!data) {

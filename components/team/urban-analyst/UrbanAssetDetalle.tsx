@@ -20,6 +20,10 @@ import type {
 } from '@/lib/urban-analyst/types'
 import { TIPOS_ESCENARIO } from '@/lib/urban-analyst/types'
 import type { VolumenCapazResult } from '@/lib/urban-analyst/volumenCapaz'
+import type { CuadroUrbanistico } from '@/lib/urban-analyst/cuadroUrbanistico'
+import type { AreaMovimientoResult, TipoLindero } from '@/lib/urban-analyst/areaMovimiento'
+import type { ProductoResult } from '@/lib/urban-analyst/producto'
+import type { MercadoZona } from '@/lib/urban-analyst/mercado'
 import { computeChecklist, type ChecklistItem, type ChecklistEstado } from '@/lib/urban-analyst/checklist'
 import { resolveDocumentosOficiales } from '@/lib/urban-analyst/documentosOficiales'
 
@@ -51,7 +55,7 @@ const VEREDICTO: Record<string, { label: string; color: string }> = {
   descartar:          { label: 'Descartar',          color: BAD },
 }
 
-type Tab = 'ficha' | 'edificabilidad' | 'riesgos' | 'checklist' | 'escenarios' | 'chat' | 'documentos'
+type Tab = 'cuadro' | 'producto' | 'ficha' | 'edificabilidad' | 'riesgos' | 'checklist' | 'escenarios' | 'chat' | 'documentos'
 
 const GLOBAL_CSS = `
 @keyframes uaFadeUp { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: translateY(0) } }
@@ -70,15 +74,21 @@ const GLOBAL_CSS = `
 export default function UrbanAssetDetalle({ initial }: { initial: UrbanAssetFull }) {
   const router = useRouter()
   const [data, setData] = useState<UrbanAssetFull>(initial)
-  const [tab, setTab] = useState<Tab>('ficha')
+  const [tab, setTab] = useState<Tab>(
+    initial.analysis.some((a) => a.kind === 'cuadro_urbanistico') ? 'cuadro' : 'ficha'
+  )
   const [isDeleting, setIsDeleting] = useState(false)
   const [showTesis, setShowTesis] = useState(false)
+  const [isInforme, setIsInforme] = useState(false)
+  const captureMaquetaRef = useRef<(() => Promise<string | null>) | null>(null)
   const { mode, toggle, vars } = useUATheme()
 
   const { asset } = data
   const memo = data.analysis.find((a) => a.kind === 'memo')?.content as Record<string, unknown> | undefined
   const edificabilidad = data.analysis.find((a) => a.kind === 'edificabilidad')?.content as unknown as EdificabilidadResult | undefined
   const volumenCapaz = data.analysis.find((a) => a.kind === 'volumen_capaz')?.content as unknown as VolumenCapazResult | undefined
+  const cuadro = data.analysis.find((a) => a.kind === 'cuadro_urbanistico')?.content as unknown as (CuadroUrbanistico & { area_movimiento?: AreaMovimientoResult | null }) | undefined
+  const areaMovimiento = cuadro?.area_movimiento || null
 
   const refreshFull = useCallback(async () => {
     const full = await getUrbanAssetFull(asset.id)
@@ -124,6 +134,49 @@ export default function UrbanAssetDetalle({ initial }: { initial: UrbanAssetFull
       .catch(() => refreshFull())
   }, [asset.id, asset.refcat, asset.refcats, refreshFull])
 
+  // Reclasificación manual de un lindero desde el gemelo 3D: recalcula el
+  // área de movimiento en servidor y actualiza el cuadro en memoria (mapa,
+  // KPIs y tab Cuadro se refrescan por props)
+  const handleLinderoChange = useCallback(async (key: string, tipo: TipoLindero) => {
+    const res = await fetch(`/api/urban-analyst/${asset.id}/linderos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, tipo }),
+    })
+    if (!res.ok) return
+    const { area_movimiento } = await res.json() as { area_movimiento: AreaMovimientoResult }
+    setData((d) => ({
+      ...d,
+      analysis: d.analysis.map((a) => (
+        a.kind === 'cuadro_urbanistico'
+          ? { ...a, content: { ...(a.content as Record<string, unknown>), area_movimiento } as never }
+          : a
+      )),
+    }))
+  }, [asset.id])
+
+  // Informe PDF: antes de abrirlo se captura la maqueta 3D (vista casi
+  // cenital) y se sube a Storage para que el PDF la incruste. La ventana se
+  // abre SÍNCRONA (gesto del usuario) para esquivar el bloqueador de popups.
+  const handleInformePdf = async () => {
+    setIsInforme(true)
+    const win = window.open('about:blank', '_blank')
+    try {
+      const shot = await captureMaquetaRef.current?.()
+      if (shot) {
+        await fetch(`/api/urban-analyst/${asset.id}/captura`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: shot }),
+        })
+      }
+    } catch { /* la captura es opcional: el informe sale igual */ }
+    const url = `/api/urban-analyst/${asset.id}/informe`
+    if (win) win.location.href = url
+    else window.open(url, '_blank')
+    setIsInforme(false)
+  }
+
   const handleDelete = async () => {
     if (!confirm(`¿Eliminar el activo "${asset.nombre}" y todo su análisis?`)) return
     setIsDeleting(true)
@@ -140,12 +193,24 @@ export default function UrbanAssetDetalle({ initial }: { initial: UrbanAssetFull
   const kpis: { label: string; value: string; unit?: string; color?: string; sub?: string }[] = [
     { label: 'Norma zonal', value: asset.norma_zonal || '—', sub: asset.norma_zonal_denominacion || undefined },
     { label: 'Parcela', value: fmtK(asset.parcel_area), unit: 'm²', sub: 'oficial Catastro' },
-    { label: 'Construido', value: fmtK(asset.built_area), unit: 'm²c', sub: 'Catastro' },
-    { label: 'Volumen capaz', value: fmtK(volumenCapaz?.capaz_total_m2c), unit: 'm²c', sub: 'bandas COEF_Z' },
     {
-      label: 'Remanente', value: fmtK(volumenCapaz?.remanente_materializable_m2c), unit: 'm²c',
-      color: (volumenCapaz?.remanente_materializable_m2c ?? 0) > 0 ? OK : SUB, sub: 'materializable teórico',
+      label: 'Construido', value: fmtK(asset.built_area), unit: 'm²',
+      sub: asset.built_area_computable != null && asset.built_area != null && asset.built_area - asset.built_area_computable > 0
+        ? `${fmtK(asset.built_area_computable)} m²c computable`
+        : 'Catastro',
     },
+    (volumenCapaz?.capaz_total_m2c ?? 0) > 0 || !areaMovimiento?.volumen_max_m2c
+      ? { label: 'Volumen capaz', value: fmtK(volumenCapaz?.capaz_total_m2c), unit: 'm²c', sub: 'bandas COEF_Z' }
+      : { label: 'Volumen capaz', value: fmtK(areaMovimiento.volumen_max_m2c), unit: 'm²c', sub: `área movimiento (${areaMovimiento.restriccion_vinculante || 'retranqueos'})` },
+    (volumenCapaz?.capaz_total_m2c ?? 0) > 0 || areaMovimiento?.remanente_vs_construido_m2c == null
+      ? {
+          label: 'Remanente', value: fmtK(volumenCapaz?.remanente_materializable_m2c), unit: 'm²c',
+          color: (volumenCapaz?.remanente_materializable_m2c ?? 0) > 0 ? OK : SUB, sub: 'materializable teórico',
+        }
+      : {
+          label: 'Remanente', value: fmtK(areaMovimiento.remanente_vs_construido_m2c), unit: 'm²c',
+          color: (areaMovimiento.remanente_vs_construido_m2c ?? 0) > 0 ? OK : SUB, sub: 'vs construido (hipótesis)',
+        },
     {
       label: 'Red flags', value: String(data.redFlags.length || 0),
       color: flagsAltas > 0 ? BAD : data.redFlags.length > 0 ? WARN : OK,
@@ -154,6 +219,8 @@ export default function UrbanAssetDetalle({ initial }: { initial: UrbanAssetFull
   ]
 
   const tabs: { key: Tab; label: string; badge?: number }[] = [
+    { key: 'cuadro', label: 'Cuadro', badge: cuadro?.filas.filter((f) => f.contradiccion).length || undefined },
+    { key: 'producto', label: 'Producto' },
     { key: 'ficha', label: 'Ficha' },
     { key: 'edificabilidad', label: 'Edificabilidad' },
     { key: 'riesgos', label: 'Riesgos', badge: data.redFlags.length || undefined },
@@ -188,9 +255,9 @@ export default function UrbanAssetDetalle({ initial }: { initial: UrbanAssetFull
           </button>
           <button onClick={() => setShowTesis(true)} style={btnGhost}>Tesis</button>
           {asset.status === 'completado' && (
-            <a href={`/api/urban-analyst/${asset.id}/informe`} target="_blank" rel="noreferrer" style={{ ...btnGhost, textDecoration: 'none', display: 'inline-block' }}>
-              Informe PDF
-            </a>
+            <button onClick={handleInformePdf} disabled={isInforme} style={{ ...btnGhost, opacity: isInforme ? 0.6 : 1 }}>
+              {isInforme ? 'Capturando 3D…' : 'Informe PDF'}
+            </button>
           )}
           <button onClick={handleAnalyze} disabled={analizando} style={{ ...btnPrimary, opacity: analizando ? 0.5 : 1 }}>
             {analizando ? 'Analizando…' : asset.status === 'completado' ? 'Re-analizar' : 'Analizar'}
@@ -241,11 +308,23 @@ export default function UrbanAssetDetalle({ initial }: { initial: UrbanAssetFull
             geometry={asset.parcel_geometry}
             lat={asset.lat}
             lng={asset.lng}
-            volumen={volumenCapaz ? { bandas: volumenCapaz.bandas, partes: volumenCapaz.partes } : null}
+            volumen={volumenCapaz || areaMovimiento?.geometry ? {
+              bandas: volumenCapaz?.bandas || [],
+              partes: volumenCapaz?.partes || [],
+              movimiento: areaMovimiento?.geometry ? {
+                geometry: areaMovimiento.geometry,
+                plantas: areaMovimiento.plantas_aplicadas,
+                volumen_max_m2c: areaMovimiento.volumen_max_m2c,
+                restriccion: areaMovimiento.restriccion_vinculante,
+                linderos: areaMovimiento.linderos || [],
+              } : null,
+            } : null}
             auto3D={asset.status === 'completado'}
             mode={mode}
             currentRefcats={[asset.refcat, ...(asset.refcats || [])].filter(Boolean) as string[]}
             onAddParcela={handleAddParcela}
+            onLinderoChange={areaMovimiento?.linderos?.length ? handleLinderoChange : undefined}
+            onRegisterCapture={(fn) => { captureMaquetaRef.current = fn }}
           />
           {/* Overlay del pipeline durante el análisis */}
           {(analizando || asset.status === 'error') && (
@@ -278,6 +357,8 @@ export default function UrbanAssetDetalle({ initial }: { initial: UrbanAssetFull
           </div>
 
           <div key={tab} className="ua-panel">
+            {tab === 'cuadro' && <CuadroTab cuadro={cuadro} />}
+            {tab === 'producto' && <ProductoTab data={data} onChanged={refreshFull} />}
             {tab === 'ficha' && <FichaTab data={data} memo={memo} />}
             {tab === 'edificabilidad' && <EdificabilidadTab edificabilidad={edificabilidad} volumen={volumenCapaz} />}
             {tab === 'riesgos' && <RiesgosTab data={data} />}
@@ -521,6 +602,8 @@ function FichaTab({ data, memo }: { data: UrbanAssetFull; memo?: Record<string, 
         {datoRow('Norma zonal', asset.norma_zonal ? `${asset.norma_zonal}${asset.norma_zonal_denominacion ? ` — ${asset.norma_zonal_denominacion}` : ''}` : null, 'inferido')}
         {datoRow('Superficie de parcela', fmtNum(asset.parcel_area) ? `${fmtNum(asset.parcel_area)} m²` : null, 'oficial')}
         {datoRow('Superficie construida', fmtNum(asset.built_area) ? `${fmtNum(asset.built_area)} m²` : null, 'inferido')}
+        {asset.built_area_computable != null && asset.built_area != null && asset.built_area - asset.built_area_computable > 0 &&
+          datoRow('— computable a edificabilidad', `${fmtNum(asset.built_area_computable)} m²c (−${fmtNum(asset.built_area - asset.built_area_computable)} m² garaje/trastero)`, 'inferido')}
         {datoRow('Uso catastral', asset.cadastral_use, 'oficial')}
         {datoRow('Año construcción', asset.year_built, 'oficial')}
         {datoRow('Inmuebles / viviendas', asset.num_inmuebles != null ? `${asset.num_inmuebles}${asset.num_viviendas != null ? ` / ${asset.num_viviendas}` : ''}` : null, 'oficial')}
@@ -573,6 +656,375 @@ function FichaTab({ data, memo }: { data: UrbanAssetFull; memo?: Record<string, 
   )
 }
 
+// ── Tab: Cuadro urbanístico (formato licencia) ───────────────────────────────
+// Normativa (todas las figuras, la más restrictiva marcada) · Estado actual · Potencial
+
+function CuadroTab({ cuadro }: { cuadro?: CuadroUrbanistico & { area_movimiento?: AreaMovimientoResult | null } }) {
+  if (!cuadro || !cuadro.disponible) {
+    return (
+      <Card titulo="Cuadro urbanístico">
+        <p style={pStyle}>
+          Sin cuadro urbanístico todavía. Lanza (o relanza) el análisis; si la norma zonal no tiene
+          parámetros en la tabla interna, complétalos en «Normas zonales» desde el listado de activos.
+        </p>
+      </Card>
+    )
+  }
+  const c = cuadro
+  const fmtM = (n: number | null | undefined) => (n == null ? '—' : new Intl.NumberFormat('es-ES').format(Math.round(n)))
+
+  return (
+    <div>
+      {c.ambitos_prevalentes.length > 0 && (
+        <div style={{ padding: '10px 14px', border: `1px solid ${alpha(BAD, 0.5)}`, borderRadius: 8, marginBottom: 12, background: alpha(BAD, 0.07) }}>
+          <p style={{ fontSize: 11.5, color: BAD, fontWeight: 500 }}>
+            ⚠ Ámbito de planeamiento prevalente: {c.ambitos_prevalentes.join(' · ')}
+          </p>
+          <p style={{ fontSize: 10.5, color: SUB, fontWeight: 300, marginTop: 3, lineHeight: 1.5 }}>
+            La ficha del ámbito desplaza las condiciones generales de la norma zonal: los valores del cuadro son provisionales hasta leerla (súbela en «Docs» y usa «Leer documentos oficiales»).
+          </p>
+        </div>
+      )}
+
+      <Card titulo={`Cuadro resumen · NZ ${c.norma_zonal ?? 's/d'} · ${c.figuras.length} figura(s) normativa(s)`}>
+        {/* Formato apilado por parámetro: el panel es estrecho (~360 px); la
+            tabla clásica de licencia (4 columnas) vive en el informe PDF. */}
+        {c.filas.map((fila) => (
+          <div key={fila.parametro} style={{ padding: '10px 0', borderBottom: `1px solid ${EDGE}` }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: TXT }}>
+                {fila.label}
+              </span>
+              {fila.contradiccion && (
+                <span style={{ fontSize: 8, letterSpacing: '0.08em', textTransform: 'uppercase', color: BAD, border: `1px solid ${alpha(BAD, 0.5)}`, borderRadius: 4, padding: '1px 6px' }}>
+                  contradicción
+                </span>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 6 }}>
+              {fila.valores.length === 0 && <span style={{ fontSize: 11, color: FAINT }}>Sin valor normativo registrado</span>}
+              {fila.valores.map((v, i) => {
+                const enRojo = v.mas_restrictivo && fila.valores.length > 1
+                return (
+                  <div key={i} style={{
+                    padding: '4px 8px',
+                    border: `1px solid ${enRojo ? alpha(BAD, 0.55) : EDGE}`,
+                    borderRadius: 5,
+                    background: enRojo ? alpha(BAD, 0.08) : undefined,
+                    minWidth: 0,
+                  }}>
+                    <span style={{ fontSize: 12, color: enRojo ? BAD : TXT, fontWeight: enRojo ? 500 : 400, overflowWrap: 'anywhere' }}>
+                      {v.valor}
+                      {enRojo && <span style={{ fontSize: 8, letterSpacing: '0.08em', textTransform: 'uppercase', marginLeft: 6 }}>más restrictiva</span>}
+                    </span>
+                    <span style={{ display: 'block', fontSize: 9, color: FAINT, fontWeight: 300, marginTop: 1, overflowWrap: 'anywhere' }}>
+                      {v.figura}{v.fuente ? ` · ${v.fuente}` : ''}
+                      <span style={{ color: TAG_COLOR[v.tipo] || FAINT, textTransform: 'uppercase', letterSpacing: '0.06em', marginLeft: 6, fontSize: 8 }}>{v.tipo}</span>
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+
+            {(fila.estado_actual.valor || fila.potencial) && (
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                {fila.estado_actual.valor && (
+                  <div style={{ flex: '1 1 140px', minWidth: 0 }}>
+                    <p style={{ fontSize: 8, letterSpacing: '0.1em', textTransform: 'uppercase', color: FAINT, marginBottom: 1 }}>Estado actual</p>
+                    <p style={{ fontSize: 11.5, color: TXT, overflowWrap: 'anywhere' }}>{fila.estado_actual.valor}</p>
+                    {fila.estado_actual.fuente && <p style={{ fontSize: 8.5, color: FAINT, fontWeight: 300 }}>{fila.estado_actual.fuente}</p>}
+                  </div>
+                )}
+                {fila.potencial && (
+                  <div style={{ flex: '1 1 140px', minWidth: 0 }}>
+                    <p style={{ fontSize: 8, letterSpacing: '0.1em', textTransform: 'uppercase', color: FAINT, marginBottom: 1 }}>Potencial</p>
+                    <p style={{ fontSize: 11.5, color: fila.potencial.startsWith('+') ? OK : TXT, fontWeight: fila.potencial.startsWith('+') ? 500 : 300, overflowWrap: 'anywhere' }}>
+                      {fila.potencial}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </Card>
+
+      {(c.sintesis.edificabilidad_max_m2c != null || c.sintesis.plantas_max != null) && (
+        <Card titulo="Síntesis (más restrictivo aplicado)">
+          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+            {[
+              ['Edificabilidad máx.', c.sintesis.edificabilidad_max_m2c, 'm²c', TXT],
+              ['Construido', c.sintesis.construida_m2c, 'm²c', TXT],
+              ['Remanente teórico', c.sintesis.remanente_m2c, 'm²c', (c.sintesis.remanente_m2c ?? 0) > 0 ? OK : SUB],
+              ['Ocupación máx.', c.sintesis.ocupacion_max_m2, 'm²', TXT],
+              ['Plantas máx.', c.sintesis.plantas_max, 'pl', TXT],
+            ].filter(([, v]) => v != null).map(([label, v, unit, color]) => (
+              <div key={String(label)}>
+                <p style={{ fontSize: 8.5, letterSpacing: '0.12em', textTransform: 'uppercase', color: FAINT, marginBottom: 2 }}>{String(label)}</p>
+                <p style={{ fontSize: 17, fontWeight: 200, color: color as string }}>
+                  {fmtM(v as number)} <span style={{ fontSize: 9.5, color: FAINT }}>{String(unit)}</span>
+                </p>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {c.area_movimiento?.disponible && (
+        <Card titulo="Área de movimiento (parcela − retranqueos) — visible en el gemelo 3D">
+          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 10 }}>
+            {[
+              ['Área de movimiento', c.area_movimiento.area_movimiento_m2, 'm²', TXT],
+              ['Huella máx. (con ocupación)', c.area_movimiento.huella_max_m2, 'm²', TXT],
+              ['Volumen capaz', c.area_movimiento.volumen_max_m2c, 'm²c', TXT],
+              ['Remanente vs construido', c.area_movimiento.remanente_vs_construido_m2c, 'm²c',
+                (c.area_movimiento.remanente_vs_construido_m2c ?? 0) > 0 ? OK : SUB],
+            ].filter(([, v]) => v != null).map(([label, v, unit, color]) => (
+              <div key={String(label)}>
+                <p style={{ fontSize: 8.5, letterSpacing: '0.12em', textTransform: 'uppercase', color: FAINT, marginBottom: 2 }}>{String(label)}</p>
+                <p style={{ fontSize: 17, fontWeight: 200, color: color as string }}>
+                  {fmtM(v as number)} <span style={{ fontSize: 9.5, color: FAINT }}>{String(unit)}</span>
+                </p>
+              </div>
+            ))}
+          </div>
+          {c.area_movimiento.restriccion_vinculante && (
+            <p style={{ fontSize: 11, color: TXT, marginBottom: 6 }}>
+              Restricción que vincula: <span style={{ color: BAD, fontWeight: 500 }}>{
+                { edificabilidad: 'edificabilidad (coef × parcela)', ocupacion: 'ocupación máxima', retranqueos: 'retranqueos (área de movimiento × plantas)' }[c.area_movimiento.restriccion_vinculante]
+              }</span>
+            </p>
+          )}
+          <p style={{ fontSize: 10, color: FAINT, fontWeight: 300, lineHeight: 1.5, overflowWrap: 'anywhere' }}>
+            Linderos clasificados: frente {c.area_movimiento.linderos_m.frente} m · laterales {c.area_movimiento.linderos_m.lateral} m · testero {c.area_movimiento.linderos_m.testero} m
+            {' '}· retranqueos aplicados: {['frente', 'lateral', 'testero'].map((k) => `${k} ${c.area_movimiento!.retranqueos_aplicados[k as 'frente'] ?? '—'} m`).join(' / ')}
+          </p>
+          {c.area_movimiento.advertencias.map((a, i) => (
+            <p key={i} style={{ fontSize: 10, color: WARN, marginTop: 6, fontWeight: 300, lineHeight: 1.5, opacity: 0.85 }}>⚠  {a}</p>
+          ))}
+        </Card>
+      )}
+
+      {c.advertencias.length > 0 && (
+        <Card titulo="Advertencias">
+          {c.advertencias.map((a, i) => (
+            <p key={i} style={{ ...pStyle, marginBottom: 8, color: WARN, opacity: 0.9 }}>⚠  {a}</p>
+          ))}
+        </Card>
+      )}
+    </div>
+  )
+}
+
+// ── Tab: Producto optimizado (mercado × volumen capaz) ───────────────────────
+
+function ProductoTab({ data, onChanged }: { data: UrbanAssetFull; onChanged: () => Promise<void> }) {
+  const contenido = data.analysis.find((a) => a.kind === 'producto')?.content as {
+    mercado?: MercadoZona
+    producto?: ProductoResult
+    narrativa?: { titular?: string; comprador_tipo?: string; narrativa?: string; argumentos_venta?: string[]; riesgos_comerciales?: string[]; siguiente_paso?: string } | null
+  } | undefined
+
+  const inputsPrevios = contenido?.producto?.inputs
+  const [precioM2, setPrecioM2] = useState<string>(inputsPrevios ? String(inputsPrevios.precioVentaM2) : '')
+  const [renta, setRenta] = useState<string>(inputsPrevios ? String(inputsPrevios.rentaNetaHogarAnual) : '')
+  const [tipo, setTipo] = useState<string>(String(inputsPrevios?.tipoInteresPct ?? 3.1))
+  const [plazo, setPlazo] = useState<string>(String(inputsPrevios?.plazoAnios ?? 30))
+  const [esfuerzo, setEsfuerzo] = useState<string>(String(inputsPrevios?.esfuerzoMaxPct ?? 35))
+  const [isCalculando, setIsCalculando] = useState(false)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+
+  const fmtE = (n: number | null | undefined) => (n == null ? '—' : new Intl.NumberFormat('es-ES').format(Math.round(n)))
+
+  const calcular = async () => {
+    setErrorMsg(null)
+    setIsCalculando(true)
+    try {
+      const res = await fetch(`/api/urban-analyst/${data.asset.id}/producto`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          precioVentaM2: parseFloat(precioM2) || 0,
+          ...(renta ? { rentaNetaHogarAnual: parseFloat(renta) } : {}),
+          tipoInteresPct: parseFloat(tipo) || 3.1,
+          plazoAnios: parseInt(plazo, 10) || 30,
+          esfuerzoMaxPct: parseFloat(esfuerzo) || 35,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Error calculando el producto')
+      await onChanged()
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : 'Error calculando el producto')
+    } finally {
+      setIsCalculando(false)
+    }
+  }
+
+  const m = contenido?.mercado
+  const p = contenido?.producto
+  const n = contenido?.narrativa
+
+  return (
+    <div>
+      <Card titulo="Mercado de la zona (INE + capas municipales)">
+        {m ? (
+          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+            {[
+              ['Barrio', m.barrio ? `${m.barrio} (${m.distrito || ''})` : '—', null],
+              ['Renta neta media hogar', m.renta_hogar_anual != null ? `${fmtE(m.renta_hogar_anual)} €/año` : '—', m.renta_anio ? `INE ${m.renta_anio} · sección ${m.cusec}` : null],
+              ['Renta por persona', m.renta_persona_anual != null ? `${fmtE(m.renta_persona_anual)} €/año` : '—', null],
+              ['Edad promedio', m.edad_promedio_seccion != null ? `${m.edad_promedio_seccion.toFixed(1)} años` : m.edad_promedio_barrio != null ? `${m.edad_promedio_barrio.toFixed(1)} años (barrio)` : '—', 'sección censal'],
+            ].map(([label, valor, sub]) => (
+              <div key={String(label)}>
+                <p style={{ fontSize: 8.5, letterSpacing: '0.12em', textTransform: 'uppercase', color: FAINT, marginBottom: 2 }}>{String(label)}</p>
+                <p style={{ fontSize: 14, fontWeight: 300, color: TXT }}>{String(valor)}</p>
+                {sub && <p style={{ fontSize: 8.5, color: FAINT, fontWeight: 300 }}>{String(sub)}</p>}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p style={pStyle}>Calcula el producto para traer la renta INE de la sección censal y la demografía municipal del punto.</p>
+        )}
+      </Card>
+
+      <Card titulo="Supuestos del cálculo">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10, marginBottom: 12 }}>
+          {[
+            { label: '€/m² venta zona *', value: precioM2, set: setPrecioM2, ph: 'ej. 4500' },
+            { label: 'Renta hogar €/año', value: renta, set: setRenta, ph: m?.renta_hogar_anual ? `INE: ${m.renta_hogar_anual}` : 'auto (INE)' },
+            { label: 'Interés %', value: tipo, set: setTipo, ph: '3,1' },
+            { label: 'Plazo años', value: plazo, set: setPlazo, ph: '30' },
+            { label: 'Esfuerzo máx %', value: esfuerzo, set: setEsfuerzo, ph: '35' },
+          ].map((f) => (
+            <label key={f.label} style={{ display: 'block' }}>
+              <span style={{ display: 'block', fontSize: 8.5, letterSpacing: '0.06em', textTransform: 'uppercase', color: FAINT, marginBottom: 3 }}>{f.label}</span>
+              <input
+                type="number" value={f.value} placeholder={f.ph}
+                onChange={(e) => f.set(e.target.value)}
+                style={{
+                  width: '100%', padding: '7px 9px', fontSize: 12.5, background: PANEL2, color: TXT,
+                  border: `1px solid ${EDGE}`, borderRadius: 6, outline: 'none', fontFamily: 'inherit',
+                }}
+              />
+            </label>
+          ))}
+        </div>
+        <button
+          onClick={calcular}
+          disabled={isCalculando || !parseFloat(precioM2)}
+          style={{
+            padding: '9px 16px', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase',
+            background: BRAND, color: '#fff', border: 'none', borderRadius: 5,
+            cursor: isCalculando ? 'wait' : 'pointer', fontWeight: 600, opacity: !parseFloat(precioM2) ? 0.5 : 1,
+          }}
+        >
+          {isCalculando ? 'Calculando…' : p ? 'Recalcular producto' : 'Calcular producto óptimo'}
+        </button>
+        {errorMsg && <p style={{ fontSize: 11, color: BAD, marginTop: 8 }}>{errorMsg}</p>}
+        <p style={{ fontSize: 9.5, color: FAINT, fontWeight: 300, marginTop: 8, lineHeight: 1.5 }}>
+          * El €/m² de venta es el único dato no automático: usa testigos reales de la zona. La renta se precarga del INE (sección censal) y puede ajustarse al comprador objetivo.
+        </p>
+      </Card>
+
+      {p && n?.titular && (
+        <div style={{ padding: '14px 16px', border: `1px solid ${alpha(BRAND, 0.5)}`, borderRadius: 8, marginBottom: 12, background: alpha(BRAND, 0.06) }}>
+          <p style={{ fontSize: 9, letterSpacing: '0.15em', textTransform: 'uppercase', color: BRAND, fontWeight: 600, marginBottom: 5 }}>Producto óptimo</p>
+          <p style={{ fontSize: 14, color: TXT, lineHeight: 1.55, fontWeight: 400 }}>{n.titular}</p>
+          {n.comprador_tipo && <p style={{ fontSize: 11.5, color: SUB, marginTop: 6, fontWeight: 300 }}>Comprador tipo: {n.comprador_tipo}</p>}
+        </div>
+      )}
+
+      {p && p.regimen === 'colectiva' && p.tipologias.length > 0 && (
+        <Card titulo={`Mix de tipologías · ${fmtE(p.m2_vendibles)} m² vendibles de ${fmtE(p.m2c_disponibles)} m²c`}>
+          <p style={{ fontSize: 9.5, color: FAINT, fontWeight: 300, marginBottom: 10 }}>Volumen: {p.volumen_fuente}</p>
+          {p.tipologias.map((t) => {
+            const esOptima = p.optimo?.key === t.key
+            return (
+              <div key={t.key} style={{
+                padding: '9px 10px', marginBottom: 6,
+                border: `1px solid ${esOptima ? alpha(OK, 0.6) : EDGE}`, borderRadius: 6,
+                background: esOptima ? alpha(OK, 0.07) : undefined,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 12.5, color: TXT, fontWeight: esOptima ? 600 : 400 }}>
+                    {esOptima ? '★ ' : ''}{t.label} · {t.m2_vendibles} m² · {t.unidades} uds
+                  </span>
+                  <span style={{ fontSize: 11.5, color: t.accesible_zona ? OK : BAD, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                    esfuerzo {t.esfuerzo_zona_pct}% {t.accesible_zona ? '✓' : '✗'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+                  {[
+                    ['Precio ud', `${fmtE(t.precio_venta_ud)} €`],
+                    ['Cuota/mes', `${fmtE(t.cuota_mensual)} €`],
+                    ['Renta necesaria', `${fmtE(t.renta_necesaria_anual)} €/año`],
+                    ['GDV', `${fmtE(t.gdv)} €`],
+                  ].map(([label, valor]) => (
+                    <div key={label} style={{ minWidth: 0 }}>
+                      <p style={{ fontSize: 8, letterSpacing: '0.08em', textTransform: 'uppercase', color: FAINT, marginBottom: 1 }}>{label}</p>
+                      <p style={{ fontSize: 11.5, color: TXT }}>{valor}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+          {p.optimo_criterio && <p style={{ fontSize: 10, color: FAINT, fontWeight: 300, marginTop: 6, lineHeight: 1.5 }}>{p.optimo_criterio}</p>}
+        </Card>
+      )}
+
+      {p && p.regimen === 'unifamiliar' && p.unifamiliar && (
+        <Card titulo={`Producto unifamiliar · ${fmtE(p.m2_vendibles)} m² vendibles (${p.volumen_fuente})`}>
+          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+            {[
+              ['Viviendas posibles', String(p.unifamiliar.parcelas_posibles), 'por división de parcela'],
+              ['m² por vivienda', fmtE(p.unifamiliar.m2_por_vivienda), 'vendibles'],
+              ['Precio por vivienda', `${fmtE(p.unifamiliar.precio_por_vivienda)} €`, null],
+              ['Renta necesaria', `${fmtE(p.unifamiliar.renta_necesaria_anual)} €/año`, `esfuerzo zona: ${p.unifamiliar.esfuerzo_zona_pct} % ${p.unifamiliar.accesible_zona ? '✓' : '✗'}`],
+            ].map(([label, valor, sub]) => (
+              <div key={String(label)}>
+                <p style={{ fontSize: 8.5, letterSpacing: '0.12em', textTransform: 'uppercase', color: FAINT, marginBottom: 2 }}>{String(label)}</p>
+                <p style={{ fontSize: 16, fontWeight: 200, color: TXT }}>{String(valor)}</p>
+                {sub && <p style={{ fontSize: 9, color: FAINT, fontWeight: 300 }}>{String(sub)}</p>}
+              </div>
+            ))}
+          </div>
+          {p.optimo_criterio && <p style={{ fontSize: 10, color: FAINT, fontWeight: 300, marginTop: 10, lineHeight: 1.5 }}>{p.optimo_criterio}</p>}
+        </Card>
+      )}
+
+      {n?.narrativa && (
+        <Card titulo="Lectura del analista">
+          <p style={{ ...pStyle, marginBottom: 10 }}>{n.narrativa}</p>
+          {Array.isArray(n.argumentos_venta) && n.argumentos_venta.length > 0 && (
+            <>
+              <p style={{ fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: FAINT, margin: '10px 0 4px' }}>Argumentos de venta</p>
+              {n.argumentos_venta.map((a, i) => <p key={i} style={{ ...pStyle, marginBottom: 4 }}>—  {a}</p>)}
+            </>
+          )}
+          {Array.isArray(n.riesgos_comerciales) && n.riesgos_comerciales.length > 0 && (
+            <>
+              <p style={{ fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: FAINT, margin: '10px 0 4px' }}>Riesgos comerciales</p>
+              {n.riesgos_comerciales.map((r, i) => <p key={i} style={{ ...pStyle, marginBottom: 4, color: WARN }}>⚠  {r}</p>)}
+            </>
+          )}
+          {n.siguiente_paso && <p style={{ ...pStyle, marginTop: 10, color: SUB }}>Siguiente paso: {n.siguiente_paso}</p>}
+        </Card>
+      )}
+
+      {p && p.advertencias.length > 0 && (
+        <Card titulo="Advertencias">
+          {p.advertencias.map((a, i) => (
+            <p key={i} style={{ ...pStyle, marginBottom: 6, color: WARN, opacity: 0.9 }}>⚠  {a}</p>
+          ))}
+        </Card>
+      )}
+    </div>
+  )
+}
+
 // ── Tab: Edificabilidad ──────────────────────────────────────────────────────
 
 function EdificabilidadTab({ edificabilidad, volumen }: { edificabilidad?: EdificabilidadResult; volumen?: VolumenCapazResult }) {
@@ -582,6 +1034,7 @@ function EdificabilidadTab({ edificabilidad, volumen }: { edificabilidad?: Edifi
   const fmtM = (n: number | null | undefined) => (n == null ? 's/d' : new Intl.NumberFormat('es-ES').format(n))
   const e = edificabilidad
   const tituloMetodo =
+    e.metodo === 'formula_volumetrica' ? `Fórmula E = S × Z × C (plano CE${e.formula_c != null ? ` · C = ${e.formula_c}` : ''})` :
     e.metodo === 'volumetrico' ? 'Método volumétrico (huella × plantas)' :
     e.metodo === 'coeficiente' ? 'Método por coeficiente' :
     'Cálculo pendiente — faltan datos'
@@ -605,7 +1058,35 @@ function EdificabilidadTab({ edificabilidad, volumen }: { edificabilidad?: Edifi
             En esta norma zonal la edificabilidad no se determina por coeficiente: horquilla por envolvente [HIPÓTESIS], no un derecho.
           </p>
         )}
+        {e.metodo === 'formula_volumetrica' && (
+          <p style={{ fontSize: 10, color: FAINT, marginTop: 10, fontWeight: 300, lineHeight: 1.5 }}>
+            E calculada banda a banda con S y Z del plano de Condiciones de la Edificación y C del art. 8.1.3.
+            Sigue sin ser un derecho: CIPHAN y ficha de catálogo mandan.
+          </p>
+        )}
       </Card>
+
+      {e.construida_desglose && e.construida_desglose.por_uso.length > 0 && (e.construida_desglose.no_computable_m2 ?? 0) > 0 && (
+        <Card titulo="Desglose de la superficie construida (Catastro)">
+          <p style={{ fontSize: 10.5, color: FAINT, marginBottom: 10, fontWeight: 300, lineHeight: 1.5 }}>
+            Garaje y trastero/almacén anejo no computan a edificabilidad y se descuentan del bruto catastral (estimación [INFERIDO], no la regla exacta del art. 6.5.3 PGOUM).
+            {e.construida_desglose.incompleto ? ` Muestreo de ${e.construida_desglose.inmuebles_muestreados}/${e.construida_desglose.inmuebles_totales ?? '?'} inmuebles: descuento proporcional.` : ''}
+          </p>
+          {e.construida_desglose.por_uso.map((u, i) => (
+            <div key={i} style={{ display: 'flex', padding: '6px 0', borderBottom: `1px solid ${EDGE}`, gap: 8, fontSize: 11.5 }}>
+              <span style={{ flex: 1, color: SUB, fontWeight: 300 }}>{u.uso}</span>
+              <span style={{ color: TXT }}>{fmtM(u.m2)} m²</span>
+              <span style={{ width: 92, textAlign: 'right', fontSize: 9, letterSpacing: '0.06em', textTransform: 'uppercase', color: u.computa ? OK : SUB, alignSelf: 'center' }}>
+                {u.computa ? 'computa' : 'no computa'}
+              </span>
+            </div>
+          ))}
+          <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 10, fontSize: 12 }}>
+            <span style={{ color: SUB }}>Computable a edificabilidad</span>
+            <span style={{ color: TXT, fontWeight: 400 }}>{fmtM(e.construida_desglose.computable_m2)} m²c de {fmtM(e.construida_desglose.total_m2)} m²</span>
+          </div>
+        </Card>
+      )}
 
       {Array.isArray(e.inputs_faltantes) && e.inputs_faltantes.length > 0 && (
         <Card titulo="Datos que faltan para afinar el cálculo">

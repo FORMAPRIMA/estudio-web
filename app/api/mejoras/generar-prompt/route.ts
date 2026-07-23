@@ -39,6 +39,7 @@ por el equipo y generar un prompt preciso y accionable para un asistente de IA d
 ## Secciones y ficheros clave
 
 ### Captación (ventas) — fp_partner, fp_manager, fp_biz_dev
+- Business development (CRM de partners): app/team/captacion/business-development/, components/team/business-development/BusinessDevelopmentClient.tsx, lib/business-development/{engine,seed,types}.ts, app/actions/business-development.ts, app/api/business-development/asistente/route.ts. Tablas bd_companies/bd_weekly_log/bd_config. Puente a leads via crearLeadDesdePartner (leads.bd_company_id)
 - Leads: app/team/captacion/leads/, components/team/captacion/LeadsPage.tsx
 - Propuestas: components/team/captacion/PropuestaDetalle.tsx, lib/propuestas/config.ts
 - Contratos: components/team/captacion/ContratoDetalle.tsx (DocuSign integration)
@@ -59,10 +60,17 @@ por el equipo y generar un prompt preciso y accionable para un asistente de IA d
 - Tablas: design_hunter_viajes, design_hunter_entries (media_urls text[])
 - Bucket Storage: design-hunter (público)
 
-### Control de obra (/team/apps/control-obra) — SOLO fp_partner
+### Control de obra (/team/apps/control-obra) — fp_partner + allowlist por email (CONTROL_OBRA_ALLOWED_EMAILS en lib/control-obra/domain.ts)
 - Control económico de obra por proyecto (baseline congelado vs cambios). components/team/control-obra/ControlObraPage.tsx, app/actions/control-obra.ts, lib/control-obra/domain.ts
 - Tabs: Partidas (baseline vs actual, estado igual/modificada/nueva/eliminada, proveedor por partida, vista coste/cliente) · Proveedores y pagos (comprometido/pagado/pendiente + libro de pagos) · Tesorería (depósitos del cliente, balance = depósitos con IVA − pagos) · Vista cliente (modo presentación, sin coste/margen/proveedores) · Histórico
 - Tablas: obra_control_obras, obra_control_partidas, obra_control_proveedores, obra_control_pagos, obra_control_depositos, obra_control_log. Seed inicial: obra Claudio Coello 38
+
+### Modelo Café Goya (/team/apps/modelo-cafe) — SOLO fp_partner
+- Modelo financiero interactivo del quiosco → café de especialidad (Goya 63, Madrid): P&L, financiación (traspaso aplazado + préstamo bancario), punto de equilibrio, caja por fases
+- 5 secciones: Modelo financiero (sub-tabs Modelo/Sensibilidad/Comparativa + barra de escenarios; financiación con sliders; equilibrio con 3 umbrales incl. caja arranque) · CAPEX/equipamiento (tabla editable por categorías con precios y links, total, guardado compartido en Supabase, botón «usar en modelo») · Dossier bancario (elige conservador + sliders + toggle incluir CAPEX → PDF banco) · Análisis de mercado (precios cafeterías + ventas baristas) · Propuesta final (números editables → PDF carta vendedores)
+- components/team/modelo-cafe/{ModeloCafePage,DossierTab,MercadoTab,PropuestaTab,CapexTab}.tsx + theme.ts + Field.tsx; app/actions/modelo-cafe.ts (escenarios + getCapex/saveCapex); lib/modelo-cafe/{domain(computeModelo),dossier,mercado,capex}.ts
+- PDFs: components/pdfs/{DossierBancarioPDF,PropuestaTraspasoPDF}.tsx; rutas app/api/modelo-cafe/{dossier-pdf,propuesta-pdf}/route.ts
+- Tablas: modelo_cafe_escenarios (inputs jsonb, es_base) y modelo_cafe_capex (items jsonb, fila 'default'; migración modelo_cafe_capex.sql pendiente)
 
 ### Gastos y facturas (/team/gastos) — todos los roles FP
 - ScannerPage: components/team/finanzas/ScannerPage.tsx (mode 'partner' = vista completa, 'personal' = drop-off solo gastos propios), app/api/scan-ticket/route.ts
@@ -102,6 +110,8 @@ por el equipo y generar un prompt preciso y accionable para un asistente de IA d
 - Tablas nuevas (desde 30 oct 2026): no quedan expuestas a la Data API por defecto. service_role (createAdminClient) no se afecta; si la tabla se usa desde cliente (anon/authenticated) añadir GRANT explícito al crearla
 - Storage upload desde cliente: createClient() browser + supabase.storage.from(bucket).upload()
 - PDF: await import('@react-pdf/renderer') en API route (nunca import estático)
+- PDF headers/footers fijos: los elementos fixed se pintan encima del flujo — el padding de la Page debe reservar sus bandas (paddingTop ≥ alto header fijo, paddingBottom ≥ alto footer fijo); portada con cabecera héroe = Page propia con paddingTop normal y marginTop negativo en el héroe; cajas destacadas con wrap={false} para no partirse en saltos de página. Referencia: InformeUrbanisticoPDF.tsx
+- PDF glifos: Helvetica no tiene → ≥ ≤ ≈ ⚠ ★ ✓ — sanitizar textos de motores/IA antes de renderizar
 - Email: sendEmail() + wrapEmail() de lib/email.ts
 - Avisos: insertar con tipo 'equipo', nivel 'informativo'|'importante', visible_roles text[]
 

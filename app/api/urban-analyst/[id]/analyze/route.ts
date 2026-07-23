@@ -4,13 +4,16 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import Anthropic from '@anthropic-ai/sdk'
 import {
   geocodeDireccion, refcatFromCoords, coordsFromRefcat,
-  getParcelData, getBuildingData, getBuildingParts, getInmueblesCount, getInmueblesDetalle, translateCurrentUse,
+  getParcelData, getBuildingData, getBuildingParts, getInmueblesCount, getConstruidaDesglose, combineDesgloses, getParcelasVecinas, translateCurrentUse,
 } from '@/lib/urban-analyst/catastro'
-import { queryAllServices, queryCondicionesBandas, extractNormaZonal } from '@/lib/urban-analyst/geoportal'
+import { computeAreaMovimiento, type LinderoInfo, type TipoLindero } from '@/lib/urban-analyst/areaMovimiento'
+import { queryAllServices, queryCondicionesBandas, extractNormaZonal, queryAlturaEdificioEnParcela } from '@/lib/urban-analyst/geoportal'
 import { computeEdificabilidad } from '@/lib/urban-analyst/edificabilidad'
-import { combineGeometries } from '@/lib/urban-analyst/geometry'
-import { computeVolumenCapaz, volumenCapazResumen } from '@/lib/urban-analyst/volumenCapaz'
+import { computeCuadroUrbanistico, nzCandidatos } from '@/lib/urban-analyst/cuadroUrbanistico'
+import { combineGeometries, bbox } from '@/lib/urban-analyst/geometry'
+import { computeVolumenCapaz, volumenCapazResumen, bandasSobreParcela } from '@/lib/urban-analyst/volumenCapaz'
 import { computeRedFlags } from '@/lib/urban-analyst/redFlags'
+import { computeChecklist } from '@/lib/urban-analyst/checklist'
 import { buildContextoActivo, parseJsonRespuesta, IA_MODEL, REGLAS_ANALISTA } from '@/lib/urban-analyst/iaContext'
 import type { PipelineStep, UrbanAsset, NormaZonal, EdificabilidadResult } from '@/lib/urban-analyst/types'
 
@@ -24,6 +27,7 @@ const STEPS: { key: string; label: string }[] = [
   { key: 'catastro',       label: 'Datos catastrales y geometría' },
   { key: 'planeamiento',   label: 'Cruce con capas del PGOUM' },
   { key: 'edificabilidad', label: 'Cálculo de edificabilidad' },
+  { key: 'cuadro',         label: 'Cuadro urbanístico (normativa · actual · potencial)' },
   { key: 'volumen',        label: 'Volumen capaz 3D (bandas × plantas)' },
   { key: 'red_flags',      label: 'Detección de red flags' },
   { key: 'interprete',     label: 'Síntesis del analista (IA)' },
@@ -139,18 +143,23 @@ export async function POST(
       return max == null || b.floorsAboveGround > max ? b.floorsAboveGround : max
     }, null)
 
-    // Fallback: si falta superficie o año, agregamos el detalle DNPRC por
-    // inmueble de las referencias sin dato
+    // Desglose de superficie construida por uso (DNPRC inmueble a inmueble):
+    // separa lo que computa a edificabilidad de garaje y trastero/almacén anejo.
+    // De paso, sirve de fallback de superficie/año si el WFS BU no los devolvió.
+    const scans = await Promise.all(allRefcats.map((rc) => getConstruidaDesglose(rc)))
+    const construidaScan = combineDesgloses(scans)
+    const desglose = construidaScan?.desglose ?? null
+
     let usedFallback = false
-    if (builtArea == null || yearBuilt == null) {
-      const detalles = await Promise.all(allRefcats.map((rc) => getInmueblesDetalle(rc)))
-      const sfcTotal = sum(detalles.map((d) => d?.totalSuperficieM2 ?? null))
-      const anioMin = detalles.reduce<number | null>((min, d) => {
-        if (d?.anioMasAntiguo == null) return min
-        return min == null || d.anioMasAntiguo < min ? d.anioMasAntiguo : min
-      }, null)
-      if (builtArea == null && sfcTotal != null) { builtArea = sfcTotal; usedFallback = true }
-      if (yearBuilt == null && anioMin != null) yearBuilt = anioMin
+    if (builtArea == null && desglose?.total_m2 != null) { builtArea = desglose.total_m2; usedFallback = true }
+    if (yearBuilt == null && construidaScan?.anioMasAntiguo != null) yearBuilt = construidaScan.anioMasAntiguo
+
+    // Superficie computable = bruto × fracción computable del desglose (robusto
+    // frente a diferencias de escala entre el WFS y la suma por inmueble).
+    let builtAreaComputable: number | null = builtArea
+    if (desglose && desglose.total_m2 && desglose.total_m2 > 0 && desglose.computable_m2 != null) {
+      const frac = desglose.computable_m2 / desglose.total_m2
+      builtAreaComputable = builtArea != null ? Math.round(builtArea * frac) : desglose.computable_m2
     }
 
     const catastroPatch = {
@@ -163,8 +172,17 @@ export async function POST(
       num_viviendas: numViviendas,
     }
     await admin.from('urban_assets').update(catastroPatch).eq('id', params.id)
+    // Superficie computable + desglose (best-effort: si la migración con las
+    // columnas nuevas no está aplicada, no debe tumbar el análisis; el desglose
+    // viaja igualmente dentro del cálculo de edificabilidad, que es jsonb).
+    const { error: computableErr } = await admin.from('urban_assets')
+      .update({ built_area_computable: builtAreaComputable, built_area_desglose: desglose })
+      .eq('id', params.id)
+    if (computableErr) console.warn('[urban-analyst] columnas built_area_computable/desglose no disponibles:', computableErr.message)
+    const descuentoM2 = catastroPatch.built_area != null && builtAreaComputable != null
+      ? catastroPatch.built_area - builtAreaComputable : 0
     await setStep('catastro', parcelasFallidas.length > 0 ? 'aviso' : 'ok',
-      `${allRefcats.length > 1 ? `${parcelasOk.length}/${allRefcats.length} parcelas · ` : ''}${parcelArea ?? '?'} m² suelo · ${catastroPatch.built_area ?? '?'} m² construidos${usedFallback ? ' (suma por inmueble)' : ''} · ${catastroPatch.cadastral_use ?? 'uso s/d'}${catastroPatch.year_built ? ` · ${catastroPatch.year_built}` : ''}${parcelasFallidas.length ? ` · ⚠ sin geometría: ${parcelasFallidas.join(', ')}` : ''}`)
+      `${allRefcats.length > 1 ? `${parcelasOk.length}/${allRefcats.length} parcelas · ` : ''}${parcelArea ?? '?'} m² suelo · ${catastroPatch.built_area ?? '?'} m² construidos${usedFallback ? ' (suma por inmueble)' : ''}${descuentoM2 > 0 ? ` · ${builtAreaComputable} m²c computables (−${Math.round(descuentoM2)} garaje/trastero)` : ''} · ${catastroPatch.cadastral_use ?? 'uso s/d'}${catastroPatch.year_built ? ` · ${catastroPatch.year_built}` : ''}${parcelasFallidas.length ? ` · ⚠ sin geometría: ${parcelasFallidas.join(', ')}` : ''}`)
 
     // ── 3. Capas de planeamiento (solo Madrid capital: son capas del PGOUM) ──
     await setStep('planeamiento', 'en_curso')
@@ -190,13 +208,14 @@ export async function POST(
 
     // ── 4. Edificabilidad (determinista) ─────────────────────────────────────
     await setStep('edificabilidad', 'en_curso')
+    // Búsqueda de más específico a más genérico: '8.1.a' → '8.1' → '8'
     let nzRow: NormaZonal | null = null
     if (nz?.etiqueta) {
-      const { data: exact } = await admin.from('urban_normas_zonales').select('*').eq('codigo', nz.etiqueta).maybeSingle()
-      if (exact) nzRow = exact as NormaZonal
-      else {
-        const { data: base } = await admin.from('urban_normas_zonales').select('*').eq('codigo', nz.etiqueta.split('.')[0]).maybeSingle()
-        nzRow = (base as NormaZonal) || null
+      const candidatos = nzCandidatos(nz.etiqueta)
+      const { data: filas } = await admin.from('urban_normas_zonales').select('*').in('codigo', candidatos)
+      for (const c of candidatos) {
+        const hit = (filas || []).find((f) => f.codigo === c)
+        if (hit) { nzRow = hit as NormaZonal; break }
       }
     }
     // Parámetros volumétricos extraídos de las capas del PGOUM:
@@ -222,6 +241,12 @@ export async function POST(
       }
     }
 
+    // Bandas del plano de Condiciones de Edificación (COEF_Z = Z por banda):
+    // alimentan la fórmula E = S × Z × C de NZ 1 y, después, el volumen capaz 3D
+    const bandas = esMadridCapital
+      ? await queryCondicionesBandas(parcelGeom).catch(() => [] as Awaited<ReturnType<typeof queryCondicionesBandas>>)
+      : []
+
     const edificabilidad: EdificabilidadResult = computeEdificabilidad(
       {
         parcel_area: parcelArea,
@@ -235,6 +260,9 @@ export async function POST(
         plantasExistentes: floorsMax,
         plantasCondiciones,
         fondoInfo,
+        bandasCE: bandasSobreParcela(parcelGeom, bandas),
+        construidaComputable: builtAreaComputable,
+        desgloseConstruida: desglose,
       }
     )
     if (!esMadridCapital) {
@@ -250,22 +278,115 @@ export async function POST(
       asset_id: params.id, kind: 'edificabilidad', content: edificabilidad, model: null,
     })
     await setStep('edificabilidad', edificabilidad.calculable ? 'ok' : 'aviso',
-      edificabilidad.metodo === 'volumetrico'
-        ? `Método volumétrico · horquilla ${edificabilidad.envolvente_min ?? '?'} – ${edificabilidad.envolvente_max ?? '?'} m²c`
-        : edificabilidad.calculable
-          ? `Coeficiente · teórica ${edificabilidad.edificabilidad_teorica} m²c · remanente ${edificabilidad.edificabilidad_remanente ?? 's/d'} m²c`
-          : `No calculable — falta: ${edificabilidad.inputs_faltantes.join('; ') || 'parámetros verificados'}`)
+      edificabilidad.metodo === 'formula_volumetrica'
+        ? `Fórmula E = S × Z × C (C = ${edificabilidad.formula_c}) · teórica ${edificabilidad.edificabilidad_teorica} m²c · remanente ${edificabilidad.edificabilidad_remanente ?? 's/d'} m²c`
+        : edificabilidad.metodo === 'volumetrico'
+          ? `Método volumétrico · horquilla ${edificabilidad.envolvente_min ?? '?'} – ${edificabilidad.envolvente_max ?? '?'} m²c`
+          : edificabilidad.calculable
+            ? `Coeficiente · teórica ${edificabilidad.edificabilidad_teorica} m²c · remanente ${edificabilidad.edificabilidad_remanente ?? 's/d'} m²c`
+            : `No calculable — falta: ${edificabilidad.inputs_faltantes.join('; ') || 'parámetros verificados'}`)
 
-    // ── 4b. Volumen capaz 3D (determinista, geométrico) ──────────────────────
+    // ── 4b. Cuadro urbanístico formato licencia (determinista) ───────────────
+    await setStep('cuadro', 'en_curso')
+    let cuadroResumen: Record<string, unknown> | null = null
+    try {
+      // Altura real del edificio (cartografía municipal) para "estado actual"
+      let alturaExistenteM: number | null = null
+      if (esMadridCapital) {
+        const bb = bbox(parcelGeom)
+        if (bb) {
+          alturaExistenteM = await queryAlturaEdificioEnParcela(parcelGeom, bb).catch(() => null)
+        }
+      }
+      const cuadro = computeCuadroUrbanistico({
+        parcelArea,
+        builtArea: catastroPatch.built_area,
+        huellaM2: footprintTotal,
+        plantasExistentes: floorsMax,
+        alturaExistenteM,
+        usoCatastral: catastroPatch.cadastral_use,
+        normaZonal: nz?.etiqueta ?? null,
+        normaZonalDenominacion: nz?.denominacion ?? null,
+        nzRow,
+        plantasCondiciones,
+        hits,
+      })
+
+      // Área de movimiento (parcela − retranqueos por lindero) cuando la NZ
+      // los regula: clasifica linderos con el parcelario vecino de Catastro
+      let areaMovimiento: ReturnType<typeof computeAreaMovimiento> | null = null
+      const tieneRetranqueos = nzRow && (
+        nzRow.retranqueo_frente_m != null || nzRow.retranqueo_lateral_m != null || nzRow.retranqueo_testero_m != null
+      )
+      if (tieneRetranqueos) {
+        try {
+          const bb = bbox(parcelGeom)
+          if (bb) {
+            // Reclasificaciones manuales de linderos del análisis anterior:
+            // se conservan entre re-análisis (las keys son estables si la
+            // geometría de la parcela no cambia)
+            const { data: prevCuadro } = await admin
+              .from('urban_analysis').select('content')
+              .eq('asset_id', params.id).eq('kind', 'cuadro_urbanistico').maybeSingle()
+            const prevLinderos = ((prevCuadro?.content as { area_movimiento?: { linderos?: LinderoInfo[] } } | null)?.area_movimiento?.linderos) || []
+            const overrides: Record<string, TipoLindero> = {}
+            for (const l of prevLinderos) if (l.override) overrides[l.key] = l.tipo
+
+            // bbox ampliado ~25 m para capturar las vecinas completas
+            const margen = 25 / 111320
+            const vecinas = await getParcelasVecinas(
+              [bb[0] - margen, bb[1] - margen, bb[2] + margen, bb[3] + margen],
+              allRefcats
+            )
+            areaMovimiento = computeAreaMovimiento({
+              overrides,
+              parcelGeometry: parcelGeom,
+              parcelArea,
+              vecinos: vecinas.map((v) => v.geometry),
+              retranqueoFrente: nzRow!.retranqueo_frente_m,
+              retranqueoLateral: nzRow!.retranqueo_lateral_m,
+              retranqueoTestero: nzRow!.retranqueo_testero_m,
+              ocupacionPct: nzRow!.ocupacion_pct,
+              coefEdificabilidad: nzRow!.coef_edificabilidad,
+              plantasMax: cuadro.sintesis.plantas_max ?? nzRow!.altura_max_plantas,
+              construidaComputable: builtAreaComputable,
+            })
+          }
+        } catch (movErr) {
+          console.error('[urban-analyst/area-movimiento]', movErr)
+        }
+      }
+      const cuadroConMovimiento = { ...cuadro, area_movimiento: areaMovimiento }
+
+      await admin.from('urban_analysis').delete().eq('asset_id', params.id).eq('kind', 'cuadro_urbanistico')
+      if (cuadro.disponible) {
+        await admin.from('urban_analysis').insert({
+          asset_id: params.id, kind: 'cuadro_urbanistico', content: cuadroConMovimiento, model: null,
+        })
+        // Para la IA: sin la geometría ni las aristas del área de movimiento (pesan y no aportan)
+        cuadroResumen = {
+          ...cuadroConMovimiento,
+          area_movimiento: areaMovimiento ? { ...areaMovimiento, geometry: undefined, linderos: undefined } : null,
+        } as unknown as Record<string, unknown>
+      }
+      const contradicciones = cuadro.filas.filter((f) => f.contradiccion).length
+      await setStep('cuadro',
+        cuadro.disponible ? (contradicciones > 0 || cuadro.ambitos_prevalentes.length > 0 ? 'aviso' : 'ok') : 'aviso',
+        cuadro.disponible
+          ? `${cuadro.filas.length} parámetros · ${cuadro.figuras.length} figuras${contradicciones ? ` · ${contradicciones} contradicción(es)` : ''}${areaMovimiento?.disponible ? ` · área movimiento ${areaMovimiento.area_movimiento_m2} m²${areaMovimiento.volumen_max_m2c != null ? ` · capaz ${areaMovimiento.volumen_max_m2c} m²c (${areaMovimiento.restriccion_vinculante})` : ''}` : ''}${cuadro.ambitos_prevalentes.length ? ` · ⚠ ámbito prevalente: ${cuadro.ambitos_prevalentes.join(', ')}` : ''}`
+          : 'Sin parámetros normativos: verificar la NZ en la tabla de normas zonales')
+    } catch (cuadroErr) {
+      console.error('[urban-analyst/cuadro]', cuadroErr)
+      await setStep('cuadro', 'aviso', 'No se pudo montar el cuadro urbanístico')
+    }
+
+    // ── 4c. Volumen capaz 3D (determinista, geométrico) ──────────────────────
     await setStep('volumen', 'en_curso')
     let volumenResumen: Record<string, unknown> | null = null
     try {
       // Las partes del edificio (Catastro) existen en toda España; las bandas
-      // COEF_Z solo en Madrid capital
-      const [partesPorRefcat, bandas] = await Promise.all([
-        Promise.all(allRefcats.map((rc) => getBuildingParts(rc))),
-        esMadridCapital ? queryCondicionesBandas(parcelGeom) : Promise.resolve([]),
-      ])
+      // COEF_Z (solo Madrid capital) ya se consultaron para la edificabilidad
+      const partesPorRefcat = await Promise.all(allRefcats.map((rc) => getBuildingParts(rc)))
       const partes = partesPorRefcat.flat()
       const volumen = computeVolumenCapaz({
         parcelGeometry: parcelGeom,
@@ -322,14 +443,32 @@ export async function POST(
     const { data: freshAsset } = await admin.from('urban_assets').select('*').eq('id', params.id).single()
     const { data: docs } = await admin.from('urban_documents').select('*').eq('asset_id', params.id)
 
+    // Checklist determinista (mismas reglas que la pestaña Checklist): entra al
+    // contexto para que el modelo tenga los umbrales normativos resueltos por
+    // código (IEE a 50 años, consulta recomendada, etc.) en vez de dudas abiertas.
+    // Se excluye el ítem del memo (autorreferente: se está generando ahora).
+    const checklistItems = computeChecklist({
+      asset: freshAsset as UrbanAsset,
+      hits: hits as never[],
+      redFlags: flags as never[],
+      analysis: [
+        { kind: 'edificabilidad', content: edificabilidad },
+        volumenResumen ? { kind: 'volumen_capaz', content: volumenResumen } : null,
+        cuadroResumen ? { kind: 'cuadro_urbanistico', content: cuadroResumen } : null,
+      ].filter(Boolean) as never[],
+      documents: (docs || []) as never[],
+    }).filter((c) => c.id !== 'memo')
+
     const contexto = buildContextoActivo({
       asset: freshAsset as UrbanAsset,
       nzRow,
       hits,
       flags,
       edificabilidad,
+      cuadroUrbanistico: cuadroResumen,
       volumenCapaz: volumenResumen,
       documentos: (docs || []) as never[],
+      checklist: checklistItems,
     })
 
     const message = await anthropic.messages.create({
@@ -345,14 +484,15 @@ ${contexto}
 
 Responde ÚNICAMENTE con un JSON válido con esta estructura exacta (todos los textos en español, sin markdown):
 {
+  "resumen_directivo": "6-10 frases EN LENGUAJE LLANO para un directivo de un fondo de inversión SIN conocimientos urbanísticos ni jurídicos: qué es el activo y dónde está; cuánto suelo tiene y cuánto hay construido hoy; cuánto se podría construir o ampliar como máximo según las reglas municipales y qué lo limita o condiciona; los 2-3 riesgos que de verdad afectan al dinero o a los plazos; y qué recomendamos. PROHIBIDO usar jerga sin traducirla (nada de 'norma zonal', 'COEF_Z', 'PGOUM', 'fuera de ordenación', 'catálogo', siglas o artículos a secas — si un concepto técnico es imprescindible, explícalo en palabras corrientes, p. ej. 'las reglas municipales de esta zona limitan la altura a 3 plantas'). Cifras clave con sus unidades.",
   "resumen_ejecutivo": "3-6 frases: qué es el activo, qué permite el planeamiento, cuál es el condicionante dominante",
   "situacion_urbanistica": "norma zonal / ámbito aplicable y qué implica, con etiquetas [OFICIAL]/[INFERIDO]/[HIPÓTESIS]",
   "patrimonio": "situación de protección y su impacto en las obras posibles",
   "usos": "uso actual vs objetivo: compatibilidad probable, procedimiento y sectorial a verificar",
   "potencial": "lectura del cálculo de edificabilidad: qué es teórico, qué es materializable y qué falta por confirmar",
-  "riesgos_clave": ["riesgo 1", "riesgo 2", "..."],
+  "riesgos_clave": ["riesgo redactado como afirmación (qué puede pasar y qué implica), nunca como pregunta"],
   "recomendacion": { "veredicto": "avanzar|condicionar_oferta|renegociar|descartar", "justificacion": "..." },
-  "proximos_pasos": ["paso concreto 1", "..."],
+  "proximos_pasos": ["acción concreta en imperativo con su instrumento (p. ej. 'Solicitar el último IEE/ITE del edificio', 'Presentar consulta urbanística especial sobre la edificabilidad materializable'). Si algo no se sabe, el paso es la acción que lo resuelve — nunca escribas la duda como pregunta: este documento va al comité de inversión"],
   "nivel_confianza": { "nivel": "alto|medio|bajo", "motivo": "..." }
 }`,
       }],

@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { FP_ROLES } from '@/lib/types'
 import type { FpRole } from '@/lib/types'
+import { canAccessControlObra } from '@/lib/control-obra/domain'
 
 export const metadata = { title: 'Apps' }
 
@@ -61,7 +62,7 @@ export default async function AppsPage() {
           </Link>
         )}
 
-        {profile.rol === 'fp_partner' && (
+        {canAccessControlObra(profile.rol, user.email) && (
           <Link href="/team/apps/control-obra" style={{ textDecoration: 'none' }}>
             <div
               className="apps-card"
@@ -89,6 +90,41 @@ export default async function AppsPage() {
               <span style={{
                 fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase',
                 color: '#D85A30', fontWeight: 500,
+              }}>
+                Abrir →
+              </span>
+            </div>
+          </Link>
+        )}
+
+        {profile.rol === 'fp_partner' && (
+          <Link href="/team/apps/modelo-cafe" style={{ textDecoration: 'none' }}>
+            <div
+              className="apps-card"
+              style={{
+                background: '#fff',
+                borderRadius: 4,
+                padding: '28px 24px',
+                cursor: 'pointer',
+              }}
+            >
+              <div style={{
+                width: 40, height: 40, borderRadius: 4,
+                background: '#8A622015',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 20, marginBottom: 16,
+              }}>
+                ☕
+              </div>
+              <p style={{ fontSize: 13, fontWeight: 500, color: '#1A1A1A', marginBottom: 6, letterSpacing: '-0.01em' }}>
+                Modelo Café Goya
+              </p>
+              <p style={{ fontSize: 11, color: '#1A1A1A70', fontWeight: 300, lineHeight: 1.5, marginBottom: 20 }}>
+                Modelo financiero del quiosco → café de especialidad en Goya 63: escenarios, sensibilidad y comparativa.
+              </p>
+              <span style={{
+                fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase',
+                color: '#8A6220', fontWeight: 500,
               }}>
                 Abrir →
               </span>

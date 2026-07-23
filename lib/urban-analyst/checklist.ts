@@ -3,6 +3,7 @@
 // una consulta urbanística). Determinista: cada ítem sale de los datos ya
 // recopilados, con enlace oficial cuando la verificación es manual.
 
+import { esAmbitoEspecifico } from './cuadroUrbanistico'
 import type { UrbanAsset, UrbanLayerHit, UrbanRedFlag, UrbanAnalysisRow, UrbanDocument } from './types'
 
 export type ChecklistEstado = 'ok' | 'atencion' | 'pendiente' | 'manual'
@@ -30,7 +31,7 @@ export function computeChecklist(params: {
   const items: ChecklistItem[] = []
 
   const proteccionHits = hits.filter((h) => h.categoria === 'proteccion' || h.categoria === 'bic')
-  const ambitoHits = hits.filter((h) => h.categoria === 'ambito')
+  const ambitoHits = hits.filter((h) => h.categoria === 'ambito' && esAmbitoEspecifico(h.attributes))
   const edificabilidad = analysis.find((a) => a.kind === 'edificabilidad')?.content as { calculable?: boolean; inputs_faltantes?: string[] } | undefined
   const volumen = analysis.find((a) => a.kind === 'volumen_capaz')?.content as { bandas?: unknown[] } | undefined
   const lectura = analysis.find((a) => a.kind === 'documentos_oficiales')

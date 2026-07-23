@@ -20,7 +20,10 @@ interface Props {
   nombreCliente: string
   token: string
   heroImage: string
+  // Imágenes del hero (slideshow de fondo), en orden cronológico interno.
   proyectoImages: { nombre: string; url: string; tipologia: string | null }[]
+  // Proyectos curados de la web pública (WIP) para la banda "proyectos recientes".
+  carouselImages: { nombre: string; url: string; tipologia: string | null }[]
   studio: {
     tagline: string
     descripcion: string
@@ -93,6 +96,15 @@ const COPY = {
   },
 }
 
+// Videos del estudio (YouTube Shorts, formato vertical 9/16). El primero es el
+// original; añade/quita/reordena aquí. `title` opcional se muestra bajo el video.
+const VIDEOS: { id: string; title?: string }[] = [
+  { id: 'H2oe26E1zI8' },
+  { id: 'tAUYyTNxNfQ' },
+  { id: 'fkZE_mHrGjs' },
+  { id: 'lSoyaIG-cFI' },
+]
+
 function initials(n: string) {
   return n.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
 }
@@ -102,7 +114,7 @@ function scrollTo(id: string) {
   document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
 }
 
-export default function BienvenidaPage({ nombreCliente, token, heroImage, proyectoImages, studio, submitAction, lang = 'en' }: Props) {
+export default function BienvenidaPage({ nombreCliente, token, heroImage, proyectoImages, carouselImages, studio, submitAction, lang = 'en' }: Props) {
   const t = COPY[lang]
   const [submitted, setSubmitted]   = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -111,6 +123,7 @@ export default function BienvenidaPage({ nombreCliente, token, heroImage, proyec
   const [teamPhotoIdx, setTeamPhotoIdx] = useState(0)
   const [heroIdx, setHeroIdx]           = useState(0)
   const [heroPrev, setHeroPrev]         = useState<number | null>(null)
+  const [playingVideos, setPlayingVideos] = useState<number[]>([])
 
   // Form state
   const [nombre,    setNombre]    = useState('')
@@ -535,7 +548,8 @@ export default function BienvenidaPage({ nombreCliente, token, heroImage, proyec
       </section>
 
       {/* ── 4. CAROUSEL ───────────────────────────────────────────────────────── */}
-      <ProyectosCarousel proyectoImages={proyectoImages} title={t.recentProjects} />
+      {/* Proyectos curados de la web pública WIP (no los internos cronológicos). */}
+      <ProyectosCarousel proyectoImages={carouselImages} title={t.recentProjects} />
 
       {/* ── 5. SOCIOS ─────────────────────────────────────────────────────────── */}
       <section style={{ background: '#F8F6F1', padding: 'clamp(60px, 8vw, 96px) 0' }}>
@@ -548,7 +562,7 @@ export default function BienvenidaPage({ nombreCliente, token, heroImage, proyec
             <div style={{
               position: 'relative',
               width: '100%',
-              height: 'clamp(280px, 75vw, 440px)',
+              height: 'clamp(420px, 112.5vw, 660px)',
               background: '#1A1A1A',
               overflow: 'hidden',
             }}>
@@ -621,33 +635,98 @@ export default function BienvenidaPage({ nombreCliente, token, heroImage, proyec
       </section>
 
       {/* ── 6. VIDEO ──────────────────────────────────────────────────────────── */}
-      <section style={{ background: '#1A1A1A', padding: 'clamp(60px, 8vw, 96px) 24px' }}>
-        <div id="video" data-fade style={{ ...fadeStyle('video'), maxWidth: 800, margin: '0 auto', textAlign: 'center' }}>
+      <section style={{ background: '#1A1A1A', padding: 'clamp(60px, 8vw, 96px) 0' }}>
+        <div id="video" data-fade style={{ ...fadeStyle('video'), maxWidth: 800, margin: '0 auto 36px', textAlign: 'center', padding: '0 24px' }}>
           <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.35)', display: 'block', marginBottom: 14 }}>
             {t.workKicker}
           </span>
-          <h2 style={{ fontSize: 'clamp(20px, 4.5vw, 28px)', fontWeight: 200, color: '#fff', marginBottom: 32, lineHeight: 1.3 }}>
+          <h2 style={{ fontSize: 'clamp(20px, 4.5vw, 28px)', fontWeight: 200, color: '#fff', lineHeight: 1.3 }}>
             {t.workHeading}
           </h2>
-          {/* YouTube Shorts embed — vertical 9/16 */}
-          <div style={{
-            position: 'relative',
-            width: '100%',
-            maxWidth: 360,
-            margin: '0 auto',
-            paddingBottom: 'min(640px, 177.78%)',
-            height: 0,
-            borderRadius: 12,
-            overflow: 'hidden',
-            background: '#2A2A2A',
-          }}>
-            <iframe
-              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none' }}
-              src="https://www.youtube.com/embed/H2oe26E1zI8?rel=0&modestbranding=1&playsinline=1"
-              title="Forma Prima — así es trabajar con nosotros"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
+        </div>
+
+        {/* Fila scrollable de YouTube Shorts — verticales 9/16, click para reproducir.
+            El track interior usa width:fit-content + margin auto: se centra en la
+            página si los videos caben, y solo hace scroll cuando desbordan. */}
+        <div
+          className="fp-carousel"
+          style={{
+            overflowX: 'auto',
+            scrollSnapType: 'x mandatory',
+            WebkitOverflowScrolling: 'touch',
+            paddingBottom: 4,
+          }}
+        >
+          <div style={{ display: 'flex', gap: 16, width: 'fit-content', margin: '0 auto', padding: '0 24px' }}>
+          {VIDEOS.map((v, i) => {
+            const isPlaying = playingVideos.includes(i)
+            return (
+              <div
+                key={v.id}
+                style={{ flex: '0 0 auto', width: 'clamp(240px, 72vw, 300px)', scrollSnapAlign: 'center' }}
+              >
+                <div style={{
+                  position: 'relative',
+                  width: '100%',
+                  paddingBottom: '177.78%',
+                  height: 0,
+                  borderRadius: 12,
+                  overflow: 'hidden',
+                  background: '#2A2A2A',
+                }}>
+                  {isPlaying ? (
+                    <iframe
+                      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none' }}
+                      src={`https://www.youtube.com/embed/${v.id}?rel=0&modestbranding=1&playsinline=1&autoplay=1`}
+                      title={v.title ?? `Forma Prima — vídeo ${i + 1}`}
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setPlayingVideos(p => [...p, i])}
+                      aria-label={`Reproducir vídeo ${i + 1}`}
+                      style={{
+                        position: 'absolute', inset: 0,
+                        width: '100%', height: '100%',
+                        padding: 0, border: 'none', cursor: 'pointer',
+                        background: 'none',
+                      }}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={`https://i.ytimg.com/vi/${v.id}/hqdefault.jpg`}
+                        alt=""
+                        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center' }}
+                      />
+                      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0.15), rgba(0,0,0,0.35))' }} />
+                      <div style={{
+                        position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+                        width: 56, height: 56, borderRadius: '50%',
+                        background: 'rgba(216,90,48,0.92)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        <span style={{
+                          display: 'block',
+                          width: 0, height: 0,
+                          borderTop: '9px solid transparent',
+                          borderBottom: '9px solid transparent',
+                          borderLeft: '15px solid #fff',
+                          marginLeft: 4,
+                        }} />
+                      </div>
+                    </button>
+                  )}
+                </div>
+                {v.title && (
+                  <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.65)', textAlign: 'center', marginTop: 12, letterSpacing: '0.01em' }}>
+                    {v.title}
+                  </p>
+                )}
+              </div>
+            )
+          })}
           </div>
         </div>
       </section>

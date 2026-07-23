@@ -1,5 +1,13 @@
 // Control económico de obra — tipos y helpers de cálculo.
-// App interna /team/apps/control-obra (solo fp_partner).
+// App interna /team/apps/control-obra (fp_partner + usuarios en la allowlist).
+
+// Usuarios concretos con acceso completo además de los partners.
+export const CONTROL_OBRA_ALLOWED_EMAILS = ['acascante@formaprima.es']
+
+export function canAccessControlObra(rol: string | null | undefined, email: string | null | undefined): boolean {
+  if (rol === 'fp_partner') return true
+  return !!email && CONTROL_OBRA_ALLOWED_EMAILS.includes(email.toLowerCase())
+}
 
 export type EstadoPartida = 'igual' | 'modificada' | 'nueva' | 'eliminada'
 
@@ -37,6 +45,7 @@ export interface Partida {
   nota_cliente: string | null
   orden: number
   modified_at: string | null
+  revisado_at: string | null
 }
 
 export interface Proveedor {
@@ -66,6 +75,8 @@ export interface Deposito {
   total: number
   fecha: string | null
   fecha_texto: string | null
+  /** 'pagado' | 'programado' | null → se infiere por fecha (futura = programado) */
+  estado?: string | null
   orden: number
 }
 
@@ -119,6 +130,23 @@ export function baseImporteCliente(p: Partida): number {
   return (p.base_qty ?? 0) * (p.base_pucl ?? 0)
 }
 
+// ── Revisión periódica de partidas ──────────────────────────────────
+/** Días que dura un "revisado" antes de caducar automáticamente. */
+export const REVISADO_DIAS = 14
+
+export function revisadoCaducaEl(p: Partida): Date | null {
+  if (!p.revisado_at) return null
+  const t = new Date(p.revisado_at)
+  if (isNaN(t.getTime())) return null
+  return new Date(t.getTime() + REVISADO_DIAS * 24 * 3600 * 1000)
+}
+
+/** Un check de revisado sigue activo si se marcó hace menos de REVISADO_DIAS. */
+export function isRevisado(p: Partida): boolean {
+  const caduca = revisadoCaducaEl(p)
+  return caduca != null && caduca.getTime() > Date.now()
+}
+
 export type Vista = 'coste' | 'cliente'
 export const importeActual = (p: Partida, v: Vista) => (v === 'coste' ? importeCoste(p) : importeCliente(p))
 export const importeBase = (p: Partida, v: Vista) => (v === 'coste' ? baseImporteCoste(p) : baseImporteCliente(p))
@@ -133,10 +161,64 @@ export function pagadoProveedor(provId: string, pagos: Pago[]): number {
   return pagos.filter((p) => p.proveedor_id === provId).reduce((s, p) => s + (p.monto ?? 0), 0)
 }
 
-export const totalDepositos = (deps: Deposito[]) => deps.reduce((s, d) => s + (d.total ?? 0), 0)
+/** Estado efectivo de un depósito: el explícito, o inferido por fecha (futura → programado). */
+export function depositoEstado(d: Deposito): 'pagado' | 'programado' {
+  if (d.estado === 'pagado' || d.estado === 'programado') return d.estado
+  if (d.fecha) {
+    const t = new Date(d.fecha)
+    if (!isNaN(t.getTime()) && t.getTime() > Date.now()) return 'programado'
+  }
+  return 'pagado'
+}
+
+/** Solo cuenta la caja efectivamente recibida (los programados no son caja). */
+export const totalDepositos = (deps: Deposito[]) =>
+  deps.filter((d) => depositoEstado(d) === 'pagado').reduce((s, d) => s + (d.total ?? 0), 0)
 export const totalPagos = (pagos: Pago[]) => pagos.reduce((s, p) => s + (p.monto ?? 0), 0)
 /** Balance de tesorería = caja recibida del cliente (con IVA) − pagado a proveedores (sin IVA). */
 export const balanceTesoreria = (deps: Deposito[], pagos: Pago[]) => totalDepositos(deps) - totalPagos(pagos)
+
+// ── Resumen de pagos del cliente (pantalla + PDF) ───────────────────
+export interface PagoResumen {
+  label: string
+  fecha: string | null
+  fechaTexto: string | null
+  base: number
+  total: number
+  estado: 'pagado' | 'programado'
+  /** true en el último pago programado: su importe incluye la variación del presupuesto (se liquida ahí). */
+  preliminar: boolean
+}
+
+/**
+ * Calendario de pagos del cliente. La variación del presupuesto se liquida en el
+ * último pago: si está pendiente, se muestra con la variación sumada como importe preliminar.
+ */
+export function buildResumenPagos(depositos: Deposito[], variacion: number) {
+  const orden = [...depositos].sort((a, b) => a.orden - b.orden)
+  const ultimo = orden[orden.length - 1]
+  const pagos: PagoResumen[] = orden.map((d) => {
+    const estado = depositoEstado(d)
+    const preliminar = d === ultimo && estado === 'programado' && Math.abs(variacion) > 0.5
+    const base = (d.monto ?? 0) + (preliminar ? variacion : 0)
+    const ratio = d.monto > 0 ? d.total / d.monto : 1.21
+    return {
+      label: d.label || 'Depósito', fecha: d.fecha, fechaTexto: d.fecha_texto,
+      base: preliminar ? ceilCent(base) : d.monto ?? 0,
+      total: preliminar ? ceilCent(base * ratio) : d.total ?? 0,
+      estado, preliminar,
+    }
+  })
+  const pagados = pagos.filter((p) => p.estado === 'pagado')
+  const pendientes = pagos.filter((p) => p.estado === 'programado')
+  return {
+    pagos,
+    pagadoBase: pagados.reduce((s, p) => s + p.base, 0),
+    pagadoTotal: pagados.reduce((s, p) => s + p.total, 0),
+    pendienteBase: pendientes.reduce((s, p) => s + p.base, 0),
+    pendienteTotal: pendientes.reduce((s, p) => s + p.total, 0),
+  }
+}
 
 // ── Formato ─────────────────────────────────────────────────────────
 const eur0 = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
@@ -205,6 +287,46 @@ export function buildCambiosCliente(partidas: Partida[]): CapCliente[] {
 }
 
 export const tagCambio = (e: EstadoPartida) => (e === 'nueva' ? 'Añadido' : e === 'eliminada' ? 'No se ejecuta' : 'Modificado')
+
+// ── Presupuesto completo de cara al cliente (todas las partidas) ────
+export interface PresItem { codigo: string; descripcion: string; estado: EstadoPartida; inicial: number; actual: number }
+export interface SubPres { codigo: string; nombre: string; inicial: number; actual: number; items: PresItem[] }
+export interface CapPres { num: number; nombre: string; inicial: number; actual: number; subs: SubPres[] }
+
+/**
+ * Presupuesto completo en precios cliente, respetando trasladar_cliente:
+ * un cambio no trasladado sale con su precio inicial como si no hubiera cambiado,
+ * y una partida nueva interna no aparece. Cuadra con clienteTotales().
+ */
+export function buildPresupuestoCliente(partidas: Partida[]): CapPres[] {
+  const m = new Map<number, { nombre: string; subs: Map<string, { nombre: string; items: PresItem[] }> }>()
+  for (const p of partidas) {
+    if (p.estado === 'nueva' && p.trasladar_cliente === false) continue
+    const estado: EstadoPartida = p.trasladar_cliente === false ? 'igual' : p.estado
+    const item: PresItem = {
+      codigo: p.codigo, descripcion: p.descripcion, estado,
+      inicial: baseImporteCliente(p), actual: clienteNuevoImporte(p),
+    }
+    if (!m.has(p.capitulo_num)) m.set(p.capitulo_num, { nombre: p.capitulo_nombre, subs: new Map() })
+    const c = m.get(p.capitulo_num)!
+    if (!c.subs.has(p.subcapitulo_codigo)) c.subs.set(p.subcapitulo_codigo, { nombre: p.subcapitulo_nombre, items: [] })
+    c.subs.get(p.subcapitulo_codigo)!.items.push(item)
+  }
+  return Array.from(m.entries()).sort((a, b) => a[0] - b[0]).map(([num, c]) => {
+    const subs: SubPres[] = Array.from(c.subs.entries()).map(([codigo, s]) => ({
+      codigo, nombre: s.nombre,
+      inicial: s.items.reduce((t, i) => t + i.inicial, 0),
+      actual: s.items.reduce((t, i) => t + i.actual, 0),
+      items: s.items,
+    }))
+    return {
+      num, nombre: c.nombre,
+      inicial: subs.reduce((t, s) => t + s.inicial, 0),
+      actual: subs.reduce((t, s) => t + s.actual, 0),
+      subs,
+    }
+  })
+}
 
 export const ESTADO_COLOR: Record<EstadoPartida, { bg: string; label: string; dot: string }> = {
   igual:      { bg: 'transparent', label: 'Sin cambios', dot: '#C9C6BE' },

@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import Anthropic from '@anthropic-ai/sdk'
 import { buildContextoActivo, stripVolumenGeometrias, IA_MODEL, REGLAS_ANALISTA } from '@/lib/urban-analyst/iaContext'
+import { nzCandidatos } from '@/lib/urban-analyst/cuadroUrbanistico'
 import type { UrbanAsset, NormaZonal, EdificabilidadResult, UrbanChatMessage } from '@/lib/urban-analyst/types'
 
 export const maxDuration = 120
@@ -41,16 +42,17 @@ export async function POST(
 
   let nzRow: NormaZonal | null = null
   if (asset.norma_zonal) {
-    const { data } = await admin.from('urban_normas_zonales').select('*')
-      .in('codigo', [asset.norma_zonal, asset.norma_zonal.split('.')[0]])
+    const candidatos = nzCandidatos(asset.norma_zonal)
+    const { data } = await admin.from('urban_normas_zonales').select('*').in('codigo', candidatos)
     const rows = (data || []) as NormaZonal[]
-    nzRow = rows.find((r) => r.codigo === asset.norma_zonal) || rows[0] || null
+    nzRow = candidatos.map((c) => rows.find((r) => r.codigo === c)).find(Boolean) || null
   }
 
   const edificabilidad = (analysisRes.data || []).find((a) => a.kind === 'edificabilidad')?.content as EdificabilidadResult | undefined
   const memo = (analysisRes.data || []).find((a) => a.kind === 'memo')?.content
   const volumen = (analysisRes.data || []).find((a) => a.kind === 'volumen_capaz')?.content as Record<string, unknown> | undefined
   const lectura = (analysisRes.data || []).find((a) => a.kind === 'documentos_oficiales')?.content as Record<string, unknown> | undefined
+  const cuadro = (analysisRes.data || []).find((a) => a.kind === 'cuadro_urbanistico')?.content as Record<string, unknown> | undefined
 
   const contexto = buildContextoActivo({
     asset,
@@ -58,6 +60,7 @@ export async function POST(
     hits: (hitsRes.data || []) as never[],
     flags: (flagsRes.data || []) as never[],
     edificabilidad: edificabilidad ?? null,
+    cuadroUrbanistico: cuadro ?? null,
     volumenCapaz: stripVolumenGeometrias(volumen ?? null),
     lecturaDocumentos: lectura ?? null,
     documentos: (docsRes.data || []) as never[],

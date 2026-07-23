@@ -70,6 +70,21 @@ function m2(f: TFeature | null): number {
   try { return Math.round(area(f)) } catch { return 0 }
 }
 
+/** Bandas COEF_Z recortadas a la parcela, solo área y plantas (sin geometrías).
+ *  Es la S×Z por banda de la fórmula E = S × Z × C de NZ 1. */
+export function bandasSobreParcela(
+  parcelGeometry: GeoJSONGeometry,
+  bandas: BandaCondiciones[]
+): { coefZRaw: string; plantas: number | null; areaM2: number }[] {
+  const out: { coefZRaw: string; plantas: number | null; areaM2: number }[] = []
+  for (const b of bandas) {
+    const areaM2 = m2(safeIntersect(b.geometry, parcelGeometry))
+    if (areaM2 < 1) continue
+    out.push({ coefZRaw: b.coefZRaw, plantas: b.plantas, areaM2 })
+  }
+  return out
+}
+
 export function computeVolumenCapaz(params: {
   parcelGeometry: GeoJSONGeometry
   parcelAreaM2: number | null

@@ -18,44 +18,54 @@ const TABS: { path: string; es: string; en: string }[] = [
 export function SiteNav() {
   const { locale, setLocale } = useSite()
   const pathname = usePathname()
-  const [scrolled, setScrolled] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
 
-  // La Home tiene hero oscuro a sangre → nav en claro hasta hacer scroll.
+  // Páginas cuyo TOPE es un hero oscuro a sangre (texto del nav en blanco arriba).
+  // El resto arrancan con fondo claro (texto en negro).
   const isHome = pathname === SITE_BASE || pathname === `${SITE_BASE}/`
-  const light = isHome && !scrolled
+  const darkHero =
+    isHome ||
+    pathname === href('/estudio') ||
+    pathname.startsWith(href('/proyectos/')) ||   // detalle de proyecto
+    pathname.startsWith(href('/real-estate/'))    // detalle de propiedad
+
+  // tone 'light' = texto blanco (sobre oscuro); 'dark' = texto negro (sobre claro).
+  const [tone, setTone] = useState<'light' | 'dark'>(darkHero ? 'light' : 'dark')
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 40)
+    const onScroll = () => {
+      // En páginas de hero oscuro, al pasar el hero el fondo se vuelve claro → negro.
+      if (!darkHero) { setTone('dark'); return }
+      setTone(window.scrollY > window.innerHeight * 0.78 ? 'dark' : 'light')
+    }
     onScroll()
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
-  }, [])
+  }, [darkHero, pathname])
 
-  const fg = light ? site.color.white : site.color.ink
+  const isLight = tone === 'light'
+  const fg = isLight ? site.color.white : site.color.ink
   const isActive = (p: string) => pathname === href(p)
 
   return (
     <>
-      {/* Scrim superior para legibilidad sobre hero oscuro */}
-      {light && (
+      {/* Scrim superior sutil solo sobre hero oscuro, para legibilidad del texto blanco */}
+      {isLight && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, height: 140, zIndex: 40, pointerEvents: 'none',
-          background: 'linear-gradient(to bottom, rgba(0,0,0,0.45), rgba(0,0,0,0))' }} />
+          background: 'linear-gradient(to bottom, rgba(0,0,0,0.38), rgba(0,0,0,0))' }} />
       )}
+      {/* Nav SIEMPRE transparente (sin banda ni borde); el color del texto se adapta al fondo. */}
       <header style={{
         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50, height: 72,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: `0 ${site.gutter}`, fontFamily: site.font,
-        background: light ? 'transparent' : 'rgba(244,243,240,0.9)',
-        backdropFilter: light ? 'none' : 'saturate(140%) blur(12px)',
-        borderBottom: light ? '1px solid transparent' : `1px solid ${site.color.ink}12`,
-        transition: `background .5s ${site.ease}, border-color .5s ${site.ease}`,
+        background: 'transparent',
       }}>
         {/* Logo */}
         <Link href={href('/')} style={{ display: 'flex', alignItems: 'center', flex: 'none' }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={light ? '/FORMA_PRIMA_BLANCO.png' : '/FORMA_PRIMA_NEGRO.png'} alt="Forma Prima"
-            style={{ height: 22, width: 'auto', display: 'block' }} />
+          <img src={isLight ? '/FORMA_PRIMA_BLANCO.png' : '/FORMA_PRIMA_NEGRO.png'} alt="Forma Prima"
+            style={{ height: 22, width: 'auto', display: 'block', transition: `opacity .3s ${site.ease}` }} />
         </Link>
 
         {/* Tabs (desktop) */}
@@ -65,7 +75,7 @@ export function SiteNav() {
               style={{
                 fontSize: 11, letterSpacing: site.track.wide, textTransform: 'uppercase', textDecoration: 'none',
                 color: fg, opacity: isActive(t.path) ? 1 : 0.72, fontWeight: isActive(t.path) ? 500 : 400,
-                transition: `opacity .3s ${site.ease}`,
+                transition: `opacity .3s ${site.ease}, color .4s ${site.ease}`,
               }}>
               {locale === 'en' ? t.en : t.es}
             </Link>

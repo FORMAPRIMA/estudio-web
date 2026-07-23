@@ -5,11 +5,12 @@ import { useRouter } from 'next/navigation'
 import {
   type ObraData, type Partida, type Proveedor, type Vista, type EstadoPartida,
   importeCoste, importeCliente, baseImporteCoste, baseImporteCliente, importeActual, importeBase,
-  presupuestoProveedor, pagadoProveedor, totalDepositos, totalPagos, balanceTesoreria,
+  presupuestoProveedor, pagadoProveedor, totalDepositos, totalPagos, balanceTesoreria, depositoEstado,
   autoPucl, fmtEUR, fmtNum, fmtPct, fmtFecha, ESTADO_COLOR, buildCambiosCliente, tagCambio, clienteTotales,
+  isRevisado, revisadoCaducaEl, REVISADO_DIAS,
 } from '@/lib/control-obra/domain'
 import {
-  updatePartida, resetPartida, setPartidaEliminada, createPartida,
+  updatePartida, resetPartida, setPartidaEliminada, setPartidaRevisada, createPartida,
   createProveedor, updateProveedor, deleteProveedor,
   createPago, updatePago, deletePago,
   createDeposito, updateDeposito, deleteDeposito,
@@ -36,6 +37,10 @@ const parseNum = (v: string): number => {
   return isNaN(n) ? 0 : n
 }
 const varColor = (d: number) => (Math.abs(d) < 0.005 ? C.faint : d > 0 ? C.red : C.green)
+
+// Highlight de partida revisada (solo vista coste)
+const REV_BG = '#FFF3B0'
+const REV_INK = '#8A6D00'
 
 type Tab = 'partidas' | 'proveedores' | 'tesoreria' | 'cliente' | 'historico'
 
@@ -163,17 +168,44 @@ function PartidasTab({ obra, partidas, proveedores, vista, run, totals }: {
   const toggleSub = (c: string) => setSubCol((s) => { const x = new Set(s); x.has(c) ? x.delete(c) : x.add(c); return x })
   const dif = totals.act - totals.base
 
+  // Check de revisión periódica: solo en vista coste
+  const showRev = vista === 'coste'
+  const grid = showRev ? `30px ${GRID}` : GRID
+  const contadorRev = (items: Partida[]) => {
+    const revisables = items.filter((p) => p.estado !== 'eliminada')
+    if (revisables.length === 0) return null
+    const n = revisables.filter(isRevisado).length
+    return (
+      <span style={{ marginLeft: 8, fontSize: 9.5, fontWeight: 600, color: n === revisables.length ? REV_INK : C.faint, fontVariantNumeric: 'tabular-nums' }}>
+        ✓ {n}/{revisables.length}
+      </span>
+    )
+  }
+
   const partidaRow = (p: Partida) => {
     const act = importeActual(p, vista); const base = importeBase(p, vista); const d = act - base
     const pu = vista === 'coste' ? p.puc : p.pucl; const puBase = vista === 'coste' ? p.base_puc : p.base_pucl
     const est = ESTADO_COLOR[p.estado]
+    const rev = showRev && isRevisado(p)
+    const caduca = revisadoCaducaEl(p)
     return (
       <div key={p.id} onClick={() => setEditing(p)} style={{
-        ...gridRow(GRID), padding: '7px 16px 7px 28px', borderTop: `1px solid ${C.borderSoft}`, cursor: 'pointer',
-        background: est.bg, alignItems: 'center',
+        ...gridRow(grid), padding: '7px 16px 7px 28px', borderTop: `1px solid ${C.borderSoft}`, cursor: 'pointer',
+        background: rev ? REV_BG : est.bg, alignItems: 'center',
         textDecoration: p.estado === 'eliminada' ? 'line-through' : 'none',
         opacity: p.estado === 'eliminada' ? 0.6 : 1,
       }}>
+        {showRev && (
+          <span onClick={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {p.estado !== 'eliminada' && (
+              <input type="checkbox" checked={rev} onChange={() => run(() => setPartidaRevisada(p.id, !rev))}
+                title={rev && caduca
+                  ? `Revisada el ${fmtFecha(p.revisado_at)} · se desmarca sola el ${caduca.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}`
+                  : `Marcar como revisada (caduca a los ${REVISADO_DIAS} días)`}
+                style={{ cursor: 'pointer', accentColor: REV_INK, width: 14, height: 14 }} />
+            )}
+          </span>
+        )}
         <span style={{ fontSize: 11, color: C.muted, fontVariantNumeric: 'tabular-nums', display: 'flex', alignItems: 'center', gap: 5 }}>
           <span style={{ width: 7, height: 7, borderRadius: 2, background: est.dot, flexShrink: 0 }} />{p.codigo}
         </span>
@@ -209,12 +241,19 @@ function PartidasTab({ obra, partidas, proveedores, vista, run, totals }: {
               {ESTADO_COLOR[e].label}
             </span>
           ))}
+          {showRev && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ width: 9, height: 9, borderRadius: 2, background: REV_BG, border: `1px solid ${REV_INK}66`, display: 'inline-block' }} />
+              Revisada (se desmarca a los {REVISADO_DIAS} días)
+            </span>
+          )}
         </div>
         <button onClick={() => setCreating(true)} style={{ ...btnPrimary, marginLeft: 'auto' }}>+ Nueva partida</button>
       </div>
 
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden' }}>
-        <div style={{ ...gridRow(GRID), background: '#FAF9F6', borderBottom: `1px solid ${C.border}`, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', color: C.faint, fontWeight: 600, padding: '9px 16px' }}>
+        <div style={{ ...gridRow(grid), background: '#FAF9F6', borderBottom: `1px solid ${C.border}`, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', color: C.faint, fontWeight: 600, padding: '9px 16px' }}>
+          {showRev && <span title={`Revisión periódica: el check caduca a los ${REVISADO_DIAS} días`} style={{ textAlign: 'center' }}>✓</span>}
           <span>Código</span><span>Descripción</span><span>Ud</span><span style={{ textAlign: 'right' }}>Cant.</span>
           <span style={{ textAlign: 'right' }}>PU actual</span><span style={{ textAlign: 'right' }}>Importe</span>
           <span style={{ textAlign: 'right' }}>PU base</span><span style={{ textAlign: 'right' }}>Imp. base</span>
@@ -230,9 +269,10 @@ function PartidasTab({ obra, partidas, proveedores, vista, run, totals }: {
           return (
             <div key={ch.num}>
               {/* Capítulo */}
-              <div onClick={() => toggleCap(ch.num)} style={{ ...gridRow(GRID), background: '#ECE8E0', borderTop: `1px solid ${C.border}`, cursor: 'pointer', padding: '10px 16px', alignItems: 'center' }}>
+              <div onClick={() => toggleCap(ch.num)} style={{ ...gridRow(grid), background: '#ECE8E0', borderTop: `1px solid ${C.border}`, cursor: 'pointer', padding: '10px 16px', alignItems: 'center' }}>
+                {showRev && <span />}
                 <span style={{ fontSize: 12.5, fontWeight: 700 }}>{capOpen ? '▾' : '▸'} {ch.num}</span>
-                <span style={{ fontSize: 12.5, fontWeight: 700, textTransform: 'capitalize' }}>{ch.nombre.toLowerCase()}</span>
+                <span style={{ fontSize: 12.5, fontWeight: 700, textTransform: 'capitalize' }}>{ch.nombre.toLowerCase()}{showRev && contadorRev(chItems)}</span>
                 <span /><span /><span /><span style={{ textAlign: 'right', fontSize: 12.5, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtEUR(chAct)}</span>
                 <span /><span style={{ textAlign: 'right', fontSize: 11, color: C.faint, fontVariantNumeric: 'tabular-nums' }}>{fmtEUR(chBase)}</span>
                 <span style={{ textAlign: 'right', fontSize: 11, fontWeight: 700, color: varColor(chDif), fontVariantNumeric: 'tabular-nums' }}>
@@ -249,11 +289,13 @@ function PartidasTab({ obra, partidas, proveedores, vista, run, totals }: {
                 return (
                   <div key={sub.code}>
                     {/* Subcapítulo */}
-                    <div onClick={() => toggleSub(sub.code)} style={{ ...gridRow(GRID), background: '#F5F3EE', borderTop: `1px solid ${C.borderSoft}`, cursor: 'pointer', padding: '7px 16px 7px 16px', alignItems: 'center' }}>
+                    <div onClick={() => toggleSub(sub.code)} style={{ ...gridRow(grid), background: '#F5F3EE', borderTop: `1px solid ${C.borderSoft}`, cursor: 'pointer', padding: '7px 16px 7px 16px', alignItems: 'center' }}>
+                      {showRev && <span />}
                       <span style={{ fontSize: 10.5, color: C.faint, fontVariantNumeric: 'tabular-nums' }}>{subOpen ? '▾' : '▸'} {sub.code}</span>
                       <span style={{ fontSize: 12, fontWeight: 600, textTransform: 'capitalize' }}>
                         {sub.nombre.toLowerCase()}
                         {nCambios > 0 && <span style={{ marginLeft: 8, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.05em', color: C.accent, fontWeight: 600 }}>{nCambios} cambio{nCambios > 1 ? 's' : ''}</span>}
+                        {showRev && contadorRev(sub.items)}
                       </span>
                       <span /><span /><span /><span style={{ textAlign: 'right', fontSize: 12, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{fmtEUR(sAct)}</span>
                       <span /><span style={{ textAlign: 'right', fontSize: 10.5, color: C.faint, fontVariantNumeric: 'tabular-nums' }}>{fmtEUR(sBase)}</span>
@@ -271,8 +313,8 @@ function PartidasTab({ obra, partidas, proveedores, vista, run, totals }: {
       </div>
 
       {/* Total bar */}
-      <div style={{ ...gridRow(GRID), background: C.ink, color: '#fff', borderRadius: 8, marginTop: 12, padding: '14px 16px', alignItems: 'center' }}>
-        <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', gridColumn: '1 / 5' }}>
+      <div style={{ ...gridRow(grid), background: C.ink, color: '#fff', borderRadius: 8, marginTop: 12, padding: '14px 16px', alignItems: 'center' }}>
+        <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', gridColumn: `1 / ${showRev ? 6 : 5}` }}>
           Total presupuesto · {vista === 'coste' ? 'coste' : 'cliente'}
         </span>
         <span style={{ textAlign: 'right', fontSize: 15, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{fmtEUR(totals.act)}</span>
@@ -491,25 +533,28 @@ function ProveedoresTab({ obraId, partidas, proveedores, pagos, run }: {
 
   return (
     <>
-      <div style={{ display: 'flex', gap: 12, marginBottom: 14, alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 12, marginBottom: 6, alignItems: 'center' }}>
         <input value={nuevo} onChange={(e) => setNuevo(e.target.value)} placeholder="Nuevo proveedor…" style={{ ...inputStyle, width: 260 }} />
         <button onClick={() => nuevo.trim() && run(() => createProveedor(obraId, nuevo), () => setNuevo(''))} style={btnPrimary}>+ Añadir</button>
         <div style={{ marginLeft: 'auto', fontSize: 12, color: C.muted }}>
           Comprometido <b style={{ color: C.ink }}>{fmtEUR(totPresup)}</b> · Pagado <b style={{ color: C.ink }}>{fmtEUR(totPagado)}</b> · Pendiente <b style={{ color: C.accent }}>{fmtEUR(totPresup - totPagado)}</b>
         </div>
       </div>
+      <p style={{ fontSize: 11, color: C.faint, margin: '0 0 14px' }}>
+        Todos los importes de esta pestaña son <b>coste, sin IVA</b> (el comprometido sale de las partidas asignadas a cada proveedor y los pagos se registran en base). El IVA solo entra en Tesorería, en los depósitos del cliente.
+      </p>
 
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 90px 130px 130px 130px 160px', gap: 8, padding: '9px 16px', background: '#FAF9F6', borderBottom: `1px solid ${C.border}`, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', color: C.faint, fontWeight: 600 }}>
-          <span>Proveedor</span><span style={{ textAlign: 'right' }}>Partidas</span><span style={{ textAlign: 'right' }}>Comprometido</span>
-          <span style={{ textAlign: 'right' }}>Pagado</span><span style={{ textAlign: 'right' }}>Pendiente</span><span>% Pagado</span>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 70px 140px 140px 140px 150px', gap: 8, padding: '9px 16px', background: '#FAF9F6', borderBottom: `1px solid ${C.border}`, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', color: C.faint, fontWeight: 600 }}>
+          <span>Proveedor</span><span style={{ textAlign: 'right' }}>Partidas</span><span style={{ textAlign: 'right' }}>Comprometido s/IVA</span>
+          <span style={{ textAlign: 'right' }}>Pagado s/IVA</span><span style={{ textAlign: 'right' }}>Pendiente s/IVA</span><span>% Pagado</span>
         </div>
         {rows.map(({ p, presup, pagado, pendiente, pct, nPartidas }) => {
           const isOpen = open === p.id
           const provPagos = pagos.filter((x) => x.proveedor_id === p.id)
           return (
             <div key={p.id} style={{ borderTop: `1px solid ${C.borderSoft}` }}>
-              <div onClick={() => setOpen(isOpen ? null : p.id)} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 90px 130px 130px 130px 160px', gap: 8, padding: '10px 16px', cursor: 'pointer', alignItems: 'center' }}>
+              <div onClick={() => setOpen(isOpen ? null : p.id)} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 70px 140px 140px 140px 150px', gap: 8, padding: '10px 16px', cursor: 'pointer', alignItems: 'center' }}>
                 <span style={{ fontSize: 13, fontWeight: 500 }}>{isOpen ? '▾' : '▸'} {p.nombre}</span>
                 <span style={{ textAlign: 'right', fontSize: 12, color: C.faint }}>{nPartidas}</span>
                 <span style={{ textAlign: 'right', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{fmtEUR(presup)}{p.presupuesto_manual != null && <span title="Presupuesto manual" style={{ color: C.accent }}> ·m</span>}</span>
@@ -524,6 +569,11 @@ function ProveedoresTab({ obraId, partidas, proveedores, pagos, run }: {
               </div>
               {isOpen && (
                 <div style={{ padding: '4px 16px 16px', background: '#FAFAF8' }}>
+                  <ProveedorPartidas partidas={partidas} provId={p.id} presupuestoManual={p.presupuesto_manual} />
+
+                  <p style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.faint, fontWeight: 600, margin: '18px 0 4px' }}>
+                    Libro de pagos (sin IVA)
+                  </p>
                   {provPagos.length === 0 && <p style={{ fontSize: 12, color: C.faint, margin: '8px 0' }}>Sin pagos registrados.</p>}
                   {provPagos.map((pg, i) => (
                     <div key={pg.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', borderBottom: `1px solid ${C.borderSoft}`, fontSize: 12 }}>
@@ -558,6 +608,87 @@ function ProveedoresTab({ obraId, partidas, proveedores, pagos, run }: {
   )
 }
 
+// ── Partidas comprometidas de un proveedor (desplegable) ───────────
+function ProveedorPartidas({ partidas, provId, presupuestoManual }: {
+  partidas: Partida[]; provId: string; presupuestoManual: number | null
+}) {
+  const grouped = useMemo(() => {
+    const caps = new Map<number, { nombre: string; subs: Map<string, { nombre: string; items: Partida[] }> }>()
+    for (const p of partidas) {
+      if (p.proveedor_id !== provId) continue
+      if (!caps.has(p.capitulo_num)) caps.set(p.capitulo_num, { nombre: p.capitulo_nombre, subs: new Map() })
+      const cap = caps.get(p.capitulo_num)!
+      if (!cap.subs.has(p.subcapitulo_codigo)) cap.subs.set(p.subcapitulo_codigo, { nombre: p.subcapitulo_nombre, items: [] })
+      cap.subs.get(p.subcapitulo_codigo)!.items.push(p)
+    }
+    return Array.from(caps.entries()).sort((a, b) => a[0] - b[0]).map(([num, cap]) => ({
+      num, nombre: cap.nombre,
+      total: Array.from(cap.subs.values()).flatMap((s) => s.items).reduce((s, p) => s + importeCoste(p), 0),
+      subs: Array.from(cap.subs.entries()).map(([code, s]) => ({ code, nombre: s.nombre, items: s.items })),
+    }))
+  }, [partidas, provId])
+
+  const total = grouped.reduce((s, c) => s + c.total, 0)
+  const PROV_GRID = '86px minmax(0,1fr) 170px 110px'
+
+  if (grouped.length === 0) {
+    return <p style={{ fontSize: 12, color: C.faint, margin: '10px 0 0' }}>Sin partidas asignadas. El comprometido {presupuestoManual != null ? 'viene del presupuesto manual.' : 'es 0.'}</p>
+  }
+
+  return (
+    <div style={{ margin: '10px 0 0' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <p style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.faint, fontWeight: 600, margin: '0 0 4px' }}>
+          Partidas comprometidas (coste sin IVA)
+        </p>
+        <span style={{ fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtEUR(total)}</span>
+      </div>
+      {presupuestoManual != null && Math.abs(presupuestoManual - total) > 0.5 && (
+        <p style={{ fontSize: 11, color: C.accent, margin: '0 0 6px' }}>
+          ⚠ El comprometido de este proveedor es manual ({fmtEUR(presupuestoManual)}) y no coincide con la suma de sus partidas ({fmtEUR(total)}).
+        </p>
+      )}
+      <div style={{ background: '#fff', border: `1px solid ${C.borderSoft}`, borderRadius: 6, overflow: 'hidden' }}>
+        {grouped.map((cap) => (
+          <div key={cap.num}>
+            <div style={{ ...gridRow(PROV_GRID), background: '#F1EEE7', padding: '6px 12px' }}>
+              <span style={{ fontSize: 11, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{cap.num}</span>
+              <span style={{ fontSize: 11.5, fontWeight: 700, textTransform: 'capitalize' }}>{cap.nombre.toLowerCase()}</span>
+              <span />
+              <span style={{ textAlign: 'right', fontSize: 11.5, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtEUR(cap.total)}</span>
+            </div>
+            {cap.subs.map((sub) => (
+              <div key={sub.code}>
+                <div style={{ ...gridRow(PROV_GRID), padding: '4px 12px', background: '#FAF9F6' }}>
+                  <span style={{ fontSize: 10, color: C.faint, fontVariantNumeric: 'tabular-nums' }}>{sub.code}</span>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: 'capitalize' }}>{sub.nombre.toLowerCase()}</span>
+                  <span /><span />
+                </div>
+                {sub.items.map((p) => {
+                  const est = ESTADO_COLOR[p.estado]
+                  const eliminada = p.estado === 'eliminada'
+                  return (
+                    <div key={p.id} style={{ ...gridRow(PROV_GRID), padding: '5px 12px 5px 22px', borderTop: `1px solid ${C.borderSoft}`, textDecoration: eliminada ? 'line-through' : 'none', opacity: eliminada ? 0.55 : 1 }}>
+                      <span style={{ fontSize: 10.5, color: C.muted, fontVariantNumeric: 'tabular-nums', display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <span style={{ width: 6, height: 6, borderRadius: 2, background: est.dot, flexShrink: 0 }} />{p.codigo}
+                      </span>
+                      <span style={{ fontSize: 11.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.descripcion}>{p.descripcion}</span>
+                      <span style={{ textAlign: 'right', fontSize: 11, color: C.muted, fontVariantNumeric: 'tabular-nums' }}>
+                        {fmtNum(p.qty)} {p.unidad || ''} × {fmtEUR(p.puc ?? 0, true)}
+                      </span>
+                      <span style={{ textAlign: 'right', fontSize: 11.5, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{fmtEUR(importeCoste(p))}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ═══════════════════════ TESORERÍA ═══════════════════════
 
 function TesoreriaTab({ obraId, depositos, pagos, totCoste, run }: {
@@ -587,16 +718,31 @@ function TesoreriaTab({ obraId, depositos, pagos, totCoste, run }: {
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 120px 140px 130px 130px 90px', gap: 8, padding: '9px 16px', background: '#FAF9F6', borderBottom: `1px solid ${C.border}`, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', color: C.faint, fontWeight: 600 }}>
           <span>Concepto</span><span>Fecha</span><span style={{ textAlign: 'right' }}>Base</span><span style={{ textAlign: 'right' }}>IVA</span><span style={{ textAlign: 'right' }}>Total</span><span />
         </div>
-        {depositos.map((d) => (
-          <div key={d.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 120px 140px 130px 130px 90px', gap: 8, padding: '10px 16px', borderTop: `1px solid ${C.borderSoft}`, alignItems: 'center', fontSize: 12.5 }}>
-            <span style={{ fontWeight: 500 }}>{d.label || 'Depósito'}</span>
+        {depositos.map((d) => {
+          const estado = depositoEstado(d)
+          const pagado = estado === 'pagado'
+          return (
+          <div key={d.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 120px 140px 130px 130px 90px', gap: 8, padding: '10px 16px', borderTop: `1px solid ${C.borderSoft}`, alignItems: 'center', fontSize: 12.5, opacity: pagado ? 1 : 0.75 }}>
+            <span style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={d.label || 'Depósito'}>{d.label || 'Depósito'}</span>
+              <button
+                onClick={() => run(() => updateDeposito(d.id, { estado: pagado ? 'programado' : 'pagado' }))}
+                title="Clic para cambiar el estado"
+                style={{
+                  fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', cursor: 'pointer',
+                  padding: '2px 7px', borderRadius: 3, border: 'none', flexShrink: 0,
+                  background: pagado ? '#E3F0E8' : '#ECEAE4', color: pagado ? C.green : C.muted,
+                }}
+              >{pagado ? 'Pagado' : 'Programado'}</button>
+            </span>
             <span style={{ color: C.muted }}>{fmtFecha(d.fecha, d.fecha_texto)}</span>
             <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtEUR(d.monto, true)}</span>
             <span style={{ textAlign: 'right', color: C.muted, fontVariantNumeric: 'tabular-nums' }}>{fmtEUR(d.iva, true)}</span>
             <span style={{ textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{fmtEUR(d.total, true)}</span>
             <span style={{ textAlign: 'right' }}><button onClick={() => run(() => deleteDeposito(d.id))} style={linkDanger}>Eliminar</button></span>
           </div>
-        ))}
+          )
+        })}
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 120px 140px 130px 130px 90px', gap: 8, padding: '12px 16px', borderTop: `1px solid ${C.border}`, alignItems: 'center', background: '#FAFAF8' }}>
           <input placeholder="Concepto (Pago 4…)" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} style={inputStyle} />
           <input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} style={inputStyle} />

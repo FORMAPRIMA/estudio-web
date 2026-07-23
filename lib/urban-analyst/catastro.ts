@@ -7,14 +7,14 @@
 // (respuestas pequeñas y de esquema estable) para no añadir dependencias.
 
 import { gmlToGeoJSON, areaM2 } from './geometry'
-import type { GeoJSONGeometry } from './types'
+import type { ConstruidaDesglose, GeoJSONGeometry } from './types'
 
 const FETCH_OPTS: RequestInit = {
   cache: 'no-store',
   headers: { 'User-Agent': 'FormaPrima-UrbanAnalyst/1.0' },
 }
 
-async function fetchText(url: string, timeoutMs = 25000): Promise<string> {
+async function fetchTextOnce(url: string, timeoutMs: number): Promise<string> {
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
@@ -24,6 +24,27 @@ async function fetchText(url: string, timeoutMs = 25000): Promise<string> {
   } finally {
     clearTimeout(timer)
   }
+}
+
+// Catastro (OVC e INSPIRE) corta conexiones de forma intermitente: un único
+// `fetch failed` o timeout no debe tumbar todo el análisis. Reintentamos con
+// backoff los fallos de red (no los HTTP 4xx, que son deterministas).
+async function fetchText(url: string, timeoutMs = 25000, retries = 2): Promise<string> {
+  let lastErr: unknown
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fetchTextOnce(url, timeoutMs)
+    } catch (err) {
+      lastErr = err
+      // Los HTTP 4xx son respuestas válidas del servidor: no tiene sentido reintentar
+      const msg = err instanceof Error ? err.message : ''
+      if (/^HTTP 4\d\d/.test(msg)) throw err
+      if (attempt < retries) {
+        await new Promise((r) => setTimeout(r, 600 * (attempt + 1)))
+      }
+    }
+  }
+  throw lastErr
 }
 
 function tag(xml: string, name: string): string | null {
@@ -107,6 +128,45 @@ export async function getParcelData(refcat: string): Promise<ParcelData | null> 
     areaValue: areaStr ? parseFloat(areaStr[1]) : null,
     sourceUrl: url,
   }
+}
+
+export interface ParcelaVecina {
+  refcat: string
+  geometry: GeoJSONGeometry
+}
+
+/**
+ * Parcelas catastrales dentro de un bbox (INSPIRE WFS CP estándar, sin stored
+ * query). Se usa para clasificar los linderos de la parcela analizada:
+ * arista compartida con una vecina = medianería; arista sin vecina = frente
+ * a vía pública. bbox en [minLng, minLat, maxLng, maxLat] (WGS84).
+ */
+export async function getParcelasVecinas(
+  bboxWgs84: [number, number, number, number],
+  excludeRefcats: string[] = []
+): Promise<ParcelaVecina[]> {
+  // El WFS espera el bbox en orden lat,lng con el CRS urn de EPSG:4326
+  const bboxParam = `${bboxWgs84[1]},${bboxWgs84[0]},${bboxWgs84[3]},${bboxWgs84[2]},urn:ogc:def:crs:EPSG::4326`
+  const url = `https://ovc.catastro.meh.es/INSPIRE/wfsCP.aspx?service=WFS&version=2.0.0&request=GetFeature&typeNames=cp.cadastralparcel&srsName=urn:ogc:def:crs:EPSG::4326&bbox=${encodeURIComponent(bboxParam)}&count=80`
+  let xml: string
+  try {
+    xml = await fetchText(url, 30000)
+  } catch {
+    return []
+  }
+  const exclude = new Set(excludeRefcats.map((r) => r.slice(0, 14).toUpperCase()))
+  const out: ParcelaVecina[] = []
+  const members = xml.match(/<cp:CadastralParcel[\s\S]*?<\/cp:CadastralParcel>/g) || []
+  for (const member of members) {
+    const idMatch = member.match(/gml:id="ES\.SDGC\.CP\.([A-Z0-9]{14})"/)
+    if (!idMatch) continue
+    const refcat = idMatch[1]
+    if (exclude.has(refcat)) continue
+    const geometry = gmlToGeoJSON(member)
+    if (!geometry) continue
+    out.push({ refcat, geometry })
+  }
+  return out
 }
 
 // ── Datos de edificio (INSPIRE WFS BU) ───────────────────────────────────────
@@ -276,6 +336,174 @@ export async function getInmueblesDetalle(refcat: string, maxUnits = 40): Promis
     totalSuperficieM2: anySfc ? Math.round(total) : null,
     anioMasAntiguo: anio,
     inmueblesConsultados: target.length,
+  }
+}
+
+// ── Desglose de superficie construida por uso (OVC DNPRC) ────────────────────
+// Cada inmueble declara sus elementos constructivos <cons> con uso <lcd>,
+// planta <pt> y superficie <stl>. Sumando por uso podemos separar lo que
+// computa a edificabilidad de lo que no (garaje, trastero/almacén anejo).
+
+interface ConsElement { lcd: string; pt: string; stl: number }
+
+function parseConsElements(xml: string): ConsElement[] {
+  const out: ConsElement[] = []
+  for (const c of xml.match(/<cons>[\s\S]*?<\/cons>/g) || []) {
+    const stlM = c.match(/<stl>([\d.]+)<\/stl>/)
+    if (!stlM) continue
+    const stl = parseFloat(stlM[1])
+    if (!(stl > 0)) continue
+    const lcd = (c.match(/<lcd>([^<]*)<\/lcd>/)?.[1] || '').trim().toUpperCase()
+    const pt = (c.match(/<pt>([^<]*)<\/pt>/)?.[1] || '').trim()
+    out.push({ lcd, pt, stl })
+  }
+  return out
+}
+
+// Clasificación por uso (decisión: descontar solo garaje y trastero/almacén).
+type UsoBucket = 'aparcamiento' | 'trastero' | 'almacen' | 'computable'
+function clasificaUso(lcd: string): UsoBucket {
+  if (/APARCAMIENTO|GARAJE/.test(lcd)) return 'aparcamiento'
+  if (/TRASTERO/.test(lcd)) return 'trastero'
+  if (/ALMAC[EÉ]N/.test(lcd)) return 'almacen'
+  return 'computable'
+}
+
+/** Reparte una muestra uniforme de `n` elementos sobre `arr` (evita sesgar el
+ *  muestreo hacia el principio de la lista de inmuebles). */
+function muestraUniforme<T>(arr: T[], n: number): T[] {
+  if (arr.length <= n) return arr
+  const step = arr.length / n
+  const out: T[] = []
+  for (let i = 0; i < n; i++) out.push(arr[Math.floor(i * step)])
+  return out
+}
+
+export interface ConstruidaScan {
+  desglose: ConstruidaDesglose
+  anioMasAntiguo: number | null
+}
+
+function buildDesglose(cons: ConsElement[], inmueblesTotales: number, inmueblesMuestreados: number): ConstruidaDesglose {
+  let apar = 0, tras = 0, alm = 0, comp = 0
+  const porUsoMap = new Map<string, number>()
+  for (const c of cons) {
+    const bucket = clasificaUso(c.lcd)
+    if (bucket === 'aparcamiento') apar += c.stl
+    else if (bucket === 'trastero') tras += c.stl
+    else if (bucket === 'almacen') alm += c.stl
+    else comp += c.stl
+    const key = c.lcd || '(sin uso declarado)'
+    porUsoMap.set(key, (porUsoMap.get(key) || 0) + c.stl)
+  }
+  const total = apar + tras + alm + comp
+  // Guarda: si "almacén" es el uso dominante, es una nave productiva (su superficie
+  // SÍ computa), no un trastero anejo. Evita descontar por error un activo logístico.
+  const almacenComputa = total > 0 && alm / total > 0.5
+  const noComputable = apar + tras + (almacenComputa ? 0 : alm)
+  const computable = total - noComputable
+  const porUso = Array.from(porUsoMap.entries())
+    .map(([uso, m2]) => ({
+      uso,
+      m2: Math.round(m2),
+      computa: clasificaUso(uso.toUpperCase()) === 'computable' || (clasificaUso(uso.toUpperCase()) === 'almacen' && almacenComputa),
+    }))
+    .sort((a, b) => b.m2 - a.m2)
+  return {
+    total_m2: Math.round(total),
+    computable_m2: Math.round(computable),
+    no_computable_m2: Math.round(noComputable),
+    aparcamiento_m2: Math.round(apar),
+    trastero_m2: Math.round(tras),
+    almacen_m2: Math.round(alm),
+    almacen_computa: almacenComputa,
+    por_uso: porUso,
+    inmuebles_totales: inmueblesTotales,
+    inmuebles_muestreados: inmueblesMuestreados,
+    incompleto: inmueblesMuestreados < inmueblesTotales,
+  }
+}
+
+/** Escanea los elementos constructivos de una parcela y devuelve el desglose de
+ *  superficie por uso + el año más antiguo (reaprovechando las mismas consultas). */
+export async function getConstruidaDesglose(refcat: string, maxUnits = 60): Promise<ConstruidaScan | null> {
+  const base = refcat.slice(0, 14)
+  let listXml: string
+  try {
+    listXml = await fetchText(`https://ovc.catastro.meh.es/ovcservweb/OVCSWLocalizacionRC/OVCCallejero.asmx/Consulta_DNPRC?Provincia=&Municipio=&RC=${encodeURIComponent(base)}`)
+  } catch {
+    return null
+  }
+
+  const parseAnt = (xml: string): number | null => {
+    let min: number | null = null
+    for (const m of Array.from(xml.matchAll(/<ant>(\d{4})</g))) {
+      const y = parseInt(m[1], 10)
+      if (min == null || y < min) min = y
+    }
+    return min
+  }
+
+  // Parcela de un solo inmueble: la respuesta ya trae los <cons>
+  const directCons = parseConsElements(listXml)
+  if (directCons.length > 0) {
+    return {
+      desglose: buildDesglose(directCons, 1, 1),
+      anioMasAntiguo: parseAnt(listXml),
+    }
+  }
+
+  // Lista de inmuebles: reconstruir refcats de 20 chars (pc1+pc2+car+cc1+cc2)
+  const rcs: string[] = Array.from(
+    listXml.matchAll(/<rc>\s*<pc1>([^<]+)<\/pc1>\s*<pc2>([^<]+)<\/pc2>\s*<car>([^<]+)<\/car>\s*<cc1>([^<]+)<\/cc1>\s*<cc2>([^<]+)<\/cc2>/g)
+  ).map((m) => `${m[1]}${m[2]}${m[3]}${m[4]}${m[5]}`)
+  if (rcs.length === 0) return null
+
+  const target = muestraUniforme(rcs, maxUnits)
+  const cons: ConsElement[] = []
+  let anio: number | null = null
+
+  // Chunks de 8 para no saturar la OVC
+  for (let i = 0; i < target.length; i += 8) {
+    const chunk = target.slice(i, i + 8)
+    const results = await Promise.allSettled(chunk.map(async (rc) => {
+      const xml = await fetchText(
+        `https://ovc.catastro.meh.es/ovcservweb/OVCSWLocalizacionRC/OVCCallejero.asmx/Consulta_DNPRC?Provincia=&Municipio=&RC=${encodeURIComponent(rc)}`,
+        15000
+      )
+      return { cons: parseConsElements(xml), ant: parseAnt(xml) }
+    }))
+    for (const r of results) {
+      if (r.status !== 'fulfilled') continue
+      cons.push(...r.value.cons)
+      if (r.value.ant != null && (anio == null || r.value.ant < anio)) anio = r.value.ant
+    }
+  }
+
+  if (cons.length === 0) return null
+  return {
+    desglose: buildDesglose(cons, rcs.length, target.length),
+    anioMasAntiguo: anio,
+  }
+}
+
+/** Combina los desgloses de varias parcelas (edificio multi-refcat) en uno. */
+export function combineDesgloses(scans: (ConstruidaScan | null)[]): ConstruidaScan | null {
+  const ok = scans.filter((s): s is ConstruidaScan => Boolean(s))
+  if (ok.length === 0) return null
+  if (ok.length === 1) return ok[0]
+  const cons: ConsElement[] = []
+  let totInm = 0, muestra = 0, anio: number | null = null
+  // Reconstruimos elementos sintéticos por uso para reagregar con la misma lógica
+  for (const s of ok) {
+    for (const u of s.desglose.por_uso) cons.push({ lcd: u.uso.toUpperCase(), pt: '', stl: u.m2 })
+    totInm += s.desglose.inmuebles_totales ?? 0
+    muestra += s.desglose.inmuebles_muestreados
+    if (s.anioMasAntiguo != null && (anio == null || s.anioMasAntiguo < anio)) anio = s.anioMasAntiguo
+  }
+  return {
+    desglose: buildDesglose(cons, totInm, muestra),
+    anioMasAntiguo: anio,
   }
 }
 

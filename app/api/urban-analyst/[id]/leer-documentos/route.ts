@@ -4,7 +4,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import Anthropic from '@anthropic-ai/sdk'
 import { candidatosLectura, downloadPdfBase64 } from '@/lib/urban-analyst/documentosOficiales'
 import { parseJsonRespuesta, IA_MODEL, REGLAS_ANALISTA } from '@/lib/urban-analyst/iaContext'
-import type { UrbanAsset, UrbanLayerHit, UrbanDocument } from '@/lib/urban-analyst/types'
+import { computeCuadroUrbanistico, nzCandidatos, type CuadroHit, type CuadroUrbanistico } from '@/lib/urban-analyst/cuadroUrbanistico'
+import type { UrbanAsset, UrbanLayerHit, UrbanDocument, NormaZonal } from '@/lib/urban-analyst/types'
 
 // Lee con visión (Claude) los documentos oficiales del activo: plano de
 // Condiciones de Edificación, ficha de catálogo y PDFs aportados (nota simple,
@@ -97,8 +98,18 @@ Responde ÚNICAMENTE con JSON válido:
     }
   ],
   "sintesis": "2-4 frases: qué aportan estos documentos al análisis del activo",
-  "impacto_en_analisis": ["qué dato del análisis previo se confirma, matiza o corrige"]
+  "impacto_en_analisis": ["qué dato del análisis previo se confirma, matiza o corrige"],
+  "parametros_cuadro": [
+    {
+      "parametro": "edificabilidad|ocupacion|plantas_sobre|plantas_bajo|altura_cornisa|altura_maxima|retranqueo_frente|retranqueo_lateral|retranqueo_testero|altura_piso|altura_piso_pb|altura_libre|parcela_minima|usos",
+      "valor": "texto legible del valor (con unidad)",
+      "valor_num": 0.0,
+      "documento": "nombre del documento del que sale",
+      "detalle": "dónde se lee exactamente (plano/página/apartado)"
+    }
+  ]
 }
+Sobre "parametros_cuadro": SOLO parámetros urbanísticos NUMÉRICOS o de usos que se lean con claridad en los documentos y que apliquen a la parcela del activo (p. ej. edificabilidad de la ficha de un ámbito, plantas por tramo del plano CE, ocupación de una ficha de APE). valor_num en la unidad canónica: edificabilidad en m²c/m²s, ocupacion en %, plantas en nº, alturas y retranqueos en m, parcela_minima en m². Para "usos", valor_num = null. Si nada es legible con certeza, devuelve [].
 Reglas: lo extraído de un plano/ficha oficial se etiqueta como lectura visual [INFERIDO de documento oficial]; si la resolución no permite leer algo, decláralo en advertencias. No inventes valores.`,
     })
 
@@ -125,6 +136,74 @@ Reglas: lo extraído de un plano/ficha oficial se etiqueta como lectura visual [
     await admin.from('urban_analysis').insert({
       asset_id: params.id, kind: 'documentos_oficiales', content: resultado, model: IA_MODEL,
     })
+
+    // ── Volcar los parámetros leídos al cuadro urbanístico ───────────────────
+    // Cada valor extraído de una ficha/plano entra como figura adicional del
+    // cuadro y participa en la resolución de la más restrictiva.
+    try {
+      const parametrosLeidos = Array.isArray(lectura.parametros_cuadro)
+        ? (lectura.parametros_cuadro as { parametro?: string; valor?: string; valor_num?: number | null; documento?: string; detalle?: string }[])
+        : []
+      const clavesValidas = new Set([
+        'edificabilidad','ocupacion','plantas_sobre','plantas_bajo','altura_cornisa','altura_maxima',
+        'retranqueo_frente','retranqueo_lateral','retranqueo_testero','altura_piso','altura_piso_pb','altura_libre','parcela_minima','usos',
+      ])
+      const valoresExternos = parametrosLeidos
+        .filter((p) => p.parametro && clavesValidas.has(p.parametro) && p.valor)
+        .map((p) => ({
+          parametro: p.parametro!,
+          valor: {
+            figura: `Lectura IA — ${p.documento || 'documento oficial'}`,
+            valor: String(p.valor),
+            valor_num: typeof p.valor_num === 'number' ? p.valor_num : null,
+            tipo: 'inferido' as const,
+            fuente: p.detalle || null,
+          },
+        }))
+
+      const { data: cuadroRow } = await admin
+        .from('urban_analysis').select('id, content').eq('asset_id', params.id).eq('kind', 'cuadro_urbanistico').maybeSingle()
+      const cuadroPrevio = cuadroRow?.content as (CuadroUrbanistico & { area_movimiento?: unknown }) | undefined
+      const snapshot = cuadroPrevio?.inputs_snapshot
+
+      if (valoresExternos.length > 0 && snapshot) {
+        const { data: hitsFull } = await admin
+          .from('urban_layer_hits').select('categoria, service, layer_name, attributes').eq('asset_id', params.id)
+        let nzRow: NormaZonal | null = null
+        if (snapshot.normaZonal) {
+          const candidatos = nzCandidatos(snapshot.normaZonal)
+          const { data } = await admin.from('urban_normas_zonales').select('*').in('codigo', candidatos)
+          const rows = (data || []) as NormaZonal[]
+          nzRow = candidatos.map((c) => rows.find((r) => r.codigo === c)).find(Boolean) || null
+        }
+        const cuadro = computeCuadroUrbanistico({
+          parcelArea: snapshot.parcelArea,
+          builtArea: snapshot.builtArea,
+          huellaM2: snapshot.huellaM2,
+          plantasExistentes: snapshot.plantasExistentes,
+          alturaExistenteM: snapshot.alturaExistenteM,
+          usoCatastral: snapshot.usoCatastral,
+          normaZonal: snapshot.normaZonal,
+          normaZonalDenominacion: snapshot.normaZonalDenominacion,
+          nzRow,
+          plantasCondiciones: snapshot.plantasCondiciones,
+          hits: (hitsFull || []) as CuadroHit[],
+          valoresExternos,
+        })
+        cuadro.advertencias.push(
+          `Cuadro recalculado incorporando ${valoresExternos.length} parámetro(s) leídos por IA de documentos oficiales (verificar contra el documento original).`
+        )
+        await admin.from('urban_analysis').delete().eq('asset_id', params.id).eq('kind', 'cuadro_urbanistico')
+        await admin.from('urban_analysis').insert({
+          asset_id: params.id, kind: 'cuadro_urbanistico',
+          content: { ...cuadro, area_movimiento: cuadroPrevio?.area_movimiento ?? null },
+          model: IA_MODEL,
+        })
+      }
+    } catch (cuadroErr) {
+      // La lectura ya está guardada: un fallo del recálculo no debe romperla
+      console.error('[urban-analyst/leer-documentos/cuadro]', cuadroErr)
+    }
 
     return NextResponse.json({ ok: true, resultado })
   } catch (err) {

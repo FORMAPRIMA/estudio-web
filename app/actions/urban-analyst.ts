@@ -228,7 +228,22 @@ export async function getNormasZonales(): Promise<NormaZonal[]> {
 
 export async function updateNormaZonal(codigo: string, patch: {
   coef_edificabilidad?: number | null
+  formula_c?: number | null
   altura_max_plantas?: number | null
+  ocupacion_pct?: number | null
+  plantas_bajo_rasante?: number | null
+  altura_cornisa_m?: number | null
+  altura_max_m?: number | null
+  retranqueo_frente_m?: number | null
+  retranqueo_lateral_m?: number | null
+  retranqueo_testero_m?: number | null
+  altura_piso_m?: number | null
+  altura_piso_pb_m?: number | null
+  altura_libre_min_m?: number | null
+  parcela_minima_m2?: number | null
+  frente_minimo_m?: number | null
+  regimen_usos?: Record<string, string> | null
+  fuente_articulo?: string | null
   uso_cualificado?: string | null
   condiciones?: string | null
   notas?: string | null

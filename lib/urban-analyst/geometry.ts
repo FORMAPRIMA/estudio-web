@@ -137,6 +137,35 @@ export function areaM2(geom: GeoJSONGeometry): number {
   return Math.round(total)
 }
 
+/**
+ * Test punto-en-geometría (ray casting even-odd, incluye huecos).
+ * Para clasificar features puntuales (p. ej. un BIC declarado como punto)
+ * respecto a la parcela.
+ */
+export function pointInGeometry(pt: Position, geom: GeoJSONGeometry): boolean {
+  const polys = geom.type === 'Polygon' ? [geom.coordinates] : geom.coordinates
+  for (const rings of polys) {
+    if (rings.length === 0) continue
+    if (!pointInRing(pt, rings[0])) continue
+    // dentro del exterior: los interiores (huecos) excluyen
+    const enHueco = rings.slice(1).some((r) => pointInRing(pt, r))
+    if (!enHueco) return true
+  }
+  return false
+}
+
+function pointInRing([px, py]: Position, ring: Position[]): boolean {
+  let inside = false
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i]
+    const [xj, yj] = ring[j]
+    if (yi > py !== yj > py && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) {
+      inside = !inside
+    }
+  }
+  return inside
+}
+
 /** Convierte la geometría GeoJSON a rings ESRI (para query espacial ArcGIS). */
 export function toEsriRings(geom: GeoJSONGeometry): number[][][] {
   const polys = geom.type === 'Polygon' ? [geom.coordinates] : geom.coordinates

@@ -94,3 +94,36 @@ export async function getOrderedProyectoImages(): Promise<ProyectoImage[]> {
     ?? { nombre: 'Castelló 42', url: HERO_IMAGE, tipologia: 'Interiorismo' }
   return [castello, ...images.filter(p => p.url !== HERO_IMAGE)]
 }
+
+// Proyectos curados de la web pública (WIP, tabla `web_proyectos`), en el orden
+// curado (`orden`). `variant` elige el encuadre: 'vertical' (crop móvil, para el
+// carrusel 3:4) u 'horizontal' (hero desktop, para el fondo del hero full-screen).
+// Cada uno cae al otro encuadre si el proyecto no tiene esa versión.
+async function getWebProyectos(variant: 'vertical' | 'horizontal'): Promise<ProyectoImage[]> {
+  const admin = createAdminClient()
+  const { data } = await admin
+    .from('web_proyectos')
+    .select('nombre, nota, hero_url, hero_mobile_url')
+    .eq('activo', true)
+    .order('orden', { ascending: true })
+    .order('created_at', { ascending: true })
+
+  return (data ?? [])
+    .map((p) => {
+      const horizontal = (p.hero_url as string | null) ?? null
+      const vertical = (p.hero_mobile_url as string | null) ?? null
+      const url = variant === 'vertical' ? (vertical ?? horizontal) : (horizontal ?? vertical)
+      return { nombre: (p.nombre as string) ?? '', url: url ?? '', tipologia: (p.nota as string | null) ?? null }
+    })
+    .filter((p) => !!p.url)
+}
+
+// Banda "proyectos recientes" (carrusel vertical 3:4).
+export async function getWebProyectosCarousel(): Promise<ProyectoImage[]> {
+  return getWebProyectos('vertical')
+}
+
+// Fondo del hero de la landing del portal (slideshow full-screen horizontal).
+export async function getWebProyectosHero(): Promise<ProyectoImage[]> {
+  return getWebProyectos('horizontal')
+}

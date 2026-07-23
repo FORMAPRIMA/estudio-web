@@ -23,7 +23,7 @@ import {
   presentationCookieName,
 } from '@/lib/espacio/access'
 import { requierePin, type Etapa } from '@/lib/espacio/theme'
-import { getStudio, HERO_IMAGE, getOrderedProyectoImages } from '@/lib/espacio/studio'
+import { getStudio, HERO_IMAGE, getWebProyectosHero, getWebProyectosCarousel } from '@/lib/espacio/studio'
 import EspacioGate from '@/components/espacio/EspacioGate'
 import PresentationBadge from '@/components/espacio/PresentationBadge'
 import BienvenidaPage from '@/components/public/BienvenidaPage'
@@ -128,9 +128,10 @@ export default async function EspacioPage({
 
   // ── Etapa Contrato: estado + propuesta archivada + PDF firmado ────────────
   } else if (etapa === 'contrato') {
+    // Carrusel "proyectos recientes": proyectos curados de la web pública WIP.
     const [contrato, proyectoImages] = await Promise.all([
       getEspacioContrato(token),
-      getOrderedProyectoImages(),
+      getWebProyectosCarousel(),
     ])
     if (contrato) {
       content = <ContratoView token={token} nombre={espacio.nombre} contrato={contrato} proyectoImages={proyectoImages} />
@@ -184,13 +185,19 @@ export default async function EspacioPage({
   // ── Etapa Bienvenida: la landing comercial (reusa BienvenidaPage) ─────────
   } else if (etapa === 'bienvenida') {
     const lang = espacio.idioma === 'en' ? 'en' : 'es'
-    const proyectoImages = await getOrderedProyectoImages()
+    // Todo curado desde la web pública WIP: el hero de fondo usa el encuadre
+    // horizontal (full-screen) y la banda "proyectos recientes" el vertical (3:4).
+    const [proyectoImages, carouselImages] = await Promise.all([
+      getWebProyectosHero(),
+      getWebProyectosCarousel(),
+    ])
     content = (
       <BienvenidaPage
         nombreCliente={espacio.nombre}
         token={token}
         heroImage={HERO_IMAGE}
         proyectoImages={proyectoImages}
+        carouselImages={carouselImages}
         studio={getStudio(lang)}
         submitAction={submitEspacioBienvenida}
         lang={lang}

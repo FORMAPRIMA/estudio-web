@@ -212,7 +212,7 @@ async function generarApuestasIA(
     max_tokens: 2000,
     system: `Eres el creador de apuestas de "La Bolsa", una porra del Mundial 2026 entre amigos.
 Para cada partido de eliminatorias propones UNA apuesta divertida y personalizada al partido:
-que la estrella marque o asista, cuántos goles marca un crack, goles totales, tarjetas, prórroga…
+que la estrella marque, cuántos goles marca un crack, goles totales, tarjetas, prórroga…
 Devuelve SOLO un array JSON válido, sin markdown, sin explicaciones fuera del JSON.`,
     messages: [{
       role: 'user',
@@ -224,7 +224,12 @@ Devuelve un array con un objeto por partido, exactamente en este formato:
 Reglas:
 - 2 o 3 opciones por apuesta. Para sí/no usa keys "si"/"no"; para 3 opciones usa "a"/"b"/"c".
 - Multiplicadores realistas: favorito ~1.2–1.8, difícil ~2.0–3.2. Nunca menor a 1.1 ni mayor a 3.2.
-- Pregunta en español, tono desenfadado. Usa jugadores estrella reales de cada selección cuando aporte.
+- Pregunta en español, tono desenfadado.
+- Solo puedes nombrar a un jugador si estás COMPLETAMENTE seguro de que juega con una de las DOS
+  selecciones de ESE partido (nombre exacto y real). Ante la mínima duda, no nombres a nadie y haz
+  una pregunta de acta: goles totales, ambos equipos marcan, prórroga, tarjetas.
+- La pregunta debe poder resolverse con el acta oficial del partido (marcador, goleadores,
+  tarjetas, prórroga, penaltis). Nada subjetivo ni imposible de comprobar.
 - Un objeto por CADA partido de la lista, con su "numero" correcto.`,
     }],
   })
@@ -249,7 +254,64 @@ Reglas:
       map.set((it as { numero: number }).numero, prop)
     }
   }
-  return map
+  return verificarApuestasIA(client, matchups, map)
+}
+
+/**
+ * Segundo pase: un verificador independiente intenta refutar cada propuesta
+ * (jugador inexistente o de otra selección, pregunta no resoluble con el acta).
+ * Las que no pasan (o todas, si la verificación falla) caen a la plantilla genérica.
+ */
+async function verificarApuestasIA(
+  client: Anthropic,
+  matchups: { numero: number; local: string; visitante: string }[],
+  map: Map<number, Propuesta>,
+): Promise<Map<number, Propuesta>> {
+  if (map.size === 0) return map
+  const byNum = new Map(matchups.map(m => [m.numero, m]))
+  const listado = Array.from(map.entries()).map(([num, prop]) => {
+    const mu = byNum.get(num)
+    return `#${num} PARTIDO: ${mu?.local ?? '?'} vs ${mu?.visitante ?? '?'}
+   Pregunta: ${prop.pregunta}${prop.subtitulo ? `\n   Subtítulo: ${prop.subtitulo}` : ''}
+   Opciones: ${prop.opciones.map(o => o.label).join(' / ')}`
+  }).join('\n')
+
+  try {
+    const message = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 500,
+      system: `Eres un verificador escéptico de datos de fútbol. Tu trabajo es REFUTAR apuestas mal construidas.
+Devuelve SOLO un array JSON válido, sin markdown ni texto fuera del JSON.`,
+      messages: [{
+        role: 'user',
+        content: `Mundial 2026. Verifica cada apuesta:\n${listado}
+
+Marca ok=false si ocurre CUALQUIERA de estas cosas:
+- Se nombra a un jugador que no existe, cuyo nombre está mal escrito o que NO juega con una de las dos selecciones de ESE partido.
+- La pregunta no puede resolverse objetivamente con el acta oficial del partido (marcador, goleadores, tarjetas, prórroga, penaltis).
+Si tienes cualquier duda, ok=false.
+
+Responde exactamente: [{"numero":97,"ok":true}]`,
+      }],
+    })
+    const text = message.content.filter(c => c.type === 'text').map(c => (c as { text: string }).text).join('')
+    const ini = text.indexOf('[')
+    const fin = text.lastIndexOf(']')
+    if (ini === -1 || fin === -1 || fin < ini) return new Map()
+    const arr = JSON.parse(text.slice(ini, fin + 1))
+    if (!Array.isArray(arr)) return new Map()
+
+    const ok = new Set<number>()
+    for (const it of arr) {
+      const o = it as Record<string, unknown>
+      if (typeof o.numero === 'number' && o.ok === true) ok.add(o.numero)
+    }
+    const filtrado = new Map<number, Propuesta>()
+    map.forEach((prop, num) => { if (ok.has(num)) filtrado.set(num, prop) })
+    return filtrado
+  } catch {
+    return new Map() // sin verificación no nos fiamos: todo a plantilla genérica
+  }
 }
 
 /** Valida y normaliza una propuesta de la IA. auto/regla se fuerzan a false/null (las revisa el admin). */

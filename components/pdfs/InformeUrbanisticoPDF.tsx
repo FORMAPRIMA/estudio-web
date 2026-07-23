@@ -42,7 +42,14 @@ export interface InformeUrbanisticoData {
   datos: { label: string; valor: string; tipo?: 'oficial' | 'inferido' | 'hipotesis' }[]
   normaZonal: string | null
   normaZonalDenominacion: string | null
+  /** Resumen en lenguaje llano para dirección (sin jerga urbanística). */
+  resumenDirectivo: string | null
+  /** Cifras clave del activo para la banda de KPIs de la primera página. */
+  kpis: { label: string; valor: string; sub?: string }[]
+  /** Captura PNG (dataURL) de la maqueta 3D en vista casi cenital. */
+  maqueta?: string | null
   memo: {
+    resumen_directivo?: string
     resumen_ejecutivo?: string
     situacion_urbanistica?: string
     patrimonio?: string
@@ -57,6 +64,18 @@ export interface InformeUrbanisticoData {
     etiquetas?: { campo: string; valor: string; tipo: string }[]
     advertencias?: string[]
     recomendaciones?: string[]
+  } | null
+  // Cuadro urbanístico formato licencia: normativa · estado actual · potencial
+  cuadro: {
+    filas: {
+      label: string
+      normativa: { texto: string; figura: string; masRestrictivo: boolean }[]
+      actual: string | null
+      potencial: string | null
+      contradiccion: boolean
+    }[]
+    ambitos: string[]
+    advertencias: string[]
   } | null
   redFlags: { severidad: string; titulo: string; descripcion: string | null; recomendacion: string | null; fuente: string | null }[]
   fuentes: string[]
@@ -85,9 +104,23 @@ export function buildInformeUrbanisticoElement(
 ): ReactPDF.DocumentProps & React.ReactElement {
   const { Document, Page, View, Text, Image, StyleSheet } = pdf
 
+  // REGLA DE ORO de @react-pdf para que header/footer fijos no se solapen con
+  // el contenido: los elementos `fixed` se pintan por encima del flujo en TODAS
+  // las páginas, así que el padding de la Page debe RESERVAR sus bandas
+  // (paddingTop ≥ alto del header fijo, paddingBottom ≥ alto del footer fijo).
+  // Aquí: portada como Page propia (héroe en flujo, sin header fijo) y páginas
+  // técnicas con cabecera fija fina (58) + footer fijo (44) reservados.
+  const FOOTER_H = 44
+  const TEC_HEADER_H = 58
+
   const s = StyleSheet.create({
-    page:        { paddingTop: 0, paddingBottom: 56, paddingHorizontal: 0, fontFamily: 'Helvetica', fontSize: 8.5, color: C.ink, backgroundColor: C.white },
-    header:      { backgroundColor: C.headerBg, paddingTop: 36, paddingBottom: 24, paddingHorizontal: 56 },
+    // La portada lleva paddingTop normal (40) y el héroe lo anula con margen
+    // negativo para ir a sangre: así, si el contenido de portada desborda a una
+    // segunda página, esa continuación arranca con margen superior correcto en
+    // lugar de nacer pegada al borde.
+    pageCover:   { paddingTop: 40, paddingBottom: FOOTER_H + 16, paddingHorizontal: 0, fontFamily: 'Helvetica', fontSize: 8.5, color: C.ink, backgroundColor: C.white },
+    pageTec:     { paddingTop: TEC_HEADER_H + 24, paddingBottom: FOOTER_H + 16, paddingHorizontal: 56, fontFamily: 'Helvetica', fontSize: 8.5, color: C.ink, backgroundColor: C.white },
+    header:      { backgroundColor: C.headerBg, marginTop: -40, paddingTop: 36, paddingBottom: 24, paddingHorizontal: 56 },
     headerRow:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
     logo:        { width: 105, objectFit: 'contain', marginBottom: 10 },
     kicker:      { fontSize: 6.5, color: C.brand, fontFamily: 'Helvetica-Bold', letterSpacing: 2, textTransform: 'uppercase' },
@@ -96,6 +129,15 @@ export function buildInformeUrbanisticoElement(
     hDate:       { fontSize: 8.5, color: C.hInk, textAlign: 'right' },
     accent:      { height: 2, backgroundColor: C.brand },
     body:        { paddingHorizontal: 56, paddingTop: 22 },
+    tecHeader:   {
+      position: 'absolute', top: 0, left: 0, right: 0, height: TEC_HEADER_H - 2,
+      backgroundColor: C.headerBg, flexDirection: 'row', alignItems: 'center',
+      justifyContent: 'space-between', paddingHorizontal: 56,
+      borderBottomWidth: 2, borderBottomColor: C.brand,
+    },
+    tecHeaderTitle: { fontSize: 9, color: C.white, fontFamily: 'Helvetica-Bold' },
+    tecHeaderSub:   { fontSize: 6.5, color: C.hInk, marginTop: 2 },
+    tecHeaderRight: { fontSize: 6.5, color: C.hInk, textAlign: 'right' },
     section:     { marginBottom: 16 },
     secLabel:    { fontSize: 6.5, fontFamily: 'Helvetica-Bold', color: C.brand, letterSpacing: 1.8, textTransform: 'uppercase', marginBottom: 6 },
     p:           { fontSize: 8.5, color: C.soft, lineHeight: 1.55 },
@@ -109,11 +151,28 @@ export function buildInformeUrbanisticoElement(
     flagMeta:    { fontSize: 6.5, color: C.meta, marginTop: 2 },
     verdictBox:  { backgroundColor: C.light, padding: 14, marginTop: 4 },
     verdict:     { fontSize: 11, fontFamily: 'Helvetica-Bold', color: C.brand, textTransform: 'uppercase', letterSpacing: 1 },
+    kpiBand:     { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
+    kpiBox:      { flexGrow: 1, flexBasis: '30%', backgroundColor: C.light, padding: 10, borderLeftWidth: 2, borderLeftColor: C.brand },
+    kpiLabel:    { fontSize: 6, fontFamily: 'Helvetica-Bold', color: C.mid, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 3 },
+    kpiValue:    { fontSize: 13, fontFamily: 'Helvetica-Bold', color: C.ink },
+    kpiSub:      { fontSize: 6.5, color: C.meta, marginTop: 2 },
+    execP:       { fontSize: 9.5, color: C.ink, lineHeight: 1.65 },
+    maqueta:     { width: '100%', height: 205, objectFit: 'cover', backgroundColor: C.light },
+    maquetaBox:  { borderWidth: 0.5, borderColor: C.rule },
+    maquetaCaption: { fontSize: 6.5, color: C.meta, marginTop: 4 },
     listItem:    { fontSize: 8.5, color: C.soft, lineHeight: 1.55, marginBottom: 3 },
     disclaimer:  { fontSize: 6.5, color: C.meta, lineHeight: 1.5, marginTop: 4 },
-    footer:      { position: 'absolute', bottom: 24, left: 56, right: 56, flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 0.5, borderTopColor: C.rule, paddingTop: 8 },
+    footer:      { position: 'absolute', bottom: 0, left: 56, right: 56, height: FOOTER_H, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', borderTopWidth: 0.5, borderTopColor: C.rule, paddingTop: 8 },
     footerText:  { fontSize: 6.5, color: C.meta },
   })
+
+  const Footer = () => (
+    <View style={s.footer} fixed>
+      <Text style={s.footerText}>Forma Prima — GEINEX GROUP, S.L.</Text>
+      <Text style={s.footerText}>Urban Analyst · en desarrollo — documento orientativo sin valor jurídico</Text>
+      <Text style={s.footerText} render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} />
+    </View>
+  )
 
   const tagColor = (tipo?: string) =>
     tipo === 'oficial' ? C.ok : tipo === 'hipotesis' ? C.warn : C.mid
@@ -128,9 +187,10 @@ export function buildInformeUrbanisticoElement(
 
   return (
     <Document title={`Informe urbanístico — ${data.nombre}`} author="Forma Prima">
-      <Page size="A4" style={s.page}>
-        {/* Header */}
-        <View style={s.header} fixed={false}>
+      {/* ══ PORTADA — Resumen para dirección (Page propia: el héroe va en
+          flujo y no puede pisar al contenido de las páginas siguientes) ══ */}
+      <Page size="A4" style={s.pageCover}>
+        <View style={s.header}>
           <View style={s.headerRow}>
             <View>
               <Image src={getLogo()} style={s.logo} />
@@ -146,17 +206,52 @@ export function buildInformeUrbanisticoElement(
         <View style={s.accent} />
 
         <View style={s.body}>
-          {/* Resumen ejecutivo */}
-          {memo?.resumen_ejecutivo ? (
+          {/* Resumen para dirección (lenguaje llano) */}
+          {data.resumenDirectivo || memo?.resumen_ejecutivo ? (
             <View style={s.section}>
-              <Text style={s.secLabel}>Resumen ejecutivo</Text>
-              <Text style={s.p}>{memo.resumen_ejecutivo}</Text>
+              <Text style={s.secLabel}>Resumen para dirección</Text>
+              <Text style={s.execP}>{data.resumenDirectivo || memo?.resumen_ejecutivo}</Text>
+              {data.resumenDirectivo && memo?.resumen_ejecutivo ? (
+                <Text style={{ ...s.p, marginTop: 8, color: C.mid }}>{memo.resumen_ejecutivo}</Text>
+              ) : null}
             </View>
           ) : null}
 
-          {/* Recomendación */}
-          {memo?.recomendacion?.veredicto ? (
+          {/* Cifras clave */}
+          {data.kpis.length > 0 ? (
             <View style={s.section}>
+              <Text style={s.secLabel}>Cifras clave del activo</Text>
+              <View style={s.kpiBand}>
+                {data.kpis.map((k, i) => (
+                  <View key={i} style={s.kpiBox} wrap={false}>
+                    <Text style={s.kpiLabel}>{k.label}</Text>
+                    <Text style={s.kpiValue}>{k.valor}</Text>
+                    {k.sub ? <Text style={s.kpiSub}>{k.sub}</Text> : null}
+                  </View>
+                ))}
+              </View>
+            </View>
+          ) : null}
+
+          {/* Maqueta 3D del activo (vista casi cenital) — wrap=false: la
+              imagen salta entera de página si no cabe */}
+          {data.maqueta ? (
+            <View style={s.section} wrap={false}>
+              <Text style={s.secLabel}>Maqueta 3D del activo</Text>
+              <View style={s.maquetaBox}>
+                <Image src={data.maqueta} style={s.maqueta} />
+              </View>
+              <Text style={s.maquetaCaption}>
+                Vista cenital de la maqueta digital: edificación existente (gris), envolvente capaz teórica (naranja)
+                y contexto de manzana con alturas municipales, sobre plano catastral. Representación orientativa sin valor jurídico.
+              </Text>
+            </View>
+          ) : null}
+
+          {/* Recomendación — wrap=false: si no cabe entera, salta completa de
+              página (nunca partir la caja del veredicto por la mitad) */}
+          {memo?.recomendacion?.veredicto ? (
+            <View style={s.section} wrap={false}>
               <View style={s.verdictBox}>
                 <Text style={s.verdict}>
                   {VEREDICTO_LABEL[memo.recomendacion.veredicto] || memo.recomendacion.veredicto}
@@ -174,8 +269,43 @@ export function buildInformeUrbanisticoElement(
             </View>
           ) : null}
 
-          {/* Identificación / datos */}
-          <View style={s.section}>
+          <Text style={{ ...s.disclaimer, marginTop: 2 }}>
+            El detalle técnico completo del análisis (planeamiento, cuadro urbanístico, edificabilidad y alertas)
+            comienza en la página siguiente.
+          </Text>
+
+          <View style={{ borderTopWidth: 0.5, borderTopColor: C.rule, marginTop: 14, paddingTop: 8 }} wrap={false}>
+            <Text style={s.disclaimer}>
+              Este documento ha sido generado automáticamente por Urban Analyst, la herramienta de análisis
+              urbanístico de Forma Prima, actualmente en fase de desarrollo. La información procede de fuentes
+              oficiales de consulta que carecen de valor jurídico y las conclusiones tienen carácter preliminar y
+              orientativo: no sustituyen un informe técnico suscrito por técnico competente, una consulta
+              urbanística formal ni resolución administrativa alguna. Contraste los resultados antes de fundamentar
+              en ellos cualquier decisión de inversión.
+            </Text>
+          </View>
+        </View>
+        <Footer />
+      </Page>
+
+      {/* ══ PÁGINAS TÉCNICAS — cabecera fija fina + footer fijo; el padding de
+          la Page reserva ambas bandas para que el flujo nunca las pise ══ */}
+      <Page size="A4" style={s.pageTec}>
+        <View style={s.tecHeader} fixed>
+          <View>
+            <Text style={s.tecHeaderTitle}>{data.nombre}</Text>
+            <Text style={s.tecHeaderSub}>
+              {[data.refcat ? `RC ${data.refcat}` : null, data.normaZonal ? `NZ ${data.normaZonal}` : null].filter(Boolean).join('  ·  ')}
+            </Text>
+          </View>
+          <View>
+            <Text style={s.tecHeaderRight}>Detalle técnico del análisis</Text>
+            <Text style={{ ...s.tecHeaderRight, marginTop: 2 }}>{fmtFecha(data.fecha)}</Text>
+          </View>
+        </View>
+
+        {/* Identificación / datos */}
+        <View style={s.section}>
             <Text style={s.secLabel}>Identificación del activo</Text>
             {data.normaZonal ? (
               <View style={s.row}>
@@ -192,6 +322,51 @@ export function buildInformeUrbanisticoElement(
               </View>
             ))}
           </View>
+
+          {/* Cuadro urbanístico formato licencia */}
+          {data.cuadro && data.cuadro.filas.length > 0 ? (
+            <View style={s.section}>
+              <Text style={s.secLabel}>Cuadro urbanístico — normativa · estado actual · potencial</Text>
+              {data.cuadro.ambitos.length > 0 ? (
+                <Text style={{ ...s.p, color: C.bad, fontFamily: 'Helvetica-Bold', marginBottom: 4 }}>
+                  Ámbito de planeamiento prevalente: {data.cuadro.ambitos.join(' · ')} — su ficha desplaza las condiciones generales.
+                </Text>
+              ) : null}
+              <View style={{ ...s.row, borderBottomColor: C.ink }}>
+                <Text style={{ width: '18%', fontSize: 6.5, fontFamily: 'Helvetica-Bold', color: C.mid, textTransform: 'uppercase', letterSpacing: 0.5 }}>Parámetro</Text>
+                <Text style={{ width: '42%', fontSize: 6.5, fontFamily: 'Helvetica-Bold', color: C.mid, textTransform: 'uppercase', letterSpacing: 0.5 }}>Normativa</Text>
+                <Text style={{ width: '20%', fontSize: 6.5, fontFamily: 'Helvetica-Bold', color: C.mid, textTransform: 'uppercase', letterSpacing: 0.5 }}>Estado actual</Text>
+                <Text style={{ width: '20%', fontSize: 6.5, fontFamily: 'Helvetica-Bold', color: C.mid, textTransform: 'uppercase', letterSpacing: 0.5 }}>Potencial</Text>
+              </View>
+              {data.cuadro.filas.map((f, i) => (
+                <View key={i} style={s.row} wrap={false}>
+                  <Text style={{ width: '18%', fontSize: 7.5, color: C.mid }}>
+                    {f.label}{f.contradiccion ? '  (contradicción)' : ''}
+                  </Text>
+                  <View style={{ width: '42%', paddingRight: 6 }}>
+                    {f.normativa.length === 0 ? <Text style={{ fontSize: 7.5, color: C.meta }}>—</Text> : null}
+                    {f.normativa.map((n, j) => (
+                      <View key={j} style={{ marginBottom: j < f.normativa.length - 1 ? 3 : 0 }}>
+                        <Text style={{
+                          fontSize: 7.5,
+                          color: n.masRestrictivo && f.normativa.length > 1 ? C.bad : C.ink,
+                          fontFamily: n.masRestrictivo && f.normativa.length > 1 ? 'Helvetica-Bold' : 'Helvetica',
+                        }}>
+                          {n.texto}{n.masRestrictivo && f.normativa.length > 1 ? '  (más restrictiva)' : ''}
+                        </Text>
+                        <Text style={{ fontSize: 5.5, color: C.meta }}>{n.figura}</Text>
+                      </View>
+                    ))}
+                  </View>
+                  <Text style={{ width: '20%', fontSize: 7.5, color: f.actual ? C.ink : C.meta, paddingRight: 6 }}>{f.actual || '—'}</Text>
+                  <Text style={{ width: '20%', fontSize: 7.5, color: f.potencial ? C.ok : C.meta }}>{f.potencial || '—'}</Text>
+                </View>
+              ))}
+              {data.cuadro.advertencias.slice(0, 3).map((a, i) => (
+                <Text key={i} style={{ ...s.disclaimer, marginTop: 4 }}>Aviso: {a}</Text>
+              ))}
+            </View>
+          ) : null}
 
           {/* Secciones del memo */}
           {secciones.filter((sec) => sec.texto).map((sec, i) => (
@@ -213,7 +388,7 @@ export function buildInformeUrbanisticoElement(
                 </View>
               ))}
               {(data.edificabilidad.advertencias || []).map((a, i) => (
-                <Text key={i} style={{ ...s.disclaimer, marginTop: 4 }}>⚠ {a}</Text>
+                <Text key={i} style={{ ...s.disclaimer, marginTop: 4 }}>Aviso: {a}</Text>
               ))}
             </View>
           ) : null}
@@ -266,12 +441,8 @@ export function buildInformeUrbanisticoElement(
               decisión de inversión.
             </Text>
           </View>
-        </View>
 
-        <View style={s.footer} fixed>
-          <Text style={s.footerText}>Forma Prima — GEINEX GROUP, S.L.</Text>
-          <Text style={s.footerText} render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} />
-        </View>
+        <Footer />
       </Page>
     </Document>
   )

@@ -141,8 +141,14 @@ Los guards de rutas están en `app/team/layout.tsx` (sidebar) y en el `middlewar
 ### 5.1 Captación (`/team/captacion`)
 Funnel comercial completo. Acceso: `fp_partner`, `fp_manager`, `fp_biz_dev`.
 
-**Flujo:** Lead → Propuesta → Contrato (firmado vía DocuSign o manualmente)
+**Flujo:** (Business development →) Lead → Propuesta → Contrato (firmado vía DocuSign o manualmente)
 
+- **Business development** (`/team/captacion/business-development`) — CRM estratégico de **partners** (agencias, promotoras, fondos, family offices, prescriptores, constructoras…), distinto de Leads (que son clientes potenciales). Port fiel del artifact de Ana ("CRM estratégico Forma Prima"), restilado a la plataforma. Acceso: `fp_partner`, `fp_manager`, `fp_biz_dev` (sub-tab justo encima de Leads).
+  - **Motor de scoring** (`lib/business-development/engine.ts`, port de `crm-data.js`): 7 criterios (potencial, fit, valor, acceso, temporalidad, posicionamiento, facilidad) + bonuses/penalties → `finalScore`/`tierOf`; métricas derivadas `deriveMetrics` (EBV/PTC/ROE/timing/partnership type); regla de elegibilidad `applyEligibility` (exclusión de constructoras de Madrid, con excepciones); `leadReminder`, `strategicRecommendation`. Tipos en `types.ts`; `seed.ts` = 58 empresas (fallback si la migración no está aplicada).
+  - **12 vistas** (componente único `components/team/business-development/BusinessDevelopmentClient.tsx`, clase React con `React.createElement`, `// @ts-nocheck`): Executive Dashboard · Weekly Update (IA en lenguaje natural) · Weekly Update Log (con deshacer) · Lead Reminders · tablas España/Ecuador/México/Master · Priority Ranking · Pipeline · Research Queue · Partner Profiles · Action Center · Import/Export Excel (paquete `xlsx`) · Admin & Reglas · ficha por empresa. Sub-nav lateral clara propia dentro del contenido.
+  - **Persistencia**: `app/actions/business-development.ts` (`requireCaptacionRole`, service_role) — `getBusinessDevelopmentData`, `saveCompanies` (upsert del array completo), `replaceWeeklyLog`, `setRule`, `restoreSeed`, `crearLeadDesdePartner`. Tablas `bd_companies`/`bd_weekly_log`/`bd_config` (RLS sin políticas). **Migración `business_development.sql` pendiente de ejecutar** (hasta entonces usa el SEED en solo-lectura).
+  - **IA**: `app/api/business-development/asistente/route.ts` (Claude Haiku) — redacta hipótesis comercial y interpreta el Weekly Update. Con fallback heurístico.
+  - **Puente con Leads**: botón "Generar lead" en la ficha → `crearLeadDesdePartner` inserta en `leads` (`origen='Business development'`, `bd_company_id`), sin duplicar.
 - **Leads** — `app/actions/leads.ts` + `LeadsPage.tsx`
 - **Propuestas** — `app/actions/propuestas.ts` + `PropuestaDetalle.tsx`
   - Genera PDF con `@react-pdf/renderer` (`components/pdfs/PropuestaPDF.tsx`)
@@ -251,12 +257,31 @@ Aplicaciones internas. Acceso: todos los roles FP.
   - Soporta multiselección, cámara directa (`capture="environment"`), thumbnails de vídeo (primer frame), lightbox fullscreen, vista "Stories" tipo Instagram
   - `lib/design-hunter.ts` — tipos + `isVideoUrl()`
 
-- **Control de obra** (`/team/apps/control-obra`) — **SOLO `fp_partner`** — `components/team/control-obra/ControlObraPage.tsx`
+- **Control de obra** (`/team/apps/control-obra`) — **`fp_partner` + allowlist por email** (`CONTROL_OBRA_ALLOWED_EMAILS` en `lib/control-obra/domain.ts`; incluye a Aitana `acascante@formaprima.es`) — `components/team/control-obra/ControlObraPage.tsx`
   - Control económico de obra por proyecto. Parte de un **baseline congelado** (presupuesto firmado) y registra los cambios encima (subidas de precio, cantidades, partidas nuevas, partidas no ejecutadas), con motivo interno y comentario para el cliente.
   - 5 tabs: **Partidas** (baseline vs actual, estado igual/modificada/nueva/eliminada, **proveedor por partida**, toggle coste/cliente) · **Proveedores y pagos** (comprometido/pagado/pendiente + libro de pagos) · **Tesorería** (depósitos del cliente y balance = depósitos con IVA − pagos a proveedores) · **Vista cliente** (modo presentación limpio: solo su presupuesto y los cambios; sin coste/margen/proveedores/tesorería) · **Histórico**
   - `lib/control-obra/domain.ts` — tipos + helpers (`ceilCent` redondeo al céntimo, `autoPucl`, cálculos de importe/balance)
   - `app/actions/control-obra.ts` — todas las mutaciones (`requirePartner()`)
   - Tablas `obra_control_*` (obras, partidas, proveedores, pagos, depositos, log). Solo `service_role` (RLS sin políticas). Seed inicial: **Casa Claudio Coello 38** (baseline 14/01/2026, 11 capítulos, 259 partidas)
+
+- **Modelo Café Goya** (`/team/apps/modelo-cafe`) — **SOLO `fp_partner`** — `components/team/modelo-cafe/ModeloCafePage.tsx`
+  - Modelo financiero interactivo del quiosco → café de especialidad to-go (Calle Goya 63, Madrid): P&L mensual/anual, financiación (entrada + aplazamiento del traspaso al vendedor + préstamo bancario), punto de equilibrio, caja mensual por fases, payback y ROI sobre capital propio
+  - **5 secciones (tabs grandes)**:
+    - **Modelo financiero** — envuelve las 3 sub-tabs originales: **Modelo** (supuestos editables + resultados + conclusión) · **Sensibilidad** (matriz cafés/día × precio) · **Comparativa** (escenarios recalculados lado a lado). Aquí vive la barra de escenarios (guardar/guardar como/renombrar/eliminar/descartar/defaults). Financiación con **sliders** (precio traspaso, entrada, plazo del aplazamiento 0–72m, interés, % financiado, TIN, plazo préstamo, comisión). Punto de equilibrio con 3 umbrales: operativo (EBITDA 0), beneficio 0 (+amort+intereses) y **caja arranque ≥ 0** (+cuotas banco y vendedor, el «no pierdes dinero» real)
+    - **CAPEX / equipamiento** — tabla editable agrupada por categoría (Extracción de café · Frío · Agua · Barra y servicio) con concepto, marca/modelo, estado nuevo/2ª mano, cantidad, precio, subtotal, link de compra y nota; totales por categoría y global; **persistencia compartida en Supabase** (`modelo_cafe_capex`, una fila 'default', autoguardado con debounce; fallback a `CAPEX_DEFAULT` si la migración no está aplicada); botón «usar total como equipamiento del modelo». Datos por defecto investigados (La Marzocco 2ª mano, Mahlkönig E65S ×2, Marco SP9, hielo, neveras, vitrina, BWT, TPV…) en `lib/modelo-cafe/capex.ts`
+    - **Dossier bancario** — eliges qué escenario guardado es el CONSERVADOR y con dos sliders (% cafés/día) se derivan pesimista y optimista; toggle para **incluir el equipamiento del CAPEX** (sustituye el `equipo` del escenario y recalcula desembolso/préstamo/capital propio, con detalle por categorías en el PDF); botón genera un PDF hiper-profesional para el banco (negocio, usos/fuentes, P&L conservador, 3 escenarios con DSCR/payback, servicio de deuda, mitigantes, solicitud y páginas de mercado)
+    - **Análisis de mercado** — tabla de precios de carta de 7 cafeterías del entorno (Good News, Pink Bourbon, Utópico, East Crema, Hola Coffee, Bell's, Ágora) por bebida + media de mercado + ticket medio por local; panel de ventas/día reportadas por los baristas; KPIs de posicionamiento (renta CBRE, ticket)
+    - **Propuesta final** — formulario con los números editables de la propuesta a los vendedores (dos opciones de pago + fiscalidad); botón renderiza el PDF (carta cálida + impuestos explicados + acuerdo de reserva)
+  - **Escenarios guardados en Supabase** con nombre y notas: guardar, guardar como, renombrar, eliminar (el base no), descartar cambios, valores por defecto. Indicador de cambios sin guardar
+  - `lib/modelo-cafe/domain.ts` — tipos `ModeloInputs`/`Escenario`, `BASE_INPUTS`, `computeModelo()` (motor de cálculo), `cuotaFrancesa()`, `normalizeInputs()` (sanea jsonb), formateadores
+  - `lib/modelo-cafe/dossier.ts` — `derivarEscenarios()` (pesimista/conservador/optimista desde inputs + % cafés) y `estructuraInversion()` (usos/fuentes); fuente única del dossier
+  - `lib/modelo-cafe/mercado.ts` — datos de mercado estáticos (cafeterías, precios, ventas de baristas, traspasos comparables, CBRE) + helpers de media por bebida / ticket por local
+  - `lib/modelo-cafe/capex.ts` — tipos `CapexItem` + `CAPEX_DEFAULT` (equipamiento investigado) + helpers de total
+  - `components/team/modelo-cafe/{ModeloCafePage,DossierTab,MercadoTab,PropuestaTab,CapexTab}.tsx` + `theme.ts` (paleta compartida) + `Field.tsx` (`NumField`, `RangeField`)
+  - `components/pdfs/DossierBancarioPDF.tsx` y `components/pdfs/PropuestaTraspasoPDF.tsx` (patrón import dinámico; formateadores con `useGrouping:'always'` para uniformar miles)
+  - `app/api/modelo-cafe/{dossier-pdf,propuesta-pdf}/route.ts` — POST que renderizan los PDFs (`fp_partner`)
+  - `app/actions/modelo-cafe.ts` — CRUD de escenarios + `getCapex()`/`saveCapex()` (`requirePartner()`)
+  - Tablas `modelo_cafe_escenarios` (inputs jsonb, es_base; seed escenario base) y `modelo_cafe_capex` (items jsonb, fila única 'default'). Solo `service_role` (RLS sin políticas). **Migración `modelo_cafe_capex.sql` pendiente de ejecutar** (hasta entonces el CAPEX usa los valores por defecto y el guardado avisa)
 
 ### 5.9 Marketing (`/team/marketing`) — `fp_partner`, `fp_biz_dev`
 Gestión de contenido para redes sociales.
@@ -358,6 +383,19 @@ Registro de horas por proyecto y fase. Todos los roles FP.
 | `design_hunter_viajes` | Colecciones/viajes de referencias |
 | `design_hunter_entries` | Entradas individuales (foto_url + `media_urls text[]` para múltiples archivos) |
 
+### Business development
+| Tabla | Propósito |
+|---|---|
+| `bd_companies` | Empresas/partners del CRM (`data jsonb`, una fila por empresa) |
+| `bd_weekly_log` | Historial de Weekly Update (`data jsonb`) |
+| `bd_config` | Configuración del módulo (key/value jsonb; toggle de la regla) |
+| `leads.bd_company_id` | Back-reference del lead al partner que lo originó (puente) |
+
+### Modelo Café Goya
+| Tabla | Propósito |
+|---|---|
+| `modelo_cafe_escenarios` | Escenarios del modelo financiero (nombre, notas, `inputs jsonb`, `es_base`) |
+
 ### Marketing
 | Tabla | Propósito |
 |---|---|
@@ -424,6 +462,7 @@ Registro de horas por proyecto y fase. Todos los roles FP.
 /team/dashboard             Dashboard personal del equipo
 /team/time-tracker          Registro de horas
 /team/captacion             Índice captación
+/team/captacion/business-development  CRM estratégico de partners (Business development)
 /team/captacion/leads       CRM de leads
 /team/captacion/propuestas  Lista de propuestas
 /team/captacion/propuestas/[id]  Detalle/editor de propuesta
@@ -466,6 +505,7 @@ Registro de horas por proyecto y fase. Todos los roles FP.
 /team/apps                  Índice de apps
 /team/apps/design-hunter    Design Hunter (inspiración/referencias)
 /team/apps/control-obra     Control económico de obra (solo fp_partner)
+/team/apps/modelo-cafe      Modelo financiero Café Goya (solo fp_partner)
 /team/marketing             Índice de marketing
 /team/marketing/post-manager          Kanban de posts por red social
 /team/marketing/time-tracker-sections Time tracker de secciones (en desarrollo)
@@ -488,6 +528,7 @@ Registro de horas por proyecto y fase. Todos los roles FP.
 /api/facturas-emitidas/emit         POST — emite factura borrador
 /api/facturas-emitidas/preview-pdf  POST — preview factura
 /api/profesionalizar-instrucciones  POST — mejora texto con IA (Claude Haiku)
+/api/business-development/asistente POST — asistente IA del CRM de partners (Claude Haiku)
 /api/scan-ticket                    POST — escanea ticket con IA
 /api/portal/verify                  POST — verifica token del portal cliente
 /api/bank-statement                 POST — importa extracto bancario
@@ -565,6 +606,19 @@ Registro de horas por proyecto y fase. Todos los roles FP.
   ```
 - `stripMd()` se aplica antes de pasar texto a PDF (asteriscos de la IA no funcionan en PDF)
 - **NO usar flags regex `s` (dotAll)**  — el target de TS no lo soporta. Usar `[^*]+` en lugar de `.+?`
+- **🔴 Headers/footers fijos — REGLA DE ORO (bug recurrente):** los elementos `fixed` se pintan
+  ENCIMA del flujo en todas las páginas. Para que nunca se solapen con el contenido, el padding de
+  la `<Page>` debe RESERVAR sus bandas: `paddingTop ≥ alto del header fijo` y `paddingBottom ≥ alto
+  del footer fijo` (con alturas explícitas en los elementos fijos, anclados a `top: 0`/`bottom: 0`).
+  Nunca `paddingTop: 0` con contenido que fluye a página 2+. Si hay una portada con cabecera héroe
+  en flujo, va en su **propia `<Page>`** separada de las páginas de contenido, con paddingTop normal
+  y `marginTop` negativo en el héroe para el efecto a sangre (así las páginas de desbordamiento de la
+  portada conservan el margen superior). Las cajas destacadas (veredicto, KPIs) llevan `wrap={false}`
+  para saltar ENTERAS de página en lugar de partirse. Patrón de referencia:
+  `components/pdfs/InformeUrbanisticoPDF.tsx` (pageCover + pageTec).
+- **Glifos**: Helvetica (fuente base) no tiene `→ ≥ ≤ ≈ ⚠ ★ ✓ ✗` (salen como `'`): sanitizar los
+  textos generados por motores/IA antes de renderizar (ver `pdfSafe()` en el route del informe
+  urbanístico). Sí soporta `² × · º €`.
 
 ### Estilos en el área interna
 - **No se usa Tailwind en componentes del área interna** (`/team/*`)

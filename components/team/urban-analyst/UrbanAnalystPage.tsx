@@ -292,13 +292,34 @@ function NormasZonalesModal({ normas, onClose }: { normas: NormaZonal[]; onClose
   const router = useRouter()
   const [rows, setRows] = useState(normas)
   const [savingCodigo, setSavingCodigo] = useState<string | null>(null)
+  const [expanded, setExpanded] = useState<string | null>(null)
+
+  const setField = (codigo: string, field: keyof NormaZonal, value: unknown) => {
+    setRows((rs) => rs.map((x) => (x.codigo === codigo ? { ...x, [field]: value } : x)))
+  }
 
   const save = async (row: NormaZonal) => {
     setSavingCodigo(row.codigo)
     try {
       await updateNormaZonal(row.codigo, {
         coef_edificabilidad: row.coef_edificabilidad,
+        formula_c: row.formula_c,
         altura_max_plantas: row.altura_max_plantas,
+        ocupacion_pct: row.ocupacion_pct,
+        plantas_bajo_rasante: row.plantas_bajo_rasante,
+        altura_cornisa_m: row.altura_cornisa_m,
+        altura_max_m: row.altura_max_m,
+        retranqueo_frente_m: row.retranqueo_frente_m,
+        retranqueo_lateral_m: row.retranqueo_lateral_m,
+        retranqueo_testero_m: row.retranqueo_testero_m,
+        altura_piso_m: row.altura_piso_m,
+        altura_piso_pb_m: row.altura_piso_pb_m,
+        altura_libre_min_m: row.altura_libre_min_m,
+        parcela_minima_m2: row.parcela_minima_m2,
+        frente_minimo_m: row.frente_minimo_m,
+        regimen_usos: row.regimen_usos as Record<string, string> | null,
+        fuente_articulo: row.fuente_articulo,
+        uso_cualificado: row.uso_cualificado,
         verificado: row.verificado,
       })
       router.refresh()
@@ -307,46 +328,121 @@ function NormasZonalesModal({ normas, onClose }: { normas: NormaZonal[]; onClose
     }
   }
 
+  // Campos numéricos de la matriz (label corto, clave, decimales)
+  const camposMatriz: { key: keyof NormaZonal; label: string; step?: string }[] = [
+    { key: 'coef_edificabilidad', label: 'Edificab. (m²c/m²s)', step: '0.01' },
+    { key: 'formula_c',           label: 'C fórmula S×Z×C',     step: '0.001' },
+    { key: 'ocupacion_pct',       label: 'Ocupación (%)',       step: '0.1' },
+    { key: 'altura_max_plantas',  label: 'Plantas s/rasante' },
+    { key: 'plantas_bajo_rasante',label: 'Plantas b/rasante' },
+    { key: 'altura_cornisa_m',    label: 'Alt. cornisa (m)',    step: '0.1' },
+    { key: 'altura_max_m',        label: 'Alt. máxima (m)',     step: '0.1' },
+    { key: 'retranqueo_frente_m', label: 'Retranq. frente (m)', step: '0.1' },
+    { key: 'retranqueo_lateral_m',label: 'Retranq. lateral (m)',step: '0.1' },
+    { key: 'retranqueo_testero_m',label: 'Retranq. testero (m)',step: '0.1' },
+    { key: 'altura_piso_m',       label: 'Alt. piso (m)',       step: '0.05' },
+    { key: 'altura_piso_pb_m',    label: 'Alt. piso PB (m)',    step: '0.05' },
+    { key: 'altura_libre_min_m',  label: 'Alt. libre mín. (m)', step: '0.05' },
+    { key: 'parcela_minima_m2',   label: 'Parcela mín. (m²)' },
+    { key: 'frente_minimo_m',     label: 'Frente mín. (m)',     step: '0.1' },
+  ]
+
   return (
     <div style={overlayStyle} onClick={onClose}>
-      <div style={{ ...modalStyle, maxWidth: 780 }} onClick={(e) => e.stopPropagation()}>
+      <div style={{ ...modalStyle, maxWidth: 900 }} onClick={(e) => e.stopPropagation()}>
         <p style={{ fontSize: 9, letterSpacing: '0.2em', textTransform: 'uppercase', color: BRAND, marginBottom: 6, fontWeight: 600 }}>Tabla curada · PGOUM 1997</p>
-        <h2 style={{ fontSize: 20, fontWeight: 300, color: TXT, marginBottom: 8 }}>Normas zonales</h2>
+        <h2 style={{ fontSize: 20, fontWeight: 300, color: TXT, marginBottom: 8 }}>Normas zonales — matriz de parámetros</h2>
         <p style={{ fontSize: 11.5, color: SUB, fontWeight: 300, marginBottom: 18, lineHeight: 1.5 }}>
-          El motor solo se fía de coeficientes marcados como verificados. Rellénalos conforme los verifiques en el
-          Compendio de NNUU (los nombres ya están verificados).
+          Una fila por norma / grado / nivel (ej. 8.1.a). El cuadro urbanístico usa estos valores y solo
+          los trata como fiables si están marcados como verificados contra las NNUU. Despliega una fila
+          para editar la matriz completa (ocupación, alturas, retranqueos, usos).
         </p>
-        <div style={{ maxHeight: 420, overflowY: 'auto' }}>
-          {rows.map((r, i) => (
-            <div key={r.codigo} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: `1px solid ${EDGE}` }}>
-              <span style={{ width: 34, fontSize: 13, fontWeight: 600, color: BRAND }}>{r.codigo}</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 12.5, color: TXT }}>{r.nombre}</p>
-                {r.notas && <p style={{ fontSize: 9.5, color: FAINT, fontWeight: 300, marginTop: 2 }}>{r.notas}</p>}
+        <div style={{ maxHeight: 480, overflowY: 'auto' }}>
+          {rows.map((r) => (
+            <div key={r.codigo} style={{ borderBottom: `1px solid ${EDGE}` }}>
+              <div
+                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', cursor: 'pointer' }}
+                onClick={() => setExpanded(expanded === r.codigo ? null : r.codigo)}
+              >
+                <span style={{ width: 52, fontSize: 13, fontWeight: 600, color: BRAND }}>{r.codigo}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 12.5, color: TXT }}>{r.nombre}</p>
+                  <p style={{ fontSize: 9.5, color: FAINT, fontWeight: 300, marginTop: 2 }}>
+                    {[
+                      r.coef_edificabilidad != null ? `${r.coef_edificabilidad} m²c/m²s` : null,
+                      r.formula_c != null ? `E = S×Z×C (C ${r.formula_c})` : null,
+                      r.ocupacion_pct != null ? `ocup. ${r.ocupacion_pct}%` : null,
+                      r.altura_max_plantas != null ? `${r.altura_max_plantas} pl` : null,
+                      r.fuente_articulo,
+                    ].filter(Boolean).join(' · ') || 'sin parámetros — pendiente de rellenar'}
+                  </p>
+                </div>
+                <span style={{
+                  fontSize: 8.5, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600,
+                  color: r.verificado ? '#3E7A4E' : '#B8860B',
+                }}>
+                  {r.verificado ? 'verificada' : 'hipótesis'}
+                </span>
+                <span style={{ fontSize: 11, color: FAINT }}>{expanded === r.codigo ? '▾' : '▸'}</span>
               </div>
-              <input
-                type="number" step="0.01" placeholder="coef"
-                value={r.coef_edificabilidad ?? ''}
-                onChange={(e) => setRows(rows.map((x, j) => j === i ? { ...x, coef_edificabilidad: e.target.value === '' ? null : parseFloat(e.target.value) } : x))}
-                style={{ ...inputStyle, width: 64, padding: '6px 8px', fontSize: 12 }}
-              />
-              <input
-                type="number" placeholder="alt."
-                value={r.altura_max_plantas ?? ''}
-                onChange={(e) => setRows(rows.map((x, j) => j === i ? { ...x, altura_max_plantas: e.target.value === '' ? null : parseInt(e.target.value, 10) } : x))}
-                style={{ ...inputStyle, width: 48, padding: '6px 8px', fontSize: 12 }}
-              />
-              <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 9.5, color: SUB, cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={r.verificado}
-                  onChange={(e) => setRows(rows.map((x, j) => j === i ? { ...x, verificado: e.target.checked } : x))}
-                />
-                verif.
-              </label>
-              <button onClick={() => save(rows[i])} disabled={savingCodigo === r.codigo} style={{ ...btnGhost, padding: '5px 10px', fontSize: 9 }}>
-                {savingCodigo === r.codigo ? '…' : 'Guardar'}
-              </button>
+
+              {expanded === r.codigo && (
+                <div style={{ padding: '4px 0 14px 52px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                    {camposMatriz.map((c) => (
+                      <label key={String(c.key)} style={{ display: 'block' }}>
+                        <span style={{ display: 'block', fontSize: 8.5, letterSpacing: '0.06em', textTransform: 'uppercase', color: FAINT, marginBottom: 3 }}>{c.label}</span>
+                        <input
+                          type="number" step={c.step || '1'}
+                          value={(r[c.key] as number | null) ?? ''}
+                          onChange={(e) => setField(r.codigo, c.key, e.target.value === '' ? null : parseFloat(e.target.value))}
+                          style={{ ...inputStyle, padding: '6px 8px', fontSize: 12 }}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
+                    <label style={{ display: 'block' }}>
+                      <span style={{ display: 'block', fontSize: 8.5, letterSpacing: '0.06em', textTransform: 'uppercase', color: FAINT, marginBottom: 3 }}>Uso cualificado</span>
+                      <input
+                        value={r.uso_cualificado ?? ''}
+                        onChange={(e) => setField(r.codigo, 'uso_cualificado', e.target.value || null)}
+                        style={{ ...inputStyle, padding: '6px 8px', fontSize: 12 }}
+                      />
+                    </label>
+                    <label style={{ display: 'block' }}>
+                      <span style={{ display: 'block', fontSize: 8.5, letterSpacing: '0.06em', textTransform: 'uppercase', color: FAINT, marginBottom: 3 }}>Fuente (artículos NNUU)</span>
+                      <input
+                        value={r.fuente_articulo ?? ''} placeholder="ej. arts. 8.8.5-8.8.9 NNUU"
+                        onChange={(e) => setField(r.codigo, 'fuente_articulo', e.target.value || null)}
+                        style={{ ...inputStyle, padding: '6px 8px', fontSize: 12 }}
+                      />
+                    </label>
+                  </div>
+                  <label style={{ display: 'block', marginTop: 8 }}>
+                    <span style={{ display: 'block', fontSize: 8.5, letterSpacing: '0.06em', textTransform: 'uppercase', color: FAINT, marginBottom: 3 }}>Régimen de usos (compatibles / autorizables / prohibidos)</span>
+                    <textarea
+                      value={r.regimen_usos?.texto ?? ''}
+                      onChange={(e) => setField(r.codigo, 'regimen_usos', e.target.value ? { ...(r.regimen_usos || {}), texto: e.target.value } : null)}
+                      rows={2}
+                      style={{ ...inputStyle, padding: '6px 8px', fontSize: 12, resize: 'vertical' }}
+                    />
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 10 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, color: SUB, cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={r.verificado}
+                        onChange={(e) => setField(r.codigo, 'verificado', e.target.checked)}
+                      />
+                      Verificada contra NNUU
+                    </label>
+                    <button onClick={() => save(r)} disabled={savingCodigo === r.codigo} style={{ ...btnGhost, padding: '6px 14px', fontSize: 9 }}>
+                      {savingCodigo === r.codigo ? 'Guardando…' : 'Guardar'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>

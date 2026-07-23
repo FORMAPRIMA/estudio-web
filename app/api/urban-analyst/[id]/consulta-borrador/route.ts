@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import Anthropic from '@anthropic-ai/sdk'
 import { buildContextoActivo, stripVolumenGeometrias, parseJsonRespuesta, IA_MODEL, REGLAS_ANALISTA } from '@/lib/urban-analyst/iaContext'
+import { nzCandidatos } from '@/lib/urban-analyst/cuadroUrbanistico'
 import type { ConsultaUrbanisticaData } from '@/components/pdfs/ConsultaUrbanisticaPDF'
 import type { UrbanAsset, NormaZonal, EdificabilidadResult, UrbanDocument } from '@/lib/urban-analyst/types'
 
@@ -44,10 +45,10 @@ export async function POST(
 
     let nzRow: NormaZonal | null = null
     if (asset.norma_zonal) {
-      const { data } = await admin.from('urban_normas_zonales').select('*')
-        .in('codigo', [asset.norma_zonal, asset.norma_zonal.split('.')[0]])
+      const candidatos = nzCandidatos(asset.norma_zonal)
+      const { data } = await admin.from('urban_normas_zonales').select('*').in('codigo', candidatos)
       const rows = (data || []) as NormaZonal[]
-      nzRow = rows.find((r) => r.codigo === asset.norma_zonal) || rows[0] || null
+      nzRow = candidatos.map((c) => rows.find((r) => r.codigo === c)).find(Boolean) || null
     }
     const analysis = analysisRes.data || []
     const contexto = buildContextoActivo({
@@ -55,6 +56,7 @@ export async function POST(
       hits: (hitsRes.data || []) as never[],
       flags: (flagsRes.data || []) as never[],
       edificabilidad: (analysis.find((a) => a.kind === 'edificabilidad')?.content as EdificabilidadResult | undefined) ?? null,
+      cuadroUrbanistico: (analysis.find((a) => a.kind === 'cuadro_urbanistico')?.content as Record<string, unknown> | undefined) ?? null,
       volumenCapaz: stripVolumenGeometrias(analysis.find((a) => a.kind === 'volumen_capaz')?.content as Record<string, unknown> | undefined ?? null),
       lecturaDocumentos: (analysis.find((a) => a.kind === 'documentos_oficiales')?.content as Record<string, unknown> | undefined) ?? null,
       documentos: (docsRes.data || []) as UrbanDocument[],

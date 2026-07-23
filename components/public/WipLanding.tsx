@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { submitContactoWeb } from '@/app/actions/web-publica'
 import type { WebProyecto } from '@/lib/web-publica'
+import MadridProjectsMap from './MadridProjectsMap'
 
 const LOGO_WHITE = '/wip/logo-h.png'            // logo horizontal (negro; se pinta en blanco con filtro CSS)
 const ISOTIPO_DARK = '/ISOTIPO%20NEGRO.png'     // isotipo oscuro (esquina, modo abierto/claro)
@@ -19,6 +20,7 @@ interface ProjData {
 
 export function WipLanding({ proyectos }: { proyectos: WebProyecto[] }) {
   const root = useRef<HTMLDivElement>(null)
+  const [mapOpen, setMapOpen] = useState(false)
 
   const P = useMemo<ProjData[]>(
     () =>
@@ -67,6 +69,7 @@ export function WipLanding({ proyectos }: { proyectos: WebProyecto[] }) {
     const center = $('fp-center')
     const logoCorner = $('fp-logo-corner')
     const contact = $('fp-contact')
+    const mapBtn = $('fp-map-btn')
     const closeBtn = $('fp-close')
     const openLayer = $('fp-open')
     const sheet = $('fp-sheet')
@@ -150,6 +153,7 @@ export function WipLanding({ proyectos }: { proyectos: WebProyecto[] }) {
       heroScrim.style.opacity = '0'
       logoCorner.style.opacity = '1'
       contact.style.opacity = '0'; contact.style.pointerEvents = 'none'
+      mapBtn.style.opacity = '0'; mapBtn.style.pointerEvents = 'none'
       closeBtn.style.opacity = '1'; closeBtn.style.pointerEvents = 'auto'
       setIndexUI(i, false)
     }
@@ -165,6 +169,7 @@ export function WipLanding({ proyectos }: { proyectos: WebProyecto[] }) {
       heroScrim.style.opacity = '1'
       logoCorner.style.opacity = '0'
       contact.style.opacity = '0.92'; contact.style.pointerEvents = 'auto'
+      mapBtn.style.opacity = '0.92'; mapBtn.style.pointerEvents = 'auto'
       closeBtn.style.opacity = '0'; closeBtn.style.pointerEvents = 'none'
       go(current, true)
       startTimer()
@@ -419,11 +424,28 @@ export function WipLanding({ proyectos }: { proyectos: WebProyecto[] }) {
           <img src={ISOTIPO_DARK} alt="Forma Prima" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
         </div>
 
-        {/* CONTACTO */}
-        <button id="fp-contact" className="fp-tint fp-interactive" data-cursor="" style={{ position: 'absolute', top: 'clamp(22px,3.2vh,36px)', right: 'clamp(22px,3.4vw,44px)', display: 'flex', alignItems: 'center', gap: 9, background: 'none', border: 'none', padding: 8, margin: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 500, letterSpacing: '.24em', textTransform: 'uppercase', color: '#fff', transition: 'color 1s ease,opacity .4s ease', opacity: .92 }}>
-          <span style={{ display: 'inline-block', width: 5, height: 5, borderRadius: '50%', background: 'currentColor' }} />
-          <span>Contacto</span>
-        </button>
+        {/* TOP-RIGHT ACTIONS (mapa + contacto) */}
+        <div style={{ position: 'absolute', top: 'clamp(22px,3.2vh,36px)', right: 'clamp(22px,3.4vw,44px)', zIndex: 6, display: 'flex', alignItems: 'center', gap: 'clamp(14px,2vw,26px)' }}>
+          {/* MAPA MADRID */}
+          <button
+            id="fp-map-btn"
+            onClick={() => setMapOpen(true)}
+            onMouseEnter={(e) => { e.currentTarget.style.opacity = '1' }}
+            onMouseLeave={(e) => { e.currentTarget.style.opacity = '.92' }}
+            className="fp-tint fp-interactive"
+            data-cursor=""
+            style={{ display: 'flex', alignItems: 'center', gap: 9, background: 'none', border: 'none', padding: 8, margin: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 500, letterSpacing: '.24em', textTransform: 'uppercase', color: '#fff', transition: 'color 1s ease,opacity .4s ease', opacity: .92 }}
+          >
+            <span style={{ fontSize: 12, lineHeight: 1 }}>◍</span>
+            <span className="fp-mapbtn-full">Mapa Madrid</span>
+            <span className="fp-mapbtn-short">Mapa</span>
+          </button>
+          {/* CONTACTO */}
+          <button id="fp-contact" className="fp-tint fp-interactive" data-cursor="" style={{ display: 'flex', alignItems: 'center', gap: 9, background: 'none', border: 'none', padding: 8, margin: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 500, letterSpacing: '.24em', textTransform: 'uppercase', color: '#fff', transition: 'color 1s ease,opacity .4s ease', opacity: .92 }}>
+            <span style={{ display: 'inline-block', width: 5, height: 5, borderRadius: '50%', background: 'currentColor' }} />
+            <span>Contacto</span>
+          </button>
+        </div>
 
         {/* CLOSE (open mode) */}
         <button id="fp-close" className="fp-tint fp-interactive" data-cursor="" aria-label="Cerrar" style={{ position: 'absolute', top: 'clamp(20px,3vh,32px)', right: 'clamp(20px,3.2vw,42px)', display: 'flex', alignItems: 'center', gap: 9, background: 'none', border: 'none', padding: 8, margin: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 500, letterSpacing: '.24em', textTransform: 'uppercase', color: '#141414', opacity: 0, pointerEvents: 'none', transition: 'color 1s ease,opacity .5s ease' }}>
@@ -535,11 +557,16 @@ export function WipLanding({ proyectos }: { proyectos: WebProyecto[] }) {
         </div>
       </div>
 
+      {/* MAPA INTERACTIVO DE MADRID */}
+      <MadridProjectsMap open={mapOpen} onClose={() => setMapOpen(false)} />
+
       {/* estilos que no se pueden expresar inline (placeholder, focus, hover) */}
       <style>{`
         #fp-modal input::placeholder,#fp-modal textarea::placeholder{color:rgba(17,17,17,.28);}
         #fp-modal input:focus,#fp-modal textarea:focus{border-bottom-color:#111 !important;}
         #fp-index button:hover .fp-iname{opacity:1 !important;}
+        .fp-mapbtn-short{ display:none; }
+        @media (max-width: 560px){ .fp-mapbtn-full{ display:none; } .fp-mapbtn-short{ display:inline; } }
 
         /* ── Mobile-first ─────────────────────────────────────────── */
         @media (max-width: 640px){

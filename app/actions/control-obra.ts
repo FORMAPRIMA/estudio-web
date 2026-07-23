@@ -4,23 +4,24 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import type { ObraData, Partida, Proveedor, Pago, Deposito, LogEntry, Obra } from '@/lib/control-obra/domain'
+import { canAccessControlObra } from '@/lib/control-obra/domain'
 
 const PATH = '/team/apps/control-obra'
 const SLUG = 'claudio-coello-38'
 
-async function requirePartner() {
+async function requireControlObraAccess() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Sin sesión activa.')
   const { data: profile } = await supabase.from('profiles').select('rol').eq('id', user.id).single()
-  if (!profile || profile.rol !== 'fp_partner') throw new Error('Sin permisos.')
+  if (!profile || !canAccessControlObra(profile.rol, user.email)) throw new Error('Sin permisos.')
   return { userId: user.id }
 }
 
 type Result = { success: true } | { error: string }
 
 export async function getObraData(): Promise<ObraData | null> {
-  await requirePartner()
+  await requireControlObraAccess()
   const admin = createAdminClient()
   const { data: obra } = await admin.from('obra_control_obras').select('*').eq('slug', SLUG).single()
   if (!obra) return null
@@ -81,7 +82,7 @@ export async function updatePartida(
   }
 ): Promise<Result> {
   try {
-    const { userId } = await requirePartner()
+    const { userId } = await requireControlObraAccess()
     const admin = createAdminClient()
     const { data: prev } = await admin.from('obra_control_partidas').select('*').eq('id', id).single()
     if (!prev) return { error: 'Partida no encontrada.' }
@@ -125,7 +126,7 @@ export async function updatePartida(
 
 export async function resetPartida(id: string): Promise<Result> {
   try {
-    const { userId } = await requirePartner()
+    const { userId } = await requireControlObraAccess()
     const admin = createAdminClient()
     const { data: prev } = await admin.from('obra_control_partidas').select('*').eq('id', id).single()
     if (!prev) return { error: 'Partida no encontrada.' }
@@ -151,7 +152,7 @@ export async function resetPartida(id: string): Promise<Result> {
 
 export async function setPartidaEliminada(id: string, eliminada: boolean): Promise<Result> {
   try {
-    const { userId } = await requirePartner()
+    const { userId } = await requireControlObraAccess()
     const admin = createAdminClient()
     const { data: prev } = await admin.from('obra_control_partidas').select('*').eq('id', id).single()
     if (!prev) return { error: 'Partida no encontrada.' }
@@ -181,6 +182,23 @@ export async function setPartidaEliminada(id: string, eliminada: boolean): Promi
   }
 }
 
+/** Marca/desmarca el check de revisión periódica (caduca solo a los 14 días; no pasa al histórico). */
+export async function setPartidaRevisada(id: string, revisado: boolean): Promise<Result> {
+  try {
+    await requireControlObraAccess()
+    const admin = createAdminClient()
+    const { error } = await admin
+      .from('obra_control_partidas')
+      .update({ revisado_at: revisado ? new Date().toISOString() : null })
+      .eq('id', id)
+    if (error) return { error: error.message }
+    revalidatePath(PATH)
+    return { success: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
 export async function createPartida(data: {
   obra_id: string
   capitulo_num: number
@@ -201,7 +219,7 @@ export async function createPartida(data: {
   nota_cliente?: string | null
 }): Promise<Result> {
   try {
-    const { userId } = await requirePartner()
+    const { userId } = await requireControlObraAccess()
     if (!data.descripcion?.trim()) return { error: 'La descripción es obligatoria.' }
     const admin = createAdminClient()
     const { data: maxRow } = await admin
@@ -241,7 +259,7 @@ export async function createPartida(data: {
 
 export async function createProveedor(obraId: string, nombre: string): Promise<Result> {
   try {
-    await requirePartner()
+    await requireControlObraAccess()
     if (!nombre.trim()) return { error: 'Nombre obligatorio.' }
     const admin = createAdminClient()
     const { error } = await admin.from('obra_control_proveedores').insert({ obra_id: obraId, nombre: nombre.trim() })
@@ -253,7 +271,7 @@ export async function createProveedor(obraId: string, nombre: string): Promise<R
 
 export async function updateProveedor(id: string, patch: { nombre?: string; notas?: string | null; presupuesto_manual?: number | null }): Promise<Result> {
   try {
-    await requirePartner()
+    await requireControlObraAccess()
     const admin = createAdminClient()
     const { error } = await admin.from('obra_control_proveedores').update(patch).eq('id', id)
     if (error) return { error: error.message }
@@ -264,7 +282,7 @@ export async function updateProveedor(id: string, patch: { nombre?: string; nota
 
 export async function deleteProveedor(id: string): Promise<Result> {
   try {
-    await requirePartner()
+    await requireControlObraAccess()
     const admin = createAdminClient()
     // liberar partidas asignadas
     await admin.from('obra_control_partidas').update({ proveedor_id: null }).eq('proveedor_id', id)
@@ -279,7 +297,7 @@ export async function deleteProveedor(id: string): Promise<Result> {
 
 export async function createPago(obraId: string, proveedorId: string, data: { monto: number; fecha?: string | null; nota?: string | null }): Promise<Result> {
   try {
-    const { userId } = await requirePartner()
+    const { userId } = await requireControlObraAccess()
     const admin = createAdminClient()
     const { data: maxRow } = await admin.from('obra_control_pagos').select('orden').eq('proveedor_id', proveedorId).order('orden', { ascending: false }).limit(1).single()
     const orden = ((maxRow?.orden as number) ?? -1) + 1
@@ -296,7 +314,7 @@ export async function createPago(obraId: string, proveedorId: string, data: { mo
 
 export async function updatePago(id: string, patch: { monto?: number; fecha?: string | null; nota?: string | null }): Promise<Result> {
   try {
-    await requirePartner()
+    await requireControlObraAccess()
     const admin = createAdminClient()
     const { error } = await admin.from('obra_control_pagos').update(patch).eq('id', id)
     if (error) return { error: error.message }
@@ -307,7 +325,7 @@ export async function updatePago(id: string, patch: { monto?: number; fecha?: st
 
 export async function deletePago(id: string): Promise<Result> {
   try {
-    await requirePartner()
+    await requireControlObraAccess()
     const admin = createAdminClient()
     const { error } = await admin.from('obra_control_pagos').delete().eq('id', id)
     if (error) return { error: error.message }
@@ -318,14 +336,15 @@ export async function deletePago(id: string): Promise<Result> {
 
 // ── Depósitos ───────────────────────────────────────────────────────
 
-export async function createDeposito(obraId: string, data: { label?: string | null; monto: number; iva: number; total: number; fecha?: string | null }): Promise<Result> {
+export async function createDeposito(obraId: string, data: { label?: string | null; monto: number; iva: number; total: number; fecha?: string | null; estado?: 'pagado' | 'programado' }): Promise<Result> {
   try {
-    const { userId } = await requirePartner()
+    const { userId } = await requireControlObraAccess()
     const admin = createAdminClient()
     const { data: maxRow } = await admin.from('obra_control_depositos').select('orden').eq('obra_id', obraId).order('orden', { ascending: false }).limit(1).single()
     const orden = ((maxRow?.orden as number) ?? -1) + 1
     const { error } = await admin.from('obra_control_depositos').insert({
       obra_id: obraId, label: data.label?.trim() || null, monto: data.monto, iva: data.iva, total: data.total, fecha: data.fecha || null, orden,
+      ...(data.estado ? { estado: data.estado } : {}),
     })
     if (error) return { error: error.message }
     await logEvent(admin, obraId, userId, { tipo: 'deposito', resumen: `Depósito del cliente: ${data.total} €` })
@@ -334,9 +353,9 @@ export async function createDeposito(obraId: string, data: { label?: string | nu
   } catch (err) { return { error: err instanceof Error ? err.message : 'Error inesperado.' } }
 }
 
-export async function updateDeposito(id: string, patch: { label?: string | null; monto?: number; iva?: number; total?: number; fecha?: string | null }): Promise<Result> {
+export async function updateDeposito(id: string, patch: { label?: string | null; monto?: number; iva?: number; total?: number; fecha?: string | null; estado?: 'pagado' | 'programado' }): Promise<Result> {
   try {
-    await requirePartner()
+    await requireControlObraAccess()
     const admin = createAdminClient()
     const { error } = await admin.from('obra_control_depositos').update(patch).eq('id', id)
     if (error) return { error: error.message }
@@ -347,7 +366,7 @@ export async function updateDeposito(id: string, patch: { label?: string | null;
 
 export async function deleteDeposito(id: string): Promise<Result> {
   try {
-    await requirePartner()
+    await requireControlObraAccess()
     const admin = createAdminClient()
     const { error } = await admin.from('obra_control_depositos').delete().eq('id', id)
     if (error) return { error: error.message }

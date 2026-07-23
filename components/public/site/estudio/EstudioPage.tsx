@@ -55,12 +55,12 @@ export function EstudioPage({ content, equipo }: { content: ContentMap; equipo: 
         )}
 
         {equipo.length > 0 && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 'clamp(18px, 2.4vw, 34px)', marginTop: 'clamp(40px, 6vh, 70px)' }}>
+          <div className="equipo-grid" style={{ display: 'grid', gap: 'clamp(18px, 2.4vw, 34px)', marginTop: 'clamp(40px, 6vh, 70px)' }}>
             {equipo.map((m, i) => (
               <Reveal key={m.id} delay={Math.min(i, 6) * 70}>
                 <Link href={href(`/estudio/${m.slug}`)} className="member-card" data-cursor={locale === 'en' ? 'View CV' : 'Ver CV'}
                   style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}>
-                  <div className="member-photo" style={{ position: 'relative', width: '100%', aspectRatio: '3 / 4', overflow: 'hidden', background: '#e7e5df' }}>
+                  <div className="member-photo" style={{ position: 'relative', width: '100%', overflow: 'hidden', background: '#e7e5df' }}>
                     {m.foto_url && (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={m.foto_url} alt={m.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -86,6 +86,13 @@ export function EstudioPage({ content, equipo }: { content: ContentMap; equipo: 
       </section>
 
       <style dangerouslySetInnerHTML={{ __html: `
+        /* Equipo: 1 por fila en móvil, 2 en tablet, 3 en escritorio */
+        .equipo-grid { grid-template-columns: 1fr; }
+        @media (min-width: 640px)  { .equipo-grid { grid-template-columns: repeat(2, 1fr); } }
+        @media (min-width: 980px)  { .equipo-grid { grid-template-columns: repeat(3, 1fr); } }
+        /* Proporción del recuadro: retrato 4:5 (móvil/tablet), más esbelto 3:4 en escritorio */
+        .member-photo { aspect-ratio: 4 / 5; }
+        @media (min-width: 980px)  { .member-photo { aspect-ratio: 3 / 4; } }
         .member-photo img { transition: transform .6s cubic-bezier(.16,1,.3,1); }
         .member-cv { opacity: 0; transition: opacity .4s ease; }
         .member-card:hover .member-cv { opacity: 1; }

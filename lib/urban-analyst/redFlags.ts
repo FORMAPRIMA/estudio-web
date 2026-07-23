@@ -3,6 +3,7 @@
 // recomendación. La IA no interviene aquí.
 
 import type { LayerHitRaw } from './geoportal'
+import { esAmbitoEspecifico } from './cuadroUrbanistico'
 import type { EdificabilidadResult, Severidad } from './types'
 
 export interface RedFlagInput {
@@ -102,14 +103,43 @@ export function computeRedFlags(input: RedFlagInput): RedFlagRaw[] {
     })
   }
 
-  // 2 — BIC
-  if (byService('/BIC').length > 0) {
+  // 2 — BIC (verificado geométricamente contra la parcela: directo vs entorno)
+  const bicHits = byService('/BIC')
+  const bicNombres = (hs: typeof bicHits) =>
+    Array.from(new Set(hs.map((h) => h.attributes._bic_nombre).filter((n): n is string => typeof n === 'string'))).slice(0, 3).join(' · ')
+  const bicDirectas = bicHits.filter((h) => h.attributes._afeccion === 'directa')
+  const bicEntornos = bicHits.filter((h) => h.attributes._afeccion === 'entorno')
+  const bicNoVerif = bicHits.filter((h) => h.attributes._afeccion === 'no_verificable')
+
+  if (bicDirectas.length > 0) {
+    const nombres = bicNombres(bicDirectas)
     flags.push({
       categoria: 'patrimonio',
-      severidad: 'alta',
-      titulo: 'Afección por Bien de Interés Cultural',
-      descripcion: 'La parcela intersecta con un BIC o su entorno de protección. Cualquier intervención requiere autorización de la administración competente en patrimonio (Comunidad de Madrid).',
-      recomendacion: 'Determinar si la afección es directa o de entorno y qué autorizaciones sectoriales exige.',
+      severidad: 'critica',
+      titulo: 'Afección DIRECTA por Bien de Interés Cultural',
+      descripcion: `La parcela solapa geométricamente con la delimitación de un BIC${nombres ? ` (${nombres})` : ''}. El régimen de la Ley 3/2013 de Patrimonio Histórico de la CM prevalece sobre el planeamiento: cualquier intervención exige autorización previa de la DG de Patrimonio Cultural.`,
+      recomendacion: 'Verificar la declaración del BIC (BOCM) y su plan/normas de protección antes de cualquier tesis de inversión. Este condicionante domina el análisis.',
+      fuente: `${GEOPORTAL_DISCLAIMER} — verificado por intersección geométrica`,
+    })
+  }
+  if (bicEntornos.length > 0) {
+    const nombres = bicNombres(bicEntornos)
+    flags.push({
+      categoria: 'patrimonio',
+      severidad: 'media',
+      titulo: 'Parcela dentro de ENTORNO de protección de BIC',
+      descripcion: `La parcela está dentro del entorno de protección de un BIC${nombres ? ` (${nombres})` : ''}, sin afección directa. Las intervenciones con incidencia exterior (volumen, fachada, cubierta, demolición) pueden requerir informe/autorización de Patrimonio (CM).`,
+      recomendacion: 'Confirmar el alcance del entorno en la declaración del BIC y qué obras exigen autorización sectorial.',
+      fuente: `${GEOPORTAL_DISCLAIMER} — verificado por intersección geométrica`,
+    })
+  }
+  if (bicNoVerif.length > 0 && bicDirectas.length === 0 && bicEntornos.length === 0) {
+    flags.push({
+      categoria: 'patrimonio',
+      severidad: 'baja',
+      titulo: 'Posible afección BIC no verificable geométricamente',
+      descripcion: 'El servicio de BIC devolvió registros sin geometría utilizable: no se pudo confirmar si la parcela está realmente dentro de la delimitación o su entorno.',
+      recomendacion: 'Comprobar manualmente el plano de BIC y entornos en el Geoportal / DG de Patrimonio Cultural CM.',
       fuente: GEOPORTAL_DISCLAIMER,
     })
   }
@@ -126,8 +156,9 @@ export function computeRedFlags(input: RedFlagInput): RedFlagRaw[] {
     })
   }
 
-  // 4 — Ámbitos de planeamiento (APE/APR/API/UE...)
-  const ambitos = byService('AMBITOS_PLANEAMIENTO_URBANISTICO')
+  // 4 — Ámbitos de planeamiento (APE/APR/API/UE...) — solo ámbitos REALES:
+  // la capa devuelve también el polígono de la propia norma zonal
+  const ambitos = byService('AMBITOS_PLANEAMIENTO_URBANISTICO').filter((h) => esAmbitoEspecifico(h.attributes))
   if (ambitos.length > 0) {
     const nombres = ambitos.map((h) => resumenAttrs(h.attributes)).filter(Boolean).slice(0, 3).join(' · ')
     flags.push({
@@ -140,8 +171,8 @@ export function computeRedFlags(input: RedFlagInput): RedFlagRaw[] {
     })
   }
 
-  // 5 — Modificaciones / desarrollos del PGOUM
-  const planeamiento = byService('PLANEAMIENTO_URBANISTICO')
+  // 5 — Modificaciones / desarrollos del PGOUM (filtrando el eco de la NZ)
+  const planeamiento = byService('PLANEAMIENTO_URBANISTICO').filter((h) => esAmbitoEspecifico(h.attributes))
   if (planeamiento.length > 0) {
     flags.push({
       categoria: 'administrativo',
