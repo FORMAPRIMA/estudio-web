@@ -673,6 +673,7 @@ export default function LeadsPage({
   const [showNuevo, setShowNuevo] = useState(false)
   const [nuevoNombre, setNuevoNombre] = useState('')
   const [nuevoEmail, setNuevoEmail] = useState('')
+  const [nuevoEmailCc, setNuevoEmailCc] = useState('')
   const [nuevoNota, setNuevoNota] = useState('')
   const [nuevoIdioma, setNuevoIdioma] = useState<'es' | 'en'>('es')
   const [creatingProceso, setCreatingProceso] = useState(false)
@@ -842,11 +843,11 @@ export default function LeadsPage({
     if (!nuevoNombre.trim()) { setNuevoError('El nombre es obligatorio.'); return }
     setCreatingProceso(true)
     setNuevoError('')
-    const res = await createEspacio(nuevoNombre.trim(), nuevoEmail.trim(), nuevoNota.trim(), nuevoIdioma)
+    const res = await createEspacio(nuevoNombre.trim(), nuevoEmail.trim(), nuevoNota.trim(), nuevoIdioma, nuevoEmailCc.trim())
     setCreatingProceso(false)
     if ('error' in res) { setNuevoError(res.error); return }
     setShowNuevo(false)
-    setNuevoNombre(''); setNuevoEmail(''); setNuevoNota(''); setNuevoIdioma('es')
+    setNuevoNombre(''); setNuevoEmail(''); setNuevoEmailCc(''); setNuevoNota(''); setNuevoIdioma('es')
     refresh()
   }
 
@@ -1030,6 +1031,7 @@ export default function LeadsPage({
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <input placeholder="Nombre del cliente *" value={nuevoNombre} onChange={e => setNuevoNombre(e.target.value)} style={{ ...FIELD, fontSize: 14 }} />
               <input type="email" placeholder="Email (para enviarle el espacio)" value={nuevoEmail} onChange={e => setNuevoEmail(e.target.value)} style={{ ...FIELD, fontSize: 14 }} />
+              <input type="email" placeholder="Email secundario en copia — CC (opcional)" value={nuevoEmailCc} onChange={e => setNuevoEmailCc(e.target.value)} style={{ ...FIELD, fontSize: 14 }} />
               <textarea placeholder="Nota interna (opcional)" value={nuevoNota} onChange={e => setNuevoNota(e.target.value)} rows={2} style={{ ...FIELD, fontSize: 14, resize: 'vertical', padding: 8 }} />
               <div style={{ display: 'flex', gap: 8 }}>
                 {(['es', 'en'] as const).map(l => (

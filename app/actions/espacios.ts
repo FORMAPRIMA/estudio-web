@@ -78,12 +78,14 @@ export async function createEspacio(
   email: string,
   notaInterna: string,
   idioma: 'es' | 'en' = 'es',
+  emailCc: string = '',
 ): Promise<{ token: string; emailSent: boolean } | { error: string }> {
   try {
     const user = await requireCaptacion()
     const { token, emailSent } = await crearEspacioCore({
       nombre,
       email,
+      emailCc,
       idioma,
       createdBy: user.id,
       notaInterna,

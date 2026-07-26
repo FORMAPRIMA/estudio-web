@@ -341,12 +341,14 @@ export async function submitContactoWeb(data: {
 
     // Dedup por email: si ya existe un espacio, no creamos otro. Reenviamos el
     // enlace y registramos el mensaje nuevo en su lead.
-    const { data: existing } = await admin
-      .from('espacios')
-      .select('id, token, nombre, idioma, lead_id')
-      .ilike('email', email)
-      .limit(1)
-      .maybeSingle()
+    // Fallback si la migración espacios_email_cc.sql aún no está aplicada:
+    // reintenta el select sin la columna para no romper la deduplicación.
+    const base = 'id, token, nombre, idioma, lead_id'
+    const dedup = await admin.from('espacios').select(`${base}, email_cc`).ilike('email', email).limit(1).maybeSingle()
+    const dedupData = dedup.error && /email_cc/.test(dedup.error.message)
+      ? (await admin.from('espacios').select(base).ilike('email', email).limit(1).maybeSingle()).data
+      : dedup.data
+    const existing = dedupData as { id: string; token: string; nombre: string; idioma: string; lead_id: string | null; email_cc?: string | null } | null
 
     if (existing) {
       await enviarCorreoBienvenida(
@@ -354,6 +356,7 @@ export async function submitContactoWeb(data: {
         existing.nombre || nombre,
         existing.token as string,
         existing.idioma === 'en' ? 'en' : 'es',
+        existing.email_cc ?? null,
       )
       if (existing.lead_id) {
         const { data: lead } = await admin.from('leads').select('notas').eq('id', existing.lead_id).single()

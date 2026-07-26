@@ -16,6 +16,7 @@ export async function enviarCorreoBienvenida(
   nombre: string,
   token: string,
   idioma: 'es' | 'en',
+  emailCc?: string | null,
 ): Promise<boolean> {
   const link = `${process.env.NEXT_PUBLIC_SITE_URL ?? 'https://internal.formaprima.es'}/espacio/${token}`
   const C = idioma === 'en'
@@ -45,7 +46,10 @@ export async function enviarCorreoBienvenida(
     <p style="font-size:12px;color:#888;margin:0 0 20px;line-height:1.6;">${C.note}</p>
     <p style="font-size:13px;color:#555;margin:0;line-height:1.6;">${C.sign}</p>
   `
-  const res = await sendEmail({ to: email, subject: C.subject, html: wrapEmail(body) })
+  // CC opcional al segundo correo, solo si es distinto del primario.
+  const cc = emailCc?.trim()
+  const ccValido = cc && cc.toLowerCase() !== email.trim().toLowerCase() ? cc : undefined
+  const res = await sendEmail({ to: email, subject: C.subject, html: wrapEmail(body), ...(ccValido && { cc: ccValido }) })
   if (res.error) { console.error('[espacio] correo bienvenida:', res.error); return false }
   return true
 }
@@ -53,6 +57,8 @@ export async function enviarCorreoBienvenida(
 export interface CrearEspacioInput {
   nombre: string
   email: string
+  /** Segundo correo en copia (CC) del correo de bienvenida. Opcional. */
+  emailCc?: string | null
   idioma?: 'es' | 'en'
   /** Usuario del equipo que lo crea; null en el flujo público. */
   createdBy?: string | null
@@ -83,6 +89,7 @@ export async function crearEspacioCore(input: CrearEspacioInput): Promise<CrearE
   const admin = createAdminClient()
   const nombre = input.nombre.trim()
   const email = input.email.trim()
+  const emailCc = input.emailCc?.trim() || null
   const idioma = input.idioma === 'en' ? 'en' : 'es'
 
   // Creamos el lead ya, para que aparezca en el CRM desde el primer contacto y
@@ -102,23 +109,31 @@ export async function crearEspacioCore(input: CrearEspacioInput): Promise<CrearE
     .select('id')
     .single()
 
-  const { data, error } = await admin
-    .from('espacios')
-    .insert({
-      nombre,
-      email: email || null,
-      lead_id: lead?.id ?? null,
-      nota_interna: input.notaInterna?.trim() || null,
-      etapa: 'bienvenida',
-      idioma,
-      created_by: input.createdBy ?? null,
-    })
-    .select('id, token')
-    .single()
-  if (error) throw new Error(error.message)
+  const espacioRow: Record<string, unknown> = {
+    nombre,
+    email: email || null,
+    email_cc: emailCc,
+    lead_id: lead?.id ?? null,
+    nota_interna: input.notaInterna?.trim() || null,
+    etapa: 'bienvenida',
+    idioma,
+    created_by: input.createdBy ?? null,
+  }
+  const insertEspacio = (row: Record<string, unknown>) =>
+    admin.from('espacios').insert(row).select('id, token').single()
+  let result = await insertEspacio(espacioRow)
+  // Fallback si la migración espacios_email_cc.sql aún no está aplicada: reintenta
+  // sin la columna. El CC del correo se envía igual (usa la variable en memoria);
+  // solo se pierde la persistencia hasta ejecutar la migración.
+  if (result.error && /email_cc/.test(result.error.message)) {
+    const { email_cc, ...sinCc } = espacioRow
+    result = await insertEspacio(sinCc)
+  }
+  if (result.error) throw new Error(result.error.message)
+  const data = result.data!
 
   const emailSent = email
-    ? await enviarCorreoBienvenida(email, nombre, data.token as string, idioma)
+    ? await enviarCorreoBienvenida(email, nombre, data.token as string, idioma, emailCc)
     : false
 
   return { token: data.token as string, emailSent, leadId: lead?.id ?? null, espacioId: data.id as string }
