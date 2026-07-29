@@ -68,6 +68,8 @@ por el equipo y generar un prompt preciso y accionable para un asistente de IA d
 - Enlaces externos de solo lectura y revocables por audiencia: /repasos/[token] (modo presentación). lib/repasos/auth.ts valida y cuenta accesos
 - Estados: detectado | programado | resuelto. Trazabilidad en repaso_eventos (log append-only) + código R-001 por proyecto, que es el número del pin
 - Ficheros: app/team/apps/repasos/{page,[id]/page}.tsx, app/repasos/[token]/page.tsx, components/team/repasos/{RepasosIndex,RepasoProyectoView,PlanoCanvas,RepasoModal,RepasosList,RepasoLinksModal}.tsx, app/actions/repasos.ts, lib/repasos/{domain,data,auth,upload}.ts
+- Informe PDF: components/pdfs/RepasosObraPDF.tsx (portada + página horizontal por plano con pins numerados + ficha por repaso con fotos). Rutas: /api/repasos/[token]/pdf (audiencia del token) y /api/repasos/proyecto/[id]/pdf?audiencia=. lib/repasos/pdfData.ts re-filtra por visibilidad como segunda barrera; lib/repasos/imageSize.ts lee las dimensiones reales del plano de sus bytes para situar los pins
+- El portal externo lleva banda oscura con FORMA_PRIMA_BLANCO.png y botón de descarga del informe
 - Estilos: clases .rp-* al final de app/globals.css (mobile-first, desktop en min-width 1024px)
 - Tablas: repaso_proyectos, repaso_planos, repasos, repaso_fotos, repaso_eventos, repaso_tokens. Bucket Storage: repasos (público). Migración repasos_obra.sql pendiente de ejecutar
 

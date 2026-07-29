@@ -25,6 +25,7 @@ export default async function Page({ params }: { params: { token: string } }) {
       repasos={data.repasos}
       modo="presentacion"
       audiencia={tokenRow.audiencia}
+      token={params.token}
     />
   )
 }

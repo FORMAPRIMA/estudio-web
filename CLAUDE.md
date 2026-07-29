@@ -265,6 +265,7 @@ Aplicaciones internas. Acceso: todos los roles FP.
   - **Modal**: foto (cámara directa o galería, comprimida en cliente antes de subir), descripción, oficio (catálogo de 28 gremios), estado, visibilidad, prioridad, responsable, fecha objetivo e historial. **No se cierra al tocar fuera**; al cerrar con cambios pregunta guardar / descartar / seguir editando; el borrador se guarda en `localStorage` (en móvil abrir la cámara puede matar la pestaña).
   - **Visibilidad jerárquica**: `interno` ⊂ `constructora` ⊂ `cliente`. El filtrado por audiencia se hace **en servidor**: lo que un cliente no debe ver nunca llega a su payload.
   - **Enlaces externos** de solo lectura, uno por audiencia, revocables y con traza de accesos: `/repasos/[token]` (modo presentación, sin sesión, sin edición). Patrón de `gestor_tokens`, sin PIN.
+  - **Informe PDF** (`components/pdfs/RepasosObraPDF.tsx`): portada + una página horizontal por plano con los pins numerados + una ficha por repaso con sus fotos. Se descarga desde el propio enlace externo (`/api/repasos/[token]/pdf`, la audiencia sale del token, nunca de la petición) y desde el área interna con las tres vistas — interno / constructora / cliente — en `/api/repasos/proyecto/[id]/pdf?audiencia=`. `lib/repasos/pdfData.ts` monta los datos y **vuelve a filtrar por visibilidad** aunque la query ya lo hizo (colar un repaso interno en un informe de cliente no se puede deshacer); `lib/repasos/imageSize.ts` lee las dimensiones reales del plano de sus bytes (PNG/JPEG) para que los pins caigan exactos sin depender de lo guardado en BD.
   - **Trazabilidad**: `repaso_eventos` es un log append-only (creado, cambio de estado/visibilidad, foto, movido, editado) con autor y fecha, visible en el modal. El código `R-014` por proyecto es además **el número que se pinta en el pin**, para poder referenciarlo por teléfono en obra.
   - **Selección bidireccional**: tocar un pin resalta y hace scroll a su fila; tocar una fila hace zoom y centra el pin con un halo. Segundo toque = abrir ficha.
   - `lib/repasos/domain.ts` (tipos, `OFICIOS`, `ESTADOS`, `VISIBILIDADES`, `esVisiblePara`, `nextCodigo`, filtros) · `lib/repasos/data.ts` (**no es `'use server'` a propósito**: si `loadProyectoData` fuese Server Action, cualquiera podría pedir los repasos internos de un proyecto) · `lib/repasos/auth.ts` (validación de token) · `lib/repasos/upload.ts` (compresión de fotos, rasterizado de planos)
@@ -555,6 +556,8 @@ Registro de horas por proyecto y fase. Todos los roles FP.
 /api/facturas-emitidas/batch-pdf    POST — ZIP con varios PDFs
 /api/facturas-emitidas/emit         POST — emite factura borrador
 /api/facturas-emitidas/preview-pdf  POST — preview factura
+/api/repasos/[token]/pdf            GET  — informe PDF de repasos (audiencia según el token)
+/api/repasos/proyecto/[id]/pdf      GET  — informe PDF interno (?audiencia=cliente|constructora)
 /api/profesionalizar-instrucciones  POST — mejora texto con IA (Claude Haiku)
 /api/business-development/asistente POST — asistente IA del CRM de partners (Claude Haiku)
 /api/scan-ticket                    POST — escanea ticket con IA

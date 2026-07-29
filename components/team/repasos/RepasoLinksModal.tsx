@@ -129,7 +129,8 @@ export default function RepasoLinksModal({
                       Enlace para {a.label.toLowerCase()}
                     </p>
                     <p style={{ fontSize: 10.5, color: '#1A1A1A70', margin: '4px 0 0', fontWeight: 300, lineHeight: 1.5 }}>
-                      {a.nota} Ahora mismo verá <strong>{cuenta(a.id)}</strong> repasos.
+                      {a.nota} Ahora mismo verá <strong>{cuenta(a.id)}</strong> repasos, y podrá
+                      descargarlos en PDF desde el propio enlace.
                     </p>
                   </div>
                   <button

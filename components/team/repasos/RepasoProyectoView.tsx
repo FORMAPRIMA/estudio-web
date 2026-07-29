@@ -51,6 +51,8 @@ interface Props {
   modo: 'interno' | 'presentacion'
   audiencia?: RepasoAudiencia
   tokens?: RepasoToken[]
+  /** Token del enlace externo, para poder descargar el informe en presentación. */
+  token?: string
 }
 
 const SHEET_COLLAPSED = 62
@@ -62,6 +64,7 @@ export default function RepasoProyectoView({
   modo,
   audiencia,
   tokens = [],
+  token,
 }: Props) {
   const router = useRouter()
   const interno = modo === 'interno'
@@ -78,6 +81,8 @@ export default function RepasoProyectoView({
   const [dragSheet, setDragSheet] = useState(false)
   const [subiendoPlano, setSubiendoPlano] = useState(false)
   const [aviso, setAviso] = useState<string | null>(null)
+  const [pdf, setPdf] = useState<string | null>(null)
+  const [pdfMenu, setPdfMenu] = useState(false)
 
   const canvasRef = useRef<PlanoCanvasHandle>(null)
   const mainRef = useRef<HTMLDivElement>(null)
@@ -260,6 +265,42 @@ export default function RepasoProyectoView({
     return () => clearTimeout(t)
   }, [aviso])
 
+  // ── Informe PDF ─────────────────────────────────────────────────────────────
+  // Se descarga por fetch en vez de con un enlace directo porque generarlo puede
+  // tardar (descarga e incrusta las fotos) y así se puede avisar de que está en
+  // marcha en lugar de dejar al usuario mirando un botón muerto.
+
+  async function descargarPdf(url: string, etiqueta: string) {
+    setPdf(etiqueta)
+    setAviso(null)
+    try {
+      const res = await fetch(url)
+      if (!res.ok) {
+        const detalle = await res.json().catch(() => null)
+        throw new Error(detalle?.error ?? `El servidor respondió ${res.status}.`)
+      }
+      const blob = await res.blob()
+      const nombre =
+        /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ??
+        'repasos-de-obra.pdf'
+      const href = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = href
+      a.download = nombre
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(href), 5000)
+    } catch (err) {
+      setAviso(err instanceof Error ? err.message : 'No se pudo generar el PDF.')
+    } finally {
+      setPdf(null)
+    }
+  }
+
+  const pdfInterno = (audiencia?: RepasoAudiencia) =>
+    `/api/repasos/proyecto/${proyecto.id}/pdf${audiencia ? `?audiencia=${audiencia}` : ''}`
+
   // ── Panel de lista (compartido por sidebar y sheet) ──────────────────────────
 
   const contadores = ESTADOS.map((e) => ({
@@ -294,6 +335,45 @@ export default function RepasoProyectoView({
 
   return (
     <div className={`rp-shell${interno ? '' : ' rp-shell-public'}`}>
+      {/* ── Marca (solo en el portal externo) ── */}
+      {!interno && (
+        <div
+          style={{
+            flexShrink: 0,
+            background: '#1A1A1A',
+            padding: '13px 16px calc(13px + env(safe-area-inset-top))',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 14,
+          }}
+        >
+          <img
+            src="/FORMA_PRIMA_BLANCO.png"
+            alt="Forma Prima"
+            style={{ height: 24, width: 'auto', objectFit: 'contain', flexShrink: 0 }}
+          />
+          {token && (
+            <button
+              onClick={() => descargarPdf(`/api/repasos/${token}/pdf`, 'informe')}
+              disabled={!!pdf}
+              style={{
+                flexShrink: 0,
+                display: 'inline-flex', alignItems: 'center', gap: 7,
+                padding: '7px 13px', borderRadius: 4,
+                border: '1px solid rgba(255,255,255,0.26)',
+                background: 'transparent', color: '#fff',
+                fontSize: 11, fontFamily: 'inherit', letterSpacing: '0.02em',
+                cursor: pdf ? 'wait' : 'pointer',
+                opacity: pdf ? 0.6 : 1,
+              }}
+            >
+              {pdf ? 'Generando informe…' : 'Descargar PDF'}
+            </button>
+          )}
+        </div>
+      )}
+
       {/* ── Cabecera ── */}
       <header
         style={{
@@ -304,7 +384,7 @@ export default function RepasoProyectoView({
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {interno ? (
+          {interno && (
             <Link
               href="/team/apps/repasos"
               aria-label="Volver"
@@ -317,15 +397,6 @@ export default function RepasoProyectoView({
             >
               ←
             </Link>
-          ) : (
-            <span
-              style={{
-                fontSize: 9, letterSpacing: '0.15em', textTransform: 'uppercase',
-                color: '#1A1A1A99', flexShrink: 0,
-              }}
-            >
-              Forma Prima
-            </span>
           )}
 
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -361,6 +432,65 @@ export default function RepasoProyectoView({
               >
                 {subiendoPlano ? '…' : '+ Plano'}
               </button>
+
+              {/* Informe PDF, con la opción de generarlo tal y como lo verá
+                  cada audiencia antes de mandar el enlace. */}
+              <div style={{ position: 'relative' }}>
+                <button
+                  className="rp-btn rp-btn-ghost"
+                  onClick={() => setPdfMenu((v) => !v)}
+                  disabled={!!pdf}
+                  style={{ padding: '8px 10px', fontSize: 11 }}
+                  title="Descargar informe en PDF"
+                >
+                  {pdf ? 'Generando…' : 'PDF'}
+                </button>
+
+                {pdfMenu && !pdf && (
+                  <>
+                    <div
+                      onClick={() => setPdfMenu(false)}
+                      style={{ position: 'fixed', inset: 0, zIndex: 60 }}
+                    />
+                    <div
+                      style={{
+                        position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 61,
+                        background: '#fff', border: '1px solid #E2E0D9', borderRadius: 4,
+                        boxShadow: '0 12px 32px rgba(0,0,0,0.14)',
+                        width: 232, overflow: 'hidden',
+                      }}
+                    >
+                      {[
+                        { label: 'Informe interno', nota: 'Todos los repasos', a: undefined },
+                        { label: 'Vista constructora', nota: 'Sin los repasos internos', a: 'constructora' as RepasoAudiencia },
+                        { label: 'Vista cliente', nota: 'Solo los marcados «Cliente»', a: 'cliente' as RepasoAudiencia },
+                      ].map((op) => (
+                        <button
+                          key={op.label}
+                          onClick={() => {
+                            setPdfMenu(false)
+                            descargarPdf(pdfInterno(op.a), op.label)
+                          }}
+                          style={{
+                            display: 'block', width: '100%', textAlign: 'left',
+                            padding: '10px 12px', border: 'none', background: '#fff',
+                            borderBottom: '1px solid #F2F0EA', cursor: 'pointer',
+                            fontFamily: 'inherit',
+                          }}
+                        >
+                          <span style={{ display: 'block', fontSize: 12, color: '#1A1A1A' }}>
+                            {op.label}
+                          </span>
+                          <span style={{ display: 'block', fontSize: 10, color: '#1A1A1A70', marginTop: 2 }}>
+                            {op.nota}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+
               <button
                 className="rp-btn rp-btn-primary"
                 onClick={() => setLinksOpen(true)}
