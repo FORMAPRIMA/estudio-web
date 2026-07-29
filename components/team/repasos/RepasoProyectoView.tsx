@@ -462,7 +462,8 @@ export default function RepasoProyectoView({
           {placing && (
             <div
               style={{
-                position: 'absolute', left: 10, right: 10, bottom: 14, zIndex: 26,
+                position: 'absolute', left: 10, right: 10, zIndex: 42,
+                bottom: 'calc(14px + env(safe-area-inset-bottom))',
                 display: 'flex', gap: 8,
               }}
             >
@@ -546,6 +547,9 @@ export default function RepasoProyectoView({
             style={{
               height: sheetH ?? SHEET_COLLAPSED,
               transition: dragSheet ? 'none' : undefined,
+              // Durante la colocación la lista no aporta nada y su banda tapaba
+              // la barra de «Confirmar posición». Fuera mientras se sitúa el pin.
+              ...(placing ? { display: 'none' } : null),
             }}
           >
             <div

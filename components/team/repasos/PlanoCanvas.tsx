@@ -268,12 +268,16 @@ const PlanoCanvas = forwardRef<PlanoCanvasHandle, Props>(function PlanoCanvas(
     }
 
     if (pointers.current.size === 1 && panStart.current) {
-      const dx = e.clientX - panStart.current.x
-      const dy = e.clientY - panStart.current.y
+      // El updater de setView lo ejecuta React en la fase de render, que puede
+      // caer DESPUÉS de que onPointerUp haya puesto panStart.current a null
+      // (los dos handlers se agrupan en la misma tarea). Hay que capturar el
+      // valor aquí: leer la ref dentro del updater reventaba con
+      // "null is not an object (evaluating 'panStart.current.tx')".
+      const start = panStart.current
+      const dx = e.clientX - start.x
+      const dy = e.clientY - start.y
       if (!dragging && Math.hypot(dx, dy) > TAP_SLOP) setDragging(true)
-      setView((v) =>
-        clampView({ scale: v.scale, tx: panStart.current!.tx + dx, ty: panStart.current!.ty + dy })
-      )
+      setView((v) => clampView({ scale: v.scale, tx: start.tx + dx, ty: start.ty + dy }))
     }
   }
 

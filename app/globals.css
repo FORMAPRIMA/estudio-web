@@ -1208,7 +1208,7 @@ div:hover > .tt-avatar-overlay {
   position: absolute;
   right: 16px;
   bottom: 84px;
-  z-index: 25;
+  z-index: 35;
   display: inline-flex;
   align-items: center;
   gap: 8px;
