@@ -1010,3 +1010,407 @@ div:hover > .tt-avatar-overlay {
     color: #F2F2F0;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   REPASOS DE OBRA — /team/apps/repasos y /repasos/[token]
+   Mobile-first: la base es el móvil, el desktop se activa en
+   min-width 1024px (mismo breakpoint que el lg: del layout /team,
+   donde desaparece la barra superior de 56px).
+═══════════════════════════════════════════════════════════════ */
+
+/* ── Shell ── */
+.rp-shell {
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - 56px);
+  background: #F8F7F4;
+  overflow: hidden;
+}
+.rp-shell-public { height: 100dvh; }
+
+.rp-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  position: relative;
+}
+.rp-canvas-wrap {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+}
+
+/* Panel lateral (solo desktop) */
+.rp-side {
+  display: none;
+  width: 380px;
+  flex-shrink: 0;
+  flex-direction: column;
+  background: #fff;
+  border-left: 1px solid #E8E6E0;
+  min-height: 0;
+}
+
+/* Bottom sheet (solo móvil) */
+.rp-sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-top-left-radius: 14px;
+  border-top-right-radius: 14px;
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.18);
+  transition: height 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+.rp-sheet-handle {
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  cursor: grab;
+  touch-action: none;
+}
+.rp-sheet-handle span {
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: #D8D5CE;
+}
+.rp-sheet-body,
+.rp-side-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (min-width: 1024px) {
+  .rp-shell { height: 100dvh; }
+  .rp-side  { display: flex; }
+  .rp-sheet { display: none; }
+}
+
+/* ── Pins ── */
+.rp-pin {
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  transition: transform 0.12s ease;
+  line-height: 1;
+}
+.rp-pin-body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--rp-pin-color, #D85A30);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.38);
+}
+.rp-pin-tail {
+  display: block;
+  width: 0;
+  height: 0;
+  margin: -1px auto 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 8px solid var(--rp-pin-color, #D85A30);
+}
+.rp-pin-halo {
+  position: absolute;
+  top: -9px;
+  left: 50%;
+  width: 46px;
+  height: 46px;
+  margin-left: -23px;
+  border-radius: 50%;
+  border: 2px solid var(--rp-pin-color, #D85A30);
+  animation: rp-halo 1.5s ease-out infinite;
+  pointer-events: none;
+}
+@keyframes rp-halo {
+  0%   { transform: scale(0.72); opacity: 0.9; }
+  100% { transform: scale(1.25); opacity: 0; }
+}
+
+/* ── Pin fantasma (modo colocación) ── */
+.rp-ghost {
+  transform: translate(-50%, -50%);
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  cursor: grab;
+  touch-action: none;
+}
+.rp-ghost-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px dashed #D85A30;
+  background: rgba(216, 90, 48, 0.16);
+  animation: rp-ghost-pulse 1.6s ease-in-out infinite;
+}
+.rp-ghost-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #D85A30;
+  box-shadow: 0 0 0 2px #fff;
+}
+@keyframes rp-ghost-pulse {
+  0%, 100% { transform: scale(1);    opacity: 1; }
+  50%      { transform: scale(1.12); opacity: 0.75; }
+}
+
+/* ── Controles de zoom ── */
+.rp-zoom {
+  position: absolute;
+  right: 10px;
+  bottom: 84px;
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rp-zoom button {
+  width: 34px;
+  height: 34px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.93);
+  color: #1A1A1A;
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+}
+.rp-zoom button:hover { background: #fff; }
+@media (min-width: 1024px) {
+  .rp-zoom { bottom: 14px; }
+}
+
+/* ── FAB ── */
+.rp-fab {
+  position: absolute;
+  right: 16px;
+  bottom: 84px;
+  z-index: 25;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 20px;
+  border: none;
+  border-radius: 999px;
+  background: #D85A30;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  box-shadow: 0 6px 22px rgba(216, 90, 48, 0.42);
+}
+.rp-fab:hover { background: #C24E28; }
+@media (min-width: 1024px) {
+  .rp-fab { bottom: 14px; right: 60px; }
+}
+
+/* ── Chips de filtro ── */
+.rp-chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+.rp-chips::-webkit-scrollbar { display: none; }
+.rp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  border: 1px solid #E8E6E0;
+  background: #fff;
+  color: #1A1A1A;
+  font-size: 11px;
+  font-weight: 400;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.rp-chip:hover { border-color: #C9C6BE; }
+.rp-chip-active {
+  background: #1A1A1A;
+  border-color: #1A1A1A;
+  color: #fff;
+}
+
+/* ── Filas de la lista ── */
+.rp-row {
+  width: 100%;
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+  padding: 11px 14px;
+  border: none;
+  border-bottom: 1px solid #F2F0EA;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.rp-row:hover { background: #FAF9F6; }
+.rp-row-selected {
+  background: #FDF4EF;
+  box-shadow: inset 3px 0 0 #D85A30;
+}
+
+/* ── Modal ── */
+.rp-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(26, 26, 26, 0.55);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.rp-modal {
+  background: #fff;
+  width: 100%;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+@media (min-width: 1024px) {
+  .rp-backdrop { align-items: center; padding: 24px; }
+  .rp-modal {
+    width: 580px;
+    height: auto;
+    max-height: 88vh;
+    border-radius: 6px;
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.35);
+  }
+}
+.rp-modal-head {
+  flex-shrink: 0;
+  padding: 14px 16px;
+  border-bottom: 1px solid #F0EEE8;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.rp-modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
+  -webkit-overflow-scrolling: touch;
+}
+.rp-modal-foot {
+  flex-shrink: 0;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  border-top: 1px solid #F0EEE8;
+  display: flex;
+  gap: 8px;
+  background: #fff;
+}
+
+/* ── Formularios ── */
+.rp-label {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(26, 26, 26, 0.5);
+  margin-bottom: 6px;
+}
+.rp-input,
+.rp-select,
+.rp-textarea {
+  width: 100%;
+  padding: 10px 11px;
+  border: 1px solid #E2E0D9;
+  border-radius: 4px;
+  background: #fff;
+  color: #1A1A1A;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 300;
+}
+.rp-textarea { resize: vertical; min-height: 82px; line-height: 1.5; }
+.rp-input:focus,
+.rp-select:focus,
+.rp-textarea:focus { outline: none; border-color: #D85A30; }
+
+/* ── Botones ── */
+.rp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 11px 16px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-size: 12.5px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.rp-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.rp-btn-primary { background: #1A1A1A; color: #fff; }
+.rp-btn-primary:hover:not(:disabled) { background: #333; }
+.rp-btn-accent { background: #D85A30; color: #fff; }
+.rp-btn-accent:hover:not(:disabled) { background: #C24E28; }
+.rp-btn-ghost { background: #fff; border-color: #E2E0D9; color: #1A1A1A; }
+.rp-btn-ghost:hover:not(:disabled) { border-color: #C9C6BE; }
+.rp-btn-danger { background: #fff; border-color: #E8C4BC; color: #B03A2E; }
+.rp-btn-danger:hover:not(:disabled) { background: #FDF4F2; }
+
+/* ── Segmented control (estado / visibilidad) ── */
+.rp-seg {
+  display: flex;
+  gap: 6px;
+}
+.rp-seg button {
+  flex: 1;
+  padding: 10px 6px;
+  border: 1px solid #E2E0D9;
+  border-radius: 4px;
+  background: #fff;
+  color: #1A1A1A;
+  font-size: 11.5px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.rp-seg button:hover { border-color: #C9C6BE; }
+
+/* ── Tarjetas del índice ── */
+.rp-card {
+  display: block;
+  background: #fff;
+  border: 1px solid #E8E6E0;
+  border-radius: 4px;
+  overflow: hidden;
+  text-decoration: none;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.rp-card:hover { border-color: #D85A30; }

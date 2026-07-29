@@ -60,6 +60,17 @@ por el equipo y generar un prompt preciso y accionable para un asistente de IA d
 - Tablas: design_hunter_viajes, design_hunter_entries (media_urls text[])
 - Bucket Storage: design-hunter (público)
 
+### Repasos de obra (/team/apps/repasos) — todos los roles FP
+- Repasos (incidencias/remates) geolocalizados sobre el plano de un proyecto. Mobile-first: visor con pinch-zoom, pins de tamaño constante, lista en bottom sheet
+- Coordenadas NORMALIZADAS (x,y de 0 a 1) sobre la imagen del plano. Los PDF se rasterizan en el navegador al subirlos (pdfjs) y se guarda imagen + PDF original
+- Alta de repaso: modo colocación (banner → tap → pin fantasma arrastrable → «Confirmar posición») → modal. El modal NO se cierra al tocar fuera; al cerrar con cambios pregunta guardar/descartar/seguir; borrador en localStorage
+- Visibilidad JERÁRQUICA: interno ⊂ constructora ⊂ cliente. Filtrado por audiencia en servidor (lib/repasos/data.ts, NO es 'use server' a propósito)
+- Enlaces externos de solo lectura y revocables por audiencia: /repasos/[token] (modo presentación). lib/repasos/auth.ts valida y cuenta accesos
+- Estados: detectado | programado | resuelto. Trazabilidad en repaso_eventos (log append-only) + código R-001 por proyecto, que es el número del pin
+- Ficheros: app/team/apps/repasos/{page,[id]/page}.tsx, app/repasos/[token]/page.tsx, components/team/repasos/{RepasosIndex,RepasoProyectoView,PlanoCanvas,RepasoModal,RepasosList,RepasoLinksModal}.tsx, app/actions/repasos.ts, lib/repasos/{domain,data,auth,upload}.ts
+- Estilos: clases .rp-* al final de app/globals.css (mobile-first, desktop en min-width 1024px)
+- Tablas: repaso_proyectos, repaso_planos, repasos, repaso_fotos, repaso_eventos, repaso_tokens. Bucket Storage: repasos (público). Migración repasos_obra.sql pendiente de ejecutar
+
 ### Control de obra (/team/apps/control-obra) — fp_partner + allowlist por email (CONTROL_OBRA_ALLOWED_EMAILS en lib/control-obra/domain.ts)
 - Control económico de obra por proyecto (baseline congelado vs cambios). components/team/control-obra/ControlObraPage.tsx, app/actions/control-obra.ts, lib/control-obra/domain.ts
 - Tabs: Partidas (baseline vs actual, estado igual/modificada/nueva/eliminada, proveedor por partida, vista coste/cliente) · Proveedores y pagos (comprometido/pagado/pendiente + libro de pagos) · Tesorería (depósitos del cliente, balance = depósitos con IVA − pagos) · Vista cliente (modo presentación, sin coste/margen/proveedores) · Histórico

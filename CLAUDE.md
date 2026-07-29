@@ -257,6 +257,21 @@ Aplicaciones internas. Acceso: todos los roles FP.
   - Soporta multiselección, cámara directa (`capture="environment"`), thumbnails de vídeo (primer frame), lightbox fullscreen, vista "Stories" tipo Instagram
   - `lib/design-hunter.ts` — tipos + `isVideoUrl()`
 
+- **Repasos de obra** (`/team/apps/repasos`) — **todos los roles FP** — `components/team/repasos/RepasoProyectoView.tsx`
+  - Repasos (remates/incidencias) **geolocalizados sobre el plano** de un proyecto. Enfoque **mobile-first**: el visor ocupa la pantalla, la lista vive en un *bottom sheet* con tres posiciones y el alta se hace con el dedo en obra.
+  - **Coordenadas normalizadas** (`x`, `y` de 0 a 1 sobre la imagen del plano): el pin sobrevive a zoom, rotación de pantalla, cambio de dispositivo y sustitución del plano por otro de distinta resolución.
+  - **Planos**: un proyecto tiene N planos (plantas). Si se sube un PDF se **rasteriza la página 1 en el navegador** (`pdfjs`, mismo patrón que `ClientPortal.tsx`) y se guardan imagen + PDF original. Pintar pins sobre una imagen es instantáneo en móvil; sobre un PDF vivo no.
+  - **Alta de repaso**: `+ Agregar repaso` → modo colocación (banner *«Toca el plano para situar el repaso»*) → tap → **pin fantasma arrastrable** → `Confirmar posición` → modal. El paso de confirmación existe porque el dedo es impreciso.
+  - **Modal**: foto (cámara directa o galería, comprimida en cliente antes de subir), descripción, oficio (catálogo de 28 gremios), estado, visibilidad, prioridad, responsable, fecha objetivo e historial. **No se cierra al tocar fuera**; al cerrar con cambios pregunta guardar / descartar / seguir editando; el borrador se guarda en `localStorage` (en móvil abrir la cámara puede matar la pestaña).
+  - **Visibilidad jerárquica**: `interno` ⊂ `constructora` ⊂ `cliente`. El filtrado por audiencia se hace **en servidor**: lo que un cliente no debe ver nunca llega a su payload.
+  - **Enlaces externos** de solo lectura, uno por audiencia, revocables y con traza de accesos: `/repasos/[token]` (modo presentación, sin sesión, sin edición). Patrón de `gestor_tokens`, sin PIN.
+  - **Trazabilidad**: `repaso_eventos` es un log append-only (creado, cambio de estado/visibilidad, foto, movido, editado) con autor y fecha, visible en el modal. El código `R-014` por proyecto es además **el número que se pinta en el pin**, para poder referenciarlo por teléfono en obra.
+  - **Selección bidireccional**: tocar un pin resalta y hace scroll a su fila; tocar una fila hace zoom y centra el pin con un halo. Segundo toque = abrir ficha.
+  - `lib/repasos/domain.ts` (tipos, `OFICIOS`, `ESTADOS`, `VISIBILIDADES`, `esVisiblePara`, `nextCodigo`, filtros) · `lib/repasos/data.ts` (**no es `'use server'` a propósito**: si `loadProyectoData` fuese Server Action, cualquiera podría pedir los repasos internos de un proyecto) · `lib/repasos/auth.ts` (validación de token) · `lib/repasos/upload.ts` (compresión de fotos, rasterizado de planos)
+  - `app/actions/repasos.ts` — todas las mutaciones (`requireAnyFP()`)
+  - Estilos en clases `.rp-*` al final de `app/globals.css` (mobile-first; desktop a partir de `min-width: 1024px`, el mismo breakpoint donde el layout de `/team` quita la barra superior de 56 px)
+  - Tablas `repaso_*` + bucket público `repasos`. Solo `service_role` (RLS sin políticas). **Migración `repasos_obra.sql` pendiente de ejecutar**
+
 - **Control de obra** (`/team/apps/control-obra`) — **`fp_partner` + allowlist por email** (`CONTROL_OBRA_ALLOWED_EMAILS` en `lib/control-obra/domain.ts`; incluye a Aitana `acascante@formaprima.es`) — `components/team/control-obra/ControlObraPage.tsx`
   - Control económico de obra por proyecto. Parte de un **baseline congelado** (presupuesto firmado) y registra los cambios encima (subidas de precio, cantidades, partidas nuevas, partidas no ejecutadas), con motivo interno y comentario para el cliente.
   - 5 tabs: **Partidas** (baseline vs actual, estado igual/modificada/nueva/eliminada, **proveedor por partida**, toggle coste/cliente) · **Proveedores y pagos** (comprometido/pagado/pendiente + libro de pagos) · **Tesorería** (depósitos del cliente y balance = depósitos con IVA − pagos a proveedores) · **Vista cliente** (modo presentación limpio: solo su presupuesto y los cambios; sin coste/margen/proveedores/tesorería) · **Histórico**
@@ -383,6 +398,16 @@ Registro de horas por proyecto y fase. Todos los roles FP.
 | `design_hunter_viajes` | Colecciones/viajes de referencias |
 | `design_hunter_entries` | Entradas individuales (foto_url + `media_urls text[]` para múltiples archivos) |
 
+### Repasos de obra
+| Tabla | Propósito |
+|---|---|
+| `repaso_proyectos` | Proyectos con repasos (nombre, dirección, cliente, constructora, status) |
+| `repaso_planos` | Planos/plantas de un proyecto (`img_url` raster + `pdf_url` original + width/height) |
+| `repasos` | Repasos: `codigo` (R-001), `x`,`y` normalizados (0..1), oficio, estado, visibilidad, prioridad |
+| `repaso_fotos` | Fotos del repaso (`tipo`: `antes` = incidencia, `despues` = evidencia de resuelto) |
+| `repaso_eventos` | Log append-only de trazabilidad (creado, estado, visibilidad, foto, movido, editado) |
+| `repaso_tokens` | Enlaces externos revocables por audiencia (`constructora` \| `cliente`) con traza de accesos |
+
 ### Business development
 | Tabla | Propósito |
 |---|---|
@@ -455,6 +480,7 @@ Registro de horas por proyecto y fase. Todos los roles FP.
 /bienvenida/[token]         Onboarding de nuevo cliente
 /execution-portal/[token]   Portal para partners de FP Execution
 /gestor/[token]             Portal de la gestoría (solo lectura: gastos, facturas, conciliación)
+/repasos/[token]            Repasos de obra en modo presentación (constructora o cliente, solo lectura)
 ```
 
 ### Área interna `/team`
@@ -504,6 +530,8 @@ Registro de horas por proyecto y fase. Todos los roles FP.
 /team/perfil                Perfil personal
 /team/apps                  Índice de apps
 /team/apps/design-hunter    Design Hunter (inspiración/referencias)
+/team/apps/repasos          Repasos de obra — índice de proyectos
+/team/apps/repasos/[id]     Repasos de obra — visor del plano con pins
 /team/apps/control-obra     Control económico de obra (solo fp_partner)
 /team/apps/modelo-cafe      Modelo financiero Café Goya (solo fp_partner)
 /team/marketing             Índice de marketing
@@ -718,6 +746,7 @@ actualizarlo en **ambos**: `lib/types/index.ts` Y `middleware.ts`.
 - Naming audit completo: `create/update/send` prefijos, variables descriptivas
 - Design Hunter (multiselección, vídeos, thumbnails, lightbox, vista Stories)
 - Marketing Post Manager (kanban, tabs Instagram/LinkedIn, media upload, flujo de aprobación, avisos)
+- Repasos de obra (pins sobre plano, visibilidad de 3 niveles, enlaces externos, trazabilidad) — **pendiente ejecutar `repasos_obra.sql`**
 
 ### 🚧 En progreso / incompleto
 - `/team/finanzas/facturacion/dashboard` — ruta existe pero redirige o está vacía
