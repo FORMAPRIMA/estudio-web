@@ -67,7 +67,15 @@ const PlanoCanvas = forwardRef<PlanoCanvasHandle, Props>(function PlanoCanvas(
   ref
 ) {
   const boxRef = useRef<HTMLDivElement>(null)
+  const imgRef = useRef<HTMLImageElement>(null)
   const [box, setBox] = useState({ w: 0, h: 0 })
+  const [nat, setNat] = useState<{ w: number; h: number } | null>(null)
+
+  // La imagen cargada es la fuente de verdad del aspect ratio. Las dimensiones
+  // guardadas en BD son solo la estimación inicial: pueden faltar (filas creadas
+  // antes de medirlas) o no corresponder si se reemplazó el archivo del plano.
+  const W = nat?.w || (imgW > 0 ? imgW : 1600)
+  const H = nat?.h || (imgH > 0 ? imgH : 1131)
   const [view, setView] = useState<View>({ scale: 1, tx: 0, ty: 0 })
   const [dragging, setDragging] = useState(false)
 
@@ -84,21 +92,21 @@ const PlanoCanvas = forwardRef<PlanoCanvasHandle, Props>(function PlanoCanvas(
 
   const fitScale = useCallback(() => {
     if (!box.w || !box.h) return 1
-    return Math.min(box.w / imgW, box.h / imgH) * 0.96
-  }, [box.w, box.h, imgW, imgH])
+    return Math.min(box.w / W, box.h / H) * 0.96
+  }, [box.w, box.h, W, H])
 
   const clampView = useCallback(
     (v: View): View => {
       const min = fitScale()
       const scale = Math.min(Math.max(v.scale, min), min * MAX_SCALE_FACTOR)
-      const rw = imgW * scale
-      const rh = imgH * scale
+      const rw = W * scale
+      const rh = H * scale
       // Si el plano cabe en el eje, se centra; si no, no se puede dejar hueco.
       const tx = rw <= box.w ? (box.w - rw) / 2 : Math.min(0, Math.max(box.w - rw, v.tx))
       const ty = rh <= box.h ? (box.h - rh) / 2 : Math.min(0, Math.max(box.h - rh, v.ty))
       return { scale, tx, ty }
     },
-    [box.w, box.h, imgW, imgH, fitScale]
+    [box.w, box.h, W, H, fitScale]
   )
 
   const doFit = useCallback(() => {
@@ -121,20 +129,48 @@ const PlanoCanvas = forwardRef<PlanoCanvasHandle, Props>(function PlanoCanvas(
   useEffect(() => {
     if (box.w && box.h) doFit()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [box.w, box.h, src, imgW, imgH])
+  }, [box.w, box.h, src, W, H])
+
+  // Si la imagen ya estaba cargada (caché) el evento onLoad se dispara antes de
+  // que React hidrate y nunca llega al componente: hay que medirla también aquí.
+  useEffect(() => {
+    setNat(null)
+    const el = imgRef.current
+    if (el?.complete && el.naturalWidth && el.naturalHeight) {
+      setNat({ w: el.naturalWidth, h: el.naturalHeight })
+    }
+  }, [src])
 
   // ── Conversión de coordenadas ───────────────────────────────────────────────
 
   const toNormalized = useCallback(
     (clientX: number, clientY: number) => {
-      const rect = boxRef.current!.getBoundingClientRect()
+      // Un gesto puede terminar después de que el visor se desmonte (al abrir el
+      // modal o cambiar de plano a media pulsación): sin esta guarda sería un
+      // TypeError sobre null dentro de un handler de eventos.
+      const el = boxRef.current
+      if (!el) return null
+      const rect = el.getBoundingClientRect()
       const v = viewRef.current
-      const x = (clientX - rect.left - v.tx) / (imgW * v.scale)
-      const y = (clientY - rect.top - v.ty) / (imgH * v.scale)
+      const dx = W * v.scale
+      const dy = H * v.scale
+      if (!dx || !dy) return null
+      const x = (clientX - rect.left - v.tx) / dx
+      const y = (clientY - rect.top - v.ty) / dy
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return null
       return { x: Math.min(1, Math.max(0, x)), y: Math.min(1, Math.max(0, y)) }
     },
-    [imgW, imgH]
+    [W, H]
   )
+
+  /** setPointerCapture lanza NotFoundError si el puntero ya no está activo. */
+  const capture = (target: EventTarget | null, pointerId: number) => {
+    try {
+      ;(target as Element | null)?.setPointerCapture?.(pointerId)
+    } catch {
+      /* el puntero ya se soltó: seguimos sin captura */
+    }
+  }
 
   const zoomAt = useCallback(
     (factor: number, cx: number, cy: number) => {
@@ -155,8 +191,8 @@ const PlanoCanvas = forwardRef<PlanoCanvasHandle, Props>(function PlanoCanvas(
       setView(
         clampView({
           scale,
-          tx: box.w / 2 - x * imgW * scale,
-          ty: box.h / 2 - y * imgH * scale,
+          tx: box.w / 2 - x * W * scale,
+          ty: box.h / 2 - y * H * scale,
         })
       )
     },
@@ -180,7 +216,7 @@ const PlanoCanvas = forwardRef<PlanoCanvasHandle, Props>(function PlanoCanvas(
   // ── Punteros: pan, pinch y toques ───────────────────────────────────────────
 
   function onPointerDown(e: React.PointerEvent) {
-    ;(e.target as Element).setPointerCapture?.(e.pointerId)
+    capture(e.target, e.pointerId)
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
 
     if (pointers.current.size === 1) {
@@ -188,7 +224,8 @@ const PlanoCanvas = forwardRef<PlanoCanvasHandle, Props>(function PlanoCanvas(
       tapStart.current = { x: e.clientX, y: e.clientY, t: Date.now() }
     } else if (pointers.current.size === 2) {
       const [a, b] = Array.from(pointers.current.values())
-      const rect = boxRef.current!.getBoundingClientRect()
+      const rect = boxRef.current?.getBoundingClientRect()
+      if (!a || !b || !rect) return
       pinchStart.current = {
         dist: Math.hypot(a.x - b.x, a.y - b.y),
         mx: (a.x + b.x) / 2 - rect.left,
@@ -206,12 +243,14 @@ const PlanoCanvas = forwardRef<PlanoCanvasHandle, Props>(function PlanoCanvas(
 
     // Arrastre del pin fantasma: manda sobre el pan.
     if (ghostDrag.current && onPlace) {
-      onPlace(toNormalized(e.clientX, e.clientY))
+      const p = toNormalized(e.clientX, e.clientY)
+      if (p) onPlace(p)
       return
     }
 
     if (pointers.current.size >= 2 && pinchStart.current) {
       const [a, b] = Array.from(pointers.current.values())
+      if (!a || !b) return
       const dist = Math.hypot(a.x - b.x, a.y - b.y)
       const start = pinchStart.current
       const factor = dist / (start.dist || 1)
@@ -257,16 +296,20 @@ const PlanoCanvas = forwardRef<PlanoCanvasHandle, Props>(function PlanoCanvas(
           Math.hypot(e.clientX - prev.x, e.clientY - prev.y) < 24
 
         if (isDouble && !placing) {
-          const rect = boxRef.current!.getBoundingClientRect()
+          const rect = boxRef.current?.getBoundingClientRect()
           const min = fitScale()
           const zoomedIn = viewRef.current.scale > min * 1.4
-          if (zoomedIn) doFit()
+          if (zoomedIn || !rect) doFit()
           else zoomAt(2.6, e.clientX - rect.left, e.clientY - rect.top)
           lastTap.current = null
         } else {
           lastTap.current = { x: e.clientX, y: e.clientY, t: Date.now() }
-          if (placing && onPlace) onPlace(toNormalized(e.clientX, e.clientY))
-          else onBackgroundTap?.()
+          if (placing && onPlace) {
+            const p = toNormalized(e.clientX, e.clientY)
+            if (p) onPlace(p)
+          } else {
+            onBackgroundTap?.()
+          }
         }
       }
 
@@ -279,11 +322,9 @@ const PlanoCanvas = forwardRef<PlanoCanvasHandle, Props>(function PlanoCanvas(
   // ── Render ──────────────────────────────────────────────────────────────────
 
   const screenOf = (x: number, y: number) => ({
-    left: view.tx + x * imgW * view.scale,
-    top: view.ty + y * imgH * view.scale,
+    left: view.tx + x * W * view.scale,
+    top: view.ty + y * H * view.scale,
   })
-
-  const zoomed = view.scale > fitScale() * 1.05
 
   return (
     <div
@@ -307,19 +348,31 @@ const PlanoCanvas = forwardRef<PlanoCanvasHandle, Props>(function PlanoCanvas(
     >
       {/* Plano */}
       <img
+        ref={imgRef}
         src={src}
         alt="Plano del proyecto"
         draggable={false}
+        onLoad={(e) => {
+          const el = e.currentTarget
+          if (!el.naturalWidth || !el.naturalHeight) return
+          if (nat?.w === el.naturalWidth && nat?.h === el.naturalHeight) return
+          setNat({ w: el.naturalWidth, h: el.naturalHeight })
+        }}
         style={{
           position: 'absolute',
           left: 0,
           top: 0,
-          width: imgW,
-          height: imgH,
+          width: W,
+          height: H,
+          // El preflight de Tailwind aplica `img { max-width: 100% }` a nivel de
+          // hoja de estilos. El width inline gana, pero max-width NO se anula solo:
+          // recortaba el ancho al del contenedor dejando el alto intacto, y el
+          // plano salía distorsionado. Hay que desactivarlo explícitamente.
+          maxWidth: 'none',
+          maxHeight: 'none',
           transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.scale})`,
           transformOrigin: '0 0',
           pointerEvents: 'none',
-          imageRendering: zoomed ? 'auto' : 'auto',
         }}
       />
 
@@ -364,11 +417,13 @@ const PlanoCanvas = forwardRef<PlanoCanvasHandle, Props>(function PlanoCanvas(
           onPointerDown={(e) => {
             e.stopPropagation()
             ghostDrag.current = true
-            ;(e.target as Element).setPointerCapture?.(e.pointerId)
+            capture(e.target, e.pointerId)
             pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
           }}
           onPointerMove={(e) => {
-            if (ghostDrag.current && onPlace) onPlace(toNormalized(e.clientX, e.clientY))
+            if (!ghostDrag.current || !onPlace) return
+            const p = toNormalized(e.clientX, e.clientY)
+            if (p) onPlace(p)
           }}
           onPointerUp={(e) => {
             ghostDrag.current = false
