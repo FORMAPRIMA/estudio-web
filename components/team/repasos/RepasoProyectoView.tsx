@@ -8,6 +8,7 @@ import type { PlanoCanvasHandle, PlanoPin } from './PlanoCanvas'
 import RepasosList, { RepasosFiltros } from './RepasosList'
 import RepasoModal from './RepasoModal'
 import RepasoLinksModal from './RepasoLinksModal'
+import RepasoVisorPublico from './RepasoVisorPublico'
 import {
   ESTADOS,
   FILTROS_VACIOS,
@@ -83,6 +84,8 @@ export default function RepasoProyectoView({
   const [aviso, setAviso] = useState<string | null>(null)
   const [pdf, setPdf] = useState<string | null>(null)
   const [pdfMenu, setPdfMenu] = useState(false)
+  /** Id del repaso abierto en el visor del portal externo. */
+  const [visor, setVisor] = useState<string | null>(null)
 
   const canvasRef = useRef<PlanoCanvasHandle>(null)
   const mainRef = useRef<HTMLDivElement>(null)
@@ -123,6 +126,10 @@ export default function RepasoProyectoView({
 
   const selected = delPlano.find((r) => r.id === selectedId) ?? null
 
+  // El visor recorre exactamente lo que la lista muestra: si un filtro deja
+  // fuera el repaso abierto, se cierra en lugar de quedarse descolgado.
+  const visorIndex = visor ? visibles.findIndex((r) => r.id === visor) : -1
+
   // ── Medida del área principal (para los topes del bottom sheet) ─────────────
 
   useLayoutEffect(() => {
@@ -158,13 +165,20 @@ export default function RepasoProyectoView({
   // ── Selección ───────────────────────────────────────────────────────────────
 
   const seleccionarDesdePlano = (id: string) => {
-    // Segundo toque sobre el pin ya seleccionado = abrir la ficha.
+    setSelectedId(id)
+    // En el portal externo un toque en el pin abre la ficha con la foto grande:
+    // quien consulta esto quiere VER el desperfecto, no navegar por una lista.
+    if (!interno) {
+      setVisor(id)
+      return
+    }
+    // Dentro del equipo el primer toque selecciona (para no tapar el plano
+    // mientras se revisa) y el segundo abre la ficha de edición.
     if (id === selectedId) {
       const r = delPlano.find((x) => x.id === id)
       if (r) setModal({ tipo: 'edit', repaso: r })
       return
     }
-    setSelectedId(id)
     if (snap === 'collapsed') goSnap('half')
   }
 
@@ -172,9 +186,15 @@ export default function RepasoProyectoView({
     setSelectedId(id)
     const r = delPlano.find((x) => x.id === id)
     if (r) canvasRef.current?.focusPoint(r.x, r.y)
+    if (!interno) setVisor(id)
   }
 
   const abrirRepaso = (id: string) => {
+    if (!interno) {
+      setSelectedId(id)
+      setVisor(id)
+      return
+    }
     const r = delPlano.find((x) => x.id === id)
     if (r) setModal({ tipo: 'edit', repaso: r })
   }
@@ -768,8 +788,24 @@ export default function RepasoProyectoView({
         />
       )}
 
-      {modal && !interno && modal.tipo === 'edit' && (
-        <RepasoDetallePublico repaso={modal.repaso} onClose={cerrarModal} />
+      {!interno && visorIndex >= 0 && (
+        <RepasoVisorPublico
+          repasos={visibles}
+          index={visorIndex}
+          onIndex={(i) => {
+            const r = visibles[i]
+            if (!r) return
+            setVisor(r.id)
+            setSelectedId(r.id)
+          }}
+          onClose={() => setVisor(null)}
+          onVerEnPlano={(r) => {
+            setVisor(null)
+            setSelectedId(r.id)
+            goSnap('collapsed')
+            canvasRef.current?.focusPoint(r.x, r.y)
+          }}
+        />
       )}
 
       {linksOpen && interno && (
@@ -782,135 +818,6 @@ export default function RepasoProyectoView({
           onChange={() => router.refresh()}
         />
       )}
-    </div>
-  )
-}
-
-// ─── Ficha de solo lectura (modo presentación) ─────────────────────────────────
-
-function RepasoDetallePublico({ repaso, onClose }: { repaso: Repaso; onClose: () => void }) {
-  const [lightbox, setLightbox] = useState<string | null>(null)
-  const estado = ESTADOS.find((e) => e.id === repaso.estado)
-
-  return (
-    <div className="rp-backdrop" role="dialog" aria-modal="true">
-      <div className="rp-modal">
-        <div className="rp-modal-head">
-          <div>
-            <h2 style={{ fontSize: 15, fontWeight: 400, color: '#1A1A1A', margin: 0 }}>
-              {repaso.codigo}
-            </h2>
-            <p style={{ fontSize: 10.5, color: '#1A1A1A60', margin: '5px 0 0', fontWeight: 300 }}>
-              {estado?.label}
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            aria-label="Cerrar"
-            style={{
-              flexShrink: 0, width: 34, height: 34, borderRadius: 4,
-              border: '1px solid #E2E0D9', background: '#fff',
-              fontSize: 15, cursor: 'pointer', lineHeight: 1,
-            }}
-          >
-            ✕
-          </button>
-        </div>
-
-        <div className="rp-modal-body">
-          {repaso.fotos.length > 0 && (
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
-                gap: 8, marginBottom: 18,
-              }}
-            >
-              {repaso.fotos.map((f) => (
-                <div
-                  key={f.id}
-                  style={{
-                    position: 'relative', aspectRatio: '1', borderRadius: 4,
-                    overflow: 'hidden', background: '#F0EEE8',
-                  }}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={f.url}
-                    alt=""
-                    onClick={() => setLightbox(f.url)}
-                    style={{
-                      width: '100%', height: '100%', objectFit: 'cover',
-                      display: 'block', cursor: 'zoom-in',
-                    }}
-                  />
-                  <span
-                    style={{
-                      position: 'absolute', left: 4, bottom: 4,
-                      fontSize: 9, padding: '2px 5px', borderRadius: 3,
-                      background: f.tipo === 'despues' ? '#2D7D5AE0' : '#1A1A1AB0',
-                      color: '#fff',
-                    }}
-                  >
-                    {f.tipo === 'despues' ? 'Resuelto' : 'Incidencia'}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <p
-            style={{
-              fontSize: 13.5, color: '#1A1A1A', lineHeight: 1.6,
-              fontWeight: 300, margin: '0 0 18px',
-            }}
-          >
-            {repaso.descripcion || 'Sin descripción.'}
-          </p>
-
-          <dl style={{ margin: 0, display: 'grid', gap: 10 }}>
-            <Dato label="Oficio" valor={repaso.oficio} oficio />
-            <Dato label="Estado" valor={estado?.label ?? repaso.estado} />
-            {repaso.responsable && <Dato label="Responsable" valor={repaso.responsable} />}
-          </dl>
-        </div>
-
-        <div className="rp-modal-foot">
-          <button className="rp-btn rp-btn-primary" style={{ flex: 1 }} onClick={onClose}>
-            Cerrar
-          </button>
-        </div>
-
-        {lightbox && (
-          <div
-            onClick={() => setLightbox(null)}
-            style={{
-              position: 'fixed', inset: 0, zIndex: 300,
-              background: 'rgba(10,10,10,0.94)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              padding: 16, cursor: 'zoom-out',
-            }}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={lightbox}
-              alt=""
-              style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-            />
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function Dato({ label, valor, oficio }: { label: string; valor: string; oficio?: boolean }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-      <dt style={{ fontSize: 11, color: '#1A1A1A70', fontWeight: 300 }}>{label}</dt>
-      <dd style={{ fontSize: 12, color: '#1A1A1A', margin: 0, fontWeight: 400, textAlign: 'right' }}>
-        {oficio ? oficioLabel(valor) : valor}
-      </dd>
     </div>
   )
 }

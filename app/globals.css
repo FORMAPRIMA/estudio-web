@@ -1414,3 +1414,233 @@ div:hover > .tt-avatar-overlay {
   transition: border-color 0.15s, transform 0.15s;
 }
 .rp-card:hover { border-color: #D85A30; }
+
+/* ── Visor del portal externo: la foto manda, los datos van encima ── */
+.rp-visor {
+  position: fixed;
+  inset: 0;
+  z-index: 250;
+  background: #0A0A0A;
+  display: flex;
+}
+.rp-visor-card {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: #0A0A0A;
+  overflow: hidden;
+}
+@media (min-width: 1024px) {
+  .rp-visor { background: rgba(8, 8, 8, 0.92); padding: 26px; backdrop-filter: blur(3px); }
+  .rp-visor-card {
+    max-width: 1000px;
+    /* Alto definido, no max-height: con la imagen en absoluto la ficha ya no
+       toma alto de su contenido y el área de foto se colapsaba a cero. */
+    height: 94vh;
+    margin: auto;
+    border-radius: 8px;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+  }
+}
+
+.rp-visor-foto {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  /* overflow oculto + imagen en absoluto: si la imagen fuese un hijo normal del
+     flex, su alto intrínseco haría crecer el contenedor y max-height: 100% no
+     ataría nada (una foto vertical se salía de la ficha en desktop). */
+  overflow: hidden;
+  background: #0A0A0A;
+  touch-action: pan-y;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.rp-visor-img {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  display: block;
+}
+.rp-visor-sinfoto {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.rp-visor-sinfoto { text-align: center; padding: 40px 24px; color: #fff; }
+
+
+.rp-visor-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 12px 12px 26px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.62), rgba(0, 0, 0, 0));
+  pointer-events: none;
+}
+.rp-visor-top > * { pointer-events: auto; }
+.rp-visor-num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
+  border: 1.5px solid rgba(255, 255, 255, 0.9);
+}
+.rp-visor-estado {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.rp-visor-cerrar {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+}
+.rp-visor-cerrar:hover { background: rgba(0, 0, 0, 0.75); }
+
+.rp-visor-fotos {
+  position: absolute;
+  left: 12px;
+  top: 56px;
+  display: flex;
+  gap: 6px;
+}
+.rp-visor-tab {
+  padding: 6px 11px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(0, 0, 0, 0.45);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 10.5px;
+  font-family: inherit;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  white-space: nowrap;
+}
+.rp-visor-tab-on {
+  background: #fff;
+  border-color: #fff;
+  color: #1A1A1A;
+  font-weight: 500;
+}
+
+.rp-visor-info {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 44px 16px 16px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.92) 0%, rgba(0, 0, 0, 0.72) 52%, rgba(0, 0, 0, 0) 100%);
+}
+.rp-visor-desc {
+  margin: 0 0 10px;
+  color: #fff;
+  font-size: 15px;
+  line-height: 1.5;
+  font-weight: 300;
+  letter-spacing: -0.01em;
+}
+@media (min-width: 1024px) {
+  .rp-visor-info { padding: 52px 22px 20px; }
+  .rp-visor-desc { font-size: 16.5px; max-width: 760px; }
+}
+.rp-visor-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.66);
+  font-weight: 300;
+}
+.rp-visor-oficio {
+  color: #fff;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.rp-visor-plano {
+  margin-top: 12px;
+  padding: 8px 13px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: transparent;
+  color: #fff;
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.rp-visor-plano:hover { background: rgba(255, 255, 255, 0.12); }
+
+.rp-visor-nav {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  background: #141414;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+.rp-visor-nav button {
+  padding: 10px 15px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: transparent;
+  color: #fff;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.rp-visor-nav button:disabled { opacity: 0.3; cursor: default; }
+.rp-visor-nav button:hover:not(:disabled) { background: rgba(255, 255, 255, 0.1); }
+.rp-visor-contador {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+  letter-spacing: 0.04em;
+}
+
+/* Filas de la lista en el portal externo: miniatura mayor y estado en chip */
+.rp-row-publico { padding: 12px 14px; gap: 12px; align-items: center; }
+.rp-row-thumb {
+  flex-shrink: 0;
+  width: 68px;
+  height: 68px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #F0EEE8;
+  display: block;
+  position: relative;
+}

@@ -201,6 +201,102 @@ export default function RepasosList({
     )
   }
 
+  // ── Fila del portal externo: la foto primero y el estado en un chip legible ──
+  if (modo === 'presentacion') {
+    return (
+      <div>
+        {visibles.map((r) => {
+          const selected = r.id === selectedId
+          const foto = r.fotos.find((f) => f.tipo === 'antes') ?? r.fotos[0]
+          return (
+            <button
+              key={r.id}
+              ref={(el) => {
+                if (el) rowRefs.current.set(r.id, el)
+                else rowRefs.current.delete(r.id)
+              }}
+              className={`rp-row rp-row-publico${selected ? ' rp-row-selected' : ''}`}
+              onClick={() => onSelect(r.id)}
+            >
+              <span className="rp-row-thumb">
+                {foto ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={foto.url}
+                    alt=""
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                  />
+                ) : (
+                  <span
+                    style={{
+                      position: 'absolute', inset: 0, display: 'flex',
+                      alignItems: 'center', justifyContent: 'center',
+                      fontSize: 15, color: '#1A1A1A35',
+                    }}
+                  >
+                    ◻
+                  </span>
+                )}
+                <span
+                  style={{
+                    position: 'absolute', top: 4, left: 4,
+                    width: 19, height: 19, borderRadius: '50%',
+                    background: estadoColor(r.estado), color: '#fff',
+                    fontSize: 9, fontWeight: 600,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    border: '1.5px solid #fff',
+                  }}
+                >
+                  {numeroDe(r.id)}
+                </span>
+              </span>
+
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span
+                  style={{
+                    display: 'inline-flex', alignItems: 'center',
+                    fontSize: 9.5, fontWeight: 600, letterSpacing: '0.09em',
+                    textTransform: 'uppercase', color: '#fff',
+                    background: estadoColor(r.estado),
+                    padding: '3px 8px', borderRadius: 999, marginBottom: 6,
+                  }}
+                >
+                  {estadoLabel(r.estado)}
+                </span>
+                <span
+                  style={{
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                    fontSize: 13,
+                    lineHeight: 1.45,
+                    color: r.descripcion ? '#1A1A1A' : '#1A1A1A55',
+                    fontWeight: 300,
+                  }}
+                >
+                  {r.descripcion || 'Sin descripción'}
+                </span>
+                <span
+                  style={{
+                    display: 'block', marginTop: 5,
+                    fontSize: 10.5, color: '#1A1A1A70',
+                  }}
+                >
+                  {oficioLabel(r.oficio)}
+                  {r.fotos.length > 1 ? ` · ${r.fotos.length} fotos` : ''}
+                </span>
+              </span>
+
+              <span style={{ flexShrink: 0, fontSize: 15, color: '#1A1A1A40' }}>›</span>
+            </button>
+          )
+        })}
+        <div style={{ height: 24 }} />
+      </div>
+    )
+  }
+
   return (
     <div>
       {visibles.map((r) => {
