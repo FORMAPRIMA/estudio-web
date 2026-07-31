@@ -3,7 +3,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import type { NivelCalidad, WarehouseItemInput } from '@/lib/memorias/domain'
+import { IVA_DEFAULT, NIVELES, type NivelCalidad, type WarehouseItemInput } from '@/lib/memorias/domain'
 
 const PATH = '/team/memorias-calidad/warehouse'
 
@@ -31,21 +31,17 @@ export async function createWarehouseItem(
     const { userId } = await requireFpStaff()
     if (!input.nombre?.trim()) return { error: 'El nombre es obligatorio.' }
     if (!input.subcapitulo_id) return { error: 'El subcapítulo es obligatorio.' }
+    const nivelesError = validarNiveles(input.niveles_calidad)
+    if (nivelesError) return { error: nivelesError }
 
     const admin = createAdminClient()
-
-    // El favorito es único por subcapítulo × nivel: liberamos el anterior antes de insertar
-    if (input.es_favorito) {
-      const { error: freeErr } = await liberarFavorito(admin, input.subcapitulo_id, input.nivel_calidad)
-      if (freeErr) return { error: freeErr }
-    }
 
     const { data, error } = await admin
       .from('warehouse_items')
       .insert({
         subcapitulo_id: input.subcapitulo_id,
         nombre: input.nombre.trim(),
-        nivel_calidad: input.nivel_calidad,
+        niveles_calidad: input.niveles_calidad,
         marca: input.marca?.trim() || null,
         modelo: input.modelo?.trim() || null,
         referencia: input.referencia?.trim() || null,
@@ -56,6 +52,8 @@ export async function createWarehouseItem(
         ficha_tecnica_url: input.ficha_tecnica_url || null,
         url_producto: input.url_producto?.trim() || null,
         precio_pvp: input.precio_pvp ?? null,
+        precio_pvp_con_iva: input.precio_pvp_con_iva ?? null,
+        iva_pct: input.iva_pct ?? IVA_DEFAULT,
         precio_coste: input.precio_coste ?? null,
         moneda: input.moneda ?? 'EUR',
         proveedor_preferente_id: input.proveedor_preferente_id ?? null,
@@ -63,7 +61,6 @@ export async function createWarehouseItem(
         dimensiones: input.dimensiones ?? {},
         data: input.data ?? {},
         tags: input.tags ?? [],
-        es_favorito: input.es_favorito ?? false,
         activo: input.activo ?? true,
         created_by: userId,
       })
@@ -86,25 +83,21 @@ export async function updateWarehouseItem(
     await requireFpStaff()
     const admin = createAdminClient()
 
-    // Si pasa a favorito (o cambia de subcapítulo/nivel siendo favorito), liberamos el hueco
-    if (input.es_favorito) {
-      const { data: actual } = await admin
-        .from('warehouse_items')
-        .select('subcapitulo_id, nivel_calidad')
-        .eq('id', id)
-        .single()
-      const subcapituloId = input.subcapitulo_id ?? actual?.subcapitulo_id
-      const nivel = (input.nivel_calidad ?? actual?.nivel_calidad) as NivelCalidad | undefined
-      if (subcapituloId && nivel) {
-        const { error: freeErr } = await liberarFavorito(admin, subcapituloId, nivel, id)
-        if (freeErr) return { error: freeErr }
-      }
+    if (input.niveles_calidad !== undefined) {
+      const nivelesError = validarNiveles(input.niveles_calidad)
+      if (nivelesError) return { error: nivelesError }
     }
+
+    const { data: actual } = await admin
+      .from('warehouse_items')
+      .select('subcapitulo_id, niveles_calidad')
+      .eq('id', id)
+      .single()
 
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
     if (input.subcapitulo_id !== undefined) patch.subcapitulo_id = input.subcapitulo_id
     if (input.nombre !== undefined) patch.nombre = input.nombre.trim()
-    if (input.nivel_calidad !== undefined) patch.nivel_calidad = input.nivel_calidad
+    if (input.niveles_calidad !== undefined) patch.niveles_calidad = input.niveles_calidad
     if (input.marca !== undefined) patch.marca = input.marca?.trim() || null
     if (input.modelo !== undefined) patch.modelo = input.modelo?.trim() || null
     if (input.referencia !== undefined) patch.referencia = input.referencia?.trim() || null
@@ -115,6 +108,8 @@ export async function updateWarehouseItem(
     if (input.ficha_tecnica_url !== undefined) patch.ficha_tecnica_url = input.ficha_tecnica_url || null
     if (input.url_producto !== undefined) patch.url_producto = input.url_producto?.trim() || null
     if (input.precio_pvp !== undefined) patch.precio_pvp = input.precio_pvp
+    if (input.precio_pvp_con_iva !== undefined) patch.precio_pvp_con_iva = input.precio_pvp_con_iva
+    if (input.iva_pct !== undefined) patch.iva_pct = input.iva_pct
     if (input.precio_coste !== undefined) patch.precio_coste = input.precio_coste
     if (input.moneda !== undefined) patch.moneda = input.moneda
     if (input.proveedor_preferente_id !== undefined) patch.proveedor_preferente_id = input.proveedor_preferente_id
@@ -122,11 +117,34 @@ export async function updateWarehouseItem(
     if (input.dimensiones !== undefined) patch.dimensiones = input.dimensiones
     if (input.data !== undefined) patch.data = input.data
     if (input.tags !== undefined) patch.tags = input.tags
-    if (input.es_favorito !== undefined) patch.es_favorito = input.es_favorito
     if (input.activo !== undefined) patch.activo = input.activo
 
     const { error } = await admin.from('warehouse_items').update(patch).eq('id', id)
     if (error) return { error: error.message }
+
+    // Si se mueve de subcapítulo, sus favoritos se llevan al hueco nuevo; si ya está
+    // ocupado, se pierden (el hueco tiene dueño y no lo desalojamos por la espalda).
+    if (input.subcapitulo_id && actual && input.subcapitulo_id !== actual.subcapitulo_id) {
+      const { data: propios } = await admin
+        .from('warehouse_favoritos')
+        .select('nivel_calidad')
+        .eq('item_id', id)
+      await admin.from('warehouse_favoritos').delete().eq('item_id', id)
+      for (const fila of propios ?? []) {
+        await admin
+          .from('warehouse_favoritos')
+          .insert({ subcapitulo_id: input.subcapitulo_id, nivel_calidad: fila.nivel_calidad, item_id: id })
+      }
+    }
+
+    // Un nivel que ya no cubre no puede seguir siendo su favorito
+    if (input.niveles_calidad !== undefined) {
+      const fuera = NIVELES.map(n => n.value).filter(n => !input.niveles_calidad!.includes(n))
+      if (fuera.length > 0) {
+        await admin.from('warehouse_favoritos').delete().eq('item_id', id).in('nivel_calidad', fuera)
+      }
+    }
+
     revalidatePath(PATH)
     return { success: true }
   } catch (err) {
@@ -149,30 +167,21 @@ export async function deleteWarehouseItem(id: string): Promise<{ success: true }
 
 // ── Favorito FP ───────────────────────────────────────────────────────────────
 
-/**
- * Desmarca el favorito que ocupe ese hueco (subcapítulo × nivel). El índice único
- * parcial de BD garantiza que nunca haya dos, así que hay que liberar antes de marcar.
- */
-async function liberarFavorito(
-  admin: ReturnType<typeof createAdminClient>,
-  subcapituloId: string,
-  nivel: NivelCalidad,
-  exceptoId?: string
-): Promise<{ error?: string }> {
-  let query = admin
-    .from('warehouse_items')
-    .update({ es_favorito: false, updated_at: new Date().toISOString() })
-    .eq('subcapitulo_id', subcapituloId)
-    .eq('nivel_calidad', nivel)
-    .eq('es_favorito', true)
-  if (exceptoId) query = query.neq('id', exceptoId)
-  const { error } = await query
-  return error ? { error: error.message } : {}
+function validarNiveles(niveles: NivelCalidad[] | undefined): string | null {
+  if (!niveles || niveles.length === 0) return 'Marca al menos un nivel de calidad.'
+  const validos = NIVELES.map(n => n.value)
+  if (niveles.some(n => !validos.includes(n))) return 'Nivel de calidad no válido.'
+  return null
 }
 
-export async function setFavorito(
+/**
+ * Define en qué niveles este producto es el Favorito FP de su subcapítulo.
+ * `warehouse_favoritos` tiene PK (subcapitulo_id, nivel_calidad), así que el upsert
+ * desaloja al que ocupara el hueco: un nivel solo puede tener un favorito.
+ */
+export async function setFavoritos(
   id: string,
-  favorito: boolean
+  niveles: NivelCalidad[]
 ): Promise<{ success: true } | { error: string }> {
   try {
     await requireFpStaff()
@@ -180,21 +189,36 @@ export async function setFavorito(
 
     const { data: item } = await admin
       .from('warehouse_items')
-      .select('subcapitulo_id, nivel_calidad')
+      .select('subcapitulo_id, niveles_calidad')
       .eq('id', id)
       .single()
-    if (!item) return { error: 'Item no encontrado.' }
+    if (!item) return { error: 'Producto no encontrado.' }
 
-    if (favorito) {
-      const { error: freeErr } = await liberarFavorito(admin, item.subcapitulo_id, item.nivel_calidad, id)
-      if (freeErr) return { error: freeErr }
+    const fueraDeAlcance = niveles.filter(n => !(item.niveles_calidad ?? []).includes(n))
+    if (fueraDeAlcance.length > 0) {
+      return { error: 'No puede ser favorito de un nivel que el producto no cubre.' }
     }
 
-    const { error } = await admin
-      .from('warehouse_items')
-      .update({ es_favorito: favorito, updated_at: new Date().toISOString() })
-      .eq('id', id)
-    if (error) return { error: error.message }
+    // Quita los niveles que deja de ocupar
+    const sobran = NIVELES.map(n => n.value).filter(n => !niveles.includes(n))
+    if (sobran.length > 0) {
+      const { error: delErr } = await admin
+        .from('warehouse_favoritos')
+        .delete()
+        .eq('item_id', id)
+        .in('nivel_calidad', sobran)
+      if (delErr) return { error: delErr.message }
+    }
+
+    if (niveles.length > 0) {
+      const { error: upErr } = await admin
+        .from('warehouse_favoritos')
+        .upsert(
+          niveles.map(nivel => ({ subcapitulo_id: item.subcapitulo_id, nivel_calidad: nivel, item_id: id })),
+          { onConflict: 'subcapitulo_id,nivel_calidad' }
+        )
+      if (upErr) return { error: upErr.message }
+    }
 
     revalidatePath(PATH)
     return { success: true }

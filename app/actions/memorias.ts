@@ -3,7 +3,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import { autoPvp, type EstadoCompra, type NivelCalidad } from '@/lib/memorias/domain'
+import { autoPvp, conIva, IVA_DEFAULT, type EstadoCompra, type NivelCalidad } from '@/lib/memorias/domain'
 
 const PATH = '/team/memorias-calidad/proyectos'
 
@@ -228,7 +228,7 @@ export async function addItemFromWarehouse(
         warehouse_item_id: wh.id,
         subcapitulo_id: wh.subcapitulo_id,
         nombre: wh.nombre,
-        nivel_calidad: wh.nivel_calidad,
+        niveles_calidad: wh.niveles_calidad ?? [],
         marca: wh.marca,
         modelo: wh.modelo,
         referencia: wh.referencia,
@@ -243,6 +243,8 @@ export async function addItemFromWarehouse(
         proveedor_id: wh.proveedor_preferente_id,
         precio_coste: wh.precio_coste,
         precio_pvp: wh.precio_pvp ?? autoPvp(wh.precio_coste),
+        precio_pvp_con_iva: wh.precio_pvp_con_iva ?? conIva(wh.precio_pvp ?? autoPvp(wh.precio_coste), wh.iva_pct ?? IVA_DEFAULT),
+        iva_pct: wh.iva_pct ?? IVA_DEFAULT,
         moneda: wh.moneda ?? 'EUR',
         orden: await siguienteOrden(admin, estancia_id),
       })
@@ -260,7 +262,7 @@ export async function addItemFromWarehouse(
 export interface ItemLibreInput {
   subcapitulo_id: string
   nombre: string
-  nivel_calidad?: NivelCalidad | null
+  niveles_calidad?: NivelCalidad[]
   marca?: string | null
   modelo?: string | null
   referencia?: string | null
@@ -302,7 +304,7 @@ export async function addItemLibre(
         warehouse_item_id: null,
         subcapitulo_id: input.subcapitulo_id,
         nombre: input.nombre.trim(),
-        nivel_calidad: input.nivel_calidad ?? null,
+        niveles_calidad: input.niveles_calidad ?? [],
         marca: input.marca?.trim() || null,
         modelo: input.modelo?.trim() || null,
         referencia: input.referencia?.trim() || null,
@@ -316,6 +318,7 @@ export async function addItemLibre(
         proveedor_id: input.proveedor_id || null,
         precio_coste: input.precio_coste ?? null,
         precio_pvp: input.precio_pvp ?? autoPvp(input.precio_coste ?? null),
+        precio_pvp_con_iva: conIva(input.precio_pvp ?? autoPvp(input.precio_coste ?? null)),
         notas: input.notas?.trim() || null,
         orden: await siguienteOrden(admin, estancia_id),
       })
@@ -342,6 +345,8 @@ export async function updateEstanciaItem(
     cantidad?: number
     proveedor_id?: string | null
     precio_pvp?: number | null
+    precio_pvp_con_iva?: number | null
+    iva_pct?: number
     precio_coste?: number | null
     notas?: string | null
     estado_compra?: EstadoCompra
@@ -349,7 +354,7 @@ export async function updateEstanciaItem(
     imagen_principal_url?: string | null
     imagen_lifestyle_url?: string | null
     subcapitulo_id?: string
-    nivel_calidad?: NivelCalidad | null
+    niveles_calidad?: NivelCalidad[]
     orden?: number
   }
 ): Promise<{ success: true } | { error: string }> {
@@ -370,6 +375,8 @@ export async function updateEstanciaItem(
     if (data.cantidad !== undefined) patch.cantidad = data.cantidad
     if (data.proveedor_id !== undefined) patch.proveedor_id = data.proveedor_id || null
     if (data.precio_pvp !== undefined) patch.precio_pvp = data.precio_pvp
+    if (data.precio_pvp_con_iva !== undefined) patch.precio_pvp_con_iva = data.precio_pvp_con_iva
+    if (data.iva_pct !== undefined) patch.iva_pct = data.iva_pct
     if (data.precio_coste !== undefined) patch.precio_coste = data.precio_coste
     if (data.notas !== undefined) patch.notas = data.notas?.trim() || null
     if (data.estado_compra !== undefined) patch.estado_compra = data.estado_compra
@@ -377,7 +384,7 @@ export async function updateEstanciaItem(
     if (data.imagen_principal_url !== undefined) patch.imagen_principal_url = data.imagen_principal_url || null
     if (data.imagen_lifestyle_url !== undefined) patch.imagen_lifestyle_url = data.imagen_lifestyle_url || null
     if (data.subcapitulo_id !== undefined) patch.subcapitulo_id = data.subcapitulo_id
-    if (data.nivel_calidad !== undefined) patch.nivel_calidad = data.nivel_calidad
+    if (data.niveles_calidad !== undefined) patch.niveles_calidad = data.niveles_calidad
     if (data.orden !== undefined) patch.orden = data.orden
 
     const { error } = await admin
@@ -435,7 +442,7 @@ export async function moveEstanciaItem(
  */
 export async function guardarItemEnWarehouse(
   item_id: string,
-  nivel_calidad: NivelCalidad
+  niveles_calidad: NivelCalidad[]
 ): Promise<{ id: string } | { error: string }> {
   try {
     const { userId } = await requireFpStaff()
@@ -448,13 +455,14 @@ export async function guardarItemEnWarehouse(
       .single()
     if (!item) return { error: 'Item no encontrado.' }
     if (item.warehouse_item_id) return { error: 'Este item ya viene del warehouse.' }
+    if (!niveles_calidad || niveles_calidad.length === 0) return { error: 'Marca al menos un nivel de calidad.' }
 
     const { data: nuevo, error } = await admin
       .from('warehouse_items')
       .insert({
         subcapitulo_id: item.subcapitulo_id,
         nombre: item.nombre,
-        nivel_calidad,
+        niveles_calidad,
         marca: item.marca,
         modelo: item.modelo,
         referencia: item.referencia,
@@ -464,6 +472,8 @@ export async function guardarItemEnWarehouse(
         ficha_tecnica_url: item.ficha_tecnica_url,
         url_producto: item.url_producto,
         precio_pvp: item.precio_pvp,
+        precio_pvp_con_iva: item.precio_pvp_con_iva,
+        iva_pct: item.iva_pct ?? IVA_DEFAULT,
         precio_coste: item.precio_coste,
         moneda: item.moneda,
         proveedor_preferente_id: item.proveedor_id,
@@ -476,7 +486,7 @@ export async function guardarItemEnWarehouse(
 
     await admin
       .from('memoria_estancia_items')
-      .update({ warehouse_item_id: nuevo.id, nivel_calidad, updated_at: new Date().toISOString() })
+      .update({ warehouse_item_id: nuevo.id, niveles_calidad, updated_at: new Date().toISOString() })
       .eq('id', item_id)
 
     revalidatePath(PATH, 'layout')

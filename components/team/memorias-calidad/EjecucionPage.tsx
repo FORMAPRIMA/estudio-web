@@ -25,6 +25,7 @@ import {
   formatCantidad,
   formatEur,
   nivelMeta,
+  nivelesLabel,
   totales,
   type Capitulo,
   type Estancia,
@@ -110,7 +111,7 @@ function SelectorProducto({
     const t = texto.trim().toLowerCase()
     return warehouse
       .filter(w => {
-        if (nivelFiltro !== 'all' && w.nivel_calidad !== nivelFiltro) return false
+        if (nivelFiltro !== 'all' && !w.niveles_calidad.includes(nivelFiltro)) return false
         if (capituloId !== 'all') {
           const sub = subPorId.get(w.subcapitulo_id)
           if (!sub || sub.capitulo_id !== capituloId) return false
@@ -198,7 +199,6 @@ function SelectorProducto({
               {resultados.map(item => {
                 const sub = subPorId.get(item.subcapitulo_id)
                 const cap = sub ? capPorId.get(sub.capitulo_id) : null
-                const meta = nivelMeta(item.nivel_calidad)
                 return (
                   <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '8px 22px', borderBottom: '1px solid #F5F4F0' }}>
                     <div style={{ width: 38, height: 30, borderRadius: 3, background: '#F8F7F4', overflow: 'hidden', flexShrink: 0 }}>
@@ -209,12 +209,16 @@ function SelectorProducto({
                         {[item.marca, item.nombre].filter(Boolean).join(' · ')}
                       </div>
                       <div style={{ fontSize: 10, color: '#AAA' }}>
-                        {cap?.nombre} › {sub?.nombre}{item.es_favorito ? ' · ★ Favorito FP' : ''}
+                        {cap?.nombre} › {sub?.nombre}
                       </div>
                     </div>
-                    <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', padding: '2px 6px', borderRadius: 3, background: meta.bg, color: meta.color, flexShrink: 0 }}>
-                      {meta.label}
-                    </span>
+                    <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
+                      {NIVELES.filter(n => item.niveles_calidad.includes(n.value)).map(n => (
+                        <span key={n.value} title={n.label} style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', padding: '2px 5px', borderRadius: 3, background: n.bg, color: n.color }}>
+                          {n.label.slice(0, 4)}
+                        </span>
+                      ))}
+                    </div>
                     <span style={{ width: 74, textAlign: 'right', fontSize: 11.5, color: '#555', flexShrink: 0 }}>
                       {item.precio_pvp != null ? formatEur(item.precio_pvp, 0) : '—'}
                     </span>
@@ -339,10 +343,13 @@ function ItemFicha({
     onSaved()
   }
 
+  const [nivelesSubida, setNivelesSubida] = useState<NivelCalidad[]>(
+    item.niveles_calidad.length > 0 ? item.niveles_calidad : ['select']
+  )
+
   const subirAlWarehouse = async () => {
-    const nivel = (window.prompt('¿A qué nivel lo subimos? functional / select / master_piece', 'select') ?? '').trim()
-    if (!NIVELES.some(n => n.value === nivel)) return
-    const res = await guardarItemEnWarehouse(item.id, nivel as NivelCalidad)
+    if (nivelesSubida.length === 0) { setError('Marca al menos un nivel para subirlo al catálogo.'); return }
+    const res = await guardarItemEnWarehouse(item.id, nivelesSubida)
     if ('error' in res) { setError(res.error); return }
     onSaved()
   }
@@ -445,7 +452,29 @@ function ItemFicha({
                 {estancias.filter(e => e.id !== item.estancia_id).map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
               </select>
               {!item.warehouse_item_id && (
-                <button type="button" onClick={subirAlWarehouse} style={S.btnSm()}>Subir al warehouse</button>
+                <>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    {NIVELES.map(n => {
+                      const activo = nivelesSubida.includes(n.value)
+                      return (
+                        <button
+                          key={n.value}
+                          type="button"
+                          onClick={() => setNivelesSubida(prev => activo ? prev.filter(x => x !== n.value) : [...prev, n.value])}
+                          title={`Subirlo al catálogo en nivel ${n.label}`}
+                          style={{
+                            padding: '3px 8px', fontSize: 10, fontWeight: 600, borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit',
+                            border: `1px solid ${activo ? n.color : '#E8E6E0'}`,
+                            background: activo ? n.color : '#fff', color: activo ? '#fff' : '#999',
+                          }}
+                        >
+                          {n.label.slice(0, 4)}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <button type="button" onClick={subirAlWarehouse} style={S.btnSm()}>Subir al warehouse</button>
+                </>
               )}
               {item.url_producto && (
                 <a href={item.url_producto} target="_blank" rel="noreferrer" style={{ ...S.btnSm(), textDecoration: 'none' }}>Ver en la web</a>
@@ -589,7 +618,7 @@ function ItemRow({
             {item.descripcion && <p style={{ margin: '0 0 4px' }}>{item.descripcion}</p>}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, fontSize: 10.5, color: '#999' }}>
               {item.referencia && <span>Ref. <span style={{ fontFamily: 'monospace', color: '#666' }}>{item.referencia}</span></span>}
-              {item.nivel_calidad && <span>{nivelMeta(item.nivel_calidad).label}</span>}
+              {item.niveles_calidad.length > 0 && <span>{nivelesLabel(item.niveles_calidad)}</span>}
               {!item.warehouse_item_id && <span style={{ color: '#D97706' }}>Item libre (no está en el warehouse)</span>}
               {item.notas && <span style={{ color: '#D85A30', fontStyle: 'italic' }}>{item.notas}</span>}
             </div>

@@ -92,6 +92,7 @@ const s = StyleSheet.create({
   itemPrecio: { width: 92, alignItems: 'flex-end' },
   itemPrecioValor: { fontSize: 12, fontFamily: 'Helvetica-Bold', color: C.ink },
   itemPrecioLabel: { fontSize: 6, color: C.meta, letterSpacing: 1.2, textTransform: 'uppercase', marginTop: 2 },
+  itemPrecioSecundario: { fontSize: 9.5, color: C.mid, marginTop: 5 },
 
   cierre: { marginTop: 12, backgroundColor: C.light, borderLeftWidth: 3, borderLeftColor: C.brand, padding: 14 },
   cierreTitulo: { fontSize: 7, fontFamily: 'Helvetica-Bold', color: C.brand, letterSpacing: 1.4, textTransform: 'uppercase', marginBottom: 5 },
@@ -103,6 +104,7 @@ const s = StyleSheet.create({
   },
   totalLabel: { fontSize: 8, fontFamily: 'Helvetica-Bold', color: C.ink, letterSpacing: 1.4, textTransform: 'uppercase' },
   totalValor: { fontSize: 15, fontFamily: 'Helvetica-Bold', color: C.ink },
+  totalValorSecundario: { fontSize: 9, color: C.mid, marginTop: 3 },
 })
 
 function euros(n: number | null): string {
@@ -207,7 +209,13 @@ export function MemoriaAnteproyectoPDF({ data }: { data: AnteproyectoData }) {
                   {incluirPrecios && item.precio_pvp != null && (
                     <View style={s.itemPrecio}>
                       <Text style={s.itemPrecioValor}>{euros(item.precio_pvp)}</Text>
-                      <Text style={s.itemPrecioLabel}>Unidad</Text>
+                      <Text style={s.itemPrecioLabel}>Sin IVA</Text>
+                      {item.precio_pvp_con_iva != null && (
+                        <>
+                          <Text style={s.itemPrecioSecundario}>{euros(item.precio_pvp_con_iva)}</Text>
+                          <Text style={s.itemPrecioLabel}>Con IVA</Text>
+                        </>
+                      )}
                     </View>
                   )}
                 </View>
@@ -219,7 +227,12 @@ export function MemoriaAnteproyectoPDF({ data }: { data: AnteproyectoData }) {
         {incluirPrecios && totalPvp != null && (
           <View style={s.totalRow} wrap={false}>
             <Text style={s.totalLabel}>Total orientativo por unidad de cada elemento</Text>
-            <Text style={s.totalValor}>{euros(totalPvp)}</Text>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={s.totalValor}>{euros(totalPvp)} sin IVA</Text>
+              {data.totalPvpConIva != null && (
+                <Text style={s.totalValorSecundario}>{euros(data.totalPvpConIva)} con IVA</Text>
+              )}
+            </View>
           </View>
         )}
 

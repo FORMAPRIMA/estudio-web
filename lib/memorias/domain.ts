@@ -15,6 +15,13 @@ export function nivelMeta(nivel: string | null | undefined) {
   return NIVELES.find(n => n.value === nivel) ?? { value: nivel as NivelCalidad, label: '—', color: '#AAA', bg: '#F5F4F0' }
 }
 
+/** "Select" · "Select / Masterpiece" · "Los tres niveles". */
+export function nivelesLabel(niveles: NivelCalidad[] | null | undefined): string {
+  if (!niveles || niveles.length === 0) return '—'
+  if (niveles.length === NIVELES.length) return 'Los tres niveles'
+  return NIVELES.filter(n => niveles.includes(n.value)).map(n => n.label).join(' / ')
+}
+
 // ── Estado de compra (memoria de ejecución) ───────────────────────────────────
 
 export type EstadoCompra = 'pendiente' | 'pedido' | 'en_transito' | 'recibido' | 'instalado'
@@ -72,7 +79,8 @@ export interface WarehouseItem {
   id: string
   subcapitulo_id: string
   nombre: string
-  nivel_calidad: NivelCalidad
+  /** Un mismo producto puede valer para varios niveles (1 a 3). */
+  niveles_calidad: NivelCalidad[]
   marca: string | null
   modelo: string | null
   referencia: string | null
@@ -82,7 +90,12 @@ export interface WarehouseItem {
   imagenes_adicionales: string[]
   ficha_tecnica_url: string | null
   url_producto: string | null
+  /** Base sin IVA. */
   precio_pvp: number | null
+  /** Con IVA. Se deriva de `precio_pvp` e `iva_pct`, pero se puede sobrescribir. */
+  precio_pvp_con_iva: number | null
+  iva_pct: number
+  /** Coste para nosotros, siempre sin IVA. */
   precio_coste: number | null
   moneda: string
   proveedor_preferente_id: string | null
@@ -90,7 +103,6 @@ export interface WarehouseItem {
   dimensiones: Record<string, unknown>
   data: Record<string, unknown>
   tags: string[]
-  es_favorito: boolean
   activo: boolean
   created_by: string | null
   created_at: string
@@ -100,7 +112,7 @@ export interface WarehouseItem {
 export interface WarehouseItemInput {
   subcapitulo_id: string
   nombre: string
-  nivel_calidad: NivelCalidad
+  niveles_calidad: NivelCalidad[]
   marca?: string | null
   modelo?: string | null
   referencia?: string | null
@@ -111,6 +123,8 @@ export interface WarehouseItemInput {
   ficha_tecnica_url?: string | null
   url_producto?: string | null
   precio_pvp?: number | null
+  precio_pvp_con_iva?: number | null
+  iva_pct?: number
   precio_coste?: number | null
   moneda?: string
   proveedor_preferente_id?: string | null
@@ -118,8 +132,65 @@ export interface WarehouseItemInput {
   dimensiones?: Record<string, unknown>
   data?: Record<string, unknown>
   tags?: string[]
-  es_favorito?: boolean
   activo?: boolean
+}
+
+/**
+ * Normaliza una fila del warehouse. Cubre la ventana entre el deploy y la
+ * ejecución de `memorias_calidad_v3_niveles_iva.sql`: si la fila viene del
+ * esquema antiguo (nivel único, sin IVA) se traduce al nuevo en lugar de
+ * dejar la pantalla en blanco.
+ */
+export function normalizarWarehouseItem(row: Record<string, unknown>): WarehouseItem {
+  const niveles = Array.isArray(row.niveles_calidad) && row.niveles_calidad.length > 0
+    ? (row.niveles_calidad as NivelCalidad[])
+    : row.nivel_calidad
+      ? [row.nivel_calidad as NivelCalidad]
+      : ['select' as NivelCalidad]
+  const ivaPct = typeof row.iva_pct === 'number' ? row.iva_pct : IVA_DEFAULT
+  const pvp = (row.precio_pvp as number | null) ?? null
+  return {
+    ...(row as unknown as WarehouseItem),
+    niveles_calidad: niveles,
+    iva_pct: ivaPct,
+    precio_pvp: pvp,
+    precio_pvp_con_iva: (row.precio_pvp_con_iva as number | null) ?? conIva(pvp, ivaPct),
+  }
+}
+
+/** Igual que la anterior, para los items de una estancia. */
+export function normalizarEstanciaItem(row: Record<string, unknown>): EstanciaItem {
+  const niveles = Array.isArray(row.niveles_calidad)
+    ? (row.niveles_calidad as NivelCalidad[])
+    : row.nivel_calidad
+      ? [row.nivel_calidad as NivelCalidad]
+      : []
+  const ivaPct = typeof row.iva_pct === 'number' ? row.iva_pct : IVA_DEFAULT
+  const pvp = (row.precio_pvp as number | null) ?? null
+  return {
+    ...(row as unknown as EstanciaItem),
+    niveles_calidad: niveles,
+    iva_pct: ivaPct,
+    precio_pvp: pvp,
+    precio_pvp_con_iva: (row.precio_pvp_con_iva as number | null) ?? conIva(pvp, ivaPct),
+  }
+}
+
+/** Fila de `warehouse_favoritos`: un único producto por subcapítulo × nivel. */
+export interface Favorito {
+  subcapitulo_id: string
+  nivel_calidad: NivelCalidad
+  item_id: string
+}
+
+/** Índice `subcapituloId|nivel` → itemId, para pintar estrellas sin recorrer listas. */
+export function indexarFavoritos(favoritos: Favorito[]): Map<string, string> {
+  return new Map(favoritos.map(f => [`${f.subcapitulo_id}|${f.nivel_calidad}`, f.item_id]))
+}
+
+/** Niveles en los que este item es el Favorito FP de su subcapítulo. */
+export function nivelesFavoritos(item: WarehouseItem, favoritos: Favorito[]): NivelCalidad[] {
+  return favoritos.filter(f => f.item_id === item.id).map(f => f.nivel_calidad)
 }
 
 // ── Memoria de ejecución: estancias ───────────────────────────────────────────
@@ -137,7 +208,7 @@ export interface EstanciaItem {
   warehouse_item_id: string | null
   subcapitulo_id: string
   nombre: string
-  nivel_calidad: NivelCalidad | null
+  niveles_calidad: NivelCalidad[]
   marca: string | null
   modelo: string | null
   referencia: string | null
@@ -151,6 +222,8 @@ export interface EstanciaItem {
   cantidad: number
   proveedor_id: string | null
   precio_pvp: number | null
+  precio_pvp_con_iva: number | null
+  iva_pct: number
   precio_coste: number | null
   moneda: string
   notas: string | null
@@ -176,6 +249,26 @@ export interface ProyectoMemoria {
 
 /** Margen por defecto para derivar PVP desde coste (el mismo que control de obra). */
 export const MARGEN_DEFAULT = 1.16
+
+/** IVA general. Las reformas de vivienda pueden ir al 10%: el campo es editable. */
+export const IVA_DEFAULT = 21
+
+/** Redondeo al céntimo (normal, no hacia arriba) para pasar de base a total. */
+export function redondeaCent(x: number): number {
+  return Math.round(x * 100) / 100
+}
+
+/** Base sin IVA → total con IVA. */
+export function conIva(base: number | null, ivaPct: number = IVA_DEFAULT): number | null {
+  if (base == null) return null
+  return redondeaCent(base * (1 + ivaPct / 100))
+}
+
+/** Total con IVA → base sin IVA. */
+export function sinIva(total: number | null, ivaPct: number = IVA_DEFAULT): number | null {
+  if (total == null) return null
+  return redondeaCent(total / (1 + ivaPct / 100))
+}
 
 /** Redondeo al céntimo hacia arriba (igual que control de obra). */
 export function ceilCent(x: number): number {
@@ -237,3 +330,17 @@ export function formatFecha(iso: string): string {
 
 export type VistaModo = 'cards' | 'lista'
 export const VISTA_STORAGE_KEY = 'fp_memorias_vista'
+
+// ── Modo cliente ──────────────────────────────────────────────────────────────
+//
+// Para revisiones con el cliente delante: oculta coste, margen y cualquier rastro
+// del descuento profesional, y deja solo el precio (sin IVA y con IVA).
+// Se recuerda en sessionStorage, no en localStorage: sobrevive a un refresco a
+// mitad de reunión, pero no se queda encendido para el día siguiente.
+
+export const MODO_CLIENTE_STORAGE_KEY = 'fp_memorias_modo_cliente'
+
+/** Cómo se llama el precio del cliente según quién esté mirando. */
+export function etiquetaPrecio(modoCliente: boolean): string {
+  return modoCliente ? 'Precio' : 'PVP'
+}

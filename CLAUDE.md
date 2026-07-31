@@ -335,12 +335,20 @@ Es el eje de clasificación de todo el módulo. Control de obra sigue guardando 
 denormalizado por obra; **no comparten tablas** (sería la migración natural si algún día se unifica).
 
 **Warehouse** (`/warehouse`) — `WarehousePage.tsx`
-- `warehouse_items` cuelga de `subcapitulo_id` + `nivel_calidad` (`functional` | `select` | `master_piece`),
-  con marca/modelo/referencia, foto de producto, foto de ambiente, ficha técnica, acabados, tags,
-  **`precio_pvp` + `precio_coste`**, proveedor preferente y `url_producto`.
-- **Favorito FP**: `es_favorito` con **índice único parcial** `(subcapitulo_id, nivel_calidad) WHERE es_favorito AND activo`.
-  Solo uno por subcapítulo y nivel; al marcar otro, la action libera el hueco antes (`liberarFavorito`).
-  Es lo que alimenta la memoria de anteproyecto.
+- `warehouse_items` cuelga de `subcapitulo_id` y de **`niveles_calidad text[]`**: un mismo producto puede
+  convivir en varios niveles (`functional` | `select` | `master_piece`), y aparece en el catálogo de cada uno.
+  Además marca/modelo/referencia, foto de producto, foto de ambiente, ficha técnica, acabados, tags,
+  proveedor preferente y `url_producto`.
+- **Precios**: `precio_pvp` es la base **sin IVA**, `precio_pvp_con_iva` el total, e `iva_pct` el tipo (21 por
+  defecto; las reformas de vivienda van al 10). En el modal los dos campos están enlazados en ambos sentidos:
+  escribes uno y se recalcula el otro. `precio_coste` es lo que pagamos nosotros y **siempre va sin IVA**.
+- **Favorito FP**: tabla propia `warehouse_favoritos` con **PK `(subcapitulo_id, nivel_calidad)`**, así un
+  producto puede ser el favorito de uno, de varios o de los tres niveles, y la unicidad por hueco la
+  garantiza la BD (el upsert desaloja al anterior). Es lo que alimenta la memoria de anteproyecto.
+- **Modo cliente**: botón discreto de ojo abierto/cerrado en la cabecera. Con el ojo cerrado desaparecen
+  coste, margen y el botón de eliminar, y el PVP pasa a llamarse **"Precio"** (sin IVA / con IVA). Se recuerda
+  en `sessionStorage`, no en `localStorage`: sobrevive a un refresco a mitad de reunión pero no al día
+  siguiente (`ModoClienteToggle.tsx` + `useModoCliente`).
 - **Alta con IA por URL** (`app/api/warehouse/analizar-url/route.ts`): `claude-opus-5` con **structured outputs**
   (`output_config.format` json_schema; nullable vía `anyOf`, subcapítulo como `enum` de los 53 códigos para que
   no pueda alucinar uno). Primero lee la página desde nuestro servidor (`lib/memorias/scrape.ts`: JSON-LD
@@ -378,8 +386,11 @@ denormalizado por obra; **no comparten tablas** (sería la migración natural si
   imágenes a data URI**: si una falla, ese item sale sin foto en vez de tumbar el render) ·
   `lib/memorias/scrape.ts` (solo servidor)
 - `app/actions/warehouse.ts` (items, favoritos, subcapítulos) · `app/actions/memorias.ts` (estancias e items)
-- Tablas `presupuesto_*`, `warehouse_items`, `memoria_estancias`, `memoria_estancia_items` + bucket público
-  `warehouse`. Solo `service_role`. **Migración `memorias_calidad_v2.sql` pendiente de ejecutar**
+- Tablas `presupuesto_*`, `warehouse_items`, `warehouse_favoritos`, `memoria_estancias`,
+  `memoria_estancia_items` + bucket público `warehouse`. Solo `service_role`.
+  `memorias_calidad_v2.sql` ✅ ejecutada · **`memorias_calidad_v3_niveles_iva.sql` pendiente de ejecutar**
+  (multi-nivel, favoritos en tabla y precios con IVA). Hasta entonces `normalizarWarehouseItem` /
+  `normalizarEstanciaItem` traducen las filas del esquema antiguo para que las pantallas no se caigan.
 - Pendiente: manual PDF del módulo (el anterior describía el flujo FPE y se eliminó)
 
 ### 5.11 Time Tracker (`/team/time-tracker`)
@@ -480,7 +491,8 @@ Registro de horas por proyecto y fase. Todos los roles FP.
 |---|---|
 | `presupuesto_capitulos` | Capítulos de nuestro presupuesto de obra (numero, nombre) — 11 sembrados |
 | `presupuesto_subcapitulos` | Subcapítulos (`codigo` tipo `5_CM_07`, nombre) — 53 sembrados. Eje de clasificación del módulo |
-| `warehouse_items` | Catálogo de producto: `subcapitulo_id` + `nivel_calidad`, `precio_pvp`/`precio_coste`, `es_favorito` (único por subcapítulo × nivel) |
+| `warehouse_items` | Catálogo de producto: `subcapitulo_id` + `niveles_calidad text[]`, `precio_pvp` (sin IVA) / `precio_pvp_con_iva` / `iva_pct` / `precio_coste` |
+| `warehouse_favoritos` | Favorito FP: PK `(subcapitulo_id, nivel_calidad)` → `item_id`. Un producto puede ser favorito de varios niveles |
 | `memoria_estancias` | Estancias de la memoria de ejecución de un proyecto (solo nombre + orden) |
 | `memoria_estancia_items` | Items por estancia: **snapshot** del warehouse + cantidad, proveedor asignado, precios, acabado, `estado_compra` |
 
@@ -825,9 +837,10 @@ actualizarlo en **ambos**: `lib/types/index.ts` Y `middleware.ts`.
 - Design Hunter (multiselección, vídeos, thumbnails, lightbox, vista Stories)
 - Marketing Post Manager (kanban, tabs Instagram/LinkedIn, media upload, flujo de aprobación, avisos)
 - Repasos de obra (pins sobre plano, visibilidad de 3 niveles, enlaces externos, trazabilidad) — **pendiente ejecutar `repasos_obra.sql`**
-- Memorias de calidades v2: warehouse por subcapítulo con Favorito FP, alta por URL con IA, memoria de
-  anteproyecto automática y memoria de ejecución por estancias con control económico y PDF por proveedor
-  — **pendiente ejecutar `memorias_calidad_v2.sql`**; falta el manual PDF del módulo
+- Memorias de calidades v2 + v3: warehouse por subcapítulo con productos multi-nivel y Favorito FP por
+  nivel, precios con y sin IVA, modo cliente, alta por URL con IA, memoria de anteproyecto automática y
+  memoria de ejecución por estancias con control económico y PDF por proveedor
+  — **pendiente ejecutar `memorias_calidad_v3_niveles_iva.sql`**; falta el manual PDF del módulo
 
 ### 🚧 En progreso / incompleto
 - `/team/finanzas/facturacion/dashboard` — ruta existe pero redirige o está vacía

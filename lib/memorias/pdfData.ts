@@ -6,9 +6,12 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
   ceilCent,
+  conIva,
   importeCoste,
   importePvp,
+  IVA_DEFAULT,
   nivelMeta,
+  nivelesLabel,
   type EstadoCompra,
   type NivelCalidad,
 } from './domain'
@@ -63,6 +66,7 @@ export interface ItemAnteproyecto {
   acabados: string[]
   imagen: string | null
   precio_pvp: number | null
+  precio_pvp_con_iva: number | null
 }
 
 export interface CapituloAnteproyecto {
@@ -80,6 +84,7 @@ export interface AnteproyectoData {
   capitulos: CapituloAnteproyecto[]
   huecos: string[]
   totalPvp: number | null
+  totalPvpConIva: number | null
 }
 
 export interface ItemEjecutivo {
@@ -133,22 +138,48 @@ export async function cargarAnteproyecto(
   incluirPrecios: boolean
 ): Promise<AnteproyectoData | null> {
   const admin = createAdminClient()
-  const [{ data: proyecto }, { data: capitulos }, { data: subcapitulos }, { data: favoritos }] = await Promise.all([
+  const [{ data: proyecto }, { data: capitulos }, { data: subcapitulos }, { data: filas }] = await Promise.all([
     admin.from('proyectos').select('nombre, codigo, direccion').eq('id', proyectoId).single(),
     admin.from('presupuesto_capitulos').select('id, numero, nombre, orden').eq('activo', true).order('orden'),
     admin.from('presupuesto_subcapitulos').select('id, capitulo_id, nombre, orden').eq('activo', true).order('orden'),
     admin
-      .from('warehouse_items')
-      .select('subcapitulo_id, nombre, marca, modelo, referencia, descripcion, acabados, imagen_lifestyle_url, imagen_principal_url, precio_pvp')
-      .eq('es_favorito', true)
-      .eq('activo', true)
+      .from('warehouse_favoritos')
+      .select(`
+        subcapitulo_id,
+        item:warehouse_items (
+          nombre, marca, modelo, referencia, descripcion, acabados,
+          imagen_lifestyle_url, imagen_principal_url, precio_pvp, precio_pvp_con_iva, iva_pct, activo
+        )
+      `)
       .eq('nivel_calidad', nivel),
   ])
 
   if (!proyecto) return null
 
+  type FavoritoConItem = {
+    subcapitulo_id: string
+    item: {
+      nombre: string
+      marca: string | null
+      modelo: string | null
+      referencia: string | null
+      descripcion: string | null
+      acabados: string[] | null
+      imagen_lifestyle_url: string | null
+      imagen_principal_url: string | null
+      precio_pvp: number | null
+      precio_pvp_con_iva: number | null
+      iva_pct: number | null
+      activo: boolean
+    } | null
+  }
+
+  const favoritos = ((filas ?? []) as unknown as FavoritoConItem[])
+    .filter(f => f.item && f.item.activo)
+    .map(f => ({ subcapitulo_id: f.subcapitulo_id, ...f.item! }))
+
   const imagenes = await inlineImagenes(
-    (favoritos ?? []).map(f => f.imagen_lifestyle_url ?? f.imagen_principal_url)
+    favoritos.map(f => f.imagen_lifestyle_url ?? f.imagen_principal_url)
   )
 
   const huecos: string[] = []
@@ -158,7 +189,7 @@ export async function cargarAnteproyecto(
     const subs = (subcapitulos ?? []).filter(s => s.capitulo_id === capitulo.id)
     const items: ItemAnteproyecto[] = []
     for (const sub of subs) {
-      const fav = (favoritos ?? []).find(f => f.subcapitulo_id === sub.id)
+      const fav = favoritos.find(f => f.subcapitulo_id === sub.id)
       if (!fav) {
         huecos.push(`${capitulo.nombre} › ${sub.nombre}`)
         continue
@@ -174,6 +205,7 @@ export async function cargarAnteproyecto(
         acabados: fav.acabados ?? [],
         imagen: urlImagen ? imagenes.get(urlImagen) ?? null : null,
         precio_pvp: fav.precio_pvp,
+        precio_pvp_con_iva: fav.precio_pvp_con_iva ?? conIva(fav.precio_pvp, fav.iva_pct ?? IVA_DEFAULT),
       })
     }
     if (items.length > 0) {
@@ -182,8 +214,12 @@ export async function cargarAnteproyecto(
   }
 
   const meta = nivelMeta(nivel)
+  const planos = capitulosData.flatMap(c => c.items)
   const totalPvp = incluirPrecios
-    ? ceilCent(capitulosData.flatMap(c => c.items).reduce((acc, i) => acc + (i.precio_pvp ?? 0), 0))
+    ? ceilCent(planos.reduce((acc, i) => acc + (i.precio_pvp ?? 0), 0))
+    : null
+  const totalPvpConIva = incluirPrecios
+    ? ceilCent(planos.reduce((acc, i) => acc + (i.precio_pvp_con_iva ?? 0), 0))
     : null
 
   return {
@@ -195,6 +231,7 @@ export async function cargarAnteproyecto(
     capitulos: capitulosData,
     huecos,
     totalPvp,
+    totalPvpConIva,
   }
 }
 
@@ -241,7 +278,8 @@ export async function cargarEjecutivo(
     referencia: string | null
     descripcion: string | null
     acabado_seleccionado: string | null
-    nivel_calidad: NivelCalidad | null
+    niveles_calidad: NivelCalidad[] | null
+    nivel_calidad?: NivelCalidad | null
     cantidad: number
     proveedor_id: string | null
     precio_pvp: number | null
@@ -282,7 +320,11 @@ export async function cargarEjecutivo(
         acabado: f.acabado_seleccionado,
         subcapitulo: sub?.nombre ?? '—',
         capitulo: sub ? capPorId.get(sub.capitulo_id) ?? '—' : '—',
-        nivelLabel: f.nivel_calidad ? nivelMeta(f.nivel_calidad).label : null,
+        nivelLabel: f.niveles_calidad?.length
+          ? nivelesLabel(f.niveles_calidad)
+          : f.nivel_calidad
+            ? nivelesLabel([f.nivel_calidad])
+            : null,
         cantidad: f.cantidad,
         proveedor: f.proveedor_id ? provPorId.get(f.proveedor_id) ?? null : null,
         precio_pvp: f.precio_pvp,

@@ -2,11 +2,14 @@
 
 import React, { useMemo, useState } from 'react'
 import {
+  IVA_DEFAULT,
   NIVELES,
   agruparEstructura,
+  conIva,
   formatEur,
   nivelMeta,
   type Capitulo,
+  type Favorito,
   type NivelCalidad,
   type Subcapitulo,
   type WarehouseItem,
@@ -25,7 +28,8 @@ interface Props {
   proyectos: ProyectoOpcion[]
   capitulos: Capitulo[]
   subcapitulos: Subcapitulo[]
-  favoritos: WarehouseItem[]
+  favoritos: Favorito[]
+  items: WarehouseItem[]
 }
 
 const S = {
@@ -33,7 +37,7 @@ const S = {
   input: { width: '100%', padding: '8px 10px', fontSize: 12.5, border: '1px solid #E8E6E0', borderRadius: 5, fontFamily: 'inherit', color: '#1A1A1A', background: '#fff', boxSizing: 'border-box' as const, outline: 'none' },
 }
 
-export default function AnteproyectoPage({ proyectos, capitulos, subcapitulos, favoritos }: Props) {
+export default function AnteproyectoPage({ proyectos, capitulos, subcapitulos, favoritos, items }: Props) {
   const [vista, setVista] = useVistaModo('cards')
   const [proyectoId, setProyectoId] = useState<string>(proyectos[0]?.id ?? '')
   const proyecto = proyectos.find(p => p.id === proyectoId) ?? null
@@ -44,8 +48,15 @@ export default function AnteproyectoPage({ proyectos, capitulos, subcapitulos, f
   const nivel: NivelCalidad = nivelManual ?? proyecto?.nivel_calidad ?? 'select'
   const estructura = useMemo(() => agruparEstructura(capitulos, subcapitulos), [capitulos, subcapitulos])
 
-  const delNivel = useMemo(() => favoritos.filter(f => f.nivel_calidad === nivel), [favoritos, nivel])
-  const porSub = useMemo(() => new Map(delNivel.map(f => [f.subcapitulo_id, f])), [delNivel])
+  const itemsPorId = useMemo(() => new Map(items.map(i => [i.id, i])), [items])
+  const delNivel = useMemo(
+    () => favoritos
+      .filter(f => f.nivel_calidad === nivel)
+      .map(f => ({ subcapitulo_id: f.subcapitulo_id, item: itemsPorId.get(f.item_id) }))
+      .filter((f): f is { subcapitulo_id: string; item: WarehouseItem } => !!f.item),
+    [favoritos, nivel, itemsPorId]
+  )
+  const porSub = useMemo(() => new Map(delNivel.map(f => [f.subcapitulo_id, f.item])), [delNivel])
 
   const bloques = useMemo(() =>
     estructura
@@ -62,7 +73,7 @@ export default function AnteproyectoPage({ proyectos, capitulos, subcapitulos, f
 
   const totalItems = delNivel.length
   const totalHuecos = subcapitulos.length - totalItems
-  const totalPvp = delNivel.reduce((acc, f) => acc + (f.precio_pvp ?? 0), 0)
+  const totalPvp = delNivel.reduce((acc, f) => acc + (f.item.precio_pvp ?? 0), 0)
   const meta = nivelMeta(nivel)
 
   const urlPdf = proyectoId
@@ -219,7 +230,13 @@ export default function AnteproyectoPage({ proyectos, capitulos, subcapitulos, f
                     <p style={{ margin: '2px 0 0', fontSize: 12.5, fontWeight: 500, color: '#1A1A1A', lineHeight: 1.3 }}>{item.nombre}</p>
                     {item.modelo && <p style={{ margin: '2px 0 0', fontSize: 11, color: '#999' }}>{item.modelo}</p>}
                     {incluirPrecios && item.precio_pvp != null && (
-                      <p style={{ margin: '6px 0 0', fontSize: 12, fontWeight: 600, color: '#1A1A1A' }}>{formatEur(item.precio_pvp, 0)}</p>
+                      <p style={{ margin: '6px 0 0', fontSize: 12, fontWeight: 600, color: '#1A1A1A' }}>
+                        {formatEur(item.precio_pvp, 0)}
+                        <span style={{ fontSize: 10, fontWeight: 400, color: '#AAA' }}> sin IVA</span>
+                        <span style={{ display: 'block', fontSize: 10.5, fontWeight: 400, color: '#888' }}>
+                          {formatEur(item.precio_pvp_con_iva ?? conIva(item.precio_pvp, item.iva_pct ?? IVA_DEFAULT), 0)} con IVA
+                        </span>
+                      </p>
                     )}
                   </div>
                 </div>

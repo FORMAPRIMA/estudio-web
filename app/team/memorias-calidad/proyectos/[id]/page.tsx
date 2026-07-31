@@ -2,14 +2,13 @@ import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import EjecucionPage from '@/components/team/memorias-calidad/EjecucionPage'
+import { normalizarEstanciaItem, normalizarWarehouseItem } from '@/lib/memorias/domain'
 import type {
   Capitulo,
   Estancia,
-  EstanciaItem,
   Proveedor,
   ProyectoMemoria,
   Subcapitulo,
-  WarehouseItem,
 } from '@/lib/memorias/domain'
 
 const ALLOWED_ROLES = ['fp_partner', 'fp_manager', 'fp_team']
@@ -55,10 +54,10 @@ export default async function MemoriaEjecucionRoute({ params }: { params: { id: 
     <EjecucionPage
       proyecto={proyectoRes.data as ProyectoMemoria}
       estancias={estancias}
-      items={(items ?? []) as EstanciaItem[]}
+      items={(items ?? []).map(normalizarEstanciaItem)}
       capitulos={(capitulosRes.data ?? []) as Capitulo[]}
       subcapitulos={(subcapitulosRes.data ?? []) as Subcapitulo[]}
-      warehouse={(warehouseRes.data ?? []) as WarehouseItem[]}
+      warehouse={(warehouseRes.data ?? []).map(normalizarWarehouseItem)}
       proveedores={(proveedoresRes.data ?? []) as Proveedor[]}
     />
   )

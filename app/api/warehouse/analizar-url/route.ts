@@ -3,7 +3,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertPublicUrl, extraerSenales, fetchHtml, type SenalesProducto } from '@/lib/memorias/scrape'
-import { NIVELES } from '@/lib/memorias/domain'
+import { IVA_DEFAULT, NIVELES, conIva, sinIva, type NivelCalidad } from '@/lib/memorias/domain'
 
 const ALLOWED_ROLES = ['fp_partner', 'fp_manager', 'fp_team']
 
@@ -19,8 +19,8 @@ function buildSchema(codigos: string[]) {
     additionalProperties: false,
     required: [
       'nombre', 'marca', 'modelo', 'referencia', 'descripcion',
-      'acabados', 'tags', 'nivel_calidad', 'subcapitulo_codigo',
-      'precio_pvp', 'precio_coste', 'moneda',
+      'acabados', 'tags', 'niveles_calidad', 'subcapitulo_codigo',
+      'precio', 'precio_lleva_iva', 'iva_pct', 'precio_coste', 'moneda',
       'imagen_producto_idx', 'imagen_ambiente_idx', 'notas_ia',
     ],
     properties: {
@@ -31,9 +31,15 @@ function buildSchema(codigos: string[]) {
       descripcion: nullable({ type: 'string', description: 'Una a tres frases para una memoria de calidades: material, acabado y característica técnica relevante.' }),
       acabados: { type: 'array', items: { type: 'string' }, description: 'Acabados o colores disponibles.' },
       tags: { type: 'array', items: { type: 'string' }, description: 'Tres a seis etiquetas de búsqueda en minúsculas.' },
-      nivel_calidad: nullable({ type: 'string', enum: NIVELES.map(n => n.value) }),
+      niveles_calidad: {
+        type: 'array',
+        items: { type: 'string', enum: NIVELES.map(n => n.value) },
+        description: 'Niveles en los que este producto encajaría. Normalmente uno; dos o tres si es una pieza que vale para varios.',
+      },
       subcapitulo_codigo: nullable({ type: 'string', enum: codigos }),
-      precio_pvp: nullable({ type: 'number', description: 'Precio de venta al público que muestra la web.' }),
+      precio: nullable({ type: 'number', description: 'Precio de venta al público tal y como lo muestra la web.' }),
+      precio_lleva_iva: nullable({ type: 'boolean', description: 'true si ese precio es con IVA incluido, false si la web indica que es sin IVA, null si no se puede saber.' }),
+      iva_pct: nullable({ type: 'number', description: 'Tipo de IVA que indique la web (21, 10, 4). Null si no lo dice.' }),
       precio_coste: nullable({ type: 'number', description: 'Solo si la web muestra precio profesional, de distribuidor o tarifa con descuento.' }),
       moneda: { type: 'string', enum: ['EUR', 'USD', 'GBP', 'MXN'] },
       imagen_producto_idx: nullable({ type: 'integer', description: 'Índice de la imagen que mejor muestra el producto aislado.' }),
@@ -51,7 +57,8 @@ Reglas:
 - Escribe en español de España, registro técnico y sobrio. Nada de superlativos de marketing ("increíble", "el mejor"), exclamaciones ni emoji.
 - La descripción va a un documento que ve el cliente: di de qué está hecho, cómo está acabado y qué lo distingue. Entre una y tres frases.
 - No inventes. Si una referencia, un precio o un acabado no aparece en la página, devuelve null. Es mucho mejor un hueco que un dato falso.
-- Nivel de calidad: "functional" = gama funcional correcta y contenida en precio; "select" = gama media-alta de marca reconocida; "master_piece" = alta gama, diseño de autor o pieza singular. Deduce por marca, precio y acabados.
+- Niveles de calidad: "functional" = gama funcional correcta y contenida en precio; "select" = gama media-alta de marca reconocida; "master_piece" = alta gama, diseño de autor o pieza singular. Deduce por marca, precio y acabados. Devuelve un solo nivel salvo que la pieza encaje razonablemente en dos (por ejemplo, una marca media-alta con acabado sobrio que sirve tanto en select como en functional). Nunca los tres a la vez a menos que sea un producto neutro que valga para cualquier gama.
+- Precio: en España las tiendas al público suelen mostrarlo con IVA incluido. Devuelve el número tal y como aparece y marca en "precio_lleva_iva" si lo lleva o no; si la web no lo aclara, devuelve null y dilo en notas_ia. Si aparece un tipo de IVA concreto, indícalo en "iva_pct".
 - Subcapítulo: elige el del listado que corresponda al capítulo de obra donde se presupuestaría esta pieza. Si dudas entre dos, elige el más específico; si ninguno encaja, devuelve null.
 - Imágenes: te doy una lista numerada de candidatas. Elige por índice la mejor foto de producto y, si existe, una foto de ambiente distinta. No repitas el mismo índice en las dos.`
 
@@ -100,9 +107,11 @@ interface FichaIA {
   descripcion: string | null
   acabados: string[]
   tags: string[]
-  nivel_calidad: string | null
+  niveles_calidad: string[]
   subcapitulo_codigo: string | null
-  precio_pvp: number | null
+  precio: number | null
+  precio_lleva_iva: boolean | null
+  iva_pct: number | null
   precio_coste: number | null
   moneda: string
   imagen_producto_idx: number | null
@@ -231,7 +240,21 @@ ${catalogoTexto}`,
     const subcapitulo = ficha.subcapitulo_codigo
       ? subcapitulos.find(s => s.codigo === ficha.subcapitulo_codigo) ?? null
       : null
-    const nivel = NIVELES.some(n => n.value === ficha.nivel_calidad) ? ficha.nivel_calidad : null
+
+    const validos = NIVELES.map(n => n.value) as string[]
+    const niveles = Array.isArray(ficha.niveles_calidad)
+      ? (Array.from(new Set(ficha.niveles_calidad.filter(n => validos.includes(n)))) as NivelCalidad[])
+      : []
+
+    // El precio de la web casi siempre viene con IVA: separamos base y total
+    const ivaPct = typeof ficha.iva_pct === 'number' && ficha.iva_pct >= 0 && ficha.iva_pct <= 30
+      ? ficha.iva_pct
+      : IVA_DEFAULT
+    const precio = typeof ficha.precio === 'number' ? ficha.precio : null
+    // Sin indicación expresa asumimos precio con IVA (lo normal en tienda al público)
+    const llevaIva = ficha.precio_lleva_iva !== false
+    const precioBase = precio == null ? null : (llevaIva ? sinIva(precio, ivaPct) : precio)
+    const precioConIva = precio == null ? null : (llevaIva ? precio : conIva(precio, ivaPct))
 
     return NextResponse.json({
       fuente,
@@ -245,10 +268,12 @@ ${catalogoTexto}`,
         descripcion: ficha.descripcion?.trim() || null,
         acabados: Array.isArray(ficha.acabados) ? ficha.acabados.filter(Boolean).slice(0, 20) : [],
         tags: Array.isArray(ficha.tags) ? ficha.tags.filter(Boolean).slice(0, 12) : [],
-        nivel_calidad: nivel,
+        niveles_calidad: niveles,
         subcapitulo_id: subcapitulo?.id ?? null,
         subcapitulo_codigo: subcapitulo?.codigo ?? null,
-        precio_pvp: typeof ficha.precio_pvp === 'number' ? ficha.precio_pvp : null,
+        precio_pvp: precioBase,
+        precio_pvp_con_iva: precioConIva,
+        iva_pct: ivaPct,
         precio_coste: typeof ficha.precio_coste === 'number' ? ficha.precio_coste : null,
         moneda: ficha.moneda || 'EUR',
         url_producto: senales?.finalUrl ?? url.toString(),
