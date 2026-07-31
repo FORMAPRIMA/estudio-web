@@ -33,7 +33,14 @@ export function useModoCliente() {
   return [modoCliente, cambiar] as const
 }
 
-/** Ojo abierto = ves todo. Ojo cerrado = modo cliente. */
+/**
+ * Ojo abierto + "Modo admin" = estás viendo coste y margen.
+ * Ojo cerrado y a secas = modo cliente.
+ *
+ * El aviso va en el estado interno a propósito: delante del cliente, un cartel
+ * que diga "modo cliente" delata que hay algo escondido. Y el riesgo real no es
+ * olvidarte de que lo tienes puesto, es creer que lo tienes puesto cuando no.
+ */
 export default function ModoClienteToggle({
   modoCliente,
   onChange,
@@ -47,19 +54,20 @@ export default function ModoClienteToggle({
       onClick={() => onChange(!modoCliente)}
       title={
         modoCliente
-          ? 'Modo cliente activo: coste y margen ocultos. Pulsa para volver a la vista interna.'
-          : 'Ocultar coste y margen para revisar con el cliente'
+          ? 'Coste y margen ocultos. Pulsa para volver a la vista interna.'
+          : 'Modo admin: se ven coste y margen. Pulsa para ocultarlos y revisar con el cliente.'
       }
       aria-pressed={modoCliente}
+      aria-label={modoCliente ? 'Mostrar coste y margen' : 'Ocultar coste y margen'}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 6,
-        padding: modoCliente ? '5px 10px' : '5px 7px',
+        padding: modoCliente ? '5px 7px' : '5px 10px',
         fontSize: 10.5, fontWeight: 600, letterSpacing: '0.04em',
-        border: `1px solid ${modoCliente ? '#F0D89B' : '#EAE8E3'}`,
+        border: `1px solid ${modoCliente ? 'transparent' : '#EAE8E3'}`,
         borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit',
-        background: modoCliente ? '#FFFBEB' : 'transparent',
-        color: modoCliente ? '#B7791F' : '#C4C1BA',
-        transition: 'color 0.15s, background 0.15s',
+        background: 'transparent',
+        color: modoCliente ? '#C4C1BA' : '#9A968E',
+        transition: 'color 0.15s, border-color 0.15s',
       }}
     >
       {/* Ojo abierto / tachado, en línea para no depender de iconografía externa */}
@@ -78,7 +86,7 @@ export default function ModoClienteToggle({
           </>
         )}
       </svg>
-      {modoCliente && 'Modo cliente'}
+      {!modoCliente && 'Modo admin'}
     </button>
   )
 }

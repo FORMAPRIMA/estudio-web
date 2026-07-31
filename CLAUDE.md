@@ -345,10 +345,12 @@ denormalizado por obra; **no comparten tablas** (sería la migración natural si
 - **Favorito FP**: tabla propia `warehouse_favoritos` con **PK `(subcapitulo_id, nivel_calidad)`**, así un
   producto puede ser el favorito de uno, de varios o de los tres niveles, y la unicidad por hueco la
   garantiza la BD (el upsert desaloja al anterior). Es lo que alimenta la memoria de anteproyecto.
-- **Modo cliente**: botón discreto de ojo abierto/cerrado en la cabecera. Con el ojo cerrado desaparecen
-  coste, margen y el botón de eliminar, y el PVP pasa a llamarse **"Precio"** (sin IVA / con IVA). Se recuerda
-  en `sessionStorage`, no en `localStorage`: sobrevive a un refresco a mitad de reunión pero no al día
-  siguiente (`ModoClienteToggle.tsx` + `useModoCliente`).
+- **Modo cliente**: botón de ojo en la cabecera. Ojo abierto + etiqueta **"Modo admin"** = se ven coste y
+  margen; ojo cerrado **y sin texto** = modo cliente (desaparecen coste, margen y el botón de eliminar, y el
+  PVP pasa a llamarse **"Precio"**, sin IVA / con IVA). El aviso va en el estado interno a propósito: delante
+  del cliente un cartel de "modo cliente" delataría que se esconde algo, y el riesgo real es creerse en modo
+  cliente sin estarlo. Se recuerda en `sessionStorage`, no en `localStorage`: sobrevive a un refresco a mitad
+  de reunión pero no al día siguiente (`ModoClienteToggle.tsx` + `useModoCliente`).
 - **Alta con IA por URL** (`app/api/warehouse/analizar-url/route.ts`): `claude-opus-5` con **structured outputs**
   (`output_config.format` json_schema; nullable vía `anyOf`, subcapítulo como `enum` de los 53 códigos para que
   no pueda alucinar uno). Primero lee la página desde nuestro servidor (`lib/memorias/scrape.ts`: JSON-LD
