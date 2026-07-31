@@ -1,297 +1,241 @@
-// Server-only — only used inside API routes with @react-pdf/renderer
-// Do NOT import this from client components
+// Server-only — se renderiza dentro de API routes con @react-pdf/renderer.
+// No importar desde componentes cliente.
 
-import {
-  Document, Page, View, Text, Image, StyleSheet,
-} from '@react-pdf/renderer'
+import { Document, Image, Page, StyleSheet, Text, View } from '@react-pdf/renderer'
 import path from 'path'
+import type { AnteproyectoData } from '@/lib/memorias/pdfData'
 
 const LOGO = path.join(process.cwd(), 'public', 'FORMA_PRIMA_BLANCO.png')
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-export interface MemoriaAnteproyectoItem {
-  id: string
-  nombre: string
-  marca: string | null
-  modelo: string | null
-  referencia: string | null
-  descripcion: string | null
-  imagen_principal_url: string | null
-  imagen_lifestyle_url: string | null
-  precio_referencia: number | null
-  moneda: string
-  estado_definicion: string
-  template_line_item_id: string
-}
-
-export interface MemoriaAnteproyectoChapter {
-  id: string
-  nombre: string
-  label_cliente: string | null
-  descripcion_cliente: string | null
-  imagen_portada_url: string | null
-  units: {
-    id: string
-    nombre: string
-    label_cliente: string | null
-    descripcion_cliente: string | null
-    imagen_portada_url: string | null
-    line_items: { id: string; nombre: string }[]
-  }[]
-}
-
-export interface MemoriaAnteproyectoPDFData {
-  proyecto: { nombre: string; codigo: string | null; nivel_calidad: string | null }
-  items: MemoriaAnteproyectoItem[]
-  chapters: MemoriaAnteproyectoChapter[]
-  fecha: string
-}
-
-// ── Palette ───────────────────────────────────────────────────────────────────
-
 const C = {
-  ink:   '#1A1A1A',
-  soft:  '#555555',
-  mid:   '#888888',
-  meta:  '#AAAAAA',
-  rule:  '#E6E4DF',
+  ink: '#1A1A1A',
+  soft: '#444444',
+  mid: '#777777',
+  meta: '#AAAAAA',
+  rule: '#E6E4DF',
   light: '#F8F7F4',
   white: '#FFFFFF',
   brand: '#D85A30',
-  cream: '#F0EDE8',
 }
 
-const NIVEL_LABEL: Record<string, string> = {
-  functional: 'Functional', select: 'Select', master_piece: 'Masterpiece',
+// Helvetica no tiene flechas ni símbolos matemáticos: se cambian por equivalentes
+export function pdfSafe(texto: string | null | undefined): string {
+  if (!texto) return ''
+  return texto
+    .replace(/[→⇒]/g, '>')
+    .replace(/[←]/g, '<')
+    .replace(/≥/g, '>=')
+    .replace(/≤/g, '<=')
+    .replace(/[≈~]/g, 'aprox. ')
+    .replace(/[★☆✓✗⚠•·–—]/g, m => ({ '★': '*', '☆': '*', '✓': 'OK', '✗': 'X', '⚠': '!', '•': '-', '·': '-', '–': '-', '—': '-' }[m] ?? '-'))
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/[""]/g, '"')
+    .replace(/['']/g, "'")
 }
 
-function fmtDate(iso: string) {
-  try {
-    return new Date(iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })
-  } catch { return iso }
-}
-
-function fmtEur(n: number) {
-  return new Intl.NumberFormat('es-ES', { minimumFractionDigits: 0 }).format(n) + ' €'
-}
-
-// ── Styles ────────────────────────────────────────────────────────────────────
+const HEADER_H = 26
+const FOOTER_H = 34
 
 const s = StyleSheet.create({
+  // Portada: página propia, sin banda fija
+  cover: { fontFamily: 'Helvetica', backgroundColor: C.ink, paddingHorizontal: 54, paddingVertical: 54 },
+  coverInner: { flexDirection: 'column', justifyContent: 'space-between', minHeight: '100%' },
+  coverLogo: { width: 104, height: 25 },
+  coverEyebrow: { fontSize: 7.5, fontFamily: 'Helvetica-Bold', color: C.brand, letterSpacing: 3.4, textTransform: 'uppercase', marginBottom: 14 },
+  coverTitle: { fontSize: 38, fontFamily: 'Helvetica-Bold', color: C.white, letterSpacing: -0.8, lineHeight: 1.08 },
+  coverNivel: { fontSize: 13, color: '#8A8A8A', marginTop: 14 },
+  coverRule: { borderTopWidth: 1, borderTopColor: '#2E2E2E', paddingTop: 16, marginTop: 30 },
+  coverMetaRow: { flexDirection: 'row', flexWrap: 'wrap' },
+  coverMetaItem: { marginRight: 34, marginBottom: 10, maxWidth: 200 },
+  coverMetaLabel: { fontSize: 6, fontFamily: 'Helvetica-Bold', color: '#4A4A4A', letterSpacing: 1.6, textTransform: 'uppercase', marginBottom: 4 },
+  coverMetaValue: { fontSize: 9, color: '#9A9A9A' },
+
+  // Páginas de contenido: el padding reserva las bandas fijas
   page: {
-    fontFamily: 'Helvetica', color: C.ink, backgroundColor: C.white, paddingBottom: 40,
+    fontFamily: 'Helvetica', fontSize: 9, color: C.ink, backgroundColor: C.white,
+    paddingTop: HEADER_H + 22, paddingBottom: FOOTER_H, paddingHorizontal: 44,
   },
-
-  // Cover page
-  coverPage: { backgroundColor: C.ink },
-  coverInner: {
-    paddingHorizontal: 48, paddingTop: 48, paddingBottom: 48,
-    flexDirection: 'column', justifyContent: 'flex-end', minHeight: '100%',
-  },
-  coverLogo: { width: 90, height: 22, marginBottom: 80 },
-  coverEyebrow: { fontSize: 7, fontFamily: 'Helvetica-Bold', color: C.brand, letterSpacing: 2.5, textTransform: 'uppercase', marginBottom: 10 },
-  coverTitle: { fontSize: 26, fontFamily: 'Helvetica-Bold', color: C.white, marginBottom: 6 },
-  coverCodigo: { fontSize: 9, color: '#666', marginBottom: 40 },
-  coverRule: { borderTopWidth: 1, borderTopColor: '#333', paddingTop: 14 },
-  coverMetaRow: { flexDirection: 'row' },
-  coverMetaItem: { marginRight: 32 },
-  coverMetaLabel: { fontSize: 6, fontFamily: 'Helvetica-Bold', color: '#555', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 2 },
-  coverMetaValue: { fontSize: 8, color: '#888' },
-
-  // Chapter intro page
-  chapterPage: { backgroundColor: C.ink },
-  chapterCoverImg: { width: '100%', height: 260, objectFit: 'cover', opacity: 0.45 },
-  chapterCoverOverlay: { paddingHorizontal: 48, paddingTop: 32, paddingBottom: 48, flex: 1, justifyContent: 'flex-end' },
-  chapterEyebrow: { fontSize: 6.5, fontFamily: 'Helvetica-Bold', color: C.brand, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 10 },
-  chapterTitle: { fontSize: 22, fontFamily: 'Helvetica-Bold', color: C.white, marginBottom: 8 },
-  chapterDesc: { fontSize: 9, color: '#888', maxWidth: 360 },
-
-  // Content page
-  contentPage: { backgroundColor: C.white, paddingBottom: 40 },
-  pageHeader: {
-    backgroundColor: C.ink, paddingHorizontal: 32, paddingVertical: 8,
+  header: {
+    position: 'absolute', top: 0, left: 0, right: 0, height: HEADER_H,
+    backgroundColor: C.ink, paddingHorizontal: 44,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginBottom: 0,
   },
-  pageHeaderLogo: { width: 52, height: 13 },
-  pageHeaderTitle: { fontSize: 6.5, color: '#666' },
-
-  // Unit header
-  unitHeader: { paddingHorizontal: 32, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.rule },
-  unitEyebrow: { fontSize: 6, fontFamily: 'Helvetica-Bold', color: C.meta, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 3 },
-  unitTitle: { fontSize: 12, fontFamily: 'Helvetica-Bold', color: C.ink, marginBottom: 3 },
-  unitDesc: { fontSize: 8, color: C.mid },
-
-  // Items grid: 2 columns
-  itemsGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 28, paddingTop: 16 },
-
-  // Single item card (half width)
-  itemCard: { width: '48%', marginHorizontal: '1%', marginBottom: 20 },
-  itemImage: { width: '100%', height: 130, objectFit: 'cover', backgroundColor: C.light, marginBottom: 8 },
-  itemImagePlaceholder: { width: '100%', height: 130, backgroundColor: C.light, marginBottom: 8 },
-  itemMarca: { fontSize: 6, fontFamily: 'Helvetica-Bold', color: C.meta, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 3 },
-  itemNombre: { fontSize: 9, fontFamily: 'Helvetica-Bold', color: C.ink, marginBottom: 2 },
-  itemModelo: { fontSize: 7.5, color: C.soft, marginBottom: 2 },
-  itemRef: { fontSize: 7, color: C.meta, fontFamily: 'Helvetica-Oblique', marginBottom: 3 },
-  itemDesc: { fontSize: 7, color: C.mid },
-  itemPrice: { fontSize: 7, color: C.soft, marginTop: 4 },
-  itemConfirmado: { fontSize: 6, fontFamily: 'Helvetica-Bold', color: '#1D9E75', letterSpacing: 1, textTransform: 'uppercase', marginTop: 3 },
-
-  // Footer
+  headerLogo: { width: 50, height: 12 },
+  headerText: { fontSize: 6.5, color: '#6A6A6A', letterSpacing: 0.8 },
   footer: {
-    position: 'absolute', bottom: 14, left: 32, right: 32,
+    position: 'absolute', bottom: 14, left: 44, right: 44,
     flexDirection: 'row', justifyContent: 'space-between',
-    borderTopWidth: 1, borderTopColor: C.rule, paddingTop: 5,
+    borderTopWidth: 1, borderTopColor: C.rule, paddingTop: 6,
   },
   footerText: { fontSize: 6, color: C.meta },
+
+  capituloBloque: { marginTop: 6, marginBottom: 14 },
+  capituloNum: { fontSize: 7, fontFamily: 'Helvetica-Bold', color: C.brand, letterSpacing: 2.4 },
+  capituloNombre: { fontSize: 19, fontFamily: 'Helvetica-Bold', color: C.ink, marginTop: 3, letterSpacing: -0.3 },
+  capituloRule: { borderBottomWidth: 1.4, borderBottomColor: C.ink, marginTop: 8 },
+
+  item: { marginBottom: 26 },
+  itemImagen: { width: '100%', height: 208, objectFit: 'cover', backgroundColor: C.light },
+  itemSinImagen: {
+    width: '100%', height: 96, backgroundColor: C.light,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  itemSinImagenTexto: { fontSize: 7, color: '#C8C8C8', letterSpacing: 1.6, textTransform: 'uppercase' },
+  itemCuerpo: { flexDirection: 'row', marginTop: 10 },
+  itemTextos: { flex: 1, paddingRight: 16 },
+  itemEyebrow: { fontSize: 6.5, fontFamily: 'Helvetica-Bold', color: C.meta, letterSpacing: 1.6, textTransform: 'uppercase', marginBottom: 4 },
+  itemMarca: { fontSize: 8, fontFamily: 'Helvetica-Bold', color: C.brand, letterSpacing: 1.4, textTransform: 'uppercase', marginBottom: 2 },
+  itemNombre: { fontSize: 13.5, color: C.ink, lineHeight: 1.25 },
+  itemModelo: { fontSize: 9, color: C.mid, marginTop: 2 },
+  itemDescripcion: { fontSize: 8.8, color: C.soft, lineHeight: 1.6, marginTop: 7 },
+  itemDatos: { fontSize: 7.5, color: C.meta, marginTop: 6 },
+  itemPrecio: { width: 92, alignItems: 'flex-end' },
+  itemPrecioValor: { fontSize: 12, fontFamily: 'Helvetica-Bold', color: C.ink },
+  itemPrecioLabel: { fontSize: 6, color: C.meta, letterSpacing: 1.2, textTransform: 'uppercase', marginTop: 2 },
+
+  cierre: { marginTop: 12, backgroundColor: C.light, borderLeftWidth: 3, borderLeftColor: C.brand, padding: 14 },
+  cierreTitulo: { fontSize: 7, fontFamily: 'Helvetica-Bold', color: C.brand, letterSpacing: 1.4, textTransform: 'uppercase', marginBottom: 5 },
+  cierreTexto: { fontSize: 8.2, color: C.soft, lineHeight: 1.6 },
+
+  totalRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    borderTopWidth: 1.4, borderTopColor: C.ink, paddingTop: 10, marginTop: 6,
+  },
+  totalLabel: { fontSize: 8, fontFamily: 'Helvetica-Bold', color: C.ink, letterSpacing: 1.4, textTransform: 'uppercase' },
+  totalValor: { fontSize: 15, fontFamily: 'Helvetica-Bold', color: C.ink },
 })
 
-// ── Component ─────────────────────────────────────────────────────────────────
+function euros(n: number | null): string {
+  if (n == null) return '—'
+  return `${n.toLocaleString('es-ES', { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: 'always' })} EUR`
+}
 
-export function MemoriaAnteproyectoPDF({ data }: { data: MemoriaAnteproyectoPDFData }) {
-  const { proyecto, items, chapters, fecha } = data
+function fechaLarga(iso: string): string {
+  return new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })
+}
 
-  // Only non-descartado items
-  const visibleItems = items.filter(i => i.estado_definicion !== 'descartado')
-
-  const chaptersWithItems = chapters.filter(ch =>
-    ch.units.some(u => u.line_items.some(li => visibleItems.some(i => i.template_line_item_id === li.id)))
-  )
-
-  const confirmados = visibleItems.filter(i => i.estado_definicion === 'confirmado').length
+export function MemoriaAnteproyectoPDF({ data }: { data: AnteproyectoData }) {
+  const { proyecto, nivelLabel, fecha, capitulos, incluirPrecios, totalPvp } = data
+  const totalItems = capitulos.reduce((n, c) => n + c.items.length, 0)
 
   return (
-    <Document title={`Memoria de Calidad — ${proyecto.nombre}`}>
-
-      {/* ── Cover ── */}
-      <Page size="A4" style={s.coverPage}>
+    <Document
+      title={`Memoria de calidades — ${proyecto.nombre}`}
+      author="Forma Prima"
+      subject={`Anteproyecto · nivel ${nivelLabel}`}
+    >
+      {/* ── Portada ── */}
+      <Page size="A4" style={s.cover}>
         <View style={s.coverInner}>
           <Image src={LOGO} style={s.coverLogo} />
-          <Text style={s.coverEyebrow}>Memoria de Calidad · Anteproyecto</Text>
-          <Text style={s.coverTitle}>{proyecto.nombre}</Text>
-          {proyecto.codigo && <Text style={s.coverCodigo}>{proyecto.codigo}</Text>}
-          <View style={s.coverRule}>
-            <View style={s.coverMetaRow}>
-              {proyecto.nivel_calidad && (
+          <View>
+            <Text style={s.coverEyebrow}>Memoria de calidades</Text>
+            <Text style={s.coverTitle}>{pdfSafe(proyecto.nombre)}</Text>
+            <Text style={s.coverNivel}>Anteproyecto · Nivel {nivelLabel}</Text>
+            <View style={s.coverRule}>
+              <View style={s.coverMetaRow}>
+                {proyecto.codigo && (
+                  <View style={s.coverMetaItem}>
+                    <Text style={s.coverMetaLabel}>Proyecto</Text>
+                    <Text style={s.coverMetaValue}>{pdfSafe(proyecto.codigo)}</Text>
+                  </View>
+                )}
+                {proyecto.direccion && (
+                  <View style={s.coverMetaItem}>
+                    <Text style={s.coverMetaLabel}>Emplazamiento</Text>
+                    <Text style={s.coverMetaValue}>{pdfSafe(proyecto.direccion)}</Text>
+                  </View>
+                )}
                 <View style={s.coverMetaItem}>
-                  <Text style={s.coverMetaLabel}>Nivel</Text>
-                  <Text style={s.coverMetaValue}>{NIVEL_LABEL[proyecto.nivel_calidad] ?? proyecto.nivel_calidad}</Text>
+                  <Text style={s.coverMetaLabel}>Fecha</Text>
+                  <Text style={s.coverMetaValue}>{fechaLarga(fecha)}</Text>
                 </View>
-              )}
-              <View style={s.coverMetaItem}>
-                <Text style={s.coverMetaLabel}>Productos orientativos</Text>
-                <Text style={s.coverMetaValue}>{visibleItems.length}</Text>
-              </View>
-              {confirmados > 0 && (
                 <View style={s.coverMetaItem}>
-                  <Text style={s.coverMetaLabel}>Confirmados</Text>
-                  <Text style={s.coverMetaValue}>{confirmados}</Text>
+                  <Text style={s.coverMetaLabel}>Elementos</Text>
+                  <Text style={s.coverMetaValue}>{totalItems}</Text>
                 </View>
-              )}
-              <View style={s.coverMetaItem}>
-                <Text style={s.coverMetaLabel}>Fecha</Text>
-                <Text style={s.coverMetaValue}>{fmtDate(fecha)}</Text>
               </View>
             </View>
           </View>
         </View>
       </Page>
 
-      {/* ── Chapter pages ── */}
-      {chaptersWithItems.map(chapter => {
-        const chapterVisibleItems = visibleItems.filter(i =>
-          chapter.units.some(u => u.line_items.some(li => li.id === i.template_line_item_id))
-        )
+      {/* ── Contenido ── */}
+      <Page size="A4" style={s.page}>
+        <View style={s.header} fixed>
+          <Image src={LOGO} style={s.headerLogo} />
+          <Text style={s.headerText}>
+            {pdfSafe(proyecto.nombre).toUpperCase()} · ANTEPROYECTO · {nivelLabel.toUpperCase()}
+          </Text>
+        </View>
 
-        const chapterTitle = chapter.label_cliente ?? chapter.nombre
+        <View style={s.footer} fixed>
+          <Text style={s.footerText}>GEINEX GROUP, S.L. · Forma Prima · {fechaLarga(fecha)}</Text>
+          <Text style={s.footerText} render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} />
+        </View>
 
-        // Collect all units with items for this chapter
-        const unitsWithItems = chapter.units.filter(u =>
-          u.line_items.some(li => visibleItems.some(i => i.template_line_item_id === li.id))
-        )
-
-        return [
-          // Chapter intro page
-          <Page key={`ch-${chapter.id}`} size="A4" style={s.chapterPage}>
-            {chapter.imagen_portada_url && (
-              <Image src={chapter.imagen_portada_url} style={s.chapterCoverImg} />
-            )}
-            <View style={chapter.imagen_portada_url ? s.chapterCoverOverlay : [s.chapterCoverOverlay, { paddingTop: 120 }]}>
-              <Text style={s.chapterEyebrow}>{chapter.nombre}</Text>
-              <Text style={s.chapterTitle}>{chapterTitle}</Text>
-              {chapter.descripcion_cliente && (
-                <Text style={s.chapterDesc}>{chapter.descripcion_cliente}</Text>
-              )}
-              <Text style={[s.coverMetaValue, { marginTop: 20 }]}>
-                {chapterVisibleItems.length} producto{chapterVisibleItems.length !== 1 ? 's' : ''}
+        {capitulos.map(capitulo => (
+          <View key={`${capitulo.numero}-${capitulo.nombre}`}>
+            <View style={s.capituloBloque} wrap={false}>
+              <Text style={s.capituloNum}>
+                CAPÍTULO {String(capitulo.numero).padStart(2, '0')}
               </Text>
-            </View>
-          </Page>,
-
-          // Chapter content page(s)
-          <Page key={`ch-content-${chapter.id}`} size="A4" style={s.contentPage} wrap>
-            <View style={s.pageHeader} fixed>
-              <Image src={LOGO} style={s.pageHeaderLogo} />
-              <Text style={s.pageHeaderTitle}>{proyecto.nombre} · {chapterTitle}</Text>
+              <Text style={s.capituloNombre}>{pdfSafe(capitulo.nombre)}</Text>
+              <View style={s.capituloRule} />
             </View>
 
-            {unitsWithItems.map(unit => {
-              const unitItems = visibleItems.filter(i =>
-                unit.line_items.some(li => li.id === i.template_line_item_id)
-              )
-              const unitTitle = unit.label_cliente ?? unit.nombre
-
-              return (
-                <View key={unit.id}>
-                  {/* Unit header */}
-                  <View style={s.unitHeader}>
-                    {unit.label_cliente && (
-                      <Text style={s.unitEyebrow}>{unit.nombre}</Text>
-                    )}
-                    <Text style={s.unitTitle}>{unitTitle}</Text>
-                    {unit.descripcion_cliente && (
-                      <Text style={s.unitDesc}>{unit.descripcion_cliente}</Text>
+            {capitulo.items.map((item, i) => (
+              <View key={`${capitulo.numero}-${i}`} style={s.item} wrap={false}>
+                {item.imagen ? (
+                  <Image src={item.imagen} style={s.itemImagen} />
+                ) : (
+                  <View style={s.itemSinImagen}>
+                    <Text style={s.itemSinImagenTexto}>Imagen pendiente</Text>
+                  </View>
+                )}
+                <View style={s.itemCuerpo}>
+                  <View style={s.itemTextos}>
+                    <Text style={s.itemEyebrow}>{pdfSafe(item.subcapitulo)}</Text>
+                    {item.marca && <Text style={s.itemMarca}>{pdfSafe(item.marca)}</Text>}
+                    <Text style={s.itemNombre}>{pdfSafe(item.nombre)}</Text>
+                    {item.modelo && <Text style={s.itemModelo}>{pdfSafe(item.modelo)}</Text>}
+                    {item.descripcion && <Text style={s.itemDescripcion}>{pdfSafe(item.descripcion)}</Text>}
+                    {item.acabados.length > 0 && (
+                      <Text style={s.itemDatos}>Acabados: {pdfSafe(item.acabados.join(' / '))}</Text>
                     )}
                   </View>
-
-                  {/* Items grid */}
-                  <View style={s.itemsGrid}>
-                    {unitItems.map(item => {
-                      const img = item.imagen_lifestyle_url ?? item.imagen_principal_url
-
-                      return (
-                        <View key={item.id} style={s.itemCard} wrap={false}>
-                          {img
-                            ? <Image src={img} style={s.itemImage} />
-                            : <View style={s.itemImagePlaceholder} />
-                          }
-                          {item.marca && <Text style={s.itemMarca}>{item.marca}</Text>}
-                          <Text style={s.itemNombre}>{item.nombre}</Text>
-                          {item.modelo && <Text style={s.itemModelo}>{item.modelo}</Text>}
-                          {item.referencia && <Text style={s.itemRef}>Ref. {item.referencia}</Text>}
-                          {item.descripcion && <Text style={s.itemDesc}>{item.descripcion}</Text>}
-                          {item.precio_referencia != null && (
-                            <Text style={s.itemPrice}>{fmtEur(item.precio_referencia)}</Text>
-                          )}
-                          {item.estado_definicion === 'confirmado' && (
-                            <Text style={s.itemConfirmado}>Confirmado</Text>
-                          )}
-                        </View>
-                      )
-                    })}
-                  </View>
+                  {incluirPrecios && item.precio_pvp != null && (
+                    <View style={s.itemPrecio}>
+                      <Text style={s.itemPrecioValor}>{euros(item.precio_pvp)}</Text>
+                      <Text style={s.itemPrecioLabel}>Unidad</Text>
+                    </View>
+                  )}
                 </View>
-              )
-            })}
+              </View>
+            ))}
+          </View>
+        ))}
 
-            <View style={s.footer} fixed>
-              <Text style={s.footerText}>GEINEX GROUP, S.L. · Forma Prima · Memoria de Calidad</Text>
-              <Text style={s.footerText} render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} />
-            </View>
-          </Page>,
-        ]
-      })}
+        {incluirPrecios && totalPvp != null && (
+          <View style={s.totalRow} wrap={false}>
+            <Text style={s.totalLabel}>Total orientativo por unidad de cada elemento</Text>
+            <Text style={s.totalValor}>{euros(totalPvp)}</Text>
+          </View>
+        )}
+
+        <View style={s.cierre} wrap={false}>
+          <Text style={s.cierreTitulo}>Alcance de este documento</Text>
+          <Text style={s.cierreTexto}>
+            Las marcas y modelos recogidos definen el nivel de calidad {nivelLabel} previsto para el proyecto y
+            tienen carácter orientativo. Podrán sustituirse por productos equivalentes en calidad, prestaciones y
+            acabado, y quedarán definidos de forma cerrada en la memoria de calidades de proyecto de ejecución,
+            junto con las cantidades y la asignación por estancia.
+            {incluirPrecios ? ' Los importes indicados son de referencia y no constituyen oferta económica.' : ''}
+          </Text>
+        </View>
+      </Page>
     </Document>
   )
 }
+
+export default MemoriaAnteproyectoPDF

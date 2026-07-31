@@ -325,7 +325,64 @@ Gestión de contenido para redes sociales.
 - rechazo (`borrador` por partner) → aviso `importante` a `fp_biz_dev`
 - feedback (comentario de partner en `en_revision`) → aviso `importante` a `fp_biz_dev`
 
-### 5.10 Time Tracker (`/team/time-tracker`)
+### 5.10 Memorias de Calidades (`/team/memorias-calidad`) — `fp_partner`, `fp_manager`, `fp_team`
+Catálogo de producto + generación de memorias de calidades. **Desacoplado de FP Execution a propósito**
+(v2, jul 2026): cuelga de su propio catálogo de capítulos/subcapítulos de presupuesto, no de la plantilla FPE.
+
+**Estructura de presupuesto** (`presupuesto_capitulos` / `presupuesto_subcapitulos`): catálogo global sembrado
+con la estructura real de nuestras obras — 11 capítulos y 53 subcapítulos extraídos de Casa Claudio Coello 38.
+Es el eje de clasificación de todo el módulo. Control de obra sigue guardando su capítulo/subcapítulo
+denormalizado por obra; **no comparten tablas** (sería la migración natural si algún día se unifica).
+
+**Warehouse** (`/warehouse`) — `WarehousePage.tsx`
+- `warehouse_items` cuelga de `subcapitulo_id` + `nivel_calidad` (`functional` | `select` | `master_piece`),
+  con marca/modelo/referencia, foto de producto, foto de ambiente, ficha técnica, acabados, tags,
+  **`precio_pvp` + `precio_coste`**, proveedor preferente y `url_producto`.
+- **Favorito FP**: `es_favorito` con **índice único parcial** `(subcapitulo_id, nivel_calidad) WHERE es_favorito AND activo`.
+  Solo uno por subcapítulo y nivel; al marcar otro, la action libera el hueco antes (`liberarFavorito`).
+  Es lo que alimenta la memoria de anteproyecto.
+- **Alta con IA por URL** (`app/api/warehouse/analizar-url/route.ts`): `claude-opus-5` con **structured outputs**
+  (`output_config.format` json_schema; nullable vía `anyOf`, subcapítulo como `enum` de los 53 códigos para que
+  no pueda alucinar uno). Primero lee la página desde nuestro servidor (`lib/memorias/scrape.ts`: JSON-LD
+  schema.org → meta og → texto plano, más candidatos de imagen de og/srcset/img); si la web bloquea o es SPA,
+  **fallback a la herramienta nativa `web_fetch_20260209`** y las imágenes se piden a mano.
+  Las imágenes elegidas se **re-suben a nuestro bucket** (`app/api/warehouse/importar-imagen`): nunca se
+  guarda la URL del CDN de la tienda, que caduca y rompería memorias ya emitidas.
+  🔴 `lib/memorias/scrape.ts` tiene **guardas anti-SSRF** (resolución DNS + bloqueo de rangos privados). No quitarlas.
+
+**Memoria de anteproyecto** (`/anteproyecto`) — `AnteproyectoPage.tsx`
+- Elige proyecto + nivel → coge los Favoritos FP de ese nivel → PDF lookbook brandeado
+  (`components/pdfs/MemoriaAnteproyectoPDF.tsx`, `app/api/memorias/anteproyecto/pdf`).
+- **No se persiste nada**: es 100% derivado de los favoritos del momento. Documento comercial para clientes
+  aún no cerrados, sin cantidades y **sin precios** salvo `?precios=1`.
+- La UI avisa de los subcapítulos sin favorito (huecos); los huecos **no** salen en el PDF.
+
+**Memoria de ejecución** (`/proyectos`, `/proyectos/[id]`) — `EjecucionPage.tsx`
+- Organizada por **estancias** (`memoria_estancias`: solo un título, es una carpeta) con items
+  (`memoria_estancia_items`) que son **snapshot** del warehouse: si mañana cambia el precio del catálogo,
+  la memoria del proyecto no se mueve. Mismo criterio que los históricos de finanzas.
+- Por item: cantidad, **proveedor asignado**, `precio_pvp` + `precio_coste`, acabado elegido, estado de compra
+  (pendiente → pedido → en tránsito → recibido → instalado), notas. Margen calculado con `ceilCent`.
+- `addItemLibre` para one-offs fuera de catálogo + `guardarItemEnWarehouse` para subirlos después (el catálogo
+  crece con el uso real). `duplicarEstancia` copia estancia e items (tres baños iguales).
+- **Tres PDFs** desde `app/api/memorias/[id]/ejecutivo/pdf` (`MemoriaEjecutivaPDF.tsx`):
+  cliente (solo PVP) · `?costes=1` interno (coste + margen) · `?proveedor_id=X` orden de pedido de ese
+  proveedor **a coste, sin PVP nunca**.
+
+**UI compartida**: toggle **tarjetas / listado desplegable** en todas las pantallas del módulo
+(`VistaToggle.tsx` + `useVistaModo`, preferencia en `localStorage`). El listado es la vista de trabajo
+(edición en línea de cantidad, proveedor y precios con autoguardado al salir del campo).
+
+- `lib/memorias/domain.ts` — tipos, `NIVELES`, `ESTADOS_COMPRA`, `ceilCent`, `autoPvp` (margen 1,16 como
+  control de obra), `totales`, formateadores · `lib/memorias/pdfData.ts` (monta los PDFs y **descarga las
+  imágenes a data URI**: si una falla, ese item sale sin foto en vez de tumbar el render) ·
+  `lib/memorias/scrape.ts` (solo servidor)
+- `app/actions/warehouse.ts` (items, favoritos, subcapítulos) · `app/actions/memorias.ts` (estancias e items)
+- Tablas `presupuesto_*`, `warehouse_items`, `memoria_estancias`, `memoria_estancia_items` + bucket público
+  `warehouse`. Solo `service_role`. **Migración `memorias_calidad_v2.sql` pendiente de ejecutar**
+- Pendiente: manual PDF del módulo (el anterior describía el flujo FPE y se eliminó)
+
+### 5.11 Time Tracker (`/team/time-tracker`)
 Registro de horas por proyecto y fase. Todos los roles FP.
 - `TimeTracker.tsx` — UI principal (cliente)
 - `app/actions/time-tracker.ts` — deleteTimeEntry
@@ -417,6 +474,15 @@ Registro de horas por proyecto y fase. Todos los roles FP.
 | `bd_weekly_log` | Historial de Weekly Update (`data jsonb`) |
 | `bd_config` | Configuración del módulo (key/value jsonb; toggle de la regla) |
 | `leads.bd_company_id` | Back-reference del lead al partner que lo originó (puente) |
+
+### Memorias de calidades
+| Tabla | Propósito |
+|---|---|
+| `presupuesto_capitulos` | Capítulos de nuestro presupuesto de obra (numero, nombre) — 11 sembrados |
+| `presupuesto_subcapitulos` | Subcapítulos (`codigo` tipo `5_CM_07`, nombre) — 53 sembrados. Eje de clasificación del módulo |
+| `warehouse_items` | Catálogo de producto: `subcapitulo_id` + `nivel_calidad`, `precio_pvp`/`precio_coste`, `es_favorito` (único por subcapítulo × nivel) |
+| `memoria_estancias` | Estancias de la memoria de ejecución de un proyecto (solo nombre + orden) |
+| `memoria_estancia_items` | Items por estancia: **snapshot** del warehouse + cantidad, proveedor asignado, precios, acabado, `estado_compra` |
 
 ### Modelo Café Goya
 | Tabla | Propósito |
@@ -536,6 +602,10 @@ Registro de horas por proyecto y fase. Todos los roles FP.
 /team/apps/repasos/[id]     Repasos de obra — visor del plano con pins
 /team/apps/control-obra     Control económico de obra (solo fp_partner)
 /team/apps/modelo-cafe      Modelo financiero Café Goya (solo fp_partner)
+/team/memorias-calidad/warehouse        Catálogo de producto (warehouse)
+/team/memorias-calidad/anteproyecto     Memoria de calidades de anteproyecto (favoritos FP → PDF)
+/team/memorias-calidad/proyectos        Memorias de ejecución — lista de proyectos
+/team/memorias-calidad/proyectos/[id]   Memoria de ejecución por estancias
 /team/marketing             Índice de marketing
 /team/marketing/post-manager          Kanban de posts por red social
 /team/marketing/time-tracker-sections Time tracker de secciones (en desarrollo)
@@ -561,6 +631,10 @@ Registro de horas por proyecto y fase. Todos los roles FP.
 /api/repasos/proyecto/[id]/pdf      GET  — informe PDF interno (?audiencia=cliente|constructora)
 /api/profesionalizar-instrucciones  POST — mejora texto con IA (Claude Haiku)
 /api/business-development/asistente POST — asistente IA del CRM de partners (Claude Haiku)
+/api/warehouse/analizar-url         POST — cataloga un producto desde su URL (Claude Opus 5 + structured outputs)
+/api/warehouse/importar-imagen      POST — trae una imagen remota al bucket `warehouse`
+/api/memorias/anteproyecto/pdf      GET  — memoria de anteproyecto (?proyecto_id=&nivel=&precios=1)
+/api/memorias/[id]/ejecutivo/pdf    GET  — memoria de ejecución (?costes=1 interno · ?proveedor_id=X pedido)
 /api/scan-ticket                    POST — escanea ticket con IA
 /api/portal/verify                  POST — verifica token del portal cliente
 /api/bank-statement                 POST — importa extracto bancario
@@ -751,6 +825,9 @@ actualizarlo en **ambos**: `lib/types/index.ts` Y `middleware.ts`.
 - Design Hunter (multiselección, vídeos, thumbnails, lightbox, vista Stories)
 - Marketing Post Manager (kanban, tabs Instagram/LinkedIn, media upload, flujo de aprobación, avisos)
 - Repasos de obra (pins sobre plano, visibilidad de 3 niveles, enlaces externos, trazabilidad) — **pendiente ejecutar `repasos_obra.sql`**
+- Memorias de calidades v2: warehouse por subcapítulo con Favorito FP, alta por URL con IA, memoria de
+  anteproyecto automática y memoria de ejecución por estancias con control económico y PDF por proveedor
+  — **pendiente ejecutar `memorias_calidad_v2.sql`**; falta el manual PDF del módulo
 
 ### 🚧 En progreso / incompleto
 - `/team/finanzas/facturacion/dashboard` — ruta existe pero redirige o está vacía

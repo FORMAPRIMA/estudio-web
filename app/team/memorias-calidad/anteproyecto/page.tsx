@@ -1,12 +1,12 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import WarehousePage from '@/components/team/memorias-calidad/WarehousePage'
-import type { Capitulo, Proveedor, Subcapitulo, WarehouseItem } from '@/lib/memorias/domain'
+import AnteproyectoPage from '@/components/team/memorias-calidad/AnteproyectoPage'
+import type { Capitulo, Subcapitulo, WarehouseItem } from '@/lib/memorias/domain'
 
 const ALLOWED_ROLES = ['fp_partner', 'fp_manager', 'fp_team']
 
-export default async function MemoriasCalidadWarehousePage() {
+export default async function MemoriaAnteproyectoRoute() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -21,23 +21,23 @@ export default async function MemoriasCalidadWarehousePage() {
 
   const admin = createAdminClient()
 
-  const [capitulosRes, subcapitulosRes, itemsRes, proveedoresRes] = await Promise.all([
+  const [proyectosRes, capitulosRes, subcapitulosRes, favoritosRes] = await Promise.all([
+    admin
+      .from('proyectos')
+      .select('id, nombre, codigo, direccion, nivel_calidad')
+      .in('status', ['activo', 'on_hold'])
+      .order('nombre', { ascending: true }),
     admin.from('presupuesto_capitulos').select('*').eq('activo', true).order('orden', { ascending: true }),
     admin.from('presupuesto_subcapitulos').select('*').eq('activo', true).order('orden', { ascending: true }),
-    admin.from('warehouse_items').select('*').eq('activo', true).order('created_at', { ascending: false }),
-    admin.from('proveedores').select('id, nombre').order('nombre', { ascending: true }),
+    admin.from('warehouse_items').select('*').eq('es_favorito', true).eq('activo', true),
   ])
 
-  // Hasta que se ejecute memorias_calidad_v2.sql, la pantalla avisa en lugar de romperse
-  const migracionPendiente = !!capitulosRes.error || (capitulosRes.data ?? []).length === 0
-
   return (
-    <WarehousePage
+    <AnteproyectoPage
+      proyectos={proyectosRes.data ?? []}
       capitulos={(capitulosRes.data ?? []) as Capitulo[]}
       subcapitulos={(subcapitulosRes.data ?? []) as Subcapitulo[]}
-      items={(itemsRes.data ?? []) as WarehouseItem[]}
-      proveedores={(proveedoresRes.data ?? []) as Proveedor[]}
-      migracionPendiente={migracionPendiente}
+      favoritos={(favoritosRes.data ?? []) as WarehouseItem[]}
     />
   )
 }

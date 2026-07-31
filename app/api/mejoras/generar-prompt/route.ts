@@ -86,6 +86,17 @@ por el equipo y generar un prompt preciso y accionable para un asistente de IA d
 - PDFs: components/pdfs/{DossierBancarioPDF,PropuestaTraspasoPDF}.tsx; rutas app/api/modelo-cafe/{dossier-pdf,propuesta-pdf}/route.ts
 - Tablas: modelo_cafe_escenarios (inputs jsonb, es_base) y modelo_cafe_capex (items jsonb, fila 'default'; migración modelo_cafe_capex.sql pendiente)
 
+### Memorias de calidades (/team/memorias-calidad) — fp_partner, fp_manager, fp_team
+- Desacoplado de FP Execution a propósito (v2): cuelga de su propio catálogo presupuesto_capitulos/presupuesto_subcapitulos (11 capítulos y 53 subcapítulos sembrados desde Claudio Coello 38). Control de obra NO comparte estas tablas
+- Warehouse (/warehouse, components/team/memorias-calidad/WarehousePage.tsx): warehouse_items por subcapitulo_id + nivel_calidad (functional|select|master_piece), precio_pvp + precio_coste, proveedor preferente, acabados, tags, url_producto. Favorito FP = es_favorito con índice único parcial (subcapitulo_id, nivel_calidad) WHERE es_favorito AND activo; la action libera el hueco antes de marcar
+- Alta con IA por URL: app/api/warehouse/analizar-url (claude-opus-5 + structured outputs con output_config.format json_schema; nullable vía anyOf y subcapítulo como enum de los 53 códigos). lib/memorias/scrape.ts lee la página (JSON-LD → meta og → texto + candidatos de imagen) CON GUARDAS ANTI-SSRF; si la web bloquea o es SPA, fallback a la herramienta nativa web_fetch_20260209. Las imágenes se re-suben al bucket con app/api/warehouse/importar-imagen (nunca se guarda la URL del CDN de la tienda)
+- Memoria de anteproyecto (/anteproyecto): elige proyecto + nivel → coge los Favoritos FP → PDF lookbook (components/pdfs/MemoriaAnteproyectoPDF.tsx, app/api/memorias/anteproyecto/pdf). NO se persiste nada: es derivado de los favoritos del momento. Sin cantidades y sin precios salvo ?precios=1
+- Memoria de ejecución (/proyectos/[id], components/team/memorias-calidad/EjecucionPage.tsx): por ESTANCIAS (memoria_estancias = solo un título) con items snapshot del warehouse (memoria_estancia_items) + cantidad, proveedor asignado, precio_pvp/precio_coste, acabado elegido, estado_compra, notas. addItemLibre para one-offs y guardarItemEnWarehouse para subirlos al catálogo; duplicarEstancia copia estancia e items
+- PDFs de ejecución (components/pdfs/MemoriaEjecutivaPDF.tsx, app/api/memorias/[id]/ejecutivo/pdf): cliente (solo PVP) · ?costes=1 interno (coste + margen) · ?proveedor_id=X orden de pedido a coste, sin PVP nunca
+- Toggle tarjetas/listado desplegable en todas las pantallas del módulo (components/team/memorias-calidad/VistaToggle.tsx + useVistaModo, preferencia en localStorage). El listado es la vista de trabajo con edición en línea y autoguardado al salir del campo
+- lib/memorias/domain.ts (NIVELES, ESTADOS_COMPRA, ceilCent, autoPvp con margen 1,16, totales) · lib/memorias/pdfData.ts (descarga las imágenes a data URI para que una imagen rota no tumbe el render) · app/actions/{warehouse,memorias}.ts
+- Migración memorias_calidad_v2.sql pendiente de ejecutar. Bucket Storage: warehouse (público). Falta el manual PDF del módulo
+
 ### Gastos y facturas (/team/gastos) — todos los roles FP
 - ScannerPage: components/team/finanzas/ScannerPage.tsx (mode 'partner' = vista completa, 'personal' = drop-off solo gastos propios), app/api/scan-ticket/route.ts
 - Export ZIP/Excel: lib/gastos/exportZip.ts (mes | trimestre | selección de ids; agrupa por carpetas de mes); períodos en lib/gastos/period.ts

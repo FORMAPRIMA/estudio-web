@@ -137,10 +137,10 @@ const ALL_NAV: (NavItem & { roles: FpRole[] })[] = [
     label: 'Proveedores',
     roles: ['fp_partner', 'fp_manager', 'fp_team'],
   },
-  // ── Memorias de Calidad ───────────────────────────────────────────────────
+  // ── Memorias de Calidades ─────────────────────────────────────────────────
   {
     href: '/team/memorias-calidad/warehouse',
-    label: 'Memorias de Calidad',
+    label: 'Memorias de Calidades',
     roles: ['fp_partner', 'fp_manager', 'fp_team'],
   },
   {
@@ -150,8 +150,14 @@ const ALL_NAV: (NavItem & { roles: FpRole[] })[] = [
     isSubItem: true,
   },
   {
+    href: '/team/memorias-calidad/anteproyecto',
+    label: 'Anteproyecto',
+    roles: ['fp_partner', 'fp_manager', 'fp_team'],
+    isSubItem: true,
+  },
+  {
     href: '/team/memorias-calidad/proyectos',
-    label: 'Proyectos',
+    label: 'Ejecución',
     roles: ['fp_partner', 'fp_manager', 'fp_team'],
     isSubItem: true,
   },

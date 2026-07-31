@@ -250,13 +250,11 @@ function UnitScopeRow({
   scope,
   onToggle,
   onNotasChange,
-  hasMem = false,
 }: {
   unit: TemplateUnit
   scope: UnitScope
   onToggle: (unitId: string) => void
   onNotasChange: (unitId: string, notas: string) => void
-  hasMem?: boolean
 }) {
   const [expanded, setExpanded] = useState(true)
   const activeItems = unit.line_items.filter(li => li.activo)
@@ -285,11 +283,6 @@ function UnitScopeRow({
             <span style={{ fontSize: 11, color: '#999', marginLeft: 8 }}>{unit.descripcion}</span>
           )}
         </div>
-        {hasMem && (
-          <span style={{ fontSize: 8, fontWeight: 700, padding: '2px 6px', borderRadius: 3, background: '#D85A30', color: '#fff', flexShrink: 0, letterSpacing: '0.06em' }}>
-            MEM
-          </span>
-        )}
         {activeItems.length > 0 ? (
           <button
             onClick={() => setExpanded(e => !e)}
@@ -1728,7 +1721,6 @@ export default function ProjectScopePage({
   initialDuracionFactor = 1.0,
   disciplines,
   chapterSettingsMap,
-  memoriaUnitIds = [],
   obraStartedAt = null,
   obraBaselineSnapshot = null,
   obraPhases = [],
@@ -1765,7 +1757,6 @@ export default function ProjectScopePage({
   initialDuracionFactor?: number
   disciplines: FpeDiscipline[]
   chapterSettingsMap: Record<string, string | null>
-  memoriaUnitIds?: string[]
   /** Si está set, la gestión de obra está activada. Habilita la 2ª top-tab. */
   obraStartedAt?:        string | null
   obraBaselineSnapshot?: ObraBaselineSnapshot | null
@@ -2119,7 +2110,6 @@ export default function ProjectScopePage({
                           scope={scope[unit.id] ?? { included: false, notas: '' }}
                           onToggle={handleToggle}
                           onNotasChange={handleNotasChange}
-                          hasMem={memoriaUnitIds.includes(unit.id)}
                         />
                       ))}
                     </div>
