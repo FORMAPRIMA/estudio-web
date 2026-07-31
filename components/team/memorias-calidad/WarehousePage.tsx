@@ -36,6 +36,10 @@ import ModoClienteToggle, { useModoCliente } from './ModoClienteToggle'
 
 const BUCKET = 'warehouse'
 
+// Resaltado del Favorito FP: tiene que cantar de un vistazo entre 20 productos
+const ORO = '#D8A22F'
+const ORO_SUAVE = '#FFFCF0'
+
 interface Props {
   capitulos: Capitulo[]
   subcapitulos: Subcapitulo[]
@@ -186,8 +190,9 @@ function FavoritoControl({
         title={mios.length > 0 ? `Favorito FP en: ${nivelesLabel(mios)}` : 'Marcar como Favorito FP'}
         style={{
           background: 'none', border: 'none', cursor: 'pointer', padding: 2,
-          fontSize: compacto ? 13 : 15, lineHeight: 1,
-          color: mios.length > 0 ? '#D8A22F' : '#D5D3CE',
+          fontSize: mios.length > 0 ? (compacto ? 15 : 17) : (compacto ? 13 : 15), lineHeight: 1,
+          color: mios.length > 0 ? ORO : '#D5D3CE',
+          textShadow: mios.length > 0 ? '0 1px 3px rgba(216,162,47,0.45)' : 'none',
         }}
       >
         {mios.length > 0 ? '★' : '☆'}
@@ -895,11 +900,29 @@ function ItemCard({
   onDelete: () => void
 }) {
   const subtitulo = [item.marca, item.modelo].filter(Boolean).join(' · ')
-  const esFavorito = favoritos.some(f => f.item_id === item.id)
+  const favNiveles = favoritos.filter(f => f.item_id === item.id).map(f => f.nivel_calidad)
+  const esFavorito = favNiveles.length > 0
   const conIvaVal = precioConIva(item)
 
   return (
-    <div style={{ background: '#fff', border: `1px solid ${esFavorito ? '#F0D89B' : '#E8E6E0'}`, borderRadius: 8, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+    <div
+      style={{
+        background: esFavorito ? ORO_SUAVE : '#fff',
+        border: `${esFavorito ? 2 : 1}px solid ${esFavorito ? ORO : '#E8E6E0'}`,
+        borderRadius: 8, overflow: 'hidden', display: 'flex', flexDirection: 'column',
+        boxShadow: esFavorito ? '0 3px 14px rgba(216,162,47,0.20)' : 'none',
+      }}
+    >
+      {esFavorito && (
+        <div style={{ background: ORO, padding: '4px 9px', display: 'flex', alignItems: 'center', gap: 7 }}>
+          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.11em', textTransform: 'uppercase', color: '#fff' }}>
+            ★ Favorito FP
+          </span>
+          <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.05em', color: 'rgba(255,255,255,0.85)', marginLeft: 'auto' }}>
+            {nivelesLabel(favNiveles)}
+          </span>
+        </div>
+      )}
       <div style={{ position: 'relative', aspectRatio: '4 / 3', background: '#F8F7F4' }}>
         {item.imagen_principal_url ? (
           <img src={item.imagen_principal_url} alt={item.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -961,14 +984,21 @@ function ItemRow({
   const [abierto, setAbierto] = useState(false)
   const proveedor = proveedores.find(p => p.id === item.proveedor_preferente_id)
   const margen = item.precio_pvp != null && item.precio_coste != null ? ceilCent(item.precio_pvp - item.precio_coste) : null
-  const esFavorito = favoritos.some(f => f.item_id === item.id)
+  const favNiveles = favoritos.filter(f => f.item_id === item.id).map(f => f.nivel_calidad)
+  const esFavorito = favNiveles.length > 0
   const conIvaVal = precioConIva(item)
 
   return (
-    <div style={{ borderBottom: '1px solid #F0EEE8', background: esFavorito ? '#FFFDF6' : '#fff' }}>
+    <div
+      style={{
+        borderBottom: '1px solid #F0EEE8',
+        background: esFavorito ? ORO_SUAVE : '#fff',
+        borderLeft: `3px solid ${esFavorito ? ORO : 'transparent'}`,
+      }}
+    >
       <div
         onClick={() => setAbierto(a => !a)}
-        style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 12px', cursor: 'pointer' }}
+        style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 12px 8px 9px', cursor: 'pointer' }}
       >
         <span style={{ fontSize: 10, color: '#CCC', width: 10, flexShrink: 0 }}>{abierto ? '▾' : '▸'}</span>
 
@@ -979,7 +1009,19 @@ function ItemRow({
         <FavoritoControl item={item} favoritos={favoritos} items={items} compacto />
 
         <div style={{ flex: 2, minWidth: 0 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#1A1A1A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.nombre}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+            <span style={{ fontSize: 12, fontWeight: esFavorito ? 700 : 600, color: '#1A1A1A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {item.nombre}
+            </span>
+            {esFavorito && (
+              <span
+                title={`Favorito FP en ${nivelesLabel(favNiveles)}`}
+                style={{ flexShrink: 0, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', padding: '2px 6px', borderRadius: 3, background: ORO, color: '#fff' }}
+              >
+                ★ Favorito
+              </span>
+            )}
+          </div>
           {(item.marca || item.modelo) && (
             <div style={{ fontSize: 10.5, color: '#999', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {[item.marca, item.modelo].filter(Boolean).join(' · ')}
@@ -1085,15 +1127,22 @@ export default function WarehousePage({ capitulos, subcapitulos, items, favorito
       if (!map.has(it.subcapitulo_id)) map.set(it.subcapitulo_id, [])
       map.get(it.subcapitulo_id)!.push(it)
     }
+    // Los Favoritos FP van fijos arriba de su subcapítulo, y entre ellos por nivel
+    const nivelDeFavorito = (id: string) => {
+      const propios = favoritos.filter(f => f.item_id === id)
+      if (propios.length === 0) return 99
+      return Math.min(...propios.map(f => NIVELES.findIndex(n => n.value === f.nivel_calidad)))
+    }
     map.forEach(lista => {
       lista.sort((a, b) =>
         Number(idsFavoritos.has(b.id)) - Number(idsFavoritos.has(a.id)) ||
+        nivelDeFavorito(a.id) - nivelDeFavorito(b.id) ||
         (a.marca ?? '').localeCompare(b.marca ?? '') ||
         a.nombre.localeCompare(b.nombre)
       )
     })
     return map
-  }, [filtrados, idsFavoritos])
+  }, [filtrados, idsFavoritos, favoritos])
 
   // Huecos de favoritos por subcapítulo × nivel
   const favoritosPorSub = useMemo(() => {

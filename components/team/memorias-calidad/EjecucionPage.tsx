@@ -29,6 +29,7 @@ import {
   totales,
   type Capitulo,
   type Estancia,
+  type Favorito,
   type EstadoCompra,
   type EstanciaItem,
   type NivelCalidad,
@@ -46,8 +47,12 @@ interface Props {
   capitulos: Capitulo[]
   subcapitulos: Subcapitulo[]
   warehouse: WarehouseItem[]
+  favoritos: Favorito[]
   proveedores: Proveedor[]
 }
+
+const ORO = '#D8A22F'
+const ORO_SUAVE = '#FFFCF0'
 
 const S = {
   label: { fontSize: 8.5, fontWeight: 700 as const, letterSpacing: '0.07em', textTransform: 'uppercase' as const, color: '#AAA', display: 'block' as const, marginBottom: 3 },
@@ -78,12 +83,13 @@ function parseNumero(v: string): number | null {
 // ── Selector de producto (warehouse o libre) ──────────────────────────────────
 
 function SelectorProducto({
-  estancia, capitulos, subcapitulos, warehouse, onClose, onAdded,
+  estancia, capitulos, subcapitulos, warehouse, favoritos, onClose, onAdded,
 }: {
   estancia: Estancia
   capitulos: Capitulo[]
   subcapitulos: Subcapitulo[]
   warehouse: WarehouseItem[]
+  favoritos: Favorito[]
   onClose: () => void
   onAdded: () => void
 }) {
@@ -107,6 +113,8 @@ function SelectorProducto({
   const subPorId = useMemo(() => new Map(subcapitulos.map(s => [s.id, s])), [subcapitulos])
   const capPorId = useMemo(() => new Map(capitulos.map(c => [c.id, c])), [capitulos])
 
+  const idsFavoritos = useMemo(() => new Set(favoritos.map(f => f.item_id)), [favoritos])
+
   const resultados = useMemo(() => {
     const t = texto.trim().toLowerCase()
     return warehouse
@@ -120,8 +128,14 @@ function SelectorProducto({
         const heno = [w.nombre, w.marca, w.modelo, w.referencia, ...(w.tags ?? [])].filter(Boolean).join(' ').toLowerCase()
         return heno.includes(t)
       })
+      // Los Favoritos FP primero: son la referencia de la casa
+      .sort((a, b) =>
+        Number(idsFavoritos.has(b.id)) - Number(idsFavoritos.has(a.id)) ||
+        (a.marca ?? '').localeCompare(b.marca ?? '') ||
+        a.nombre.localeCompare(b.nombre)
+      )
       .slice(0, 120)
-  }, [warehouse, texto, capituloId, nivelFiltro, subPorId])
+  }, [warehouse, texto, capituloId, nivelFiltro, subPorId, idsFavoritos])
 
   const añadir = async (item: WarehouseItem) => {
     setAñadiendo(item.id); setError(null)
@@ -199,14 +213,33 @@ function SelectorProducto({
               {resultados.map(item => {
                 const sub = subPorId.get(item.subcapitulo_id)
                 const cap = sub ? capPorId.get(sub.capitulo_id) : null
+                const favNiveles = favoritos.filter(f => f.item_id === item.id).map(f => f.nivel_calidad)
                 return (
-                  <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '8px 22px', borderBottom: '1px solid #F5F4F0' }}>
+                  <div
+                    key={item.id}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 11,
+                      padding: '8px 22px 8px 19px', borderBottom: '1px solid #F5F4F0',
+                      background: favNiveles.length > 0 ? ORO_SUAVE : 'transparent',
+                      borderLeft: `3px solid ${favNiveles.length > 0 ? ORO : 'transparent'}`,
+                    }}
+                  >
                     <div style={{ width: 38, height: 30, borderRadius: 3, background: '#F8F7F4', overflow: 'hidden', flexShrink: 0 }}>
                       {item.imagen_principal_url && <img src={item.imagen_principal_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: '#1A1A1A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {[item.marca, item.nombre].filter(Boolean).join(' · ')}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: '#1A1A1A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {[item.marca, item.nombre].filter(Boolean).join(' · ')}
+                        </span>
+                        {favNiveles.length > 0 && (
+                          <span
+                            title={`Favorito FP en ${nivelesLabel(favNiveles)}`}
+                            style={{ flexShrink: 0, fontSize: 8, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', padding: '2px 5px', borderRadius: 3, background: ORO, color: '#fff' }}
+                          >
+                            ★ Favorito
+                          </span>
+                        )}
                       </div>
                       <div style={{ fontSize: 10, color: '#AAA' }}>
                         {cap?.nombre} › {sub?.nombre}
@@ -688,7 +721,7 @@ function ItemCard({
 // ── Página ────────────────────────────────────────────────────────────────────
 
 export default function EjecucionPage({
-  proyecto, estancias, items: initialItems, capitulos, subcapitulos, warehouse, proveedores,
+  proyecto, estancias, items: initialItems, capitulos, subcapitulos, warehouse, favoritos, proveedores,
 }: Props) {
   const router = useRouter()
   const [vista, setVista] = useVistaModo('lista')
@@ -953,6 +986,7 @@ export default function EjecucionPage({
           capitulos={capitulos}
           subcapitulos={subcapitulos}
           warehouse={warehouse}
+          favoritos={favoritos}
           onClose={() => setAñadiendoA(null)}
           onAdded={refrescar}
         />

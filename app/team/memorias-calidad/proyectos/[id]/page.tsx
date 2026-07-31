@@ -6,6 +6,7 @@ import { normalizarEstanciaItem, normalizarWarehouseItem } from '@/lib/memorias/
 import type {
   Capitulo,
   Estancia,
+  Favorito,
   Proveedor,
   ProyectoMemoria,
   Subcapitulo,
@@ -28,12 +29,13 @@ export default async function MemoriaEjecucionRoute({ params }: { params: { id: 
 
   const admin = createAdminClient()
 
-  const [proyectoRes, estanciasRes, capitulosRes, subcapitulosRes, warehouseRes, proveedoresRes] = await Promise.all([
+  const [proyectoRes, estanciasRes, capitulosRes, subcapitulosRes, warehouseRes, favoritosRes, proveedoresRes] = await Promise.all([
     admin.from('proyectos').select('id, nombre, codigo, direccion, nivel_calidad, status').eq('id', params.id).single(),
     admin.from('memoria_estancias').select('id, proyecto_id, nombre, orden').eq('proyecto_id', params.id).order('orden', { ascending: true }),
     admin.from('presupuesto_capitulos').select('*').eq('activo', true).order('orden', { ascending: true }),
     admin.from('presupuesto_subcapitulos').select('*').eq('activo', true).order('orden', { ascending: true }),
     admin.from('warehouse_items').select('*').eq('activo', true).order('nombre', { ascending: true }),
+    admin.from('warehouse_favoritos').select('subcapitulo_id, nivel_calidad, item_id'),
     admin.from('proveedores').select('id, nombre').order('nombre', { ascending: true }),
   ])
 
@@ -58,6 +60,7 @@ export default async function MemoriaEjecucionRoute({ params }: { params: { id: 
       capitulos={(capitulosRes.data ?? []) as Capitulo[]}
       subcapitulos={(subcapitulosRes.data ?? []) as Subcapitulo[]}
       warehouse={(warehouseRes.data ?? []).map(normalizarWarehouseItem)}
+      favoritos={(favoritosRes.data ?? []) as Favorito[]}
       proveedores={(proveedoresRes.data ?? []) as Proveedor[]}
     />
   )
