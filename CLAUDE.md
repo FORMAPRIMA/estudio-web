@@ -397,10 +397,39 @@ denormalizado por obra; **no comparten tablas** (sería la migración natural si
 
 ### 5.11 Time Tracker (`/team/time-tracker`)
 Registro de horas por proyecto y fase. Todos los roles FP.
-- `TimeTracker.tsx` — UI principal (cliente)
+- `TimeTracker.tsx` — UI principal (cliente). Rejilla semanal hora × día; cada celda es una fila de
+  `time_entries` (unique `user_id + fecha + hora_inicio`)
 - `app/actions/time-tracker.ts` — deleteTimeEntry
 - Tabla `time_entries` (user_id, fecha, hora_inicio, horas, proyecto_id, fase_id, etc.)
 - Cron job de recordatorio: `app/api/cron/horas-faltantes/route.ts`
+
+**Qué se puede seleccionar en una celda** — cuatro orígenes que conviven en dos columnas:
+| Origen | Se guarda como | Se edita en |
+|---|---|---|
+| Fase de un proyecto real | `fase_id` (+ `proyecto_id`) | `catalogo_fases` / `proyecto_fases` |
+| Categoría interna | `categoria_interna` = el **código** (`'VACACIONES'`) | `/team/proyectos/plantilla` → **Categorías internas** |
+| Proyecto interno de negocio | `categoria_interna` = `iproj_<faseId>` | `/team/proyectos/plantilla` → Proyectos internos |
+| Oferta en negociación | `categoria_interna` = `oferta_<id>` | `/team/proyectos/plantilla` → Ofertas |
+
+**Categorías internas** (`tt_categorias_internas`) — antes 9 constantes hardcodeadas, ahora tabla editable
+(`lib/time-tracker/categorias.ts` + `app/actions/time-tracker-categorias.ts`):
+- Campo clave **`tipo`**: `trabajo_interno` (Gestión FP, Leads, Formación…) vs `ausencia` (Vacaciones,
+  Baja Médica, Ausente). De ahí sale la distinción **horas marcadas** (todo lo que hay en la rejilla) vs
+  **horas trabajadas** (marcadas − ausencias), en la cabecera semanal y en los KPIs de los dos análisis.
+  En las barras salen como dos filas separadas, "Interno" y "Ausencias" (esta última siempre al final).
+- El **`codigo` no se edita nunca**: es la clave con la que está guardado el histórico en
+  `time_entries.categoria_interna`. Renombrar la etiqueta es gratis; cambiar el código dejaría registros
+  huérfanos. Por eso la UI solo deja editar `label`, `tipo`, `visible_para` y `activo`.
+- Una categoría **en uso no se borra, se archiva** (`activo = false`): desaparece del desplegable y los
+  registros antiguos siguen mostrando su etiqueta. El borrado real solo está permitido con 0 registros
+  (la action lo comprueba en servidor).
+- `visible_para text[]` restringe la categoría a ciertas personas (mismo patrón que `ofertas_fp`).
+- 🔴 Los prefijos `IPROJ_`/`OFERTA_` están reservados: una categoría con ese código se confundiría con un
+  proyecto interno o una oferta.
+- **Migración `timetracker_categorias.sql` pendiente de ejecutar**. Hasta entonces `CATEGORIAS_FALLBACK`
+  mantiene las 9 de siempre en la rejilla y el editor se muestra en solo lectura con un aviso.
+- Ojo: el **calendario de equipo** (`calendario_eventos`, con visto bueno de socios) es un sistema
+  paralelo y desconectado — pedir vacaciones ahí no las marca en la rejilla.
 
 ---
 
@@ -428,7 +457,10 @@ Registro de horas por proyecto y fase. Todos los roles FP.
 | `catalogo_fases` | Catálogo global de fases (numero, label, seccion, ratio) |
 | `proyecto_fases` | Fases activas de un proyecto (responsables, status, horas_objetivo) |
 | `tasks` | Tasks de un proyecto (codigo, titulo, responsable_ids, status, urgencia) |
-| `time_entries` | Registro de horas (user_id, fecha, hora_inicio, horas, proyecto_id, fase_id) |
+| `time_entries` | Registro de horas (user_id, fecha, hora_inicio, horas, proyecto_id, fase_id, categoria_interna) |
+| `tt_categorias_internas` | Categorías del bloque "Interno" del Time Tracker (`codigo`, `label`, `tipo` `trabajo_interno\|ausencia`, `activo`, `orden`, `visible_para`) |
+| `proyectos_internos` (+`_secciones`, `_fases`) | Proyectos internos de negocio para imputar horas (`equipo`: arquitectura \| marketing) |
+| `ofertas_fp` | Ofertas en negociación a las que imputar horas antes de ser proyecto |
 | `visitas_obra` | Actas de visita (PDFs en Storage, visible_cliente flag) |
 | `due_diligencia` | Informes de due diligencia técnica |
 
@@ -839,6 +871,8 @@ actualizarlo en **ambos**: `lib/types/index.ts` Y `middleware.ts`.
 - Design Hunter (multiselección, vídeos, thumbnails, lightbox, vista Stories)
 - Marketing Post Manager (kanban, tabs Instagram/LinkedIn, media upload, flujo de aprobación, avisos)
 - Repasos de obra (pins sobre plano, visibilidad de 3 niveles, enlaces externos, trazabilidad) — **pendiente ejecutar `repasos_obra.sql`**
+- Time Tracker: categorías internas gestionables desde la UI con tipo `trabajo_interno`/`ausencia`, y
+  análisis que separa horas marcadas de horas trabajadas — **pendiente ejecutar `timetracker_categorias.sql`**
 - Memorias de calidades v2 + v3: warehouse por subcapítulo con productos multi-nivel y Favorito FP por
   nivel, precios con y sin IVA, modo cliente, alta por URL con IA, memoria de anteproyecto automática y
   memoria de ejecución por estancias con control económico y PDF por proveedor

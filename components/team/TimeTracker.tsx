@@ -4,6 +4,11 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { deleteTimeEntry } from '@/app/actions/time-tracker'
 import { MarketingMetricsView } from '@/components/team/marketing/MarketingMetricsView'
+import {
+  CATEGORIAS_FALLBACK, COLOR_AUSENCIA, COLOR_TRABAJO_INTERNO,
+  colorDeTipo, labelDeCodigo,
+  type CategoriaInterna,
+} from '@/lib/time-tracker/categorias'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -61,29 +66,11 @@ interface OfertaFP { id: string; nombre: string; cliente_potencial: string | nul
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
-const INTERNAL_CATS = [
-  'GESTION_FORMA_PRIMA',
-  'LEADS_OFERTAS',
-  'REUNION_CLIENTE_POTENCIAL',
-  'VISITA_PROVEEDOR',
-  'SOPHIQ_GENERAL',
-  'VACACIONES',
-  'BAJA_MEDICA',
-  'FORMACION',
-  'AUSENTE',
-]
-
-const INTERNAL_CATS_LABELS: Record<string, string> = {
-  GESTION_FORMA_PRIMA: 'Gestión FP',
-  LEADS_OFERTAS: 'Leads / Ofertas',
-  REUNION_CLIENTE_POTENCIAL: 'Reunión Cliente',
-  VISITA_PROVEEDOR: 'Visita Proveedor',
-  SOPHIQ_GENERAL: 'Sophiq General',
-  VACACIONES: 'Vacaciones',
-  BAJA_MEDICA: 'Baja Médica',
-  FORMACION: 'Formación',
-  AUSENTE: 'Ausente',
-}
+// Las categorías internas (Gestión FP, Vacaciones, Baja médica…) viven en
+// `tt_categorias_internas` y se editan en /team/proyectos/plantilla. Mientras la
+// migración no esté aplicada usamos las 9 de siempre (CATEGORIAS_FALLBACK).
+const ROW_INTERNO   = '__interno__'
+const ROW_AUSENCIAS = '__ausencias__'
 
 // Catalog section order for legend
 const CATALOG_SECTIONS = ['Anteproyecto', 'Proyecto de ejecución', 'Obra', 'Interiorismo', 'Post venta']
@@ -175,6 +162,7 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
   const [seccionesNegocio, setSeccionesNegocio] = useState<SeccionNegocio[]>([])
   const [fasesNegocio, setFasesNegocio] = useState<FaseNegocio[]>([])
   const [ofertasFP, setOfertasFP] = useState<OfertaFP[]>([])
+  const [categoriasInternas, setCategoriasInternas] = useState<CategoriaInterna[]>(CATEGORIAS_FALLBACK)
   const [grid, setGrid] = useState<Grid>({})
   const [allEntries, setAllEntries] = useState<TimeEntry[]>([])
 
@@ -295,17 +283,21 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
       }
     }
 
-    // Load proyectos internos + ofertas
-    const [{ data: pnData }, { data: snData }, { data: fnData }, { data: ofData }] = await Promise.all([
+    // Load proyectos internos + ofertas + categorías internas
+    const [{ data: pnData }, { data: snData }, { data: fnData }, { data: ofData }, { data: catData }] = await Promise.all([
       supabase.from('proyectos_internos').select('id, nombre, activo, orden, visible_para, equipo').order('orden'),
       supabase.from('proyectos_internos_secciones').select('id, proyecto_id, nombre, orden').order('orden'),
       supabase.from('proyectos_internos_fases').select('id, seccion_id, nombre, orden').order('orden'),
       supabase.from('ofertas_fp').select('id, nombre, cliente_potencial, activo, orden, visible_para').order('orden'),
+      supabase.from('tt_categorias_internas').select('id, codigo, label, tipo, activo, orden, visible_para').order('orden'),
     ])
     if (pnData) setProyectosNegocio(pnData as ProyectoNegocio[])
     if (snData) setSeccionesNegocio(snData as SeccionNegocio[])
     if (fnData) setFasesNegocio(fnData as FaseNegocio[])
     if (ofData) setOfertasFP(ofData as OfertaFP[])
+    // Sin la migración aplicada esto vuelve vacío o con error: nos quedamos con
+    // las categorías por defecto para no dejar la rejilla sin bloque "Interno".
+    if (catData && catData.length > 0) setCategoriasInternas(catData as CategoriaInterna[])
   }, [supabase])
 
   const loadWeek = useCallback(async (monday: string) => {
@@ -588,18 +580,38 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
     return me ? [me, ...others] : teamMembers
   }, [currentUserRole, teamMembers, currentUserId])
 
+  // Categoría interna por código. Incluye las archivadas: un registro antiguo
+  // debe seguir mostrando su etiqueta aunque la categoría ya no se ofrezca.
+  const catByCodigo = useMemo(
+    () => Object.fromEntries(categoriasInternas.map((c) => [c.codigo, c])) as Record<string, CategoriaInterna>,
+    [categoriasInternas]
+  )
+
+  // Horas marcadas que NO son trabajo: vacaciones, baja médica, ausente…
+  // Los valores `iproj_`/`oferta_` no están en el mapa, así que nunca cuentan.
+  const esAusencia = useCallback(
+    (e: TimeEntry) => !!e.categoria_interna && catByCodigo[e.categoria_interna]?.tipo === 'ausencia',
+    [catByCodigo]
+  )
+
   const isLaborEntry = (e: TimeEntry) =>
     !isWeekendDate(e.fecha) && e.hora_inicio >= 9 &&
     (isFridayDate(e.fecha) ? e.hora_inicio < 15 : e.hora_inicio < 18)
 
+  // Horas trabajadas: las marcadas menos las ausencias.
   const weekHours = (uid: string) =>
     allEntries
-      .filter((e) => e.user_id === uid && weekDates.includes(e.fecha) && isLaborEntry(e))
+      .filter((e) => e.user_id === uid && weekDates.includes(e.fecha) && isLaborEntry(e) && !esAusencia(e))
       .reduce((sum, e) => sum + e.horas, 0)
 
   const extraHours = (uid: string) =>
     allEntries
-      .filter((e) => e.user_id === uid && weekDates.includes(e.fecha) && isCellExtra(e.hora_inicio, e.fecha))
+      .filter((e) => e.user_id === uid && weekDates.includes(e.fecha) && isCellExtra(e.hora_inicio, e.fecha) && !esAusencia(e))
+      .reduce((sum, e) => sum + e.horas, 0)
+
+  const ausenciaHours = (uid: string) =>
+    allEntries
+      .filter((e) => e.user_id === uid && weekDates.includes(e.fecha) && esAusencia(e))
       .reduce((sum, e) => sum + e.horas, 0)
 
   // ── Export / Import ────────────────────────────────────────────────────────
@@ -752,8 +764,9 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
         const lbl = oferta?.nombre ?? 'Oferta'
         return { bg: '#F0EBF8', label: lbl.length > 13 ? lbl.slice(0, 12) + '…' : lbl, tc: '#5B3A7E', line1: '', line2: '' }
       }
-      const intLabel = INTERNAL_CATS_LABELS[cat] ?? cat.replace(/_/g, ' ')
-      return { bg: '#F1EFE8', label: intLabel, tc: '#666', line1: '', line2: '' }
+      const categoria = catByCodigo[cat]
+      const { bg, tc } = colorDeTipo(categoria?.tipo ?? 'trabajo_interno')
+      return { bg, label: categoria?.label ?? labelDeCodigo(cat), tc, line1: '', line2: '' }
     }
     const fase = fases.find((f) => f.id === value)
     if (fase) {
@@ -771,12 +784,18 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
   const dropdownOptions = useMemo(() => {
     const q = dropSearch.toLowerCase().trim()
 
-    // Internal categories — match by category code or its display label
-    const filteredIntCats = INTERNAL_CATS.filter((cat) => {
-      if (!q) return true
-      const label = (INTERNAL_CATS_LABELS[cat] ?? cat).toLowerCase()
-      return cat.toLowerCase().includes(q) || label.includes(q) || 'interno'.includes(q)
-    })
+    // Internal categories — activas, visibles para mí, y filtradas por código,
+    // etiqueta o el nombre del bloque ("interno" / "ausencia").
+    const catsDisponibles = categoriasInternas
+      .filter((c) => c.activo)
+      .filter((c) => !c.visible_para || c.visible_para.length === 0 || c.visible_para.includes(currentUserId))
+      .filter((c) => {
+        if (!q) return true
+        const bloque = c.tipo === 'ausencia' ? 'ausencias' : 'interno'
+        return c.label.toLowerCase().includes(q) || c.codigo.toLowerCase().includes(q) || bloque.includes(q)
+      })
+    const filteredCatsTrabajo  = catsDisponibles.filter((c) => c.tipo !== 'ausencia')
+    const filteredCatsAusencia = catsDisponibles.filter((c) => c.tipo === 'ausencia')
 
     // Architecture projects: drill into fases when project name doesn't match.
     // A fase is shown if its label or its section matches; if the project matches,
@@ -823,8 +842,8 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
       .filter(o => !q || o.nombre.toLowerCase().includes(q) || 'oferta'.includes(q) ||
         (o.cliente_potencial ?? '').toLowerCase().includes(q))
 
-    return { filteredIntCats, filteredProjects, filteredProyectosNegocio, filteredOfertas }
-  }, [dropSearch, proyectos, phasesByProject, proyectosNegocio, seccionesNegocio, fasesNegocio, ofertasFP, currentUserId, currentUserRole])
+    return { filteredCatsTrabajo, filteredCatsAusencia, filteredProjects, filteredProyectosNegocio, filteredOfertas }
+  }, [dropSearch, proyectos, phasesByProject, proyectosNegocio, seccionesNegocio, fasesNegocio, ofertasFP, categoriasInternas, currentUserId, currentUserRole])
 
   // ── Notes ──
 
@@ -861,9 +880,14 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
       extraBySec: Record<string, number>
       extra: number
     }> = {}
+    // Dos cubos distintos: trabajo interno (proyectos internos, ofertas y
+    // categorías de tipo trabajo) y ausencias (vacaciones, baja, ausente).
     const internalSections: Record<string, number> = {}
     const internalExtraSections: Record<string, number> = {}
     let internalExtra = 0
+    const ausenciaSections: Record<string, number> = {}
+    const ausenciaExtraSections: Record<string, number> = {}
+    let ausenciaExtra = 0
 
     analysisEntries.forEach((e) => {
       if (e.fase_id) {
@@ -893,7 +917,16 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
           const oferta = ofertasFP.find(o => o.id === ofertaId)
           label = oferta ? `Oferta: ${oferta.nombre}` : 'Oferta'
         } else {
-          label = INTERNAL_CATS_LABELS[e.categoria_interna] ?? e.categoria_interna.replace(/_/g, ' ')
+          const categoria = catByCodigo[e.categoria_interna]
+          label = categoria?.label ?? labelDeCodigo(e.categoria_interna)
+          if (categoria?.tipo === 'ausencia') {
+            ausenciaSections[label] = (ausenciaSections[label] ?? 0) + e.horas
+            if (e.es_extra) {
+              ausenciaExtraSections[label] = (ausenciaExtraSections[label] ?? 0) + e.horas
+              ausenciaExtra += e.horas
+            }
+            return
+          }
         }
         internalSections[label] = (internalSections[label] ?? 0) + e.horas
         if (e.es_extra) {
@@ -920,19 +953,40 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
     const internalTotal = Object.values(internalSections).reduce((a, b) => a + b, 0)
     if (internalTotal > 0) {
       rows.push({
-        id: '__interno__', nombre: 'Interno', codigo: '', total: internalTotal, extra: internalExtra,
+        id: ROW_INTERNO, nombre: 'Interno', codigo: '', total: internalTotal, extra: internalExtra,
         segments: Object.entries(internalSections).map(([label, hours]) => ({
-          seccion: label, hours, extra: internalExtraSections[label] ?? 0, bg: '#F1EFE8', tc: '#666',
+          seccion: label, hours, extra: internalExtraSections[label] ?? 0, ...COLOR_TRABAJO_INTERNO,
         })),
       })
     }
 
-    rows.sort((a, b) => b.total - a.total)
+    const ausenciasTotal = Object.values(ausenciaSections).reduce((a, b) => a + b, 0)
+    if (ausenciasTotal > 0) {
+      rows.push({
+        id: ROW_AUSENCIAS, nombre: 'Ausencias', codigo: '', total: ausenciasTotal, extra: ausenciaExtra,
+        segments: Object.entries(ausenciaSections).map(([label, hours]) => ({
+          seccion: label, hours, extra: ausenciaExtraSections[label] ?? 0, ...COLOR_AUSENCIA,
+        })),
+      })
+    }
+
+    // Ausencias siempre al final: no compite con los proyectos, se lee aparte.
+    rows.sort((a, b) => {
+      if (a.id === ROW_AUSENCIAS) return 1
+      if (b.id === ROW_AUSENCIAS) return -1
+      return b.total - a.total
+    })
     const maxTotal = Math.max(...rows.map((r) => r.total), 1)
-    const grandTotal = rows.reduce((a, r) => a + r.total, 0)
+    const marcadas = rows.reduce((a, r) => a + r.total, 0)
     const grandExtra = rows.reduce((a, r) => a + r.extra, 0)
-    return { rows, maxTotal, grandTotal, grandExtra }
-  }, [analysisEntries, fases, proyectos, fasesNegocio, seccionesNegocio, proyectosNegocio, ofertasFP])
+    const proyectosCount = rows.filter((r) => r.id !== ROW_INTERNO && r.id !== ROW_AUSENCIAS).length
+    return {
+      rows, maxTotal, grandExtra, proyectosCount,
+      marcadas,                            // todo lo que hay en la rejilla
+      ausencias: ausenciasTotal,           // marcado pero no trabajado
+      trabajadas: marcadas - ausenciasTotal,
+    }
+  }, [analysisEntries, fases, proyectos, fasesNegocio, seccionesNegocio, proyectosNegocio, ofertasFP, catByCodigo])
 
   // ── Team analysis chart data ──
 
@@ -957,7 +1011,7 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
         seccion = fase.seccion || 'Otro'
         if (!projectNames[projectId]) projectNames[projectId] = { nombre: proy.nombre, codigo: proy.codigo }
       } else if (e.categoria_interna) {
-        projectId = '__interno__'
+        projectId = ROW_INTERNO
         if (e.categoria_interna.startsWith('iproj_')) {
           const faseId = e.categoria_interna.slice(6)
           const fase = fasesNegocio.find(f => f.id === faseId)
@@ -971,9 +1025,13 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
           const oferta = ofertasFP.find(o => o.id === ofertaId)
           seccion = oferta ? `Oferta: ${oferta.nombre}` : 'Oferta'
         } else {
-          seccion = INTERNAL_CATS_LABELS[e.categoria_interna] ?? e.categoria_interna.replace(/_/g, ' ')
+          const categoria = catByCodigo[e.categoria_interna]
+          seccion = categoria?.label ?? labelDeCodigo(e.categoria_interna)
+          if (categoria?.tipo === 'ausencia') projectId = ROW_AUSENCIAS
         }
-        if (!projectNames[projectId]) projectNames[projectId] = { nombre: 'Interno', codigo: '' }
+        if (!projectNames[projectId]) {
+          projectNames[projectId] = { nombre: projectId === ROW_AUSENCIAS ? 'Ausencias' : 'Interno', codigo: '' }
+        }
       } else {
         return
       }
@@ -993,15 +1051,16 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
     const memberMap = Object.fromEntries(teamMembers.map((m) => [m.id, m]))
 
     const projects = Object.entries(projectMemberMap).map(([projId, memberData]) => {
+      const colorDe = (s: string) => projId === ROW_AUSENCIAS ? COLOR_AUSENCIA : sectionColor(s)
       const members = Object.entries(memberData).map(([memberId, data]) => {
         const total = Object.values(data.sections).reduce((a, b) => a + b, 0)
         const member = memberMap[memberId]
         const segments = CATALOG_SECTIONS
           .filter((s) => data.sections[s])
-          .map((s) => ({ seccion: s, hours: data.sections[s], extra: data.extraBySec[s] ?? 0, ...sectionColor(s) }))
+          .map((s) => ({ seccion: s, hours: data.sections[s], extra: data.extraBySec[s] ?? 0, ...colorDe(s) }))
         Object.entries(data.sections).forEach(([s, h]) => {
           if (!CATALOG_SECTIONS.includes(s)) {
-            segments.push({ seccion: s, hours: h, extra: data.extraBySec[s] ?? 0, ...sectionColor(s) })
+            segments.push({ seccion: s, hours: h, extra: data.extraBySec[s] ?? 0, ...colorDe(s) })
           }
         })
         return {
@@ -1019,14 +1078,23 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
       const totalHours = members.reduce((a, m) => a + m.total, 0)
       const info = projectNames[projId]
       return { id: projId, nombre: info?.nombre ?? projId, codigo: info?.codigo ?? '', totalHours, members }
-    }).sort((a, b) => b.totalHours - a.totalHours)
+    }).sort((a, b) => {
+      if (a.id === ROW_AUSENCIAS) return 1
+      if (b.id === ROW_AUSENCIAS) return -1
+      return b.totalHours - a.totalHours
+    })
 
     const globalMax = Math.max(...projects.flatMap((p) => p.members.map((m) => m.total)), 1)
-    const grandTotal = projects.reduce((a, p) => a + p.totalHours, 0)
+    const marcadas = projects.reduce((a, p) => a + p.totalHours, 0)
     const grandExtra = projects.reduce((a, p) => a + p.members.reduce((b, m) => b + m.extra, 0), 0)
+    const ausencias = projects.find((p) => p.id === ROW_AUSENCIAS)?.totalHours ?? 0
+    const proyectosCount = projects.filter((p) => p.id !== ROW_INTERNO && p.id !== ROW_AUSENCIAS).length
 
-    return { projects, globalMax, grandTotal, grandExtra }
-  }, [teamAnalysisEntries, fases, proyectos, teamMembers, fasesNegocio, seccionesNegocio, proyectosNegocio, ofertasFP])
+    return {
+      projects, globalMax, grandExtra, proyectosCount,
+      marcadas, ausencias, trabajadas: marcadas - ausencias,
+    }
+  }, [teamAnalysisEntries, fases, proyectos, teamMembers, fasesNegocio, seccionesNegocio, proyectosNegocio, ofertasFP, catByCodigo])
 
   // ── Team analysis: grouped by phase ──
 
@@ -1179,8 +1247,13 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
 
           {/* Hours summary + status */}
           <div style={{ display: 'flex', gap: 12, fontSize: 12, color: '#666', alignItems: 'center' }}>
-            <span><strong style={{ color: '#222' }}>{weekHours(viewingUserId)}</strong> h normales</span>
+            <span><strong style={{ color: '#222' }}>{weekHours(viewingUserId)}</strong> h trabajadas</span>
             <span><strong style={{ color: '#D85A30' }}>{extraHours(viewingUserId)}</strong> h extra</span>
+            {ausenciaHours(viewingUserId) > 0 && (
+              <span title="Vacaciones, baja médica, ausente… marcadas pero no trabajadas">
+                <strong style={{ color: COLOR_AUSENCIA.tc }}>{ausenciaHours(viewingUserId)}</strong> h ausencia
+              </span>
+            )}
             {clipboard && (
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 6,
@@ -1372,8 +1445,12 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
             )
           })}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
-            <span style={{ width: 12, height: 12, borderRadius: 2, background: '#F1EFE8', border: '1px solid #ccc', display: 'inline-block' }} />
+            <span style={{ width: 12, height: 12, borderRadius: 2, background: COLOR_TRABAJO_INTERNO.bg, border: '1px solid #ccc', display: 'inline-block' }} />
             <span style={{ color: '#888' }}>Interno</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
+            <span style={{ width: 12, height: 12, borderRadius: 2, background: COLOR_AUSENCIA.bg, border: `1px solid ${COLOR_AUSENCIA.tc}44`, display: 'inline-block' }} />
+            <span style={{ color: COLOR_AUSENCIA.tc }}>Ausencia</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
             <span style={{ width: 12, height: 12, borderRadius: 2, background: 'rgba(216,90,48,0.07)', border: '1px solid #D85A3040', display: 'inline-block' }} />
@@ -1394,7 +1471,7 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
   // ── VIEW: Análisis Personal ──
 
   const renderAnalisis = () => {
-    const { rows, maxTotal, grandTotal, grandExtra } = analysisChartData
+    const { rows, maxTotal, grandExtra, proyectosCount, marcadas, ausencias, trabajadas } = analysisChartData
     const usedSections = CATALOG_SECTIONS.filter((s) => rows.some((r) => r.segments.some((sg) => sg.seccion === s)))
 
     // Period label for the summary stat
@@ -1498,19 +1575,30 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
           )}
         </div>
 
-        {/* Grand total stat */}
-        {!analysisLoading && grandTotal > 0 && (
+        {/* Grand total stat — el número grande son horas TRABAJADAS; las
+            marcadas incluyen además vacaciones, bajas y ausencias. */}
+        {!analysisLoading && marcadas > 0 && (
           <div style={{ display: 'flex', gap: 40, marginBottom: 40, alignItems: 'flex-end' }}>
             <div>
               <div style={{ fontSize: 52, fontWeight: 200, color: '#1A1A1A', lineHeight: 1, letterSpacing: '-0.02em' }}>
-                {grandTotal}
+                {trabajadas}
               </div>
               <div style={{ fontSize: 11, color: '#AAA', textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: 4 }}>
-                horas {periodLabel}
+                horas trabajadas {periodLabel}
               </div>
             </div>
+            <div style={{ paddingBottom: 6 }} title="Todo lo que hay marcado en la rejilla, ausencias incluidas">
+              <div style={{ fontSize: 24, fontWeight: 300, color: '#555' }}>{marcadas}</div>
+              <div style={{ fontSize: 10, color: '#AAA', textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: 2 }}>marcadas</div>
+            </div>
+            {ausencias > 0 && (
+              <div style={{ paddingBottom: 6 }} title="Vacaciones, baja médica, ausente…">
+                <div style={{ fontSize: 24, fontWeight: 300, color: COLOR_AUSENCIA.tc }}>{ausencias}</div>
+                <div style={{ fontSize: 10, color: '#AAA', textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: 2 }}>ausencias</div>
+              </div>
+            )}
             <div style={{ paddingBottom: 6 }}>
-              <div style={{ fontSize: 24, fontWeight: 300, color: '#555' }}>{rows.filter(r => r.id !== '__interno__').length}</div>
+              <div style={{ fontSize: 24, fontWeight: 300, color: '#555' }}>{proyectosCount}</div>
               <div style={{ fontSize: 10, color: '#AAA', textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: 2 }}>proyectos</div>
             </div>
             {grandExtra > 0 && (
@@ -1643,10 +1731,16 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
                 </div>
               )
             })}
-            {rows.some((r) => r.id === '__interno__') && (
+            {rows.some((r) => r.id === ROW_INTERNO) && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ width: 10, height: 10, borderRadius: 2, background: '#F1EFE8', border: '1px solid #ccc', display: 'inline-block', flexShrink: 0 }} />
-                <span style={{ fontSize: 11, color: '#777' }}>Interno</span>
+                <span style={{ width: 10, height: 10, borderRadius: 2, background: COLOR_TRABAJO_INTERNO.bg, border: '1px solid #ccc', display: 'inline-block', flexShrink: 0 }} />
+                <span style={{ fontSize: 11, color: '#777' }}>Interno (trabajado, sin proyecto)</span>
+              </div>
+            )}
+            {rows.some((r) => r.id === ROW_AUSENCIAS) && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ width: 10, height: 10, borderRadius: 2, background: COLOR_AUSENCIA.bg, border: `1px solid ${COLOR_AUSENCIA.tc}44`, display: 'inline-block', flexShrink: 0 }} />
+                <span style={{ fontSize: 11, color: '#777' }}>Ausencias (marcadas, no trabajadas)</span>
               </div>
             )}
             {rows.some((r) => r.extra > 0) && (
@@ -1689,7 +1783,7 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
   // ── VIEW: Team Análisis ──
 
   const renderTeamAnalisis = () => {
-    const { projects, globalMax, grandTotal, grandExtra } = teamAnalysisChartData
+    const { projects, globalMax, grandExtra, proyectosCount, marcadas, ausencias, trabajadas } = teamAnalysisChartData
     const { projects: phaseProjects, globalMax: phaseGlobalMax } = teamAnalysisPhaseData
 
     const periodLabel = teamAnalysisPeriod === 'week'
@@ -1813,19 +1907,29 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
           )}
         </div>
 
-        {/* Grand totals */}
-        {!teamAnalysisLoading && grandTotal > 0 && (
+        {/* Grand totals — trabajadas vs marcadas, igual que en el personal */}
+        {!teamAnalysisLoading && marcadas > 0 && (
           <div style={{ display: 'flex', gap: 40, marginBottom: 40, alignItems: 'flex-end' }}>
             <div>
               <div style={{ fontSize: 52, fontWeight: 200, color: '#1A1A1A', lineHeight: 1, letterSpacing: '-0.02em' }}>
-                {grandTotal}
+                {trabajadas}
               </div>
               <div style={{ fontSize: 11, color: '#AAA', textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: 4 }}>
-                horas equipo {periodLabel}
+                horas trabajadas {periodLabel}
               </div>
             </div>
+            <div style={{ paddingBottom: 6 }} title="Todo lo que hay marcado en la rejilla, ausencias incluidas">
+              <div style={{ fontSize: 24, fontWeight: 300, color: '#555' }}>{marcadas}</div>
+              <div style={{ fontSize: 10, color: '#AAA', textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: 2 }}>marcadas</div>
+            </div>
+            {ausencias > 0 && (
+              <div style={{ paddingBottom: 6 }} title="Vacaciones, baja médica, ausente…">
+                <div style={{ fontSize: 24, fontWeight: 300, color: COLOR_AUSENCIA.tc }}>{ausencias}</div>
+                <div style={{ fontSize: 10, color: '#AAA', textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: 2 }}>ausencias</div>
+              </div>
+            )}
             <div style={{ paddingBottom: 6 }}>
-              <div style={{ fontSize: 24, fontWeight: 300, color: '#555' }}>{projects.filter(p => p.id !== '__interno__').length}</div>
+              <div style={{ fontSize: 24, fontWeight: 300, color: '#555' }}>{proyectosCount}</div>
               <div style={{ fontSize: 10, color: '#AAA', textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: 2 }}>proyectos</div>
             </div>
             <div style={{ paddingBottom: 6 }}>
@@ -1976,10 +2080,16 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
                 </div>
               )
             })}
-            {projects.some((p) => p.id === '__interno__') && (
+            {projects.some((p) => p.id === ROW_INTERNO) && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ width: 10, height: 10, borderRadius: 2, background: '#F1EFE8', border: '1px solid #ccc', display: 'inline-block', flexShrink: 0 }} />
-                <span style={{ fontSize: 11, color: '#777' }}>Interno</span>
+                <span style={{ width: 10, height: 10, borderRadius: 2, background: COLOR_TRABAJO_INTERNO.bg, border: '1px solid #ccc', display: 'inline-block', flexShrink: 0 }} />
+                <span style={{ fontSize: 11, color: '#777' }}>Interno (trabajado, sin proyecto)</span>
+              </div>
+            )}
+            {projects.some((p) => p.id === ROW_AUSENCIAS) && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ width: 10, height: 10, borderRadius: 2, background: COLOR_AUSENCIA.bg, border: `1px solid ${COLOR_AUSENCIA.tc}44`, display: 'inline-block', flexShrink: 0 }} />
+                <span style={{ fontSize: 11, color: '#777' }}>Ausencias (marcadas, no trabajadas)</span>
               </div>
             )}
             {grandExtra > 0 && (
@@ -2059,7 +2169,7 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
 
   // ── Main Render ──
 
-  const { filteredIntCats, filteredProjects, filteredProyectosNegocio, filteredOfertas } = dropdownOptions
+  const { filteredCatsTrabajo, filteredCatsAusencia, filteredProjects, filteredProyectosNegocio, filteredOfertas } = dropdownOptions
 
   return (
     <div style={{ fontFamily: "'Inter', 'system-ui', sans-serif", background: '#F8F7F4', minHeight: '100vh', color: '#222' }}>
@@ -2168,34 +2278,39 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
                 </div>
               )}
 
-              {/* Internal categories */}
-              {filteredIntCats.length > 0 && (
-                <>
+              {/* Internal categories — trabajo interno y ausencias en bloques
+                  separados: no es lo mismo dedicar la hora a Gestión FP que no
+                  haberla trabajado. */}
+              {([
+                { titulo: 'Interno',   cats: filteredCatsTrabajo,  color: COLOR_TRABAJO_INTERNO },
+                { titulo: 'Ausencias', cats: filteredCatsAusencia, color: COLOR_AUSENCIA },
+              ] as const).map(({ titulo, cats, color }) => cats.length > 0 && (
+                <div key={titulo}>
                   <div style={{ padding: '7px 12px 3px', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#BBB', fontWeight: 600 }}>
-                    Interno
+                    {titulo}
                   </div>
-                  {filteredIntCats.map((cat) => {
-                    const val = `int_${cat}`
+                  {cats.map((cat) => {
+                    const val = `int_${cat.codigo}`
                     const isSelected = getCell(openCell.uid, openCell.fecha, openCell.h) === val
                     return (
                       <div
-                        key={cat}
+                        key={cat.id}
                         onClick={() => { setCell(openCell.uid, openCell.fecha, openCell.h, val); setOpenCell(null) }}
                         style={{
                           padding: '5px 12px', fontSize: 11, cursor: 'pointer',
-                          background: isSelected ? '#F1EFE8' : 'transparent',
-                          color: isSelected ? '#444' : '#666',
+                          background: isSelected ? color.bg : 'transparent',
+                          color: isSelected ? color.tc : '#666',
                           fontWeight: isSelected ? 500 : 400,
                         }}
                         onMouseEnter={(e) => { if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = '#F8F6F1' }}
                         onMouseLeave={(e) => { if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = 'transparent' }}
                       >
-                        {INTERNAL_CATS_LABELS[cat] ?? cat.replace(/_/g, ' ')}
+                        {cat.label}
                       </div>
                     )
                   })}
-                </>
-              )}
+                </div>
+              ))}
 
               {/* Projects + phases */}
               {filteredProjects.map(({ proyecto, fases: pFases }) => (
@@ -2300,7 +2415,7 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
                 </>
               )}
 
-              {filteredIntCats.length === 0 && filteredProjects.length === 0 && filteredProyectosNegocio.length === 0 && filteredOfertas.length === 0 && (
+              {filteredCatsTrabajo.length === 0 && filteredCatsAusencia.length === 0 && filteredProjects.length === 0 && filteredProyectosNegocio.length === 0 && filteredOfertas.length === 0 && (
                 <div style={{ padding: '18px 12px', fontSize: 11, color: '#BBB', textAlign: 'center' }}>
                   Sin resultados
                 </div>

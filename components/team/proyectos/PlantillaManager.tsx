@@ -3,6 +3,14 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { CatalogoFase, PlantillaTask } from '@/lib/types'
+import {
+  TIPOS_CATEGORIA, codigoDesdeLabel,
+  type CategoriaInterna, type TipoCategoriaInterna,
+} from '@/lib/time-tracker/categorias'
+import {
+  createCategoriaInterna, updateCategoriaInterna,
+  deleteCategoriaInterna, reordenarCategoriasInternas,
+} from '@/app/actions/time-tracker-categorias'
 
 // ── New exported types ────────────────────────────────────────────────────────
 
@@ -57,6 +65,9 @@ interface Props {
   fasesNegocio:     FaseNegocio[]
   ofertasFP:        OfertaFP[]
   teamMembers:      TeamMemberSimple[]
+  categoriasInternas:     CategoriaInterna[]
+  usoCategorias:          Record<string, number>
+  categoriasDisponibles:  boolean
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -945,13 +956,255 @@ function OfertasTab({ initialOfertas, teamMembers }: { initialOfertas: OfertaFP[
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// CATEGORÍAS INTERNAS TAB
+//
+// El bloque "Interno" del desplegable del Time Tracker. El `tipo` es lo que
+// separa, en los análisis, las horas trabajadas de las simplemente marcadas.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function CategoriasInternasTab({
+  initialCategorias, uso, disponible, teamMembers,
+}: {
+  initialCategorias: CategoriaInterna[]
+  uso:               Record<string, number>
+  disponible:        boolean
+  teamMembers:       TeamMemberSimple[]
+}) {
+  const [cats, setCats]     = useState(initialCategorias)
+  const [adding, setAdding] = useState(false)
+  const [form, setForm]     = useState<{ label: string; tipo: TipoCategoriaInterna }>({ label: '', tipo: 'trabajo_interno' })
+  const [error, setError]   = useState<string | null>(null)
+
+  const ordenadas = useMemo(() => [...cats].sort((a, b) => a.orden - b.orden), [cats])
+
+  const addCategoria = async () => {
+    setError(null)
+    const res = await createCategoriaInterna({ label: form.label, tipo: form.tipo })
+    if ('error' in res) { setError(res.error); return }
+    setCats(prev => [...prev, res.categoria])
+    setForm({ label: '', tipo: 'trabajo_interno' })
+    setAdding(false)
+  }
+
+  const guardar = async (id: string, patch: Partial<CategoriaInterna>) => {
+    setError(null)
+    const res = await updateCategoriaInterna(id, patch as Parameters<typeof updateCategoriaInterna>[1])
+    if ('error' in res) { setError(res.error); return }
+    setCats(prev => prev.map(c => c.id === id ? { ...c, ...patch } : c))
+  }
+
+  const eliminar = async (cat: CategoriaInterna) => {
+    setError(null)
+    if (!confirm(`¿Eliminar "${cat.label}" definitivamente?`)) return
+    const res = await deleteCategoriaInterna(cat.id)
+    if ('error' in res) { setError(res.error); return }
+    setCats(prev => prev.filter(c => c.id !== cat.id))
+  }
+
+  const mover = async (id: string, dir: -1 | 1) => {
+    const idx = ordenadas.findIndex(c => c.id === id)
+    const dest = idx + dir
+    if (idx < 0 || dest < 0 || dest >= ordenadas.length) return
+    const reordenadas = [...ordenadas]
+    ;[reordenadas[idx], reordenadas[dest]] = [reordenadas[dest], reordenadas[idx]]
+    setCats(reordenadas.map((c, i) => ({ ...c, orden: i })))
+    const res = await reordenarCategoriasInternas(reordenadas.map(c => c.id))
+    if ('error' in res) setError(res.error)
+  }
+
+  return (
+    <div className="max-w-3xl">
+      <p className="text-sm font-light text-meta mb-2">
+        Las opciones del bloque <strong className="font-normal">Interno</strong> del Time Tracker: lo que no
+        cuelga de un proyecto. Su <strong className="font-normal">tipo</strong> decide cómo cuentan en los análisis.
+      </p>
+      <ul className="text-[11px] font-light text-meta/80 mb-6 space-y-0.5">
+        {TIPOS_CATEGORIA.map(t => (
+          <li key={t.id}>· <span className="text-ink">{t.label}</span> — {t.descripcion}</li>
+        ))}
+      </ul>
+
+      {!disponible && (
+        <div className="mb-6 border border-amber-500/40 bg-amber-50 px-4 py-3 text-[11px] font-light text-amber-900">
+          Falta ejecutar la migración <code className="font-mono">timetracker_categorias.sql</code>. El Time Tracker
+          sigue funcionando con las 9 categorías por defecto, pero desde aquí no se puede editar nada todavía.
+        </div>
+      )}
+
+      {error && (
+        <div className="mb-4 border border-red-300 bg-red-50 px-4 py-2.5 text-[11px] font-light text-red-700">
+          {error}
+        </div>
+      )}
+
+      <div className="mb-4 space-y-2">
+        {ordenadas.map((cat, idx) => {
+          const registros = uso[cat.codigo] ?? 0
+          return (
+            <div key={cat.id} className="flex items-center gap-3 px-4 py-3 border border-ink/10 group">
+              {/* Orden en el desplegable */}
+              <div className="flex flex-col shrink-0">
+                <button
+                  onClick={() => mover(cat.id, -1)}
+                  disabled={!disponible || idx === 0}
+                  className="text-[9px] leading-none text-meta/40 hover:text-ink disabled:opacity-20 disabled:hover:text-meta/40"
+                >▲</button>
+                <button
+                  onClick={() => mover(cat.id, 1)}
+                  disabled={!disponible || idx === ordenadas.length - 1}
+                  className="text-[9px] leading-none text-meta/40 hover:text-ink disabled:opacity-20 disabled:hover:text-meta/40 mt-1"
+                >▼</button>
+              </div>
+
+              {/* Nombre + código */}
+              <div className="flex-1 min-w-0">
+                <input
+                  defaultValue={cat.label}
+                  disabled={!disponible}
+                  onBlur={e => {
+                    const label = e.target.value.trim()
+                    if (label && label !== cat.label) guardar(cat.id, { label })
+                    else e.target.value = cat.label
+                  }}
+                  className={`w-full text-sm font-light bg-transparent border border-transparent hover:border-ink/15 focus:border-ink/40 px-1.5 py-1 focus:outline-none ${
+                    cat.activo ? 'text-ink' : 'text-meta/50 line-through'
+                  }`}
+                />
+                <p className="text-[9px] font-mono text-meta/40 mt-0.5 px-1.5">
+                  {cat.codigo}
+                  {registros > 0 && <span className="font-sans ml-2">· {registros} registro{registros === 1 ? '' : 's'}</span>}
+                </p>
+              </div>
+
+              {/* Tipo */}
+              <select
+                value={cat.tipo}
+                disabled={!disponible}
+                onChange={e => guardar(cat.id, { tipo: e.target.value as TipoCategoriaInterna })}
+                className="text-[10px] tracking-widest uppercase font-light border border-ink/20 bg-white px-2 py-1.5 shrink-0 focus:outline-none focus:border-ink/40"
+              >
+                {TIPOS_CATEGORIA.map(t => (
+                  <option key={t.id} value={t.id}>{t.label}</option>
+                ))}
+              </select>
+
+              <PeoplePickerField
+                teamMembers={teamMembers}
+                visiblePara={cat.visible_para}
+                onChange={val => guardar(cat.id, { visible_para: val })}
+              />
+
+              <label className="flex items-center gap-2 cursor-pointer shrink-0">
+                <input
+                  type="checkbox"
+                  checked={cat.activo}
+                  disabled={!disponible}
+                  onChange={e => guardar(cat.id, { activo: e.target.checked })}
+                  className="accent-ink"
+                />
+                <span className="text-[10px] tracking-widest uppercase font-light text-meta">
+                  {cat.activo ? 'Activa' : 'Archivada'}
+                </span>
+              </label>
+
+              {/* Solo se borra de verdad lo que nadie ha usado; el resto se archiva */}
+              <button
+                onClick={() => eliminar(cat)}
+                disabled={!disponible || registros > 0}
+                title={registros > 0
+                  ? `Tiene ${registros} registro(s) de horas: archívala para no perder el histórico`
+                  : 'Eliminar definitivamente'}
+                className="text-[10px] tracking-widest uppercase font-light text-meta/30 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-0 shrink-0"
+              >
+                Eliminar
+              </button>
+            </div>
+          )
+        })}
+      </div>
+
+      {adding ? (
+        <div className="border border-dashed border-ink/30 p-4">
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <div>
+              <label className="block text-[9px] tracking-widest uppercase font-light text-meta/60 mb-1">
+                Nombre *
+              </label>
+              <input
+                autoFocus
+                value={form.label}
+                onChange={e => setForm(f => ({ ...f, label: e.target.value }))}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') addCategoria()
+                  if (e.key === 'Escape') { setAdding(false); setForm({ label: '', tipo: 'trabajo_interno' }) }
+                }}
+                placeholder="Ej. Asuntos propios"
+                className="w-full text-sm font-light border border-ink/20 px-2 py-1.5 bg-white focus:outline-none focus:border-ink/40"
+              />
+              {form.label.trim() && (
+                <p className="text-[9px] font-mono text-meta/40 mt-1">
+                  código: {codigoDesdeLabel(form.label) || '—'}
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="block text-[9px] tracking-widest uppercase font-light text-meta/60 mb-1">
+                Tipo
+              </label>
+              <select
+                value={form.tipo}
+                onChange={e => setForm(f => ({ ...f, tipo: e.target.value as TipoCategoriaInterna }))}
+                className="w-full text-sm font-light border border-ink/20 px-2 py-1.5 bg-white focus:outline-none focus:border-ink/40"
+              >
+                {TIPOS_CATEGORIA.map(t => (
+                  <option key={t.id} value={t.id}>{t.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={addCategoria}
+              disabled={!form.label.trim()}
+              className="text-[10px] tracking-widest uppercase font-light px-4 py-2 bg-ink text-cream hover:bg-ink/80 transition-colors disabled:opacity-30"
+            >
+              Agregar categoría
+            </button>
+            <button
+              onClick={() => { setAdding(false); setForm({ label: '', tipo: 'trabajo_interno' }); setError(null) }}
+              className="text-[10px] tracking-widest uppercase font-light text-meta hover:text-ink transition-colors"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => setAdding(true)}
+          disabled={!disponible}
+          className="mt-1 text-[10px] tracking-widest uppercase font-light text-meta hover:text-ink transition-colors border border-dashed border-ink/20 hover:border-ink/40 px-4 py-3 w-full text-center disabled:opacity-30"
+        >
+          + Agregar categoría
+        </button>
+      )}
+
+      <p className="mt-6 text-[10px] font-light text-meta/60 leading-relaxed">
+        El código no se edita: es la clave con la que están guardados los registros de horas. Renombrar la
+        categoría es seguro; archivarla la saca del desplegable sin tocar el histórico.
+      </p>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // MAIN COMPONENT
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function PlantillaManager({
   catalogoFases, initialTasks, proyectosNegocio, seccionesNegocio, fasesNegocio, ofertasFP, teamMembers,
+  categoriasInternas, usoCategorias, categoriasDisponibles,
 }: Props) {
-  const [activeTab, setActiveTab]         = useState<'plantilla' | 'internos' | 'ofertas'>('plantilla')
+  const [activeTab, setActiveTab]         = useState<'plantilla' | 'internos' | 'ofertas' | 'categorias'>('plantilla')
   const [localFases, setLocalFases]       = useState<CatalogoFase[]>(catalogoFases)
   const [tasks, setTasks]                 = useState<PlantillaTask[]>(initialTasks)
   const [expandedFases, setExpandedFases] = useState<string[]>([])
@@ -1067,9 +1320,10 @@ export default function PlantillaManager({
     )
 
   const TABS = [
-    { id: 'plantilla' as const, label: 'Plantilla de tasks' },
-    { id: 'internos'  as const, label: 'Proyectos internos' },
-    { id: 'ofertas'   as const, label: 'Ofertas' },
+    { id: 'plantilla'  as const, label: 'Plantilla de tasks' },
+    { id: 'internos'   as const, label: 'Proyectos internos' },
+    { id: 'ofertas'    as const, label: 'Ofertas' },
+    { id: 'categorias' as const, label: 'Categorías internas' },
   ]
 
   return (
@@ -1174,6 +1428,16 @@ export default function PlantillaManager({
       {/* Tab: Ofertas */}
       {activeTab === 'ofertas' && (
         <OfertasTab initialOfertas={ofertasFP} teamMembers={teamMembers} />
+      )}
+
+      {/* Tab: Categorías internas */}
+      {activeTab === 'categorias' && (
+        <CategoriasInternasTab
+          initialCategorias={categoriasInternas}
+          uso={usoCategorias}
+          disponible={categoriasDisponibles}
+          teamMembers={teamMembers}
+        />
       )}
     </div>
   )

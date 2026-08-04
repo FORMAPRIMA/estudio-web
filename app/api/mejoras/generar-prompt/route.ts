@@ -113,6 +113,14 @@ por el equipo y generar un prompt preciso y accionable para un asistente de IA d
 ### Proyectos — todos los roles FP
 - app/team/proyectos/ → fases, tasks, kanban, documentación
 
+### Time Tracker (/team/time-tracker) — todos los roles FP
+- components/team/TimeTracker.tsx: rejilla semanal hora × día. Cada celda es un time_entries (unique user_id+fecha+hora_inicio)
+- El desplegable ofrece 4 orígenes: fases de proyecto (→ fase_id) · categorías internas (→ categoria_interna = CÓDIGO) · proyectos internos de negocio (→ categoria_interna = 'iproj_<faseId>') · ofertas (→ categoria_interna = 'oferta_<id>')
+- Categorías internas en tabla tt_categorias_internas (codigo, label, tipo, activo, orden, visible_para), editables en /team/proyectos/plantilla → tab "Categorías internas". lib/time-tracker/categorias.ts (tipos, colores, codigoDesdeLabel, CATEGORIAS_FALLBACK) + app/actions/time-tracker-categorias.ts
+- tipo = 'trabajo_interno' | 'ausencia'. Es lo que separa HORAS MARCADAS (todo lo que hay en la rejilla) de HORAS TRABAJADAS (marcadas − ausencias) en los KPIs y en las barras (filas "Interno" y "Ausencias", esta última siempre al final)
+- El código NO se edita (es la clave del histórico en time_entries.categoria_interna) y una categoría en uso no se borra: se archiva (activo=false)
+- Migración timetracker_categorias.sql PENDIENTE de ejecutar; hasta entonces CATEGORIAS_FALLBACK mantiene las 9 de siempre y el editor va en solo lectura
+
 ### Clientes — fp_partner, fp_manager (base-datos); todos (plataforma)
 - app/team/clientes/
 
@@ -124,6 +132,7 @@ por el equipo y generar un prompt preciso y accionable para un asistente de IA d
 - profiles (id, nombre, rol)
 - leads, clientes, propuestas, contratos
 - proyectos, proyecto_fases, tasks, time_entries
+- tt_categorias_internas (categorías del bloque Interno del Time Tracker; tipo trabajo_interno|ausencia), proyectos_internos(+_secciones/_fases), ofertas_fp
 - marketing_posts, marketing_post_media, marketing_post_comentarios
 - design_hunter_viajes, design_hunter_entries (media_urls text[])
 - expense_scans, bank_statements, bank_transactions
