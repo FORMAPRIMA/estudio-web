@@ -48,7 +48,7 @@ export function ProyectoDetalle({ proyecto }: { proyecto: WebProyecto }) {
             ← {locale === 'en' ? 'Projects' : 'Proyectos'}
           </Link>
           {tipologia && <Reveal as="p" style={{ fontSize: display.eyebrow, letterSpacing: site.track.ultra, textTransform: 'uppercase', opacity: 0.85, margin: '0 0 14px' }}>{tipologia}</Reveal>}
-          <Reveal as="h1" delay={100} style={{ fontSize: display.hero, fontWeight: 300, letterSpacing: '-0.01em', lineHeight: 1.02, margin: 0, maxWidth: '18ch' }}>{proyecto.nombre}</Reveal>
+          <Reveal as="h1" delay={100} style={{ fontSize: display.hero, fontWeight: 300, letterSpacing: '0', lineHeight: 1.18, margin: 0, maxWidth: '24ch' }}>{proyecto.nombre}</Reveal>
         </div>
       </section>
 

@@ -52,11 +52,13 @@ export const CONTENT_SCHEMA: PageSchema[] = [
       {
         seccion: 'hero',
         label:   'Portada',
-        hint:    'Titular sobre las imágenes de fondo widescreen.',
+        hint:    'Por defecto la Home es SOLO imagen widescreen: el texto central está oculto y el pie con el nombre del proyecto sí se ve. El texto sigue guardado aunque no se muestre.',
         fields: [
+          { clave: 'mostrar_texto', label: '¿Mostrar el texto central sobre la imagen?', tipo: 'texto', hint: 'Escribe "si" para que aparezcan antetítulo, titular y subtítulo. Vacío o "no" = solo imagen.', mobileable: false },
           { clave: 'eyebrow',  label: 'Antetítulo', tipo: 'texto' },
           { clave: 'titulo',   label: 'Titular',    tipo: 'texto' },
           { clave: 'subtitulo',label: 'Subtítulo',  tipo: 'texto' },
+          { clave: 'mostrar_pie', label: '¿Mostrar el pie con el proyecto?', tipo: 'texto', hint: 'El "01 / 10 · NOMBRE · UBICACIÓN" de la esquina inferior izquierda. Se muestra salvo que escribas "no".', mobileable: false },
         ],
       },
     ],
@@ -160,6 +162,18 @@ export const CONTENT_SCHEMA: PageSchema[] = [
           { clave: 'eyebrow', label: 'Antetítulo', tipo: 'texto' },
           { clave: 'titulo',  label: 'Titular',    tipo: 'texto' },
           { clave: 'intro',   label: 'Introducción', tipo: 'rich' },
+        ],
+      },
+      {
+        seccion: 'confianza',
+        label:   'Confianza (lo que hace que escriban)',
+        hint:    'Lo que se lee al lado del formulario. Un compromiso concreto convierte mucho más que un «te responderemos pronto».',
+        fields: [
+          { clave: 'quien',     label: 'Quién responde',        tipo: 'texto', hint: 'Ej.: «Te responde Ana Cristina, de nuestro equipo.» Poner nombre y cara humaniza y sube la conversión.' },
+          { clave: 'respuesta', label: 'Compromiso de respuesta', tipo: 'texto', hint: 'Ej.: «Respondemos en menos de 24 h laborables.» Sale junto al botón de enviar: prométe solo lo que se cumpla.' },
+          { clave: 'prueba_1',  label: 'Prueba 1',              tipo: 'texto', hint: 'Dato concreto: proyectos entregados, m² gestionados, años de estudio…' },
+          { clave: 'prueba_2',  label: 'Prueba 2',              tipo: 'texto' },
+          { clave: 'prueba_3',  label: 'Prueba 3',              tipo: 'texto' },
         ],
       },
       {

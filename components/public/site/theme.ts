@@ -4,13 +4,13 @@
 // y el resto del proyecto), no Tailwind: este objeto es la fuente única de verdad.
 
 export const site = {
-  font: 'var(--font-hanken), "Hanken Grotesk", system-ui, sans-serif',
+  font: 'var(--font-helixa), "Helixa", system-ui, sans-serif',
   color: {
     ink:      '#141414',   // texto sobre claro
     cream:    '#F4F3F0',   // fondo claro
     stage:    '#0D0D0D',   // fondo oscuro (hero/vídeo)
     white:    '#FFFFFF',
-    accent:   '#D85A30',   // naranja Forma Prima
+    accent:   '#6F6F6A',   // gris medio (antes naranja FP; decisión de Jose, jul 2026)
     muted:    'rgba(255,255,255,0.62)',
     mutedInk: 'rgba(20,20,20,0.55)',
     hairline: 'rgba(255,255,255,0.16)',
@@ -33,7 +33,10 @@ export const MOBILE_QUERY = '(max-width: 640px)'
 
 // Escala tipográfica display, responsiva con clamp().
 export const display = {
-  hero:  'clamp(2.6rem, 7vw, 6rem)',
+  // Titulares de hero sobre imagen widescreen. Escala deliberadamente contenida:
+  // el protagonista es la foto y el texto acompaña (antes clamp(2.6rem,7vw,6rem),
+  // 96 px en escritorio, demasiado para el tono editorial que busca Jose).
+  hero:  'clamp(1.55rem, 2.9vw, 2.7rem)',
   h1:    'clamp(2rem, 5vw, 4rem)',
   h2:    'clamp(1.5rem, 3.5vw, 2.6rem)',
   eyebrow: 'clamp(0.62rem, 0.9vw, 0.72rem)',

@@ -7,6 +7,8 @@ import { sendEmail, wrapEmail } from '@/lib/email'
 import { crearEspacioCore, enviarCorreoBienvenida } from '@/lib/espacio/create'
 import { revalidatePath } from 'next/cache'
 import { slugifyProyecto, type WebProyecto, type ProyectoMedia } from '@/lib/web-publica'
+import { resumenCualificacion } from '@/lib/contacto'
+import { LEADS_TO } from '@/lib/notificaciones'
 
 const PATH = '/team/marketing/web-publica'
 
@@ -178,7 +180,13 @@ export async function updateWebProyecto(
     await requireMarketing()
     const admin = createAdminClient()
     const patch: Record<string, unknown> = {}
-    if (data.nombre !== undefined)    patch.nombre = data.nombre?.trim() || null
+    // El nombre es NOT NULL en BD: sin esta guarda, vaciarlo devolvía el error
+    // crudo de Postgres y se perdía TODO lo demás editado en esa tarjeta.
+    if (data.nombre !== undefined) {
+      const nombre = data.nombre?.trim()
+      if (!nombre) return { error: 'El nombre del proyecto no puede quedar vacío.' }
+      patch.nombre = nombre
+    }
     if (data.ubicacion !== undefined) patch.ubicacion = data.ubicacion?.trim() || null
     if (data.anio !== undefined)      patch.anio = data.anio?.trim() || null
     if (data.nota !== undefined)      patch.nota = data.nota?.trim() || null
@@ -268,7 +276,7 @@ function contactRateLimit(key: string): boolean {
 // Aviso por email al equipo de captación (no bloquea la respuesta al visitante).
 async function avisarEquipoContacto(d: {
   nombre: string; email: string; telefono?: string; empresa?: string; mensaje?: string
-  comercial: boolean; repetido: boolean
+  comercial: boolean; repetido: boolean; cualificacion?: string
 }): Promise<void> {
   const body = `
     <p style="margin:0 0 16px;font-size:15px;color:#1A1A1A;">${d.repetido ? 'Contacto recurrente desde la web (ya tenía espacio; se le ha reenviado el enlace).' : 'Nuevo contacto desde la web. Se ha creado su espacio de cliente y se le ha enviado el enlace de acceso.'}</p>
@@ -277,17 +285,31 @@ async function avisarEquipoContacto(d: {
       <tr><td style="padding:4px 16px 4px 0;color:#1A1A1A80;">Email</td><td style="padding:4px 0;">${escapeHtml(d.email)}</td></tr>
       ${d.telefono ? `<tr><td style="padding:4px 16px 4px 0;color:#1A1A1A80;">Teléfono</td><td style="padding:4px 0;">${escapeHtml(d.telefono)}</td></tr>` : ''}
       ${d.empresa ? `<tr><td style="padding:4px 16px 4px 0;color:#1A1A1A80;">Empresa</td><td style="padding:4px 0;">${escapeHtml(d.empresa)}</td></tr>` : ''}
+      ${d.cualificacion ? `<tr><td style="padding:4px 16px 4px 0;color:#1A1A1A80;">Proyecto</td><td style="padding:4px 0;">${escapeHtml(d.cualificacion)}</td></tr>` : ''}
       <tr><td style="padding:4px 16px 4px 0;color:#1A1A1A80;">Comerciales</td><td style="padding:4px 0;">${d.comercial ? 'Sí acepta' : 'No'}</td></tr>
     </table>
     ${d.mensaje ? `<p style="margin:16px 0 0;font-size:14px;color:#1A1A1A;white-space:pre-wrap;">${escapeHtml(d.mensaje)}</p>` : ''}
     <p style="margin:20px 0 0;font-size:12px;color:#1A1A1A60;">Disponible en Captación → Leads.</p>
   `
   await sendEmail({
-    to: CONTACT_TO,
+    to: LEADS_TO,          // Ana (biz dev) atiende; contacto@ queda como buzón del estudio
     replyTo: d.email,
     subject: `Nuevo contacto web — ${d.nombre}`,
     html: wrapEmail(body),
   })
+}
+
+/** Marca como completada la fila de captura progresiva de esa sesión. Silencioso:
+ *  si la migración no está aplicada o el id no existe, el envío sigue su curso. */
+async function cerrarParcial(admin: ReturnType<typeof createAdminClient>, parcialId: string | undefined, leadId: string | null): Promise<void> {
+  if (!parcialId) return
+  try {
+    await admin.from('web_contacto_parcial')
+      .update({ completado: true, lead_id: leadId, updated_at: new Date().toISOString() })
+      .eq('id', parcialId)
+  } catch (err) {
+    console.error('[web-publica] cerrarParcial:', err)
+  }
 }
 
 /**
@@ -310,6 +332,14 @@ export async function submitContactoWeb(data: {
   comercial?: boolean
   /** Honeypot anti-bot: debe llegar vacío. */
   website?: string
+  /** Cualificación (toda opcional; normalmente llega en el paso posterior al envío). */
+  servicio?: string
+  ubicacion?: string
+  superficie?: string
+  plazo?: string
+  presupuesto?: string
+  /** Id de la sesión de formulario, para cerrar su fila de captura progresiva. */
+  parcialId?: string
 }): Promise<{ success: true } | { error: string }> {
   // Honeypot: si un bot rellena el campo oculto, fingimos éxito sin hacer nada.
   if (data.website && data.website.trim()) return { success: true }
@@ -330,6 +360,7 @@ export async function submitContactoWeb(data: {
   }
 
   const idioma: 'es' | 'en' = data.idioma === 'en' ? 'en' : 'es'
+  const cualificacion = resumenCualificacion(data, idioma)
   const telefono = data.telefono?.trim() || undefined
   const empresa = data.empresa?.trim() || undefined
   const mensaje = data.mensaje?.trim() || undefined
@@ -365,7 +396,8 @@ export async function submitContactoWeb(data: {
           .update({ notas: [lead?.notas, linea].filter(Boolean).join('\n') })
           .eq('id', existing.lead_id)
       }
-      await avisarEquipoContacto({ nombre, email, telefono, empresa, mensaje, comercial: !!data.comercial, repetido: true })
+      await cerrarParcial(admin, data.parcialId, existing.lead_id)
+      await avisarEquipoContacto({ nombre, email, telefono, empresa, mensaje, comercial: !!data.comercial, repetido: true, cualificacion })
       return { success: true }
     }
 
@@ -377,15 +409,24 @@ export async function submitContactoWeb(data: {
       createdBy: null,
       notaInterna: 'Espacio creado automáticamente desde el formulario web (teaser).',
       lead: {
-        origen: 'Web (teaser)',
+        origen: 'Web',
         mensaje: mensaje ?? null,
         telefono: telefono ?? null,
         empresa: empresa ?? null,
-        notas: consentLine,
+        notas: [consentLine, cualificacion ? `Proyecto: ${cualificacion}` : null].filter(Boolean).join('\n'),
       },
     })
 
-    await avisarEquipoContacto({ nombre, email, telefono, empresa, mensaje, comercial: !!data.comercial, repetido: false })
+    // Vincula la fila de captura progresiva con el lead recién creado (por email,
+    // que es lo único que compartimos con crearEspacioCore).
+    const { data: nuevoLead } = await admin.from('leads').select('id').ilike('email', email)
+      .order('fecha', { ascending: false }).limit(1).maybeSingle()
+    if (nuevoLead && cualificacion) {
+      await admin.from('leads').update({ interes: cualificacion }).eq('id', nuevoLead.id)
+    }
+    await cerrarParcial(admin, data.parcialId, nuevoLead?.id ?? null)
+
+    await avisarEquipoContacto({ nombre, email, telefono, empresa, mensaje, comercial: !!data.comercial, repetido: false, cualificacion })
     return { success: true }
   } catch (err) {
     console.error('[web-publica] submitContacto:', err)

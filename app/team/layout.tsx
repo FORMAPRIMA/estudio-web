@@ -165,6 +165,7 @@ const ALL_NAV: (NavItem & { roles: FpRole[] })[] = [
   { href: '/team/marketing', label: 'Marketing', roles: ['fp_partner', 'fp_biz_dev'] },
   { href: '/team/marketing/post-manager', label: 'Post Manager', roles: ['fp_partner', 'fp_biz_dev'], isSubItem: true },
   { href: '/team/marketing/horas', label: 'Horas', roles: ['fp_partner', 'fp_biz_dev'], isSubItem: true },
+  { href: '/team/marketing/web-publica', label: 'Web pública', roles: ['fp_partner', 'fp_biz_dev'], isSubItem: true },
   // ── Apps ──────────────────────────────────────────────────────────────────
   {
     href: '/team/apps',

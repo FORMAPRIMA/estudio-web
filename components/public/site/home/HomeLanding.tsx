@@ -16,14 +16,26 @@ export interface HomeBackground {
 
 const DURATION = 6800 // ms por fondo
 
+/** Interruptores del CMS guardados como texto libre ("si"/"no"). */
+const esSi = (v: string) => ['si', 'sí', 'yes', 'true', '1'].includes(v.trim().toLowerCase())
+const esNo = (v: string) => ['no', 'false', '0'].includes(v.trim().toLowerCase())
+
 export function HomeLanding({ content, backgrounds }: { content: ContentMap; backgrounds: HomeBackground[] }) {
   const { locale, mobile } = useSite()
   const [idx, setIdx] = useState(0)
   const [reduced, setReduced] = useState(false)
 
-  const eyebrow = pick(content, 'hero', 'eyebrow', { locale, mobile })
-  const titulo = pick(content, 'hero', 'titulo', { locale, mobile })
-  const subtitulo = pick(content, 'hero', 'subtitulo', { locale, mobile })
+  // La Home es solo imagen: el texto está OCULTO por defecto y se recupera desde
+  // el CMS (Marketing → Web pública → Home → Portada). Ocultar, no borrar: el
+  // titular sigue guardado en web_content esperando a que Jose lo reactive.
+  const mostrarTexto = esSi(pick(content, 'hero', 'mostrar_texto', { locale, mobile }))
+  // El pie con el nombre del proyecto SÍ se muestra por defecto (solo se oculta
+  // escribiendo "no"): es crédito de la foto, no titular de portada.
+  const mostrarPie = !esNo(pick(content, 'hero', 'mostrar_pie', { locale, mobile }))
+
+  const eyebrow = mostrarTexto ? pick(content, 'hero', 'eyebrow', { locale, mobile }) : ''
+  const titulo = mostrarTexto ? pick(content, 'hero', 'titulo', { locale, mobile }) : ''
+  const subtitulo = mostrarTexto ? pick(content, 'hero', 'subtitulo', { locale, mobile }) : ''
 
   const has = backgrounds.length > 0
 
@@ -44,9 +56,12 @@ export function HomeLanding({ content, backgrounds }: { content: ContentMap; bac
     <main style={{ position: 'relative', minHeight: '100vh', background: site.color.stage, color: site.color.white, fontFamily: site.font, overflow: 'hidden' }}>
       <Hero backgrounds={backgrounds} idx={idx} mobile={mobile} reduced={reduced} />
 
-      {/* Scrim para legibilidad del titular */}
-      <div style={{ position: 'absolute', inset: 0, zIndex: 2, pointerEvents: 'none',
-        background: 'radial-gradient(120% 90% at 50% 55%, rgba(0,0,0,0) 30%, rgba(0,0,0,0.5) 100%)' }} />
+      {/* Scrim para legibilidad del titular. Sin texto no hay nada que proteger:
+          se retira para que la foto se vea limpia. */}
+      {mostrarTexto && (
+        <div style={{ position: 'absolute', inset: 0, zIndex: 2, pointerEvents: 'none',
+          background: 'radial-gradient(120% 90% at 50% 55%, rgba(0,0,0,0) 30%, rgba(0,0,0,0.5) 100%)' }} />
+      )}
 
       {/* Titular centrado */}
       <section style={{ position: 'relative', zIndex: 3, minHeight: '100vh', display: 'flex', flexDirection: 'column',
@@ -56,7 +71,7 @@ export function HomeLanding({ content, backgrounds }: { content: ContentMap; bac
             color: site.color.white, opacity: 0.85, margin: '0 0 22px' }}>{eyebrow}</Reveal>
         )}
         {titulo && (
-          <Reveal as="h1" delay={120} style={{ fontSize: display.hero, fontWeight: 300, lineHeight: 1.02, letterSpacing: '-0.01em', margin: 0, maxWidth: '16ch' }}>
+          <Reveal as="h1" delay={120} style={{ fontSize: display.hero, fontWeight: 300, lineHeight: 1.2, letterSpacing: '0', margin: 0, maxWidth: '22ch' }}>
             {titulo}
           </Reveal>
         )}
@@ -68,7 +83,7 @@ export function HomeLanding({ content, backgrounds }: { content: ContentMap; bac
       </section>
 
       {/* Caption del proyecto actual + índice */}
-      {has && current && (
+      {mostrarPie && has && current && (
         <div style={{ position: 'absolute', left: site.gutter, bottom: 30, zIndex: 3, display: 'flex', alignItems: 'baseline', gap: 14 }}>
           <span style={{ fontSize: 11, letterSpacing: site.track.wide, fontVariantNumeric: 'tabular-nums', opacity: 0.6 }}>
             {String(idx + 1).padStart(2, '0')} / {String(backgrounds.length).padStart(2, '0')}
@@ -79,11 +94,8 @@ export function HomeLanding({ content, backgrounds }: { content: ContentMap; bac
         </div>
       )}
 
-      {/* Hint de scroll */}
-      <div style={{ position: 'absolute', bottom: 28, left: '50%', transform: 'translateX(-50%)', zIndex: 3,
-        fontSize: 10, letterSpacing: site.track.wide, textTransform: 'uppercase', opacity: 0.6 }}>
-        {locale === 'en' ? 'Scroll' : 'Desliza'}
-      </div>
+      {/* Sin hint de scroll: la Home es una sola pantalla y no scrollea, así que
+          invitaba a un gesto que no existe (retirado a petición de Jose). */}
 
       <IntroVideo content={content} locale={locale} mobile={mobile} />
     </main>

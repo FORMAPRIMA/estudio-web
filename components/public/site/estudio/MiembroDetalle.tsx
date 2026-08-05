@@ -16,7 +16,7 @@ export function MiembroDetalle({ miembro }: { miembro: WebEquipo }) {
     <main style={{ fontFamily: site.font, background: site.color.cream, color: site.color.ink, minHeight: '100vh',
       padding: `120px ${site.gutter} clamp(60px, 10vh, 120px)` }}>
       <div style={{ maxWidth: site.maxWidth, margin: '0 auto' }}>
-        <Link href={href('/estudio')} data-cursor=""
+        <Link href={`${href('/estudio')}#equipo`} scroll data-cursor=""
           style={{ display: 'inline-block', fontSize: 11, letterSpacing: site.track.wide, textTransform: 'uppercase', color: site.color.ink, opacity: 0.6, textDecoration: 'none', marginBottom: 'clamp(30px, 5vh, 56px)' }}>
           ← {locale === 'en' ? 'Team' : 'Equipo'}
         </Link>

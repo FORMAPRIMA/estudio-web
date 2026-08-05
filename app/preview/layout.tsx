@@ -1,14 +1,21 @@
 import { redirect } from 'next/navigation'
-import { Hanken_Grotesk } from 'next/font/google'
+import localFont from 'next/font/local'
 import { createClient } from '@/lib/supabase/server'
 import { SiteProvider } from '@/components/public/site/SiteProvider'
 import { SiteNav } from '@/components/public/site/SiteNav'
 import { SiteCursor } from '@/components/public/site/SiteCursor'
 
-const hanken = Hanken_Grotesk({
-  subsets: ['latin'],
-  weight: ['300', '400', '500', '600', '700'],
-  variable: '--font-hanken',
+// Helixa = tipografía de marca (brand book de Forma Prima), auto-alojada.
+// Los .ttf del Drive se convirtieron a woff2 (~25 KB cada uno). Declaramos solo
+// los 3 pesos que usa el sitio: 300 Light (displays), 400 Regular (texto),
+// 700 Bold (micro-tipografía en versales; el 500/600 del CSS resuelve a estos).
+const helixa = localFont({
+  src: [
+    { path: '../../public/fonts/Helixa-Light.woff2', weight: '300', style: 'normal' },
+    { path: '../../public/fonts/Helixa-Regular.woff2', weight: '400', style: 'normal' },
+    { path: '../../public/fonts/Helixa-Bold.woff2', weight: '700', style: 'normal' },
+  ],
+  variable: '--font-helixa',
   display: 'swap',
 })
 
@@ -27,7 +34,7 @@ export default async function PreviewLayout({ children }: { children: React.Reac
   if (!profile || !FP_ROLES.includes(profile.rol)) redirect('/login?redirectTo=/preview')
 
   return (
-    <div className={`${hanken.variable} fp-site`} style={{ minHeight: '100vh', background: '#F4F3F0' }}>
+    <div className={`${helixa.variable} fp-site`} style={{ minHeight: '100vh', background: '#F4F3F0' }}>
       <SiteProvider>
         <SiteCursor />
         <SiteNav />

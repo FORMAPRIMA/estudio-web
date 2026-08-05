@@ -22,7 +22,7 @@ export function PropiedadDetalle({ propiedad }: { propiedad: WebPropiedad }) {
         <div style={{ position: 'relative', zIndex: 2, width: '100%', maxWidth: site.maxWidth, margin: '0 auto', padding: `0 ${site.gutter} clamp(36px, 6vh, 72px)` }}>
           <Link href={href('/real-estate')} data-cursor="" style={{ display: 'inline-block', fontSize: 11, letterSpacing: site.track.wide, textTransform: 'uppercase', color: '#fff', opacity: 0.8, textDecoration: 'none', marginBottom: 18 }}>← Real Estate</Link>
           <Reveal as="p" style={{ fontSize: display.eyebrow, letterSpacing: site.track.ultra, textTransform: 'uppercase', opacity: 0.85, margin: '0 0 12px' }}>{badge}</Reveal>
-          <Reveal as="h1" delay={100} style={{ fontSize: display.hero, fontWeight: 300, letterSpacing: '-0.01em', lineHeight: 1.03, margin: 0, maxWidth: '18ch' }}>{propiedad.nombre}</Reveal>
+          <Reveal as="h1" delay={100} style={{ fontSize: display.hero, fontWeight: 300, letterSpacing: '0', lineHeight: 1.18, margin: 0, maxWidth: '24ch' }}>{propiedad.nombre}</Reveal>
         </div>
       </section>
 

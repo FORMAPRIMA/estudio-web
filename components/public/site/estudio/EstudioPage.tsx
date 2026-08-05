@@ -34,7 +34,7 @@ export function EstudioPage({ content, equipo }: { content: ContentMap; equipo: 
             <Reveal as="p" style={{ fontSize: display.eyebrow, letterSpacing: site.track.ultra, textTransform: 'uppercase', opacity: 0.85, margin: '0 0 16px' }}>{heroEyebrow}</Reveal>
           )}
           {heroTitulo && (
-            <Reveal as="h1" delay={120} style={{ fontSize: display.hero, fontWeight: 300, lineHeight: 1.03, letterSpacing: '-0.01em', margin: 0, maxWidth: '18ch' }}>{heroTitulo}</Reveal>
+            <Reveal as="h1" delay={120} style={{ fontSize: display.hero, fontWeight: 300, lineHeight: 1.2, letterSpacing: '0', margin: 0, maxWidth: '24ch' }}>{heroTitulo}</Reveal>
           )}
         </div>
         <div style={{ position: 'absolute', bottom: 28, left: '50%', transform: 'translateX(-50%)', zIndex: 2, fontSize: 10, letterSpacing: site.track.wide, textTransform: 'uppercase', opacity: 0.6 }}>
@@ -42,8 +42,10 @@ export function EstudioPage({ content, equipo }: { content: ContentMap; equipo: 
         </div>
       </section>
 
-      {/* Grid del equipo */}
-      <section style={{ maxWidth: site.maxWidth, margin: '0 auto', padding: `clamp(64px, 10vh, 130px) ${site.gutter}` }}>
+      {/* Grid del equipo. El id es el destino del «← Equipo» de la ficha de cada
+          integrante: sin él se volvía al hero y parecía que el botón no hacía nada.
+          scrollMarginTop deja hueco para el nav fijo (72 px). */}
+      <section id="equipo" style={{ maxWidth: site.maxWidth, margin: '0 auto', padding: `clamp(64px, 10vh, 130px) ${site.gutter}`, scrollMarginTop: 92 }}>
         {eqEyebrow && (
           <Reveal as="p" style={{ fontSize: display.eyebrow, letterSpacing: site.track.ultra, textTransform: 'uppercase', color: site.color.accent, margin: '0 0 16px' }}>{eqEyebrow}</Reveal>
         )}

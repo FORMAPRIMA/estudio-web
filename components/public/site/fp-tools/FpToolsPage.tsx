@@ -21,7 +21,7 @@ export function FpToolsPage({ content, tools }: { content: ContentMap; tools: We
       {/* Encabezado */}
       <header style={{ maxWidth: site.maxWidth, margin: '0 auto', padding: `0 ${site.gutter}`, marginBottom: 'clamp(48px, 8vh, 96px)' }}>
         {eyebrow && <Reveal as="p" style={{ fontSize: display.eyebrow, letterSpacing: site.track.ultra, textTransform: 'uppercase', color: site.color.accent, margin: '0 0 16px' }}>{eyebrow}</Reveal>}
-        {titulo && <Reveal as="h1" delay={100} style={{ fontSize: display.hero, fontWeight: 300, letterSpacing: '-0.01em', margin: 0, maxWidth: '18ch' }}>{titulo}</Reveal>}
+        {titulo && <Reveal as="h1" delay={100} style={{ fontSize: display.hero, fontWeight: 300, letterSpacing: '0', lineHeight: 1.2, margin: 0, maxWidth: '24ch' }}>{titulo}</Reveal>}
         {intro && <Reveal as="p" delay={180} style={{ fontSize: 'clamp(1rem, 1.5vw, 1.25rem)', fontWeight: 300, lineHeight: 1.65, opacity: 0.7, margin: '24px 0 0', maxWidth: '60ch', whiteSpace: 'pre-wrap' }}>{intro}</Reveal>}
       </header>
 

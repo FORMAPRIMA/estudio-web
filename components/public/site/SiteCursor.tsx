@@ -34,8 +34,9 @@ export function SiteCursor() {
     document.addEventListener('mousemove', (e) => { curX = e.clientX; curY = e.clientY }, sig)
 
     const tick = () => {
-      cgX += (curX - cgX) * 0.18
-      cgY += (curY - cgY) * 0.18
+      // Factor de seguimiento: más alto = la bolita persigue al ratón más de cerca.
+      cgX += (curX - cgX) * 0.34
+      cgY += (curY - cgY) * 0.34
       wrap.style.transform = `translate(${cgX.toFixed(1)}px,${cgY.toFixed(1)}px) translate(-50%,-50%)`
       raf = requestAnimationFrame(tick)
     }

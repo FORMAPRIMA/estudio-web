@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import LeadsPage from '@/components/team/captacion/LeadsPage'
+import ContactosIncompletos from '@/components/team/captacion/ContactosIncompletos'
+import { getContactosIncompletos } from '@/app/actions/contacto'
 
 export const metadata = { title: 'Leads · Captación' }
 export const dynamic  = 'force-dynamic'
@@ -40,13 +42,20 @@ export default async function Page() {
       .order('nombre', { ascending: true }),
   ])
 
+  const parciales = await getContactosIncompletos()
+
   return (
-    <LeadsPage
+    <>
+      <div style={{ padding: '20px 24px 0' }}>
+        <ContactosIncompletos parciales={parciales} />
+      </div>
+      <LeadsPage
       leads={leads ?? []}
       espacios={espacios ?? []}
       propuestas={propuestas ?? []}
       contratos={contratos ?? []}
       clientes={clientes ?? []}
-    />
+      />
+    </>
   )
 }

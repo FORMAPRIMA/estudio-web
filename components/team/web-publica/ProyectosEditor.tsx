@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition, useRef } from 'react'
+import { useState, useTransition, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import {
@@ -9,7 +9,7 @@ import {
   deleteWebProyecto,
   reorderWebProyectos,
 } from '@/app/actions/web-publica'
-import { esVideoUrl, type WebProyecto, type ProyectoMedia, type ProyectoMediaTipo } from '@/lib/web-publica'
+import { esVideoUrl, slugifyProyecto, type WebProyecto, type ProyectoMedia, type ProyectoMediaTipo } from '@/lib/web-publica'
 
 const BUCKET = 'web-publica'
 const ORANGE = '#D85A30'
@@ -79,29 +79,35 @@ export function ProyectosEditor({ proyectos }: { proyectos: WebProyecto[] }) {
   )
 }
 
+/** Borrador editable a partir de la fila guardada. Fuente única para inicializar
+ *  el formulario y para saber si hay cambios sin guardar. */
+function draftOf(p: WebProyecto) {
+  return {
+    nombre: p.nombre,
+    ubicacion: p.ubicacion ?? '',
+    anio: p.anio ?? '',
+    nota: p.nota ?? '',
+    hero_url: p.hero_url,
+    hero_mobile_url: p.hero_mobile_url,
+    galeria: p.galeria,
+    activo: p.activo,
+    descripcion_es: p.descripcion_es ?? '',
+    descripcion_en: p.descripcion_en ?? '',
+    tipologia_es: p.tipologia_es ?? '',
+    tipologia_en: p.tipologia_en ?? '',
+    superficie: p.superficie ?? '',
+    media: p.media ?? [],
+    glb_url: p.glb_url,
+  }
+}
+
 function ProyectoCard({ proyecto, index, total, onMove, busy }: {
   proyecto: WebProyecto; index: number; total: number; onMove: (id: string, dir: -1 | 1) => void; busy: boolean
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [expanded, setExpanded] = useState(false)
-  const [draft, setDraft] = useState({
-    nombre: proyecto.nombre,
-    ubicacion: proyecto.ubicacion ?? '',
-    anio: proyecto.anio ?? '',
-    nota: proyecto.nota ?? '',
-    hero_url: proyecto.hero_url,
-    hero_mobile_url: proyecto.hero_mobile_url,
-    galeria: proyecto.galeria,
-    activo: proyecto.activo,
-    descripcion_es: proyecto.descripcion_es ?? '',
-    descripcion_en: proyecto.descripcion_en ?? '',
-    tipologia_es: proyecto.tipologia_es ?? '',
-    tipologia_en: proyecto.tipologia_en ?? '',
-    superficie: proyecto.superficie ?? '',
-    media: proyecto.media ?? [],
-    glb_url: proyecto.glb_url,
-  })
+  const [draft, setDraft] = useState(draftOf(proyecto))
   const [uploading, setUploading] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
@@ -112,6 +118,17 @@ function ProyectoCard({ proyecto, index, total, onMove, busy }: {
   const glbInput = useRef<HTMLInputElement>(null)
 
   const set = <K extends keyof typeof draft>(k: K, v: (typeof draft)[K]) => { setDraft((d) => ({ ...d, [k]: v })); setSaved(false) }
+
+  // Cambios sin guardar. Importante con las fotos: la imagen sube al bucket al
+  // instante, pero el proyecto no la enseña hasta que se pulsa Guardar; sin este
+  // aviso parece que se guardó sola y al recargar no está.
+  const dirty = JSON.stringify(draft) !== JSON.stringify(draftOf(proyecto))
+  useEffect(() => {
+    if (!dirty) return
+    const avisar = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', avisar)
+    return () => window.removeEventListener('beforeunload', avisar)
+  }, [dirty])
 
   const uploadInto = async (key: 'hero' | 'heroMobile', e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return
@@ -181,6 +198,16 @@ function ProyectoCard({ proyecto, index, total, onMove, busy }: {
       })
       if ('error' in res) { setError(res.error); return }
       setSaved(true); router.refresh()
+    })
+  }
+
+  const regenerarUrl = () => {
+    if (!confirm(`La URL pública pasará a derivarse de "${draft.nombre}". Cualquier enlace al anterior dejará de funcionar. ¿Continuar?`)) return
+    setError(null)
+    startTransition(async () => {
+      const res = await updateWebProyecto(proyecto.id, { nombre: draft.nombre, regenerarSlug: true })
+      if ('error' in res) { setError(res.error); return }
+      router.refresh()
     })
   }
 
@@ -309,19 +336,39 @@ function ProyectoCard({ proyecto, index, total, onMove, busy }: {
             <p style={{ fontSize: 11, color: `${INK}45`, margin: '6px 0 0' }}>Si subes un GLB, la página muestra un visor 3D girable. Si no, se usan las fotos/renders y el vídeo de maqueta.</p>
           </div>
 
-          <p style={{ fontSize: 11, color: `${INK}45`, margin: 0 }}>
-            {proyecto.slug ? <>URL: <code style={{ color: `${INK}70` }}>/proyectos/{proyecto.slug}</code></> : 'La URL (slug) se generará al guardar a partir del nombre.'}
-          </p>
         </div>
       )}
 
       {error && <p style={{ color: '#b3261e', fontSize: 12, marginTop: 12 }}>{error}</p>}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 18, paddingTop: 16, borderTop: `1px solid ${BORDER}` }}>
+      {/* URL pública: siempre a la vista. El slug NO se regenera al renombrar (los
+          enlaces ya compartidos dejarían de funcionar), así que se ofrece a mano. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14, fontSize: 11, color: `${INK}45`, flexWrap: 'wrap' }}>
+        {proyecto.slug ? (
+          <>
+            <span>URL: <code style={{ color: `${INK}70` }}>/proyectos/{proyecto.slug}</code></span>
+            {slugifyProyecto(draft.nombre || '') !== proyecto.slug && (
+              <button onClick={regenerarUrl} disabled={anyBusy}
+                style={{ background: 'none', border: 'none', padding: 0, color: ORANGE, fontSize: 11, cursor: anyBusy ? 'default' : 'pointer', textDecoration: 'underline' }}>
+                actualizar URL al nombre nuevo
+              </button>
+            )}
+          </>
+        ) : (
+          <span>Sin URL pública todavía: se genera al guardar (y hasta entonces el proyecto no tiene página propia).</span>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 14, paddingTop: 16, borderTop: `1px solid ${BORDER}` }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: `${INK}90`, cursor: 'pointer' }}>
           <input type="checkbox" checked={draft.activo} onChange={(e) => set('activo', e.target.checked)} />
           Visible en la web
         </label>
+        {dirty && (
+          <span style={{ fontSize: 11, color: '#8a5a00', background: '#FFF6E5', border: '1px solid #F0E0BC', borderRadius: 99, padding: '3px 10px' }}>
+            cambios sin guardar
+          </span>
+        )}
         <div style={{ flex: 1 }} />
         <button onClick={remove} disabled={anyBusy} style={{ background: 'none', border: 'none', color: `${INK}70`, fontSize: 12, cursor: anyBusy ? 'default' : 'pointer' }}>Eliminar</button>
         <button onClick={save} disabled={anyBusy}
