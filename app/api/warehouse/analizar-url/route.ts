@@ -180,7 +180,9 @@ export async function POST(req: NextRequest) {
       avisoFetch = err instanceof Error ? err.message : 'No se pudo leer la página.'
     }
 
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    // Los 529 (Overloaded) de la API son frecuentes y pasajeros: el SDK reintenta
+    // con backoff exponencial. 4 intentos cubren un pico corto sin colgar el modal.
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 4 })
 
     const params: Anthropic.MessageCreateParamsNonStreaming = {
       model: MODELO,
@@ -288,6 +290,28 @@ ${catalogoTexto}`,
     })
   } catch (err) {
     console.error('[warehouse/analizar-url]', err)
+
+    // Los errores de la API de IA llegan como JSON crudo del SDK: no se los enseñamos al usuario
+    if (err instanceof Anthropic.APIError) {
+      const status = err.status ?? 500
+      if (status === 429 || status === 529) {
+        return NextResponse.json(
+          { error: 'El servicio de IA está saturado ahora mismo. Espera unos segundos y vuelve a pulsar Analizar, o rellena la ficha a mano.' },
+          { status: 503 }
+        )
+      }
+      if (status >= 500) {
+        return NextResponse.json(
+          { error: 'El servicio de IA ha fallado temporalmente. Inténtalo otra vez en un momento.' },
+          { status: 503 }
+        )
+      }
+      if (status === 401 || status === 403) {
+        return NextResponse.json({ error: 'La clave de la API de IA no es válida.' }, { status: 500 })
+      }
+      return NextResponse.json({ error: 'La IA no ha podido analizar esta página.' }, { status: 502 })
+    }
+
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Error inesperado analizando la URL.' },
       { status: 500 }
