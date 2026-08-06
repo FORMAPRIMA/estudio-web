@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { SiteProvider } from '@/components/public/site/SiteProvider'
 import { SiteNav } from '@/components/public/site/SiteNav'
 import { SiteCursor } from '@/components/public/site/SiteCursor'
+import { SiteEndMark } from '@/components/public/site/SiteEndMark'
 
 // Helixa = tipografía de marca (brand book de Forma Prima), auto-alojada.
 // Los .ttf del Drive se convirtieron a woff2 (~25 KB cada uno). Declaramos solo
@@ -39,6 +40,7 @@ export default async function PreviewLayout({ children }: { children: React.Reac
         <SiteCursor />
         <SiteNav />
         {children}
+        <SiteEndMark />
       </SiteProvider>
     </div>
   )

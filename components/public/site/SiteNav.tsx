@@ -32,9 +32,14 @@ export function SiteNav() {
 
   // tone 'light' = texto blanco (sobre oscuro); 'dark' = texto negro (sobre claro).
   const [tone, setTone] = useState<'light' | 'dark'>(darkHero ? 'light' : 'dark')
+  // El nav va fijo arriba en todas las páginas, pero transparente sobre el
+  // contenido claro se vuelve ilegible en cuanto empieza a pasar texto por
+  // debajo. En cuanto se abandona el tope aparece una banda con desenfoque.
+  const [scrolled, setScrolled] = useState(false)
 
   useEffect(() => {
     const onScroll = () => {
+      setScrolled(window.scrollY > 24)
       // En páginas de hero oscuro, al pasar el hero el fondo se vuelve claro → negro.
       if (!darkHero) { setTone('dark'); return }
       setTone(window.scrollY > window.innerHeight * 0.78 ? 'dark' : 'light')
@@ -93,6 +98,9 @@ export function SiteNav() {
   const isLight = tone === 'light'
   const fg = isLight ? site.color.white : site.color.ink
   const isActive = (p: string) => pathname === href(p)
+  // Solo con texto en negro: sobre el hero oscuro ya hay scrim y una banda crema
+  // ahí cortaría la foto a sangre.
+  const banda = scrolled && !isLight
 
   return (
     <>
@@ -101,12 +109,17 @@ export function SiteNav() {
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, height: 140, zIndex: 40, pointerEvents: 'none',
           background: 'linear-gradient(to bottom, rgba(0,0,0,0.38), rgba(0,0,0,0))' }} />
       )}
-      {/* Nav SIEMPRE transparente (sin banda ni borde); el color del texto se adapta al fondo. */}
+      {/* Transparente en el tope; con banda desenfocada en cuanto se scrollea sobre
+          contenido claro. El color del texto se adapta al fondo. */}
       <header ref={headerRef} style={{
         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50, height: 72,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: `0 ${site.gutter}`, fontFamily: site.font,
-        background: 'transparent',
+        background: banda ? 'rgba(244,243,240,0.78)' : 'transparent',
+        backdropFilter: banda ? 'blur(14px) saturate(1.1)' : 'none',
+        WebkitBackdropFilter: banda ? 'blur(14px) saturate(1.1)' : 'none',
+        borderBottom: `1px solid ${banda ? 'rgba(20,20,20,0.07)' : 'transparent'}`,
+        transition: `background .45s ${site.ease}, border-color .45s ${site.ease}`,
         // El halo del amago tiene que leerse sobre foto oscura y sobre crema.
         ['--glow' as string]: isLight ? 'rgba(255,255,255,0.14)' : 'rgba(20,20,20,0.07)',
       }}>
