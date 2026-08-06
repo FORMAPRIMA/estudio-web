@@ -30,24 +30,13 @@ export function SiteNav() {
     pathname.startsWith(href('/proyectos/')) ||   // detalle de proyecto
     pathname.startsWith(href('/real-estate/'))    // detalle de propiedad
 
-  // tone 'light' = texto blanco (sobre oscuro); 'dark' = texto negro (sobre claro).
-  const [tone, setTone] = useState<'light' | 'dark'>(darkHero ? 'light' : 'dark')
-  // El nav va fijo arriba en todas las páginas, pero transparente sobre el
-  // contenido claro se vuelve ilegible en cuanto empieza a pasar texto por
-  // debajo. En cuanto se abandona el tope aparece una banda con desenfoque.
-  const [scrolled, setScrolled] = useState(false)
-
-  useEffect(() => {
-    const onScroll = () => {
-      setScrolled(window.scrollY > 24)
-      // En páginas de hero oscuro, al pasar el hero el fondo se vuelve claro → negro.
-      if (!darkHero) { setTone('dark'); return }
-      setTone(window.scrollY > window.innerHeight * 0.78 ? 'dark' : 'light')
-    }
-    onScroll()
-    window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
-  }, [darkHero, pathname])
+  // El nav vive EN la página, no pegado al viewport: al scrollear se va con el
+  // contenido y para recuperarlo hay que volver arriba (de ahí el "volver arriba"
+  // del cierre de página, SiteEndMark). Como solo se ve en el tope, el color del
+  // texto se decide de una vez por lo que hay ahí arriba y ya no cambia: sin
+  // listener de scroll ni banda de fondo, que solo harían falta si flotara sobre
+  // el contenido.
+  const isLight = darkHero
 
   // ── Amago de scroll → insinuación de la navegación ────────────────────────
   // La Home es una sola pantalla: el gesto de scroll rebota y no lleva a ningún
@@ -95,31 +84,24 @@ export function SiteNav() {
     return () => { ac.abort(); cancelAnimationFrame(raf); el.style.setProperty('--hint', '0') }
   }, [isHome, pathname])
 
-  const isLight = tone === 'light'
   const fg = isLight ? site.color.white : site.color.ink
   const isActive = (p: string) => pathname === href(p)
-  // Solo con texto en negro: sobre el hero oscuro ya hay scrim y una banda crema
-  // ahí cortaría la foto a sangre.
-  const banda = scrolled && !isLight
 
   return (
     <>
-      {/* Scrim superior sutil solo sobre hero oscuro, para legibilidad del texto blanco */}
+      {/* Scrim superior sutil solo sobre hero oscuro, para legibilidad del texto
+          blanco. Absoluto como el nav: se va con él al scrollear. */}
       {isLight && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, height: 140, zIndex: 40, pointerEvents: 'none',
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 140, zIndex: 40, pointerEvents: 'none',
           background: 'linear-gradient(to bottom, rgba(0,0,0,0.38), rgba(0,0,0,0))' }} />
       )}
-      {/* Transparente en el tope; con banda desenfocada en cuanto se scrollea sobre
-          contenido claro. El color del texto se adapta al fondo. */}
+      {/* Absoluto, no fijo: anclado al tope del documento. Siempre transparente
+          (sin banda ni borde); el color del texto se adapta a lo que hay debajo. */}
       <header ref={headerRef} style={{
-        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50, height: 72,
+        position: 'absolute', top: 0, left: 0, right: 0, zIndex: 50, height: 72,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: `0 ${site.gutter}`, fontFamily: site.font,
-        background: banda ? 'rgba(244,243,240,0.78)' : 'transparent',
-        backdropFilter: banda ? 'blur(14px) saturate(1.1)' : 'none',
-        WebkitBackdropFilter: banda ? 'blur(14px) saturate(1.1)' : 'none',
-        borderBottom: `1px solid ${banda ? 'rgba(20,20,20,0.07)' : 'transparent'}`,
-        transition: `background .45s ${site.ease}, border-color .45s ${site.ease}`,
+        background: 'transparent',
         // El halo del amago tiene que leerse sobre foto oscura y sobre crema.
         ['--glow' as string]: isLight ? 'rgba(255,255,255,0.14)' : 'rgba(20,20,20,0.07)',
       }}>

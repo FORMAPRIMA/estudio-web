@@ -35,7 +35,9 @@ export default async function PreviewLayout({ children }: { children: React.Reac
   if (!profile || !FP_ROLES.includes(profile.rol)) redirect('/login?redirectTo=/preview')
 
   return (
-    <div className={`${helixa.variable} fp-site`} style={{ minHeight: '100vh', background: '#F4F3F0' }}>
+    // position: relative para que el nav absoluto se ancle aquí, al tope del
+    // documento, y no a un ancestro cualquiera.
+    <div className={`${helixa.variable} fp-site`} style={{ position: 'relative', minHeight: '100vh', background: '#F4F3F0' }}>
       <SiteProvider>
         <SiteCursor />
         <SiteNav />
