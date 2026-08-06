@@ -4,7 +4,9 @@ import { createClient } from '@/lib/supabase/server'
 import { SiteProvider } from '@/components/public/site/SiteProvider'
 import { SiteNav } from '@/components/public/site/SiteNav'
 import { SiteCursor } from '@/components/public/site/SiteCursor'
-import { SiteEndMark } from '@/components/public/site/SiteEndMark'
+import { SiteFooter } from '@/components/public/site/SiteFooter'
+import { getContent } from '@/app/actions/web-content'
+import { pick } from '@/lib/web-publica'
 
 // Helixa = tipografía de marca (brand book de Forma Prima), auto-alojada.
 // Los .ttf del Drive se convirtieron a woff2 (~25 KB cada uno). Declaramos solo
@@ -34,6 +36,19 @@ export default async function PreviewLayout({ children }: { children: React.Reac
   const { data: profile } = await supabase.from('profiles').select('rol').eq('id', user.id).single()
   if (!profile || !FP_ROLES.includes(profile.rol)) redirect('/login?redirectTo=/preview')
 
+  // El footer reusa los datos de contacto que el equipo ya edita en la página de
+  // Contacto: una sola fuente de verdad, sin duplicar el email en dos sitios. En
+  // ES porque el footer los pinta tal cual (un teléfono no se traduce).
+  const contacto = await getContent('contacto')
+  const datos = {
+    email:     pick(contacto, 'datos', 'email',     { locale: 'es' }),
+    telefono:  pick(contacto, 'datos', 'telefono',  { locale: 'es' }),
+    direccion: pick(contacto, 'datos', 'direccion', { locale: 'es' }),
+  }
+  // El año se calcula en servidor: hacerlo en el cliente desincronizaría el HTML
+  // en el cambio de año.
+  const anio = new Date().getFullYear()
+
   return (
     // position: relative para que el nav absoluto se ancle aquí, al tope del
     // documento, y no a un ancestro cualquiera.
@@ -42,7 +57,7 @@ export default async function PreviewLayout({ children }: { children: React.Reac
         <SiteCursor />
         <SiteNav />
         {children}
-        <SiteEndMark />
+        <SiteFooter datos={datos} anio={anio} />
       </SiteProvider>
     </div>
   )
