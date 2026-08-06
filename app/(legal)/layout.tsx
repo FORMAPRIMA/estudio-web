@@ -12,7 +12,8 @@ export default function LegalLayout({ children }: { children: ReactNode }) {
         {children}
         <hr style={{ margin: '56px 0 24px', border: 'none', borderTop: '1px solid #E8E6E0' }} />
         <p style={{ fontSize: 11, color: '#AAA', lineHeight: 1.7, margin: 0 }}>
-          Forma Prima Arquitectos, S.L. · NIF B44873552 · CL/ Ppe de Vergara 56 6ª 2ª · 28006 Madrid ·{' '}
+          {/* NIF XXXX: provisional hasta que Jose pase el de la nueva sociedad. */}
+          Forma Prima Arquitectos, S.L. · NIF XXXX · CL/ Ppe de Vergara 56 6ª 2ª · 28006 Madrid ·{' '}
           <a href="mailto:contacto@formaprima.es" style={{ color: '#D85A30', textDecoration: 'none' }}>contacto@formaprima.es</a>
         </p>
         <p style={{ marginTop: 16, fontSize: 12 }}>

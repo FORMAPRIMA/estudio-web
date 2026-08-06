@@ -26,7 +26,8 @@ export default function PrivacidadPage() {
       <h2 style={h2}>1. Responsable del tratamiento</h2>
       <ul>
         <li style={li}><strong>Titular:</strong> Forma Prima Arquitectos, S.L.</li>
-        <li style={li}><strong>NIF:</strong> B44873552</li>
+        {/* NIF XXXX: provisional hasta que Jose pase el de la nueva sociedad. */}
+        <li style={li}><strong>NIF:</strong> XXXX</li>
         <li style={li}><strong>Domicilio:</strong> CL/ Ppe de Vergara 56 6ª 2ª, 28006 Madrid (España)</li>
         <li style={li}><strong>Correo electrónico:</strong> contacto@formaprima.es</li>
       </ul>

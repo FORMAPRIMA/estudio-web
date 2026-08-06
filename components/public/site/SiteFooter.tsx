@@ -116,7 +116,8 @@ export function SiteFooter({ datos, anio }: { datos: FooterDatos; anio: number }
         }}>
           {/* Sin repetir "Madrid": ya está en la dirección de la columna. */}
           <span>© {anio} Forma Prima Arquitectos, S.L.</span>
-          <span>NIF B44873552</span>
+          {/* NIF XXXX: provisional hasta que Jose pase el de la nueva sociedad. */}
+          <span>NIF XXXX</span>
         </div>
       </div>
 
