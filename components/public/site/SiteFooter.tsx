@@ -115,7 +115,7 @@ export function SiteFooter({ datos, anio }: { datos: FooterDatos; anio: number }
           fontSize: 10.5, letterSpacing: site.track.tight, opacity: 0.4,
         }}>
           {/* Sin repetir "Madrid": ya está en la dirección de la columna. */}
-          <span>© {anio} GEINEX GROUP, S.L.</span>
+          <span>© {anio} Forma Prima Arquitectos, S.L.</span>
           <span>NIF B44873552</span>
         </div>
       </div>

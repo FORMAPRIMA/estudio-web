@@ -533,7 +533,7 @@ export function WipLanding({ proyectos }: { proyectos: WebProyecto[] }) {
                     </span>
                   </label>
                   <p style={{ margin: 0, fontSize: 10.5, lineHeight: 1.55, color: '#999' }}>
-                    Responsable: GEINEX GROUP, S.L. Finalidad: atender tu solicitud y crear tu espacio de cliente. Legitimación: tu consentimiento. Puedes ejercer tus derechos en contacto@formaprima.es. Más información en la Política de Privacidad.
+                    Responsable: Forma Prima Arquitectos, S.L. Finalidad: atender tu solicitud y crear tu espacio de cliente. Legitimación: tu consentimiento. Puedes ejercer tus derechos en contacto@formaprima.es. Más información en la Política de Privacidad.
                   </p>
                 </div>
 

@@ -25,7 +25,7 @@ export default function PrivacidadPage() {
 
       <h2 style={h2}>1. Responsable del tratamiento</h2>
       <ul>
-        <li style={li}><strong>Titular:</strong> GEINEX GROUP, S.L. (marca «Forma Prima»)</li>
+        <li style={li}><strong>Titular:</strong> Forma Prima Arquitectos, S.L.</li>
         <li style={li}><strong>NIF:</strong> B44873552</li>
         <li style={li}><strong>Domicilio:</strong> CL/ Ppe de Vergara 56 6ª 2ª, 28006 Madrid (España)</li>
         <li style={li}><strong>Correo electrónico:</strong> contacto@formaprima.es</li>

@@ -23,7 +23,7 @@ export default function AvisoLegalPage() {
 
       <h2 style={h2}>1. Datos identificativos del titular</h2>
       <ul>
-        <li style={li}><strong>Titular:</strong> GEINEX GROUP, S.L. (marca «Forma Prima»)</li>
+        <li style={li}><strong>Titular:</strong> Forma Prima Arquitectos, S.L.</li>
         <li style={li}><strong>NIF:</strong> B44873552</li>
         <li style={li}><strong>Domicilio social:</strong> CL/ Ppe de Vergara 56 6ª 2ª, 28006 Madrid (España)</li>
         <li style={li}><strong>Correo electrónico:</strong> contacto@formaprima.es</li>
@@ -47,7 +47,7 @@ export default function AvisoLegalPage() {
       <h2 style={h2}>4. Propiedad intelectual e industrial</h2>
       <p style={p}>
         Todos los contenidos del sitio (textos, imágenes, marcas, logotipos, diseños y demás
-        elementos) son titularidad de GEINEX GROUP, S.L. o de terceros que han autorizado su uso, y
+        elementos) son titularidad de Forma Prima Arquitectos, S.L. o de terceros que han autorizado su uso, y
         están protegidos por la normativa de propiedad intelectual e industrial. Queda prohibida su
         reproducción, distribución o transformación sin autorización expresa del titular.
       </p>
