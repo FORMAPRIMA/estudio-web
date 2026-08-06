@@ -47,6 +47,7 @@ export const CONTENT_SCHEMA: PageSchema[] = [
           { clave: 'video',  label: 'Vídeo widescreen', tipo: 'video', hint: 'MP4 horizontal. Se sube al bucket web-publica. Vaciarlo es la forma de quitar la intro.' },
           { clave: 'poster', label: 'Póster (primer frame)', tipo: 'imagen', hint: 'Imagen que se ve mientras carga el vídeo. Importante para rendimiento y SEO.' },
           { clave: 'activo', label: '¿Mostrar vídeo de intro?', tipo: 'texto', hint: 'Déjalo vacío para que se muestre. Escribe "no" para saltar directo a la home sin borrar el vídeo.', mobileable: false },
+          { clave: 'sonido', label: '¿Ofrecer sonido?', tipo: 'texto', hint: 'Déjalo vacío y el visitante activa el audio con un clic o toque. Escribe "no" para que la intro sea siempre muda. Ningún navegador permite arrancar con sonido en la primera visita, así que siempre hace falta ese gesto.', mobileable: false },
         ],
       },
       {

@@ -106,3 +106,10 @@ export function pick(
 ): string {
   return resolveContent(map[contentKey(seccion, clave)], opts)
 }
+
+// ── Interruptores del CMS ────────────────────────────────────────────────────
+// Los toggles se guardan como texto libre porque el editor solo tiene campos de
+// texto. Aceptamos las formas que alguien escribiría de verdad, no solo "si".
+
+export const esSi = (v: string) => ['si', 'sí', 'yes', 'true', '1'].includes(v.trim().toLowerCase())
+export const esNo = (v: string) => ['no', 'false', '0'].includes(v.trim().toLowerCase())
