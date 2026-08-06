@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import Link from 'next/link'
 import { site, display } from '../theme'
-import { useSite } from '../SiteProvider'
+import { useSite, href } from '../SiteProvider'
 import { Reveal } from '../Reveal'
 import { pick, type ContentMap } from '@/lib/web-publica'
 
@@ -12,6 +13,8 @@ export interface HomeBackground {
   nombre: string | null
   ubicacion: string | null
   anio: string | null
+  /** Slug del proyecto de esta foto: la portada entera enlaza a su ficha. */
+  slug: string | null
 }
 
 const DURATION = 6800 // ms por fondo
@@ -67,9 +70,19 @@ export function HomeLanding({ content, backgrounds }: { content: ContentMap; bac
           background: 'radial-gradient(120% 90% at 50% 55%, rgba(0,0,0,0) 30%, rgba(0,0,0,0.5) 100%)' }} />
       )}
 
+      {/* La portada entera enlaza al proyecto de la foto que se está viendo. Va
+          por encima del titular (que no es interactivo) y por debajo del nav. El
+          destino cambia con el crossfade: el pie de abajo dice de quién es. */}
+      {current?.slug && (
+        <Link href={href(`/proyectos/${current.slug}`)}
+          data-cursor={locale === 'en' ? 'View project' : 'Ver proyecto'}
+          aria-label={[locale === 'en' ? 'View project' : 'Ver proyecto', current.nombre].filter(Boolean).join(': ')}
+          style={{ position: 'absolute', inset: 0, zIndex: 4, display: 'block' }} />
+      )}
+
       {/* Titular centrado */}
       <section style={{ position: 'relative', zIndex: 3, minHeight: '100vh', display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: `0 ${site.gutter}` }}>
+        alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: `0 ${site.gutter}`, pointerEvents: 'none' }}>
         {eyebrow && (
           <Reveal as="p" delay={0} style={{ fontSize: display.eyebrow, letterSpacing: site.track.ultra, textTransform: 'uppercase',
             color: site.color.white, opacity: 0.85, margin: '0 0 22px' }}>{eyebrow}</Reveal>

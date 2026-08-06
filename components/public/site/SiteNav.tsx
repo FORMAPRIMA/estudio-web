@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { site } from './theme'
@@ -19,6 +19,7 @@ export function SiteNav() {
   const { locale, setLocale } = useSite()
   const pathname = usePathname()
   const [menuOpen, setMenuOpen] = useState(false)
+  const headerRef = useRef<HTMLElement>(null)
 
   // Páginas cuyo TOPE es un hero oscuro a sangre (texto del nav en blanco arriba).
   // El resto arrancan con fondo claro (texto en negro).
@@ -43,6 +44,52 @@ export function SiteNav() {
     return () => window.removeEventListener('scroll', onScroll)
   }, [darkHero, pathname])
 
+  // ── Amago de scroll → insinuación de la navegación ────────────────────────
+  // La Home es una sola pantalla: el gesto de scroll rebota y no lleva a ningún
+  // sitio. En vez de desperdiciarlo, su intensidad enciende las pestañas ("si
+  // quieres ir a otro sitio, es por aquí"). La energía se escribe como variable
+  // CSS sobre el header y todo el efecto es CSS: así se anima a 60 fps sin
+  // provocar un re-render de React por frame.
+  useEffect(() => {
+    const el = headerRef.current
+    if (!el) return
+    el.style.setProperty('--hint', '0')
+    if (!isHome) return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+
+    const ac = new AbortController()
+    const sig = { signal: ac.signal, passive: true } as AddEventListenerOptions
+    let energy = 0, raf = 0, lastTouchY = 0
+
+    const decay = () => {
+      // Caída exponencial: sube de golpe con el gesto y se apaga sola.
+      energy *= 0.955
+      if (energy < 0.008) { energy = 0; raf = 0 }
+      el.style.setProperty('--hint', energy.toFixed(3))
+      if (energy) raf = requestAnimationFrame(decay)
+    }
+
+    const bump = (delta: number) => {
+      // Solo si de verdad no hay a dónde scrollear: el día que la Home crezca,
+      // el gesto vuelve a ser un scroll normal y esto se calla solo.
+      if (document.documentElement.scrollHeight - window.innerHeight > 4) return
+      // Techo por evento: un trackpad dispara ráfagas de decenas de eventos y sin
+      // tope el primer roce ya saturaría el efecto.
+      energy = Math.min(1, energy + Math.min(Math.abs(delta) / 260, 0.14))
+      if (!raf) raf = requestAnimationFrame(decay)
+    }
+
+    window.addEventListener('wheel', (e) => bump((e as WheelEvent).deltaY), sig)
+    window.addEventListener('touchstart', (e) => { lastTouchY = (e as TouchEvent).touches[0]?.clientY ?? 0 }, sig)
+    window.addEventListener('touchmove', (e) => {
+      const y = (e as TouchEvent).touches[0]?.clientY ?? lastTouchY
+      bump(y - lastTouchY)
+      lastTouchY = y
+    }, sig)
+
+    return () => { ac.abort(); cancelAnimationFrame(raf); el.style.setProperty('--hint', '0') }
+  }, [isHome, pathname])
+
   const isLight = tone === 'light'
   const fg = isLight ? site.color.white : site.color.ink
   const isActive = (p: string) => pathname === href(p)
@@ -55,11 +102,13 @@ export function SiteNav() {
           background: 'linear-gradient(to bottom, rgba(0,0,0,0.38), rgba(0,0,0,0))' }} />
       )}
       {/* Nav SIEMPRE transparente (sin banda ni borde); el color del texto se adapta al fondo. */}
-      <header style={{
+      <header ref={headerRef} style={{
         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50, height: 72,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: `0 ${site.gutter}`, fontFamily: site.font,
         background: 'transparent',
+        // El halo del amago tiene que leerse sobre foto oscura y sobre crema.
+        ['--glow' as string]: isLight ? 'rgba(255,255,255,0.14)' : 'rgba(20,20,20,0.07)',
       }}>
         {/* Logo */}
         <Link href={href('/')} style={{ display: 'flex', alignItems: 'center', flex: 'none' }}>
@@ -69,14 +118,13 @@ export function SiteNav() {
         </Link>
 
         {/* Tabs (desktop) */}
-        <nav className="site-nav-desktop" style={{ display: 'flex', gap: 34, alignItems: 'center' }}>
-          {TABS.map((t) => (
+        <nav className="site-nav-desktop" style={{ display: 'flex', gap: 34, alignItems: 'center', position: 'relative' }}>
+          {TABS.map((t, i) => (
             <Link key={t.path} href={href(t.path)} className="site-tab" data-cursor=""
-              style={{
-                fontSize: 11, letterSpacing: site.track.wide, textTransform: 'uppercase', textDecoration: 'none',
-                color: fg, opacity: isActive(t.path) ? 1 : 0.72, fontWeight: isActive(t.path) ? 500 : 400,
-                transition: `opacity .3s ${site.ease}, color .4s ${site.ease}`,
-              }}>
+              data-active={isActive(t.path) ? '1' : undefined}
+              // --i escalona el encendido: la insinuación recorre las pestañas de
+              // izquierda a derecha en vez de saltar todas a la vez.
+              style={{ color: fg, ['--i' as string]: i }}>
               {locale === 'en' ? t.en : t.es}
             </Link>
           ))}
@@ -114,14 +162,45 @@ export function SiteNav() {
       )}
 
       <style dangerouslySetInnerHTML={{ __html: `
-        .site-tab { position: relative; }
+        /* --hint (0..1) lo escribe el rAF del amago de scroll sobre el <header>.
+           --lift es ese mismo valor retrasado según la posición de la pestaña:
+           con poca energía solo asoma la primera, con el gesto entero se encienden
+           todas. De ahí el degradado que recorre la navegación. */
+        .site-tab {
+          position: relative;
+          --lift: clamp(0, calc((var(--hint, 0) - var(--i, 0) * 0.055) * 1.45), 1);
+          font-size: 11px; text-transform: uppercase; text-decoration: none;
+          letter-spacing: calc(${site.track.wide} + var(--lift) * 0.02em);
+          opacity: calc(0.72 + var(--lift) * 0.28);
+          /* Con Helixa (300/400/700) el peso salta a negrita pasada la mitad del
+             gesto; el text-shadow engorda el trazo antes, para que el salto no
+             se note y la transición se lea continua. */
+          font-weight: calc(400 + var(--lift) * 300);
+          text-shadow: 0 0 calc(var(--lift) * 0.42px) currentColor;
+          transition: color .4s cubic-bezier(.4,0,.2,1);
+        }
+        .site-tab[data-active="1"] { opacity: 1; font-weight: calc(500 + var(--lift) * 200); }
         .site-tab::after {
           content: ''; position: absolute; left: 0; right: 0; bottom: -6px; height: 1px;
-          background: currentColor; transform: scaleX(0); transform-origin: left center;
+          background: currentColor; transform: scaleX(var(--lift)); transform-origin: left center;
+          opacity: calc(0.35 + var(--lift) * 0.65);
           transition: transform .45s cubic-bezier(.4,0,.2,1);
         }
+        /* El halo detrás del grupo: lo que hace que se lea como "highlight" y no
+           como un cambio de peso suelto. */
+        .site-nav-desktop::before {
+          content: ''; position: absolute; inset: -16px -26px; border-radius: 999px;
+          background: radial-gradient(58% 150% at 50% 50%, var(--glow), transparent 72%);
+          opacity: var(--hint, 0); pointer-events: none;
+        }
         .site-tab:hover { opacity: 1 !important; }
-        .site-tab:hover::after { transform: scaleX(1); }
+        .site-tab:hover::after { transform: scaleX(1); opacity: 1; }
+        /* En móvil no hay pestañas que encender: el gesto engorda la hamburguesa. */
+        .site-nav-burger { opacity: calc(0.78 + var(--hint, 0) * 0.22); }
+        .site-nav-burger span {
+          width: calc(22px + var(--hint, 0) * 5px) !important;
+          height: calc(1.5px + var(--hint, 0) * 0.9px) !important;
+        }
         @media (max-width: 860px) {
           .site-nav-desktop { display: none !important; }
           .site-nav-burger  { display: flex !important; }

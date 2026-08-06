@@ -20,6 +20,7 @@ export default async function PreviewHome() {
       nombre: p.nombre,
       ubicacion: p.ubicacion,
       anio: p.anio,
+      slug: p.slug,
     }))
 
   return <HomeLanding content={content} backgrounds={backgrounds} />
