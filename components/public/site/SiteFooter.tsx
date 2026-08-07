@@ -222,9 +222,17 @@ function VolverArriba({ etiqueta }: { etiqueta: string }) {
     if (desde <= 0) return
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { window.scrollTo(0, 0); return }
 
+    // globals.css declara `html { scroll-behavior: smooth }`. Con eso puesto, CADA
+    // escritura de scrollTop lanza además la animación nativa hacia ese valor: como
+    // le cambiamos el destino cada frame, la página persigue nuestra interpolación
+    // con retraso y el viaje se arrastra. Lo desactivamos mientras dura el nuestro.
+    const raiz = document.documentElement
+    const previo = raiz.style.scrollBehavior
+    raiz.style.scrollBehavior = 'auto'
+
     // Recorridos largos no deben tardar proporcionalmente más: el tiempo crece con
-    // la raíz de la distancia y se corta en 1,1 s.
-    const dur = Math.min(1100, 420 + Math.sqrt(desde) * 26)
+    // la raíz de la distancia y se corta en 760 ms.
+    const dur = Math.min(760, 280 + Math.sqrt(desde) * 14)
     const t0 = performance.now()
     let abortado = false
     const abortar = () => { abortado = true }
@@ -232,6 +240,7 @@ function VolverArriba({ etiqueta }: { etiqueta: string }) {
     window.addEventListener('touchstart', abortar, { passive: true, once: true })
 
     const limpiar = () => {
+      raiz.style.scrollBehavior = previo
       window.removeEventListener('wheel', abortar)
       window.removeEventListener('touchstart', abortar)
     }
@@ -239,14 +248,15 @@ function VolverArriba({ etiqueta }: { etiqueta: string }) {
     const paso = (ahora: number) => {
       if (abortado) { limpiar(); return }
       const p = Math.min(1, (ahora - t0) / dur)
-      // easeInOutQuart: arranca y aterriza muy suave, con cuerpo en el medio.
-      const e = p < 0.5 ? 8 * p * p * p * p : 1 - Math.pow(-2 * p + 2, 4) / 2
+      // easeOutQuint: sale disparado y aterriza muy suave. Para "volver arriba" el
+      // arranque lento de un ease-in-out se siente como que el botón no responde.
+      const e = 1 - Math.pow(1 - p, 5)
       const y = desde * (1 - e)
-      document.documentElement.scrollTop = y
+      raiz.scrollTop = y
       document.body.scrollTop = y
       if (p < 1) { raf.current = requestAnimationFrame(paso); return }
       // Cierre exacto: el redondeo de subpíxeles puede dejarlo en 0,4 px.
-      document.documentElement.scrollTop = 0
+      raiz.scrollTop = 0
       document.body.scrollTop = 0
       limpiar()
     }
