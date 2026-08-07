@@ -81,6 +81,17 @@ export function IntroVideo({ content, locale, mobile }: { content: ContentMap; l
 
   useEffect(() => () => cancelAnimationFrame(rampa.current), [])
 
+  // Red de seguridad: si el vídeo no ha arrancado en 6 s (conexión mala, archivo
+  // que no carga), nos quitamos de en medio. La invitación solo aparece cuando el
+  // vídeo corre de verdad, así que sin esto el visitante se quedaría ante un negro
+  // sin ninguna pista de que se puede salir con doble clic.
+  useEffect(() => {
+    if (!enabled || !show || listo) return
+    const id = setTimeout(() => dismiss(), 6000)
+    return () => clearTimeout(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, show, listo])
+
   /** Sube el volumen de 0 a 1 en ~700 ms. Ojo: en iOS `volume` es de solo
    *  lectura, así que allí el audio entra directo a tope — es lo que hay. */
   const entrarVolumen = (v: HTMLVideoElement) => {
@@ -142,7 +153,7 @@ export function IntroVideo({ content, locale, mobile }: { content: ContentMap; l
   }
 
   // Doble tap en táctil (dos toques < 320 ms). El primer toque ya activó el
-  // sonido vía onClick, así que aquí solo queda entrar.
+  // sonido vía onClick, así que aquí solo queda saltar.
   const onTouchEnd = () => {
     const now = Date.now()
     if (now - lastTap.current < 320) dismiss()
@@ -152,9 +163,11 @@ export function IntroVideo({ content, locale, mobile }: { content: ContentMap; l
   if (!enabled || !show) return null
 
   const t = (es: string, en: string) => (locale === 'en' ? en : es)
+  // "Saltar", no "entrar": el vídeo termina solo y se funde, así que el gesto es
+  // un atajo, no la única puerta.
   const gesto = mobile
-    ? { toque: t('Toca para escuchar', 'Tap for sound'), entrar: t('Doble toque para entrar', 'Double tap to enter') }
-    : { toque: t('Clic para escuchar', 'Click for sound'), entrar: t('Doble clic para entrar', 'Double-click to enter') }
+    ? { toque: t('Toca para escuchar', 'Tap for sound'), entrar: t('Doble toque para saltar', 'Double tap to skip') }
+    : { toque: t('Clic para escuchar', 'Click for sound'), entrar: t('Doble clic para saltar', 'Double-click to skip') }
 
   return (
     <div onClick={activarSonido} onDoubleClick={dismiss} onTouchEnd={onTouchEnd}
@@ -163,9 +176,14 @@ export function IntroVideo({ content, locale, mobile }: { content: ContentMap; l
         opacity: fading ? 0 : 1, transition: `opacity .7s ${site.ease}`,
       }}>
       {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+      {/* Sin `loop`: la pieza se ve entera una vez y al acabar se funde sola hacia
+          la Home. `onError` cierra igual — un rectángulo negro eterno porque el MP4
+          no cargó sería peor que no tener intro. */}
       <video ref={videoRef} src={videoUrl} poster={poster || undefined}
-        autoPlay muted loop playsInline preload="auto"
+        autoPlay muted playsInline preload="auto"
         onPlaying={() => setListo(true)}
+        onEnded={dismiss}
+        onError={dismiss}
         style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
 
       {/* Invitación. No aparece hasta que el vídeo corre de verdad. */}
