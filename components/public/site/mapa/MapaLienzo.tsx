@@ -22,6 +22,19 @@ const ZOOM_DETALLE = 16.1
  *  lento para que se lea como la ciudad girando y no como un salvapantallas. */
 const DURACION_POR_GRADO = 250
 
+/**
+ * Grados por tramo de órbita. TIENE que ser < 180 y no es un capricho de ritmo.
+ *
+ * `Camera.easeTo` pasa el rumbo objetivo por `_normalizeBearing`, que lo envuelve
+ * a [-180, 180] y luego elige el camino más corto. Pedirle `rumbo + 360` se
+ * normaliza de vuelta al rumbo actual: la cámara entiende «no gires». La órbita
+ * estaba pidiendo exactamente eso y por eso no giraba nada.
+ *
+ * Con tramos de 90° cada petición es inequívoca y se encadenan al terminar, que
+ * además es lo que ya hacía falta para poder cortarla en cualquier momento.
+ */
+const TRAMO_GRADOS = 90
+
 export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar, onSeleccionar, onFallo }: {
   puntos: MapaPunto[]
   /**
@@ -267,18 +280,18 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
     if (!m || !listo || seleccionado == null) return
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
 
-    // En táctil, UN barrido y a callar. Una órbita continua es un mapa 3D
-    // repintándose 60 veces por segundo indefinidamente: en un portátil no se
-    // nota, en un teléfono se nota en la batería y en el calor del aparato.
+    // En escritorio los tramos se encadenan; en táctil se da uno y se para. Una
+    // órbita continua es un mapa 3D repintándose 60 veces por segundo
+    // indefinidamente: en un portátil no se nota, en un teléfono se nota en la
+    // batería y en el calor del aparato.
     const continua = window.matchMedia('(hover: hover) and (pointer: fine)').matches
-    const grados = continua ? 360 : 120
     let vivo = true
 
     const girar = () => {
       if (!vivo) return
       m.easeTo({
-        bearing: m.getBearing() + grados,
-        duration: grados * DURACION_POR_GRADO,
+        bearing: m.getBearing() + TRAMO_GRADOS,
+        duration: TRAMO_GRADOS * DURACION_POR_GRADO,
         easing: (t) => t,   // lineal: una órbita no acelera ni frena
       })
     }
@@ -292,9 +305,7 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
       // retira la órbita hasta que elija otra obra.
       if (e?.originalEvent) { vivo = false; return }
       girar()
-      // En táctil, un solo barrido: una órbita infinita es un mapa 3D
-      // repintándose 60 veces por segundo, y eso en un teléfono es batería.
-      if (!continua) vivo = false
+      if (!continua) vivo = false   // táctil: un solo tramo
     }
 
     // Un único registro. Antes había `once` + `on` a la vez y el primer aterrizaje
