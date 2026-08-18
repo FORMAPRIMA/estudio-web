@@ -271,29 +271,35 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
     // repintándose 60 veces por segundo indefinidamente: en un portátil no se
     // nota, en un teléfono se nota en la batería y en el calor del aparato.
     const continua = window.matchMedia('(hover: hover) and (pointer: fine)').matches
+    const grados = continua ? 360 : 120
     let vivo = true
-    let vuelta = 0
 
     const girar = () => {
       if (!vivo) return
-      const grados = continua ? 360 : 120
       m.easeTo({
         bearing: m.getBearing() + grados,
         duration: grados * DURACION_POR_GRADO,
         easing: (t) => t,   // lineal: una órbita no acelera ni frena
-        essential: false,   // con reduce-motion del sistema, el motor la salta
       })
-      vuelta++
     }
 
-    const alAterrizar = () => {
+    const alAterrizar = (e: any) => {
       if (!vivo) return
-      if (!continua && vuelta >= 1) return   // el barrido único ya está hecho
+      // `moveend` también se dispara cuando el movimiento lo ha hecho el
+      // VISITANTE, y ahí `originalEvent` viene puesto. Sin este filtro, arrastrar
+      // el mapa lo dejaba quieto un instante y acto seguido volvía a girar solo:
+      // exactamente pelearse con quien está intentando mirar algo. Un gesto suyo
+      // retira la órbita hasta que elija otra obra.
+      if (e?.originalEvent) { vivo = false; return }
       girar()
+      // En táctil, un solo barrido: una órbita infinita es un mapa 3D
+      // repintándose 60 veces por segundo, y eso en un teléfono es batería.
+      if (!continua) vivo = false
     }
 
-    m.once('moveend', alAterrizar)
-    if (continua) m.on('moveend', alAterrizar)
+    // Un único registro. Antes había `once` + `on` a la vez y el primer aterrizaje
+    // disparaba dos animaciones de cámara compitiendo.
+    m.on('moveend', alAterrizar)
 
     return () => {
       vivo = false
