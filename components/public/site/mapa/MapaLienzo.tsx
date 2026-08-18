@@ -35,7 +35,7 @@ const DURACION_POR_GRADO = 250
  */
 const TRAMO_GRADOS = 90
 
-export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar, onSeleccionar, onFallo }: {
+export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar, onSeleccionar, tapadoAbajo = 0, unDedo = false, onFallo }: {
   puntos: MapaPunto[]
   /**
    * DOS estados y no uno, porque son dos intenciones distintas.
@@ -50,6 +50,15 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
   seleccionado: number | null
   onResaltar: (n: number | null) => void
   onSeleccionar: (n: number | null) => void
+  /**
+   * Píxeles del lienzo tapados por abajo (la lámina, en móvil). Se los pasamos a
+   * Mapbox como `padding` para que centre en el área VISIBLE: sin esto, el punto
+   * al que vuelas aterriza debajo de la lámina y parece que no ha pasado nada.
+   */
+  tapadoAbajo?: number
+  /** Un dedo mueve el mapa. Solo cuando el mapa ocupa la pantalla entera: si no,
+   *  atrapa el scroll de la página y no puedes pasar de largo. */
+  unDedo?: boolean
   /** Sin WebGL o sin token: la página cae al plano de siempre. */
   onFallo: () => void
 }) {
@@ -74,7 +83,7 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
       minZoom: CAMARA.zoomMin,
       maxZoom: CAMARA.zoomMax,
       attributionControl: true,
-      cooperativeGestures: true, // en móvil, un dedo hace scroll de la página
+      cooperativeGestures: !unDedo,
     })
     mapa.current = m
 
@@ -85,6 +94,22 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
     return () => { m.remove(); mapa.current = null }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // A pantalla completa el mapa manda y un dedo lo mueve; embebido, dos dedos,
+  // porque si no se traga el scroll de la página.
+  useEffect(() => {
+    const m = mapa.current
+    if (!m) return
+    if (unDedo) m.setCooperativeGestures(false)
+    else m.setCooperativeGestures(true)
+  }, [unDedo])
+
+  // El área útil del lienzo. Mapbox la usa en fitBounds y flyTo.
+  useEffect(() => {
+    const m = mapa.current
+    if (!m || !listo) return
+    m.setPadding({ top: 0, right: 0, left: 0, bottom: tapadoAbajo ?? 0 })
+  }, [tapadoAbajo, listo])
 
   // ── Capas ─────────────────────────────────────────────────────────────────
   // Fuente GeoJSON + capas nativas, NO marcadores HTML: en un mapa con 63° de
@@ -213,13 +238,13 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
     // El zoom NO es el del estilo (15,25): con puntos de Ferraz a Fuente del Berro
     // no cabe ni la mitad. Se calcula de los datos conservando rumbo y cabeceo.
     m.fitBounds(caja, {
-      padding: { top: 110, bottom: 90, left: 70, right: 70 },
+      padding: { top: 90, bottom: 70 + (tapadoAbajo ?? 0), left: 56, right: 56 },
       bearing: CAMARA.rumbo,
       pitch: CAMARA.cabeceo,
       duration: 0,
       maxZoom: 15,
     })
-  }, [listo, puntos])
+  }, [listo, puntos, tapadoAbajo])
 
   // ── Resaltado (hover / foco) ──────────────────────────────────────────────
   // Solo pinta. Ni una línea de cámara.

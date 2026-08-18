@@ -146,6 +146,9 @@ export const SIZES = {
    */
   fichaMapa: '(min-width: 901px) 264px, 100vw',
 
+  /** Miniatura de la lista del mapa en móvil: 56 px de ancho, siempre. */
+  miniaturaMapa: '56px',
+
   /** Fondo a sangre: el único que de verdad ocupa el viewport entero. */
   hero: '100vw',
 
