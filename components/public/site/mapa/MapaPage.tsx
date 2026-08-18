@@ -74,10 +74,11 @@ export function MapaPage({ content, puntos }: { content: ContentMap; puntos: Map
             {/* La lista no es un adorno del mapa: un <canvas> es invisible para
                 Google y para un lector de pantalla, y hay quien no tiene WebGL.
                 Resuelve las tres cosas y encima es cómoda con teclado. */}
-            <nav className="fp-mapa-lista" aria-label={locale === 'en' ? 'Works in Madrid' : 'Obras en Madrid'}>
+            <nav className="fp-mapa-lista" aria-label={locale === 'en' ? 'Works' : 'Obras'}>
               <div className="fp-mapa-cab">
                 <p className="fp-mapa-cuenta">
-                  {listados.length} {locale === 'en' ? 'works in Madrid' : 'obras en Madrid'}
+                  {/* «obras» a secas: ya no todas están en Madrid. */}
+                  {listados.length} {locale === 'en' ? 'works' : 'obras'}
                 </p>
                 {seleccionado != null && (
                   <button type="button" className="fp-mapa-todas" data-cursor="" onClick={() => setSeleccionado(null)}>

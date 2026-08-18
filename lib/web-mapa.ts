@@ -89,12 +89,42 @@ export const CAMARA = {
   zoomMin: 10.5,
 } as const
 
-/** Caja que contiene todos los puntos, para el encuadre inicial. */
+/** A partir de aquí, un punto está en otra ciudad. El área metropolitana de Madrid
+ *  no llega a 50 km, así que 100 es holgado y no necesita afinarse. */
+const KM_OTRA_CIUDAD = 100
+
+/**
+ * Caja para el encuadre inicial — la del NÚCLEO, no la de todos los puntos.
+ *
+ * El mapa nació siendo de obras en Madrid, pero en cuanto entra una obra en otro
+ * continente (Monterrey) el encuadre que las contiene a todas es medio planeta:
+ * se abriría enseñando el Atlántico con dos motas. Se encuadra el grupo denso y
+ * las obras lejanas siguen estando a un clic en la lista, que es donde se las
+ * busca de todos modos.
+ *
+ * El centro se calcula con la MEDIANA y no con la media, justamente para que un
+ * punto en otro continente no arrastre la referencia.
+ */
 export function limites(puntos: MapaPunto[]): [[number, number], [number, number]] | null {
   const con = puntos.filter(tieneCoordenadas)
   if (!con.length) return null
+
+  const mediana = (xs: number[]) => {
+    const o = [...xs].sort((a, b) => a - b)
+    const m = Math.floor(o.length / 2)
+    return o.length % 2 ? o[m] : (o[m - 1] + o[m]) / 2
+  }
+  const latC = mediana(con.map((p) => p.lat))
+  const lngC = mediana(con.map((p) => p.lng))
+  const km = (p: { lat: number; lng: number }) =>
+    Math.hypot((p.lat - latC) * 111.3, (p.lng - lngC) * 111.3 * Math.cos((latC * Math.PI) / 180))
+
+  // Si el filtro dejara el mapa casi vacío es que no hay núcleo: se encuadra todo.
+  const nucleo = con.filter((p) => km(p) <= KM_OTRA_CIUDAD)
+  const usar = nucleo.length >= 2 ? nucleo : con
+
   let oeste = Infinity, sur = Infinity, este = -Infinity, norte = -Infinity
-  for (const p of con) {
+  for (const p of usar) {
     oeste = Math.min(oeste, p.lng); este = Math.max(este, p.lng)
     sur = Math.min(sur, p.lat);     norte = Math.max(norte, p.lat)
   }
