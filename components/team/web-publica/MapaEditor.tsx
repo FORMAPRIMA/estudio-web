@@ -100,11 +100,26 @@ function Fila({ punto, index, total, proyectos, onMove, busy }: {
     proyecto_id: punto.proyecto_id ?? '',
     activo: punto.activo,
   })
+  // Coordenadas a mano: el escape cuando la geocodificación deja la chincheta en
+  // la calle equivocada, y el único camino cuando el token esté restringido por
+  // dominio (una llamada desde servidor no manda Referer y Mapbox la rechaza).
+  // Se aceptan pegadas de Google Maps en el formato «40.431538, -3.686550».
+  const [coords, setCoords] = useState(
+    punto.lat != null && punto.lng != null ? `${punto.lat}, ${punto.lng}` : ''
+  )
   const [nota, setNota] = useState<string | null>(null)
   const ocupado = busy || isPending
   const situado = punto.lat != null && punto.lng != null
 
   const guardar = () => {
+    const limpio = coords.trim()
+    let lat: number | null = null
+    let lng: number | null = null
+    if (limpio) {
+      const trozos = limpio.split(/[,\s]+/).filter(Boolean).map(Number)
+      if (trozos.length !== 2 || trozos.some(Number.isNaN)) { setNota('Coordenadas: escribe «latitud, longitud».'); return }
+      ;[lat, lng] = trozos
+    }
     startTransition(async () => {
       const r = await updateMapaPunto(punto.id, {
         nombre: draft.nombre,
@@ -112,6 +127,7 @@ function Fila({ punto, index, total, proyectos, onMove, busy }: {
         anio: draft.anio || null,
         proyecto_id: draft.proyecto_id || null,
         activo: draft.activo,
+        lat, lng,
       })
       setNota('error' in r ? r.error : 'Guardado')
       router.refresh()
@@ -121,7 +137,9 @@ function Fila({ punto, index, total, proyectos, onMove, busy }: {
   const situar = () => {
     startTransition(async () => {
       const r = await geocodificarPunto(punto.id)
-      setNota('error' in r ? r.error : `Encontrado: ${r.encontrado}`)
+      if ('error' in r) { setNota(r.error); return }
+      setNota(`Encontrado: ${r.encontrado}`)
+      setCoords(`${r.lat}, ${r.lng}`)
       router.refresh()
     })
   }
@@ -166,11 +184,13 @@ function Fila({ punto, index, total, proyectos, onMove, busy }: {
       </div>
 
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginTop: 9 }}>
-        {/* El estado de la coordenada se lee de un vistazo: es lo que hay que
-            revisar antes de publicar. */}
-        <span style={{ fontSize: 11, color: situado ? '#2e7d32' : '#b8860b', fontVariantNumeric: 'tabular-nums' }}>
-          {situado ? `${punto.lat!.toFixed(5)}, ${punto.lng!.toFixed(5)}` : 'Sin situar'}
-        </span>
+        {/* La coordenada es editable: es lo que hay que revisar antes de publicar
+            y, si la chincheta cae mal, se pega la buena desde Google Maps. */}
+        <input value={coords} onChange={(e) => setCoords(e.target.value)}
+          placeholder="Sin situar — lat, lng"
+          title="Pega aquí las coordenadas de Google Maps si la chincheta cae mal"
+          style={{ ...inputStyle, width: 205, padding: '6px 8px', fontVariantNumeric: 'tabular-nums',
+            color: situado ? '#2e7d32' : '#b8860b' }} />
         {situado && (
           <a href={`https://www.google.com/maps/search/?api=1&query=${punto.lat},${punto.lng}`} target="_blank" rel="noopener noreferrer"
             style={{ fontSize: 11, color: `${INK}70` }}>ver ↗</a>
