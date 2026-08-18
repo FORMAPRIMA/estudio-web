@@ -36,8 +36,7 @@ export function EstudioPage({ content, equipo }: { content: ContentMap; equipo: 
           alguien. Separarlos arregla el recorte y la legibilidad de una vez.
           El CMS admite además una imagen distinta para móvil en este bloque, así
           que una toma vertical hecha a propósito entra sin tocar nada de esto. */}
-      <section className="est-hero" style={{ position: 'relative',
-        background: site.color.stage, color: site.color.white, overflow: 'hidden' }}>
+      <section className="est-hero" style={{ position: 'relative', overflow: 'hidden' }}>
         {/* Sin `position` inline: el inline gana a la hoja y aquí la posición
             cambia con el breakpoint (absoluta a sangre / en flujo en móvil). */}
         <div className="est-hero-foto" style={{ overflow: 'hidden' }}>
@@ -50,7 +49,11 @@ export function EstudioPage({ content, equipo }: { content: ContentMap; equipo: 
           <div className="est-hero-velo" style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0) 35%, rgba(0,0,0,0.55) 100%)' }} />
         </div>
 
-        <div className="est-hero-txt" style={{ maxWidth: site.maxWidth, width: '100%', margin: '0 auto', padding: `0 ${site.gutter}` }}>
+        {/* Sin `padding` inline: el atajo fija los CUATRO lados, así que ganaba al
+            padding-bottom de la hoja y dejaba el titular pegado al canto de la
+            foto (y sin aire arriba en móvil). Todo el relleno vive en el CSS,
+            que es donde cambia con el breakpoint. */}
+        <div className="est-hero-txt" style={{ maxWidth: site.maxWidth, width: '100%', margin: '0 auto' }}>
           {heroEyebrow && (
             <Reveal as="p" style={{ fontSize: display.eyebrow, letterSpacing: site.track.ultra, textTransform: 'uppercase', opacity: 0.85, margin: '0 0 16px' }}>{heroEyebrow}</Reveal>
           )}
@@ -89,29 +92,40 @@ export function EstudioPage({ content, equipo }: { content: ContentMap; equipo: 
 
       <style dangerouslySetInnerHTML={{ __html: `
         /* ── Hero: a sangre en escritorio, partido en móvil ─────────────── */
-        .est-hero { min-height: 100dvh; display: flex; align-items: flex-end; }
+        .est-hero {
+          min-height: 100dvh; display: flex; align-items: flex-end;
+          background: ${site.color.stage}; color: ${site.color.white};
+        }
         .est-hero-foto { position: absolute; inset: 0; }
         /* <Img> emite un <picture>, que es inline y sin alto propio: sin esto el
            height:100% del <img> resuelve contra "auto" y el hero se desploma. */
         .est-hero-foto picture { display: block; width: 100%; height: 100%; }
-        .est-hero-txt { position: relative; z-index: 2; padding-bottom: 80px; }
+        .est-hero-txt { position: relative; z-index: 2; padding: 0 ${site.gutter} 80px; }
         .est-hero-scroll {
           position: absolute; bottom: 28px; left: 50%;
           transform: translateX(-50%); z-index: 2;
         }
         @media (max-width: 760px) {
           /* La sección deja de imponer alto: la marca la foto entera más el
-             texto. Un alto fijo aquí volvería a obligar a recortar algo. */
-          .est-hero { min-height: 0; display: block; padding-bottom: 46px; }
+             texto. Un alto fijo aquí volvería a obligar a recortar algo.
+             Y deja de ser oscura: con el titular fuera de la foto, el fondo
+             negro se quedaba como una franja suelta entre la imagen y el crema
+             de la página, que se leía como un resto y no como una decisión. */
+          .est-hero { min-height: 0; display: block; padding-bottom: 0;
+                      background: ${site.color.cream}; color: ${site.color.ink}; }
           .est-hero-foto { position: static; inset: auto; width: 100%; }
           .est-hero-foto picture { height: auto; }
           .est-hero-foto img { height: auto !important; }
           .est-hero-velo { display: none; }
-          .est-hero-txt { padding-top: 34px; padding-bottom: 0; }
-          .est-hero-scroll {
-            position: static; transform: none; display: block;
-            margin-top: 30px; text-align: center;
-          }
+          /* El titular ya no va sobre la foto sino debajo: necesita aire arriba
+             para no quedarse pegado al canto. El de abajo ya lo pone la sección
+             del equipo, que arranca con su propio relleno generoso. */
+          .est-hero-txt { padding: 32px ${site.gutter} 0; }
+          /* Fuera el «Desliza»: con el titular ya fuera de la foto, debajo se ve
+             el principio de la siguiente sección. Invitar a un gesto que el
+             visitante ya está viendo hacer sobra, y era lo que estiraba la
+             franja bajo el titular. */
+          .est-hero-scroll { display: none; }
         }
 
         /* Equipo: 1 por fila en móvil, 2 en tablet, 3 en escritorio */
