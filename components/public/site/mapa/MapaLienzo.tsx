@@ -16,12 +16,27 @@ import { site } from '../theme'
 import { CAMARA, aGeoJSON, limites, tieneCoordenadas, type MapaPunto } from '@/lib/web-mapa'
 
 const FUENTE = 'fp-obras'
+/** Zoom al que se aterriza sobre una obra si se venía de más lejos. */
+const ZOOM_DETALLE = 16.1
+/** Milisegundos por grado de órbita. 250 ≈ una vuelta completa en 90 s: lo bastante
+ *  lento para que se lea como la ciudad girando y no como un salvapantallas. */
+const DURACION_POR_GRADO = 250
 
-export default function MapaLienzo({ puntos, activo, onActivo, onFallo }: {
+export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar, onSeleccionar, onFallo }: {
   puntos: MapaPunto[]
-  /** Índice (1..n) del punto resaltado, o null. Lo comparte con la lista. */
-  activo: number | null
-  onActivo: (n: number | null) => void
+  /**
+   * DOS estados y no uno, porque son dos intenciones distintas.
+   *  · `resaltado` (pasar el ratón, o el foco de teclado) solo enciende el punto.
+   *    La cámara NO se mueve: un gesto sin compromiso no puede tener una
+   *    consecuencia con compromiso.
+   *  · `seleccionado` (clic) vuela hasta la obra, abre la tarjeta y orbita.
+   * Ambos son el índice 1..n, el mismo número que se pinta en el punto y en la
+   * lista de al lado.
+   */
+  resaltado: number | null
+  seleccionado: number | null
+  onResaltar: (n: number | null) => void
+  onSeleccionar: (n: number | null) => void
   /** Sin WebGL o sin token: la página cae al plano de siempre. */
   onFallo: () => void
 }) {
@@ -85,7 +100,13 @@ export default function MapaLienzo({ puntos, activo, onActivo, onFallo }: {
         'circle-pitch-alignment': 'map',
         'circle-radius': ['interpolate', ['linear'], ['zoom'], 11, 10, 16, 24],
         'circle-color': site.color.ink,
-        'circle-opacity': ['case', ['boolean', ['feature-state', 'activo'], false], 0.14, 0.06],
+        // Tres niveles: en reposo se insinúa, al pasar el ratón se marca, y al
+        // seleccionar se afirma. El halo es lo único que cambia con el hover:
+        // barato de pintar y suficiente para contestar «¿cuál es este?».
+        'circle-opacity': ['case',
+          ['boolean', ['feature-state', 'sel'], false], 0.16,
+          ['boolean', ['feature-state', 'res'], false], 0.11,
+          0.06],
       },
     })
     m.addLayer({
@@ -95,7 +116,7 @@ export default function MapaLienzo({ puntos, activo, onActivo, onFallo }: {
       paint: {
         'circle-pitch-alignment': 'map',
         'circle-radius': ['interpolate', ['linear'], ['zoom'], 11, 5.5, 16, 11],
-        'circle-color': ['case', ['boolean', ['feature-state', 'activo'], false], site.color.ink, site.color.cream],
+        'circle-color': ['case', ['boolean', ['feature-state', 'sel'], false], site.color.ink, site.color.cream],
         'circle-stroke-width': 1.4,
         'circle-stroke-color': site.color.ink,
       },
@@ -115,7 +136,7 @@ export default function MapaLienzo({ puntos, activo, onActivo, onFallo }: {
         'text-rotation-alignment': 'viewport',
       },
       paint: {
-        'text-color': ['case', ['boolean', ['feature-state', 'activo'], false], site.color.cream, site.color.ink],
+        'text-color': ['case', ['boolean', ['feature-state', 'sel'], false], site.color.cream, site.color.ink],
       },
     })
     m.addLayer({
@@ -148,23 +169,36 @@ export default function MapaLienzo({ puntos, activo, onActivo, onFallo }: {
       },
     })
 
-    const puntero = (v: string) => () => { m.getCanvas().style.cursor = v }
-    m.on('mouseenter', 'fp-obra-punto', puntero('pointer'))
-    m.on('mouseleave', 'fp-obra-punto', puntero(''))
+    m.on('mouseenter', 'fp-obra-punto', (e) => {
+      m.getCanvas().style.cursor = 'pointer'
+      const n = e.features?.[0]?.properties?.n
+      if (typeof n === 'number') onResaltar(n)
+    })
+    m.on('mouseleave', 'fp-obra-punto', () => {
+      m.getCanvas().style.cursor = ''
+      onResaltar(null)
+    })
     m.on('click', 'fp-obra-punto', (e) => {
       const n = e.features?.[0]?.properties?.n
-      if (typeof n === 'number') onActivo(n)
+      if (typeof n === 'number') onSeleccionar(n)
     })
-  }, [listo, puntos, onActivo])
+  }, [listo, puntos, onResaltar, onSeleccionar])
 
   // ── Encuadre inicial ──────────────────────────────────────────────────────
-  // El zoom NO es el del estilo (15,25): con puntos de Ferraz a Fuente del Berro
-  // no cabe ni la mitad. Se calcula de los datos conservando rumbo y cabeceo.
+  // Con CERROJO. Es inicial por definición: tiene que ocurrir una vez y no volver.
+  // Sin él, cualquier render que cambie la identidad del array de puntos vuelve a
+  // dispararlo con `duration: 0` y la cámara salta de golpe al encuadre general —
+  // que es exactamente lo que se leía como «se reinicia el zoom». Memoizar la
+  // lista arregla el síntoma de hoy; este cerrojo impide que vuelva mañana.
+  const encuadrado = useRef(false)
   useEffect(() => {
     const m = mapa.current
-    if (!m || !listo) return
+    if (!m || !listo || encuadrado.current) return
     const caja = limites(puntos)
     if (!caja) return
+    encuadrado.current = true
+    // El zoom NO es el del estilo (15,25): con puntos de Ferraz a Fuente del Berro
+    // no cabe ni la mitad. Se calcula de los datos conservando rumbo y cabeceo.
     m.fitBounds(caja, {
       padding: { top: 110, bottom: 90, left: 70, right: 70 },
       bearing: CAMARA.rumbo,
@@ -174,26 +208,99 @@ export default function MapaLienzo({ puntos, activo, onActivo, onFallo }: {
     })
   }, [listo, puntos])
 
-  // ── Punto resaltado ──────────────────────────────────────────────────────
-  // El resalte va por `feature-state` y no reconstruyendo el GeoJSON: cambiar la
-  // fuente en cada hover obligaría a Mapbox a recalcular colisiones de etiquetas
-  // en cada movimiento del ratón.
-  const previo = useRef<number | null>(null)
+  // ── Resaltado (hover / foco) ──────────────────────────────────────────────
+  // Solo pinta. Ni una línea de cámara.
+  const resPrevio = useRef<number | null>(null)
+  useEffect(() => {
+    const m = mapa.current
+    if (!m || !listo || !m.getSource(FUENTE)) return
+    if (resPrevio.current != null) m.setFeatureState({ source: FUENTE, id: resPrevio.current - 1 }, { res: false })
+    if (resaltado != null) m.setFeatureState({ source: FUENTE, id: resaltado - 1 }, { res: true })
+    resPrevio.current = resaltado
+  }, [resaltado, listo])
+
+  // ── Selección: el vuelo y la órbita ───────────────────────────────────────
+  const selPrevia = useRef<number | null>(null)
   useEffect(() => {
     const m = mapa.current
     if (!m || !listo || !m.getSource(FUENTE)) return
     const conCoords = puntos.filter(tieneCoordenadas)
 
-    if (previo.current != null) {
-      m.setFeatureState({ source: FUENTE, id: previo.current - 1 }, { activo: false })
+    if (selPrevia.current != null) m.setFeatureState({ source: FUENTE, id: selPrevia.current - 1 }, { sel: false })
+    selPrevia.current = seleccionado
+
+    // Al deseleccionar se para la órbita pero NO se devuelve la cámara: volver al
+    // encuadre general es otra intención y tiene su propio botón en la lista.
+    if (seleccionado == null) { m.stop(); return }
+
+    const p = conCoords[seleccionado - 1]
+    if (!p) return
+    m.setFeatureState({ source: FUENTE, id: seleccionado - 1 }, { sel: true })
+
+    // `flyTo`, no `easeTo`. No son dos maneras de lo mismo: easeTo interpola en
+    // línea recta y a zoom alto eso pasa como un borrón. flyTo implementa la curva
+    // de Van Wijk y Nuij —se eleva lo justo, recorre, y baja—, que es como el ojo
+    // entiende un desplazamiento sobre un territorio. `curve` baja porque las 27
+    // obras caben en 2 km y no hace falta subir a la estratosfera.
+    //
+    // Ni el rumbo ni el cabeceo se tocan: son del visitante. Y el zoom solo sube,
+    // nunca baja — seleccionar una obra jamás aleja la cámara.
+    m.flyTo({
+      center: [p.lng, p.lat],
+      zoom: Math.max(m.getZoom(), ZOOM_DETALLE),
+      curve: 1.2,
+      speed: 0.85,
+      essential: true,
+    })
+  }, [seleccionado, listo, puntos])
+
+  // ── La órbita ─────────────────────────────────────────────────────────────
+  // Se engancha al ATERRIZAJE del vuelo (`moveend`), no al clic: si arrancara a la
+  // vez, las dos animaciones de cámara se pisarían.
+  //
+  // Una sola llamada y no un bucle por fotograma: Mapbox ya cancela sus propias
+  // animaciones de cámara en cuanto el visitante toca el mapa, así que arrastrar,
+  // hacer zoom o rotar interrumpe la órbita al instante y sin escribir nada. La
+  // máquina se aparta sola en cuanto alguien quiere conducir.
+  useEffect(() => {
+    const m = mapa.current
+    if (!m || !listo || seleccionado == null) return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+
+    // En táctil, UN barrido y a callar. Una órbita continua es un mapa 3D
+    // repintándose 60 veces por segundo indefinidamente: en un portátil no se
+    // nota, en un teléfono se nota en la batería y en el calor del aparato.
+    const continua = window.matchMedia('(hover: hover) and (pointer: fine)').matches
+    let vivo = true
+    let vuelta = 0
+
+    const girar = () => {
+      if (!vivo) return
+      const grados = continua ? 360 : 120
+      m.easeTo({
+        bearing: m.getBearing() + grados,
+        duration: grados * DURACION_POR_GRADO,
+        easing: (t) => t,   // lineal: una órbita no acelera ni frena
+        essential: false,   // con reduce-motion del sistema, el motor la salta
+      })
+      vuelta++
     }
-    if (activo != null && conCoords[activo - 1]) {
-      m.setFeatureState({ source: FUENTE, id: activo - 1 }, { activo: true })
-      const p = conCoords[activo - 1]
-      m.easeTo({ center: [p.lng, p.lat], zoom: Math.max(m.getZoom(), 15.4), duration: 900 })
+
+    const alAterrizar = () => {
+      if (!vivo) return
+      if (!continua && vuelta >= 1) return   // el barrido único ya está hecho
+      girar()
     }
-    previo.current = activo
-  }, [activo, listo, puntos])
+
+    m.once('moveend', alAterrizar)
+    if (continua) m.on('moveend', alAterrizar)
+
+    return () => {
+      vivo = false
+      m.off('moveend', alAterrizar)
+      m.stop()
+    }
+  }, [seleccionado, listo])
 
   return <div ref={contenedor} className="fp-mapa-lienzo" aria-hidden="true" />
 }

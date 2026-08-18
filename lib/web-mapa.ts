@@ -3,6 +3,33 @@
 // es la selección que tiene ficha. Los puntos que sí corresponden a un proyecto
 // publicado lo enlazan por `proyecto_slug`.
 
+// ── Uso de la obra ──────────────────────────────────────────────────────────
+// Lista CERRADA y no texto libre. Las tipologías que el estudio ya escribe en las
+// fichas mezclan dos ejes —«Residencial · Reforma Integral»— y con un campo libre
+// convivirían «Residencial», «residencial» y «Vivienda» en seis meses, sin que
+// ninguna leyenda ni filtro pudiera agruparlos. Se guarda el CÓDIGO y la etiqueta
+// se pinta en el idioma que toque, como el resto del sitio.
+//
+// Un solo eje, el uso. El segundo (reforma integral / obra nueva / interiorismo)
+// será otra columna el día que haga falta: añadirla luego es trivial, nacer con
+// dos listas que rellenar 27 veces cada una, no.
+export const USOS = [
+  { codigo: 'residencial',  es: 'Residencial',  en: 'Residential' },
+  { codigo: 'comercial',    es: 'Comercial',    en: 'Retail' },
+  { codigo: 'hosteleria',   es: 'Hostelería',   en: 'Hospitality' },
+  { codigo: 'oficinas',     es: 'Oficinas',     en: 'Workplace' },
+  { codigo: 'equipamiento', es: 'Equipamiento', en: 'Civic' },
+  { codigo: 'industrial',   es: 'Industrial',   en: 'Industrial' },
+  { codigo: 'otros',        es: 'Otros',        en: 'Other' },
+] as const
+
+export type UsoCodigo = (typeof USOS)[number]['codigo']
+
+export function etiquetaUso(codigo: string | null, locale: 'es' | 'en'): string {
+  const u = USOS.find((x) => x.codigo === codigo)
+  return u ? (locale === 'en' ? u.en : u.es) : ''
+}
+
 export interface MapaPunto {
   id: string
   nombre: string
@@ -10,11 +37,34 @@ export interface MapaPunto {
   lat: number | null
   lng: number | null
   anio: string | null
+  /** Foto propia del punto. Respaldo de la portada del proyecto enlazado. */
+  imagen_url: string | null
+  /** Código de USOS. Respaldo de la tipología del proyecto enlazado. */
+  uso: string | null
   proyecto_id: string | null
   /** Resuelto al leer: si el proyecto enlazado está publicado, su slug. */
   proyecto_slug: string | null
+  /** Resueltos al leer: la ficha publicada manda sobre los campos del punto.
+   *  Así no hay que duplicar la información de las obras que ya tienen dossier, y
+   *  si mañana cambia la portada del proyecto, la del mapa cambia sola. */
+  proyecto_hero_url: string | null
+  proyecto_tipologia_es: string | null
+  proyecto_tipologia_en: string | null
   orden: number
   activo: boolean
+}
+
+/** Lo que la tarjeta enseña de una obra: la ficha publicada primero, y si no la
+ *  hay —21 de las 27— lo que se haya cargado en el propio punto del mapa. */
+export function datosDeTarjeta(p: MapaPunto, locale: 'es' | 'en') {
+  const tipologiaFicha = locale === 'en'
+    ? (p.proyecto_tipologia_en || p.proyecto_tipologia_es)
+    : p.proyecto_tipologia_es
+  return {
+    imagen: p.proyecto_hero_url || p.imagen_url,
+    descriptor: tipologiaFicha || etiquetaUso(p.uso, locale),
+    slug: p.proyecto_slug,
+  }
 }
 
 /** Un punto solo se puede pintar si tiene las dos coordenadas. */

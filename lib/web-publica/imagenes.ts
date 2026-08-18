@@ -138,6 +138,14 @@ export function anchosPara(anchoOriginal: number, escalera: readonly number[] = 
  * C = min(1440px, 100vw) − 2·gutter, que a 1728 px de viewport da 1280 px.
  */
 export const SIZES = {
+  /**
+   * Tarjeta de obra del mapa: 264 px fijos en escritorio, a todo el ancho cuando
+   * sube desde el pie en móvil. Sin esta entrada el navegador se bajaría el
+   * original para pintarlo a 264 px, que es justo lo que la escalera de variantes
+   * vino a evitar.
+   */
+  fichaMapa: '(min-width: 901px) 264px, 100vw',
+
   /** Fondo a sangre: el único que de verdad ocupa el viewport entero. */
   hero: '100vw',
 

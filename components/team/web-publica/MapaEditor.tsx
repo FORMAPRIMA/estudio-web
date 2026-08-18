@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { subirArchivo } from '@/lib/web-publica/subida'
 import {
   createMapaPunto, updateMapaPunto, deleteMapaPunto, reorderMapaPuntos, geocodificarPunto,
 } from '@/app/actions/web-mapa'
-import type { MapaPunto } from '@/lib/web-mapa'
+import { USOS, type MapaPunto } from '@/lib/web-mapa'
 import type { WebProyecto } from '@/lib/web-publica'
 
 const INK = '#1A1A1A'
@@ -99,7 +100,15 @@ function Fila({ punto, index, total, proyectos, onMove, busy }: {
     anio: punto.anio ?? '',
     proyecto_id: punto.proyecto_id ?? '',
     activo: punto.activo,
+    uso: punto.uso ?? '',
+    imagen_url: punto.imagen_url,
   })
+  // La fila se pliega: arriba lo que se revisa de un vistazo —nombre, coordenada,
+  // estado—, y el resto bajo demanda. Con foto y uso metidos en una sola línea la
+  // tabla dejaba de ser legible a las 27 filas.
+  const [abierta, setAbierta] = useState(false)
+  const [subiendo, setSubiendo] = useState<string | null>(null)
+  const fotoInput = useRef<HTMLInputElement>(null)
   // Coordenadas a mano: el escape cuando la geocodificación deja la chincheta en
   // la calle equivocada, y el único camino cuando el token esté restringido por
   // dominio (una llamada desde servidor no manda Referer y Mapbox la rechaza).
@@ -127,11 +136,27 @@ function Fila({ punto, index, total, proyectos, onMove, busy }: {
         anio: draft.anio || null,
         proyecto_id: draft.proyecto_id || null,
         activo: draft.activo,
+        uso: draft.uso || null,
+        imagen_url: draft.imagen_url,
         lat, lng,
       })
       setNota('error' in r ? r.error : 'Guardado')
       router.refresh()
     })
+  }
+
+  const onFoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setSubiendo('subiendo')
+    // `subirArchivo` genera la escalera de variantes y la registra; la carpeta
+    // 'mapa' mantiene el bucket ordenado.
+    const r = await subirArchivo(file, 'mapa', (fase) => setSubiendo(fase))
+    setSubiendo(null)
+    if ('error' in r) { setNota(r.error); return }
+    setDraft((d) => ({ ...d, imagen_url: r.url }))
+    setNota('Foto lista — dale a Guardar')
   }
 
   const situar = () => {
@@ -202,6 +227,9 @@ function Fila({ punto, index, total, proyectos, onMove, busy }: {
           <input type="checkbox" checked={draft.activo} onChange={(e) => setDraft({ ...draft, activo: e.target.checked })} />
           Visible en el mapa
         </label>
+        <button onClick={() => setAbierta((v) => !v)} style={{ ...btn(false), background: abierta ? '#F0EEE8' : '#F8F7F4' }}>
+          {abierta ? 'Menos' : 'Foto y uso'}{draft.imagen_url || draft.uso ? ' ·' : ''}
+        </button>
         <button onClick={guardar} disabled={ocupado} style={btn(ocupado)}>Guardar</button>
         <button
           onClick={() => { if (confirm(`¿Quitar «${punto.nombre}» del mapa?`)) startTransition(async () => { await deleteMapaPunto(punto.id); router.refresh() }) }}
@@ -211,6 +239,52 @@ function Fila({ punto, index, total, proyectos, onMove, busy }: {
         </button>
         {nota && <span style={{ fontSize: 11, color: `${INK}70` }}>{nota}</span>}
       </div>
+
+      {abierta && (
+        <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', flexWrap: 'wrap',
+          marginTop: 12, paddingTop: 12, borderTop: `1px solid ${BORDER}` }}>
+
+          {/* Foto */}
+          <div>
+            <label style={labelStyle}>Foto</label>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              {draft.imagen_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={draft.imagen_url} alt="" style={{ width: 96, height: 60, objectFit: 'cover', borderRadius: 3, border: `1px solid ${BORDER}`, display: 'block' }} />
+              ) : (
+                <div style={{ width: 96, height: 60, borderRadius: 3, border: `1px dashed ${BORDER}`, background: '#FBFAF8' }} />
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <button onClick={() => fotoInput.current?.click()} disabled={ocupado || !!subiendo} style={btn(ocupado || !!subiendo)}>
+                  {subiendo === 'optimizando' ? 'Optimizando…' : subiendo ? 'Subiendo…' : draft.imagen_url ? 'Cambiar' : 'Subir foto'}
+                </button>
+                {draft.imagen_url && (
+                  <button onClick={() => setDraft((d) => ({ ...d, imagen_url: null }))}
+                    style={{ background: 'none', border: 'none', color: `${INK}60`, fontSize: 11, cursor: 'pointer', padding: 0, textAlign: 'left' }}>
+                    Quitar
+                  </button>
+                )}
+              </div>
+              <input ref={fotoInput} type="file" accept="image/*" hidden onChange={onFoto} />
+            </div>
+          </div>
+
+          {/* Uso */}
+          <div style={{ width: 180 }}>
+            <label style={labelStyle}>Uso</label>
+            <select value={draft.uso} onChange={(e) => setDraft({ ...draft, uso: e.target.value })} style={inputStyle}>
+              <option value="">— Sin especificar —</option>
+              {USOS.map((u) => <option key={u.codigo} value={u.codigo}>{u.es}</option>)}
+            </select>
+          </div>
+
+          <p style={{ flex: 1, minWidth: 240, fontSize: 11, color: `${INK}45`, lineHeight: 1.55, margin: '18px 0 0' }}>
+            {punto.proyecto_id
+              ? 'Esta obra está enlazada a un proyecto publicado: la tarjeta del mapa usa la portada y la tipología de su ficha, así que aquí no hace falta subir nada. Lo que pongas aquí solo se usaría si se desenlaza.'
+              : 'La tarjeta del mapa funciona sin foto (se queda en nombre, uso y año), así que puedes ir subiéndolas poco a poco.'}
+          </p>
+        </div>
+      )}
     </div>
   )
 }

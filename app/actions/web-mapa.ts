@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
-import type { MapaPunto } from '@/lib/web-mapa'
+import { USOS, type MapaPunto } from '@/lib/web-mapa'
 
 const PATH = '/team/marketing/web-publica'
 const FP_ROLES = ['fp_partner', 'fp_biz_dev']
@@ -16,9 +16,24 @@ async function requireMarketing() {
   if (!profile || !FP_ROLES.includes(profile.rol)) throw new Error('Sin permisos.')
 }
 
-const SELECT = 'id, nombre, direccion, lat, lng, anio, proyecto_id, orden, activo'
+const CAMPOS = 'id, nombre, direccion, lat, lng, anio, proyecto_id, orden, activo'
+const SELECT = `${CAMPOS}, imagen_url, uso`
 
-function mapRow(r: any, slugPorProyecto: Map<string, string>): MapaPunto {
+/**
+ * Lee pidiendo las columnas de ficha y, si la migración todavía no está aplicada,
+ * reintenta sin ellas. Mismo criterio que en web-publica con `creditos`: una
+ * migración pendiente deja el mapa sin foto ni uso, no sin mapa.
+ */
+async function leerPuntos<T>(construir: (select: string) => PromiseLike<{ data: T | null; error: { message: string } | null }>) {
+  const primero = await construir(SELECT)
+  if (primero.error && /(imagen_url|uso)/i.test(primero.error.message)) return construir(CAMPOS)
+  return primero
+}
+
+interface FichaPublicada { slug: string; hero_url: string | null; tipologia_es: string | null; tipologia_en: string | null }
+
+function mapRow(r: any, fichas: Map<string, FichaPublicada>): MapaPunto {
+  const ficha = r.proyecto_id ? fichas.get(r.proyecto_id) : undefined
   return {
     id: r.id,
     nombre: r.nombre,
@@ -26,47 +41,57 @@ function mapRow(r: any, slugPorProyecto: Map<string, string>): MapaPunto {
     lat: typeof r.lat === 'number' ? r.lat : null,
     lng: typeof r.lng === 'number' ? r.lng : null,
     anio: r.anio ?? null,
+    imagen_url: r.imagen_url ?? null,
+    uso: r.uso ?? null,
     proyecto_id: r.proyecto_id ?? null,
-    proyecto_slug: (r.proyecto_id && slugPorProyecto.get(r.proyecto_id)) || null,
+    proyecto_slug: ficha?.slug ?? null,
+    proyecto_hero_url: ficha?.hero_url ?? null,
+    proyecto_tipologia_es: ficha?.tipologia_es ?? null,
+    proyecto_tipologia_en: ficha?.tipologia_en ?? null,
     orden: r.orden ?? 0,
     activo: r.activo ?? true,
   }
 }
 
 /**
- * Slugs de los proyectos publicados, para saber qué puntos pueden enlazar a una
- * ficha. Se resuelve aquí y no con un join anidado de PostgREST: con tablas
+ * Fichas de los proyectos publicados. Además del slug se traen portada y tipología
+ * porque la tarjeta del mapa las PREFIERE a los campos del propio punto: las seis
+ * obras con dossier no tienen que duplicar nada, y si cambia la portada del
+ * proyecto, la del mapa cambia sola. Se resuelve aquí y no con un join anidado de PostgREST: con tablas
  * recién creadas el join puede fallar en silencio hasta que se refresca la caché
  * de claves foráneas (ver CLAUDE.md, sección Supabase).
  */
-async function slugsPublicados(admin: ReturnType<typeof createAdminClient>) {
-  const { data } = await admin.from('web_proyectos').select('id, slug').eq('activo', true)
-  const m = new Map<string, string>()
-  for (const p of data ?? []) if (p.slug) m.set(p.id, p.slug)
+async function fichasPublicadas(admin: ReturnType<typeof createAdminClient>) {
+  const { data } = await admin.from('web_proyectos')
+    .select('id, slug, hero_url, tipologia_es, tipologia_en').eq('activo', true)
+  const m = new Map<string, FichaPublicada>()
+  for (const p of data ?? []) {
+    if (p.slug) m.set(p.id, { slug: p.slug, hero_url: p.hero_url ?? null, tipologia_es: p.tipologia_es ?? null, tipologia_en: p.tipologia_en ?? null })
+  }
   return m
 }
 
 /** Lectura pública: solo los activos, en orden. */
 export async function getMapaPuntosPublic(): Promise<MapaPunto[]> {
   const admin = createAdminClient()
-  const { data, error } = await admin.from('web_mapa_puntos').select(SELECT)
-    .eq('activo', true).order('orden', { ascending: true })
+  const { data, error } = await leerPuntos((sel) => admin.from('web_mapa_puntos').select(sel)
+    .eq('activo', true).order('orden', { ascending: true }))
   // La migración puede no estar aplicada todavía: el sitio no se cae, se queda
   // sin mapa nuevo y el visor cae al plano PNG de siempre.
   if (error) { console.error('[web-mapa] getPublic:', error.message); return [] }
-  const slugs = await slugsPublicados(admin)
-  return (data ?? []).map((r) => mapRow(r, slugs))
+  const fichas = await fichasPublicadas(admin)
+  return (data ?? []).map((r) => mapRow(r, fichas))
 }
 
 /** Lectura del CMS: también los desactivados y los que aún no tienen coordenadas. */
 export async function getMapaPuntosAdmin(): Promise<MapaPunto[]> {
   await requireMarketing()
   const admin = createAdminClient()
-  const { data, error } = await admin.from('web_mapa_puntos').select(SELECT)
-    .order('orden', { ascending: true })
+  const { data, error } = await leerPuntos((sel) => admin.from('web_mapa_puntos').select(sel)
+    .order('orden', { ascending: true }))
   if (error) { console.error('[web-mapa] getAdmin:', error.message); return [] }
-  const slugs = await slugsPublicados(admin)
-  return (data ?? []).map((r) => mapRow(r, slugs))
+  const fichas = await fichasPublicadas(admin)
+  return (data ?? []).map((r) => mapRow(r, fichas))
 }
 
 export async function createMapaPunto(): Promise<{ success: true } | { error: string }> {
@@ -93,6 +118,8 @@ export async function updateMapaPunto(id: string, data: {
   anio?: string | null
   proyecto_id?: string | null
   activo?: boolean
+  imagen_url?: string | null
+  uso?: string | null
 }): Promise<{ success: true } | { error: string }> {
   try {
     await requireMarketing()
@@ -107,6 +134,14 @@ export async function updateMapaPunto(id: string, data: {
     if (data.anio !== undefined)      patch.anio = data.anio?.trim() || null
     if (data.proyecto_id !== undefined) patch.proyecto_id = data.proyecto_id || null
     if (data.activo !== undefined)    patch.activo = data.activo
+    if (data.imagen_url !== undefined) patch.imagen_url = data.imagen_url
+    // El uso se valida contra la lista cerrada: un código inventado no rompería
+    // nada, pero dejaría un punto sin etiqueta y sin manera de agruparlo.
+    if (data.uso !== undefined) {
+      const uso = data.uso || null
+      if (uso && !USOS.some((u) => u.codigo === uso)) return { error: `Uso desconocido: ${uso}.` }
+      patch.uso = uso
+    }
     // Coordenadas: se aceptan las dos o ninguna. Media coordenada pintaría el
     // punto en el Golfo de Guinea.
     if (data.lat !== undefined || data.lng !== undefined) {
