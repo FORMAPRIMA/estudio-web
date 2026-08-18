@@ -22,6 +22,16 @@ const nextConfig = {
         protocol: 'https',
         hostname: 'picsum.photos',
       },
+      // Storage de Supabase. Faltaba, y era el eslabón que impedía usar
+      // next/image con las fotos del CMS (fallaba con "hostname not configured").
+      // La web pública ya no lo necesita —sirve la escalera de variantes de
+      // web-publica/v2 con <picture>, ver lib/web-publica/imagenes.ts— pero sin
+      // esto cualquier next/image sobre una foto del bucket seguiría rompiendo.
+      {
+        protocol: 'https',
+        hostname: '*.supabase.co',
+        pathname: '/storage/v1/object/public/**',
+      },
     ],
   },
   async headers() {

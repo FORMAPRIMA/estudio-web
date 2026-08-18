@@ -5,6 +5,7 @@ import { site, display } from '../theme'
 import { useSite, href } from '../SiteProvider'
 import { Reveal } from '../Reveal'
 import type { WebPropiedad } from '@/lib/web-propiedades'
+import { Img } from '@/components/public/site/Img'
 
 export function PropiedadDetalle({ propiedad }: { propiedad: WebPropiedad }) {
   const { locale } = useSite()
@@ -16,7 +17,8 @@ export function PropiedadDetalle({ propiedad }: { propiedad: WebPropiedad }) {
       <section style={{ position: 'relative', height: '78vh', minHeight: 440, background: site.color.stage, color: site.color.white, display: 'flex', alignItems: 'flex-end', overflow: 'hidden' }}>
         {propiedad.hero_url && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={propiedad.hero_url} alt={propiedad.nombre} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+          <Img src={propiedad.hero_url} alt={propiedad.nombre} contexto="hero" prioridad
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
         )}
         <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0) 40%, rgba(0,0,0,0.6) 100%)' }} />
         <div style={{ position: 'relative', zIndex: 2, width: '100%', maxWidth: site.maxWidth, margin: '0 auto', padding: `0 ${site.gutter} clamp(36px, 6vh, 72px)` }}>
@@ -50,7 +52,8 @@ export function PropiedadDetalle({ propiedad }: { propiedad: WebPropiedad }) {
             <Reveal key={url + i}>
               <div style={{ width: '100%', overflow: 'hidden', background: '#e7e5df' }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={url} alt="" style={{ width: '100%', height: 'auto', display: 'block' }} />
+                <Img src={url} alt="" contexto="galeria"
+                  style={{ width: '100%', height: 'auto', display: 'block' }} />
               </div>
             </Reveal>
           ))}

@@ -38,6 +38,23 @@ export async function getEquipoPublic(): Promise<WebEquipo[]> {
   return (data ?? []).map(mapRow)
 }
 
+/**
+ * Equipo para resolver los créditos de un proyecto: TODOS, activos y no activos.
+ *
+ * `getEquipoPublic` filtra por `activo` porque alimenta la parrilla de Estudio,
+ * donde solo debe salir quien está hoy. Los créditos son otra cosa: acreditan
+ * quién hizo una obra, y alguien que ya no está en el estudio siguió haciéndola.
+ * Se le da de baja con `activo = false` —desaparece de la parrilla— y aquí se
+ * sigue pudiendo resolver su nombre y su ficha.
+ */
+export async function getEquipoParaCreditos(): Promise<WebEquipo[]> {
+  const admin = createAdminClient()
+  const { data, error } = await admin.from('web_equipo').select(SELECT)
+    .order('orden', { ascending: true }).order('created_at', { ascending: true })
+  if (error) { console.error('[web-equipo] getParaCreditos:', error.message); return [] }
+  return (data ?? []).map(mapRow)
+}
+
 export async function getEquipoAdmin(): Promise<WebEquipo[]> {
   await requireMarketing()
   const admin = createAdminClient()

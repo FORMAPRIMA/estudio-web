@@ -6,6 +6,7 @@ import { useSite, href } from '../SiteProvider'
 import { Reveal } from '../Reveal'
 import { pick, type ContentMap } from '@/lib/web-publica'
 import type { WebFpTool } from '@/lib/web-fp-tools'
+import { Img } from '@/components/public/site/Img'
 
 export function FpToolsPage({ content, tools }: { content: ContentMap; tools: WebFpTool[] }) {
   const { locale, mobile } = useSite()
@@ -40,7 +41,8 @@ export function FpToolsPage({ content, tools }: { content: ContentMap; tools: We
                     {t.imagen_url ? (
                       <div style={{ width: '100%', aspectRatio: '4 / 3', overflow: 'hidden', background: '#e7e5df' }}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={t.imagen_url} alt={t.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <Img src={t.imagen_url} alt={t.nombre} contexto="tarjeta"
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       </div>
                     ) : <div style={{ width: '100%', aspectRatio: '4 / 3', background: '#e7e5df' }} />}
                   </div>

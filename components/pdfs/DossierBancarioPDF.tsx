@@ -74,6 +74,32 @@ export interface DossierData {
   }
   /** Detalle del equipamiento (CAPEX) por categoría; si viene, se muestra bajo usos/fuentes. */
   capex?: { categoria: string; importe: number }[]
+  /**
+   * Condiciones concretas de la operación bancaria negociada. Si viene, se
+   * imprime la ficha de condiciones en la sección de servicio de la deuda
+   * (importe, plazo, referencia del tipo, comisiones y avalistas). Opcional:
+   * sin ella el dossier se comporta como antes.
+   */
+  financiacion?: {
+    entidad?: string
+    importe: number
+    plazoMeses: number
+    /** Texto de la referencia, p. ej. «Euríbor 12M + 2,69 %». */
+    referencia: string
+    /** Valor de la referencia en tanto por uno (p. ej. 0.02957). */
+    euribor: number
+    /** Diferencial en tanto por uno (p. ej. 0.0269). */
+    diferencial: number
+    /** TIN resultante aplicado en el modelo (referencia + diferencial). */
+    tinAplicado: number
+    comisionAperturaPct: number
+    comisionAperturaImporte: number
+    /** Comisión por cancelación anticipada, en tanto por uno. */
+    cancelacionPct: number
+    avalistas: string[]
+    /** Notas al pie de la ficha de condiciones. */
+    notas?: string[]
+  }
 }
 
 function fmtFecha(iso: string): string {
@@ -88,6 +114,8 @@ function fmtFecha(iso: string): string {
 const eur = (n: number) => `${n < 0 ? '-' : ''}${Math.abs(Math.round(n)).toLocaleString('es-ES', { useGrouping: 'always' })} €`
 const eur1 = (n: number) => `${(Math.round(n * 10) / 10).toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 2 })} €`
 const pc = (n: number) => `${(n * 100).toLocaleString('es-ES', { maximumFractionDigits: 1 })} %`
+// Tipos de interés: 1 decimal no basta (5,647 % no es 5,6 % para un banco).
+const pcTipo = (n: number) => `${(n * 100).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 3 })} %`
 const dscr = (n: number) => `${(Math.round(n * 100) / 100).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}x`
 const meses = (m: number) => (m > 0 ? `${Math.round(m)} meses` : '—')
 
@@ -183,6 +211,7 @@ export function buildDossierBancarioElement(
   const v = data.inputs
   const r = data.conservador
   const cons = data.escenarios.find((e) => e.clave === 'conservador') ?? data.escenarios[0]
+  const fin = data.financiacion
 
   // Componentes del coste variable del caso conservador (mismas fórmulas que domain)
   const cafeCoste = v.cafe_c * v.cafe_ud * v.dias
@@ -348,8 +377,10 @@ export function buildDossierBancarioElement(
             <Text style={{ fontSize: 7.5, fontFamily: 'Helvetica-Bold', color: C.ink, marginBottom: 3 }}>Compromiso de los socios</Text>
             <Text style={{ fontSize: 8, color: C.soft, lineHeight: 1.55 }}>
               Los socios aportan {eur(r.capitalPropio)} en efectivo el día 1. El préstamo solicitado financia parte del
-              desembolso inicial y la financiación del vendedor difiere {eur(r.aplazado)} del traspaso a los primeros
-              {' '}{r.plazoT} meses de operación, sin interés.
+              desembolso inicial
+              {r.aplazado > 0
+                ? ` y la financiación del vendedor difiere ${eur(r.aplazado)} del traspaso a los primeros ${r.plazoT} meses de operación, sin interés.`
+                : `: el traspaso se paga al vendedor al completo en la firma, sin aplazamiento, y el resto de la inversión (reforma, equipamiento, licencias, stock y fondo de maniobra) se cubre entre capital propio y préstamo.`}
             </Text>
           </View>
         </View>
@@ -437,35 +468,86 @@ export function buildDossierBancarioElement(
             <Text style={[s.tHeadTxt, { width: 60, textAlign: 'right' }]}>Plazo</Text>
           </View>
           <View style={s.tRow} wrap={false}>
-            <Text style={s.cellL}>Préstamo bancario ({eur(r.prestamo)}, TIN {pc(v.banco_tin)})</Text>
+            <Text style={s.cellL}>Préstamo bancario ({eur(r.prestamo)}, TIN {pcTipo(v.banco_tin)})</Text>
             <Text style={[s.cellR, { width: 90 }]}>{eur(r.cuotaB)}</Text>
             <Text style={[s.cellR, { width: 60 }]}>{r.plazoB} meses</Text>
           </View>
-          <View style={s.tRow} wrap={false}>
-            <Text style={s.cellL}>Aplazamiento al vendedor ({eur(r.aplazado)}, {v.interes > 0 ? pc(v.interes) : 'sin interés'})</Text>
-            <Text style={[s.cellR, { width: 90 }]}>{eur(r.cuotaT)}</Text>
-            <Text style={[s.cellR, { width: 60 }]}>{r.plazoT} meses</Text>
-          </View>
+          {r.aplazado > 0 ? (
+            <View style={s.tRow} wrap={false}>
+              <Text style={s.cellL}>Aplazamiento al vendedor ({eur(r.aplazado)}, {v.interes > 0 ? pc(v.interes) : 'sin interés'})</Text>
+              <Text style={[s.cellR, { width: 90 }]}>{eur(r.cuotaT)}</Text>
+              <Text style={[s.cellR, { width: 60 }]}>{r.plazoT} meses</Text>
+            </View>
+          ) : null}
           <View style={s.tRowTot} wrap={false}>
-            <Text style={[s.cellL, { fontFamily: 'Helvetica-Bold', color: C.ink }]}>Servicio total arranque / fase estable</Text>
-            <Text style={[s.cellRbold, { width: 90 }]}>{eur(r.cuotaB + r.cuotaT)} / {eur(r.cuotaB)}</Text>
+            <Text style={[s.cellL, { fontFamily: 'Helvetica-Bold', color: C.ink }]}>
+              {r.aplazado > 0 ? 'Servicio total arranque / fase estable' : 'Servicio total de la deuda'}
+            </Text>
+            <Text style={[s.cellRbold, { width: 90 }]}>
+              {r.aplazado > 0 ? `${eur(r.cuotaB + r.cuotaT)} / ${eur(r.cuotaB)}` : eur(r.cuotaB)}
+            </Text>
             <Text style={[s.cellR, { width: 60 }]}>—</Text>
           </View>
+
+          {fin ? (
+            <View wrap={false}>
+              <Text style={s.subLabel}>Condiciones de la operación propuesta</Text>
+              <View style={s.tHead}>
+                <Text style={[s.tHeadTxt, { flex: 1 }]}>Condición</Text>
+                <Text style={[s.tHeadTxt, { width: 150, textAlign: 'right' }]}>Detalle</Text>
+              </View>
+              {([
+                ['Importe del préstamo', eur(fin.importe)],
+                ['Plazo', `${fin.plazoMeses} meses (${(fin.plazoMeses / 12).toLocaleString('es-ES', { maximumFractionDigits: 1 })} años)`],
+                ['Tipo de interés', fin.referencia],
+                ['Tipo aplicado en el modelo', `${pcTipo(fin.tinAplicado)} (${pcTipo(fin.euribor)} + ${pcTipo(fin.diferencial)})`],
+                ['Cuota mensual estimada', `${eur(r.cuotaB)}/mes`],
+                ['Intereses totales del plazo', eur(r.interesTotalB)],
+                ['Comisión de apertura', `${pc(fin.comisionAperturaPct)} · ${eur(fin.comisionAperturaImporte)}`],
+                ['Cancelación anticipada', `${pc(fin.cancelacionPct)} sobre el capital cancelado`],
+                ['Garantías', `Aval personal solidario de ${fin.avalistas.join(' y ')}`],
+                ['Coste financiero total', eur(fin.comisionAperturaImporte + r.interesTotalB)],
+              ] as [string, string][]).map(([label, val], i) => (
+                <View key={i} style={s.tRow} wrap={false}>
+                  <Text style={s.cellL}>{label}</Text>
+                  <Text style={[s.cellR, { width: 150 }]}>{val}</Text>
+                </View>
+              ))}
+              {fin.notas && fin.notas.length > 0 ? (
+                <Text style={{ fontSize: 6.5, color: C.meta, marginTop: 3, lineHeight: 1.5 }}>
+                  {fin.notas.join(' ')}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+
           <Text style={s.subLabel}>Mitigantes de riesgo</Text>
           <Text style={s.li}><Text style={s.liBold}>Costes fijos mínimos: </Text>sin alquiler de local; el punto de equilibrio queda en {Math.round(r.cafesBE)} cafés/día.</Text>
           <Text style={s.li}><Text style={s.liBold}>Ingresos diversificados: </Text>café, bollería, bebidas, prensa y publicidad aportan {eur(otrasLineasMes)}/mes al margen del café.</Text>
           <Text style={s.li}><Text style={s.liBold}>Compromiso real de los socios: </Text>{eur(r.capitalPropio)} de capital propio aportados antes del primer euro de deuda.</Text>
-          <Text style={s.li}><Text style={s.liBold}>Vendedor alineado: </Text>acepta cobrar {eur(r.aplazado)} del traspaso aplazado, reduciendo la financiación externa.</Text>
+          {r.aplazado > 0 ? (
+            <Text style={s.li}><Text style={s.liBold}>Vendedor alineado: </Text>acepta cobrar {eur(r.aplazado)} del traspaso aplazado, reduciendo la financiación externa.</Text>
+          ) : null}
+          {fin && fin.avalistas.length > 0 ? (
+            <Text style={s.li}>
+              <Text style={s.liBold}>Garantía personal: </Text>
+              la operación se refuerza con el aval personal solidario de {fin.avalistas.join(' y ')}, más allá del
+              patrimonio de la sociedad y del propio negocio.
+            </Text>
+          ) : null}
           <Text style={s.li}><Text style={s.liBold}>Operación condicionada: </Text>la compra se cierra solo tras verificar con el Ayuntamiento vigencia, transmisibilidad y autorización de la actividad de café (reserva de 60 días).</Text>
           <Text style={s.li}><Text style={s.liBold}>Respaldo del grupo: </Text>GEINEX GROUP, S.L. (Forma Prima) es un estudio de arquitectura en activo con ingresos recurrentes, que ejecutará la reforma con medios propios.</Text>
           <View style={s.boxDark} wrap={false}>
             <Text style={s.boxDarkL}>Solicitud</Text>
             <Text style={s.boxDarkT}>
-              Préstamo de {eur(r.prestamo)} a {r.plazoB} meses para completar la inversión de {eur(data.estructura.usosTotal)} en
-              la puesta en marcha del café de especialidad de Calle Goya 63. Los socios aportan {eur(r.capitalPropio)} de
-              capital propio y el vendedor financia {eur(r.aplazado)} adicionales. En el caso base conservador, la caja
-              operativa cubre el servicio total de la deuda {dscr(cons.dscrArranque)} desde el primer año, y la deuda
-              bancaria queda cubierta {dscr(cons.dscrEstable)} en la fase estable.
+              Préstamo de {eur(r.prestamo)} a {r.plazoB} meses{fin ? ` a ${fin.referencia}` : ''} para completar la inversión
+              de {eur(data.estructura.usosTotal)} en la puesta en marcha del café de especialidad de Calle Goya 63.
+              Los socios aportan {eur(r.capitalPropio)} de capital propio
+              {r.aplazado > 0 ? ` y el vendedor financia ${eur(r.aplazado)} adicionales` : ''}
+              {fin && fin.avalistas.length > 0 ? `, con aval personal solidario de ${fin.avalistas.join(' y ')}` : ''}.
+              {' '}En el caso base conservador, la caja operativa cubre el servicio
+              {r.aplazado > 0 ? ' total' : ''} de la deuda {dscr(cons.dscrArranque)} desde el primer año
+              {r.aplazado > 0 ? `, y la deuda bancaria queda cubierta ${dscr(cons.dscrEstable)} en la fase estable` : ''}.
             </Text>
           </View>
         </View>

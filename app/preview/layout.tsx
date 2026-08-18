@@ -5,7 +5,11 @@ import { SiteProvider } from '@/components/public/site/SiteProvider'
 import { SiteNav } from '@/components/public/site/SiteNav'
 import { SiteCursor } from '@/components/public/site/SiteCursor'
 import { SiteFooter } from '@/components/public/site/SiteFooter'
+import { DesignProvider } from '@/components/public/site/design/DesignProvider'
+import { AssetsProvider } from '@/components/public/site/AssetsProvider'
+import { EsqueletoCSS } from '@/components/public/site/Esqueleto'
 import { getContent } from '@/app/actions/web-content'
+import { getManifiesto } from '@/app/actions/web-assets'
 import { pick } from '@/lib/web-publica'
 
 // Helixa = tipografía de marca (brand book de Forma Prima), auto-alojada.
@@ -29,6 +33,12 @@ export const metadata = { title: 'Forma Prima' }
 // este gate (ver memoria web_publica_rebuild, Fase 6).
 const FP_ROLES = ['fp_team', 'fp_manager', 'fp_partner', 'fp_biz_dev']
 
+// Modo Diseño: quien puede EDITAR el sitio desde dentro del Studio. Mismo criterio
+// que el CMS y que cada Server Action. El resto del equipo ve el sitio y nada más.
+// Este flag es lo único que hace que el código del Modo Diseño llegue al navegador:
+// para un visitante (y para un fp_team) el canvas es una web normal.
+const ROLES_DESIGN = ['fp_partner', 'fp_biz_dev']
+
 export default async function PreviewLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -39,7 +49,12 @@ export default async function PreviewLayout({ children }: { children: React.Reac
   // El footer reusa los datos de contacto que el equipo ya edita en la página de
   // Contacto: una sola fuente de verdad, sin duplicar el email en dos sitios. En
   // ES porque el footer los pinta tal cual (un teléfono no se traduce).
-  const contacto = await getContent('contacto')
+  // El manifiesto de variantes va en paralelo: son dos consultas independientes y
+  // encadenarlas añadía un viaje de ida y vuelta a cada navegación.
+  const [contacto, manifiesto] = await Promise.all([
+    getContent('contacto'),
+    getManifiesto(),
+  ])
   const datos = {
     email:     pick(contacto, 'datos', 'email',     { locale: 'es' }),
     telefono:  pick(contacto, 'datos', 'telefono',  { locale: 'es' }),
@@ -52,12 +67,17 @@ export default async function PreviewLayout({ children }: { children: React.Reac
   return (
     // position: relative para que el nav absoluto se ancle aquí, al tope del
     // documento, y no a un ancestro cualquiera.
-    <div className={`${helixa.variable} fp-site`} style={{ position: 'relative', minHeight: '100vh', background: '#F4F3F0' }}>
+    <div className={`${helixa.variable} fp-site`} style={{ position: 'relative', minHeight: '100dvh', background: '#F4F3F0' }}>
       <SiteProvider>
-        <SiteCursor />
-        <SiteNav />
-        {children}
-        <SiteFooter datos={datos} anio={anio} />
+        <AssetsProvider manifiesto={manifiesto}>
+          <DesignProvider canDesign={ROLES_DESIGN.includes(profile.rol)}>
+            <EsqueletoCSS />
+            <SiteCursor />
+            <SiteNav />
+            {children}
+            <SiteFooter datos={datos} anio={anio} />
+          </DesignProvider>
+        </AssetsProvider>
       </SiteProvider>
     </div>
   )

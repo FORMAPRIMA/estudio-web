@@ -1,24 +1,23 @@
 'use client'
 
 import { useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { subirArchivo } from '@/lib/web-publica/subida'
 import { upsertContent } from '@/app/actions/web-content'
 import { CONTENT_SCHEMA, type ContentField } from '@/lib/web-publica-schema'
 import { contentKey, type ContentMap, type WebContent, type ContentTipo } from '@/lib/web-publica'
 
-const BUCKET = 'web-publica'
 const ORANGE = '#D85A30'
 const INK = '#1A1A1A'
 const BORDER = '#F0EEE8'
 
+// Delega en el helper compartido: sube el original intacto y genera la escalera
+// de variantes (ver lib/web-publica/subida.ts). Antes cada editor tenía su
+// propia copia de esto y ninguna comprimía.
 async function uploadFile(file: File): Promise<{ url: string } | { error: string }> {
-  const supabase = createClient()
-  const ext = file.name.split('.').pop() ?? 'bin'
-  const path = `content/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
-  const { data, error } = await supabase.storage.from(BUCKET).upload(path, file, { cacheControl: '31536000', upsert: false })
-  if (error) return { error: error.message }
-  const { data: { publicUrl } } = supabase.storage.from(BUCKET).getPublicUrl(data.path)
-  return { url: publicUrl }
+  const res = await subirArchivo(file, 'content')
+  if ('error' in res) return { error: res.error }
+  if (res.aviso) console.warn('[web-publica] subida sin optimizar:', res.aviso)
+  return { url: res.url }
 }
 
 async function traducir(texto: string): Promise<string | null> {

@@ -5,6 +5,7 @@ import { site, display } from '../theme'
 import { useSite, href } from '../SiteProvider'
 import { Reveal } from '../Reveal'
 import type { WebEquipo } from '@/lib/web-equipo'
+import { Img } from '@/components/public/site/Img'
 
 export function MiembroDetalle({ miembro }: { miembro: WebEquipo }) {
   const { locale } = useSite()
@@ -27,7 +28,8 @@ export function MiembroDetalle({ miembro }: { miembro: WebEquipo }) {
             <div style={{ width: '100%', aspectRatio: '3 / 4', overflow: 'hidden', background: '#e7e5df' }}>
               {foto && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={foto} alt={miembro.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <Img src={foto} alt={miembro.nombre} contexto="retrato" prioridad
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               )}
             </div>
           </Reveal>

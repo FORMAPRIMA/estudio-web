@@ -2,28 +2,28 @@
 
 import { useState, useTransition, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { subirArchivo } from '@/lib/web-publica/subida'
 import {
   createWebProyecto,
   updateWebProyecto,
   deleteWebProyecto,
   reorderWebProyectos,
 } from '@/app/actions/web-publica'
-import { esVideoUrl, slugifyProyecto, type WebProyecto, type ProyectoMedia, type ProyectoMediaTipo } from '@/lib/web-publica'
+import { esVideoUrl, slugifyProyecto, type WebProyecto, type ProyectoMedia, type ProyectoMediaTipo, type ProyectoCredito, type CreditoGrupo } from '@/lib/web-publica'
+import type { WebEquipo } from '@/lib/web-equipo'
 
-const BUCKET = 'web-publica'
 const ORANGE = '#D85A30'
 const INK = '#1A1A1A'
 const BORDER = '#F0EEE8'
 
+// Delega en el helper compartido: sube el original intacto y genera la escalera
+// de variantes (ver lib/web-publica/subida.ts). Antes cada editor tenía su
+// propia copia de esto y ninguna comprimía.
 async function uploadImage(file: File): Promise<{ url: string } | { error: string }> {
-  const supabase = createClient()
-  const ext = file.name.split('.').pop() ?? 'jpg'
-  const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
-  const { data, error } = await supabase.storage.from(BUCKET).upload(path, file, { cacheControl: '31536000', upsert: false })
-  if (error) return { error: error.message }
-  const { data: { publicUrl } } = supabase.storage.from(BUCKET).getPublicUrl(data.path)
-  return { url: publicUrl }
+  const res = await subirArchivo(file, '')
+  if ('error' in res) return { error: res.error }
+  if (res.aviso) console.warn('[web-publica] subida sin optimizar:', res.aviso)
+  return { url: res.url }
 }
 
 async function traducir(texto: string): Promise<string | null> {
@@ -39,7 +39,7 @@ const labelStyle: React.CSSProperties = { fontSize: 10, letterSpacing: '0.12em',
 const inputStyle: React.CSSProperties = { width: '100%', padding: '8px 10px', border: `1px solid ${BORDER}`, borderRadius: 4, fontSize: 13, color: INK, background: '#fff', fontFamily: 'inherit', outline: 'none' }
 const textareaStyle: React.CSSProperties = { ...inputStyle, resize: 'vertical', lineHeight: 1.5 }
 
-export function ProyectosEditor({ proyectos }: { proyectos: WebProyecto[] }) {
+export function ProyectosEditor({ proyectos, equipo }: { proyectos: WebProyecto[]; equipo: WebEquipo[] }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [creating, setCreating] = useState(false)
@@ -67,7 +67,7 @@ export function ProyectosEditor({ proyectos }: { proyectos: WebProyecto[] }) {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {proyectos.map((p, i) => (
-          <ProyectoCard key={p.id} proyecto={p} index={i} total={proyectos.length} onMove={move} busy={isPending} />
+          <ProyectoCard key={p.id} equipo={equipo} proyecto={p} index={i} total={proyectos.length} onMove={move} busy={isPending} />
         ))}
       </div>
 
@@ -97,12 +97,13 @@ function draftOf(p: WebProyecto) {
     tipologia_en: p.tipologia_en ?? '',
     superficie: p.superficie ?? '',
     media: p.media ?? [],
+    creditos: p.creditos ?? [],
     glb_url: p.glb_url,
   }
 }
 
-function ProyectoCard({ proyecto, index, total, onMove, busy }: {
-  proyecto: WebProyecto; index: number; total: number; onMove: (id: string, dir: -1 | 1) => void; busy: boolean
+function ProyectoCard({ proyecto, index, total, onMove, busy, equipo }: {
+  proyecto: WebProyecto; index: number; total: number; onMove: (id: string, dir: -1 | 1) => void; busy: boolean; equipo: WebEquipo[]
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -193,7 +194,7 @@ function ProyectoCard({ proyecto, index, total, onMove, busy }: {
         hero_url: draft.hero_url, hero_mobile_url: draft.hero_mobile_url, galeria: draft.galeria, activo: draft.activo,
         descripcion_es: draft.descripcion_es || null, descripcion_en: draft.descripcion_en || null,
         tipologia_es: draft.tipologia_es || null, tipologia_en: draft.tipologia_en || null,
-        superficie: draft.superficie || null, media: draft.media, glb_url: draft.glb_url,
+        superficie: draft.superficie || null, media: draft.media, creditos: draft.creditos, glb_url: draft.glb_url,
         regenerarSlug: !proyecto.slug,
       })
       if ('error' in res) { setError(res.error); return }
@@ -313,6 +314,8 @@ function ProyectoCard({ proyecto, index, total, onMove, busy }: {
                     </select>
                     <input value={m.caption_es ?? ''} onChange={(e) => setMedia(i, { caption_es: e.target.value })} placeholder="Pie de foto (ES)" style={{ ...inputStyle, flex: 1, padding: '6px 8px' }} />
                     <input value={m.caption_en ?? ''} onChange={(e) => setMedia(i, { caption_en: e.target.value })} placeholder="Caption (EN)" style={{ ...inputStyle, flex: 1, padding: '6px 8px' }} />
+                    {/* El crédito no se traduce: es un nombre propio. */}
+                    <input value={m.credito ?? ''} onChange={(e) => setMedia(i, { credito: e.target.value })} placeholder="Autoría" style={{ ...inputStyle, width: 150, padding: '6px 8px' }} />
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                       <button onClick={() => moveMedia(i, -1)} disabled={i === 0} style={arrowBtn(i === 0)}>▲</button>
                       <button onClick={() => moveMedia(i, 1)} disabled={i === draft.media.length - 1} style={arrowBtn(i === draft.media.length - 1)}>▼</button>
@@ -335,6 +338,13 @@ function ProyectoCard({ proyecto, index, total, onMove, busy }: {
             </div>
             <p style={{ fontSize: 11, color: `${INK}45`, margin: '6px 0 0' }}>Si subes un GLB, la página muestra un visor 3D girable. Si no, se usan las fotos/renders y el vídeo de maqueta.</p>
           </div>
+
+          {/* Créditos */}
+          <CreditosPanel
+            creditos={draft.creditos}
+            equipo={equipo}
+            onChange={(next) => set('creditos', next)}
+          />
 
         </div>
       )}
@@ -395,6 +405,85 @@ function Thumb({ url, onRemove, portrait }: { url: string | null; onRemove?: () 
       {url && onRemove && (
         <button onClick={onRemove} aria-label="Quitar" style={{ position: 'absolute', top: 2, right: 2, width: 18, height: 18, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.6)', color: '#fff', fontSize: 11, lineHeight: 1, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
       )}
+    </div>
+  )
+}
+
+const GRUPOS: { grupo: CreditoGrupo; titulo: string; pista: string }[] = [
+  { grupo: 'equipo',    titulo: 'Equipo',      pista: 'Arquitectos e interioristas del estudio que trabajaron en la obra. Se eligen de la lista: la web resuelve su nombre y enlaza a su ficha, así que un cambio de puesto se edita una sola vez en la pestaña Equipo. Para acreditar a alguien que ya no está, déjalo en Equipo con «activo» desmarcado.' },
+  { grupo: 'partner',   titulo: 'Partners',    pista: 'Estudios, ingenierías o colaboradores externos.' },
+  { grupo: 'proveedor', titulo: 'Proveedores', pista: 'Industriales y suministradores de la obra.' },
+]
+
+/** Los tres grupos de créditos. En la web cada bloque se oculta por separado si no
+ *  tiene a nadie, así que aquí basta con dejarlos vacíos. */
+function CreditosPanel({ creditos, equipo, onChange }: {
+  creditos: ProyectoCredito[]; equipo: WebEquipo[]; onChange: (next: ProyectoCredito[]) => void
+}) {
+  // Se trabaja sobre índices del array completo para no perder el orden entre
+  // grupos al guardar: el jsonb es una sola lista.
+  const indicesDe = (grupo: CreditoGrupo) =>
+    creditos.map((c, i) => [c, i] as const).filter(([c]) => c.grupo === grupo).map(([, i]) => i)
+
+  const patch = (i: number, p: Partial<ProyectoCredito>) => onChange(creditos.map((c, j) => (j === i ? { ...c, ...p } : c)))
+  const quitar = (i: number) => onChange(creditos.filter((_, j) => j !== i))
+  const anadir = (grupo: CreditoGrupo) => onChange([...creditos, { grupo }])
+  const mover = (i: number, dir: -1 | 1) => {
+    const hermanos = indicesDe(creditos[i].grupo)
+    const pos = hermanos.indexOf(i)
+    const destino = hermanos[pos + dir]
+    if (destino === undefined) return
+    const next = [...creditos]
+    ;[next[i], next[destino]] = [next[destino], next[i]]
+    onChange(next)
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      {GRUPOS.map((g) => {
+        const idx = indicesDe(g.grupo)
+        return (
+          <div key={g.grupo}>
+            <label style={labelStyle}>{g.titulo} — opcional</label>
+            <p style={{ fontSize: 11, color: `${INK}45`, margin: '0 0 8px', lineHeight: 1.5, maxWidth: '78ch' }}>{g.pista}</p>
+
+            {idx.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 8 }}>
+                {idx.map((i, pos) => {
+                  const c = creditos[i]
+                  return (
+                    <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center', border: `1px solid ${BORDER}`, borderRadius: 4, padding: 8, flexWrap: 'wrap' }}>
+                      {g.grupo === 'equipo' ? (
+                        <select value={c.equipo_id ?? ''} onChange={(e) => patch(i, { equipo_id: e.target.value || undefined })}
+                          style={{ ...inputStyle, width: 210, padding: '6px 8px' }}>
+                          <option value="">— Elegir del equipo —</option>
+                          {equipo.map((m) => (
+                            <option key={m.id} value={m.id}>{m.nombre}{m.activo ? '' : ' (ya no está)'}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input value={c.nombre ?? ''} onChange={(e) => patch(i, { nombre: e.target.value })} placeholder="Nombre" style={{ ...inputStyle, width: 210, padding: '6px 8px' }} />
+                      )}
+                      <input value={c.rol_es ?? ''} onChange={(e) => patch(i, { rol_es: e.target.value })} placeholder="Papel (ES)" style={{ ...inputStyle, flex: 1, minWidth: 130, padding: '6px 8px' }} />
+                      <input value={c.rol_en ?? ''} onChange={(e) => patch(i, { rol_en: e.target.value })} placeholder="Role (EN)" style={{ ...inputStyle, flex: 1, minWidth: 130, padding: '6px 8px' }} />
+                      {g.grupo !== 'equipo' && (
+                        <input value={c.url ?? ''} onChange={(e) => patch(i, { url: e.target.value })} placeholder="Web (opcional)" style={{ ...inputStyle, width: 165, padding: '6px 8px' }} />
+                      )}
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <button onClick={() => mover(i, -1)} disabled={pos === 0} style={arrowBtn(pos === 0)}>▲</button>
+                        <button onClick={() => mover(i, 1)} disabled={pos === idx.length - 1} style={arrowBtn(pos === idx.length - 1)}>▼</button>
+                      </div>
+                      <button onClick={() => quitar(i)} style={{ background: 'none', border: 'none', color: `${INK}70`, fontSize: 14, cursor: 'pointer' }}>✕</button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            <button onClick={() => anadir(g.grupo)} style={uploadBtn(false)}>+ Añadir a {g.titulo.toLowerCase()}</button>
+          </div>
+        )
+      })}
     </div>
   )
 }

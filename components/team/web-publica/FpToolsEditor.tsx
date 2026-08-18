@@ -2,18 +2,20 @@
 
 import { useState, useTransition, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { subirArchivo } from '@/lib/web-publica/subida'
 import { createFpTool, updateFpTool, deleteFpTool, reorderFpTools } from '@/app/actions/web-fp-tools'
 import type { WebFpTool } from '@/lib/web-fp-tools'
 
-const ORANGE = '#D85A30', INK = '#1A1A1A', BORDER = '#F0EEE8', BUCKET = 'web-publica'
+const ORANGE = '#D85A30', INK = '#1A1A1A', BORDER = '#F0EEE8'
 
+// Delega en el helper compartido: sube el original intacto y genera la escalera
+// de variantes (ver lib/web-publica/subida.ts). Antes cada editor tenía su
+// propia copia de esto y ninguna comprimía.
 async function uploadImage(file: File): Promise<{ url: string } | { error: string }> {
-  const supabase = createClient()
-  const ext = file.name.split('.').pop() ?? 'jpg'
-  const { data, error } = await supabase.storage.from(BUCKET).upload(`fp-tools/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`, file, { cacheControl: '31536000', upsert: false })
-  if (error) return { error: error.message }
-  return { url: supabase.storage.from(BUCKET).getPublicUrl(data.path).data.publicUrl }
+  const res = await subirArchivo(file, 'fp-tools')
+  if ('error' in res) return { error: res.error }
+  if (res.aviso) console.warn('[web-publica] subida sin optimizar:', res.aviso)
+  return { url: res.url }
 }
 async function traducir(texto: string): Promise<string | null> {
   try {

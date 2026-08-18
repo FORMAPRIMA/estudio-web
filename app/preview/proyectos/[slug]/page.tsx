@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { getProyectoBySlug } from '@/app/actions/web-publica'
+import { getEquipoParaCreditos } from '@/app/actions/web-equipo'
 import { ProyectoDetalle } from '@/components/public/site/proyectos/ProyectoDetalle'
 
 export const dynamic = 'force-dynamic'
@@ -25,6 +26,13 @@ export default async function Page({ params }: { params: { slug: string } }) {
   const proyecto = await getProyectoBySlug(params.slug)
   if (!proyecto) notFound()
 
+  // Los créditos del equipo guardan solo el id; el nombre, el rol y el enlace a
+  // la ficha se resuelven aquí. Si el proyecto no acredita a nadie del estudio,
+  // no se consulta: es la mayoría de los casos hasta que se rellenen.
+  const equipo = proyecto.creditos.some((c) => c.grupo === 'equipo')
+    ? await getEquipoParaCreditos()
+    : []
+
   // JSON-LD para SEO (obra creativa / proyecto de arquitectura).
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -40,7 +48,7 @@ export default async function Page({ params }: { params: { slug: string } }) {
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <ProyectoDetalle proyecto={proyecto} />
+      <ProyectoDetalle proyecto={proyecto} equipo={equipo} />
     </>
   )
 }

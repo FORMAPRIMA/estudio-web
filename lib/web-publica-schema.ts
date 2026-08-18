@@ -7,7 +7,7 @@
 //
 // Se amplía por página según vamos construyendo cada una (Home, Estudio, ...).
 
-import type { ContentTipo } from '@/lib/web-publica'
+import type { ContentTipo, Gesto } from '@/lib/web-publica'
 
 export interface ContentField {
   clave:      string
@@ -16,6 +16,28 @@ export interface ContentField {
   hint?:      string
   /** ¿Se ofrece override de móvil para este campo? (default: true) */
   mobileable?: boolean
+  /**
+   * Modo Diseño: qué se puede ajustar con la mano sobre este bloque en el sitio.
+   * `[]` = el bloque no es editable en el canvas (interruptores, datos técnicos).
+   * Si no se declara, se asume el juego completo de texto (ver `gestosDe`).
+   */
+  gestos?: Gesto[]
+}
+
+/** Gestos efectivos de un campo: los declarados, o el default según su tipo. */
+export function gestosDe(field: ContentField): Gesto[] {
+  if (field.gestos) return field.gestos
+  // Imagen y vídeo se siguen gestionando en el CMS clásico (el encaje llega en la
+  // siguiente fase). El texto admite el juego completo.
+  if (field.tipo === 'imagen' || field.tipo === 'video') return []
+  return ['texto', 'tamano', 'tracking', 'peso', 'align']
+}
+
+/** Busca un campo del esquema por (pagina, seccion, clave). */
+export function buscarCampo(pagina: string, seccion: string, clave: string): ContentField | undefined {
+  return CONTENT_SCHEMA.find((p) => p.pagina === pagina)
+    ?.sections.find((s) => s.seccion === seccion)
+    ?.fields.find((f) => f.clave === clave)
 }
 
 export interface ContentSection {
@@ -46,8 +68,8 @@ export const CONTENT_SCHEMA: PageSchema[] = [
         fields: [
           { clave: 'video',  label: 'Vídeo widescreen', tipo: 'video', hint: 'MP4 horizontal. Se sube al bucket web-publica. Vaciarlo es la forma de quitar la intro.' },
           { clave: 'poster', label: 'Póster (primer frame)', tipo: 'imagen', hint: 'Imagen que se ve mientras carga el vídeo. Importante para rendimiento y SEO.' },
-          { clave: 'activo', label: '¿Mostrar vídeo de intro?', tipo: 'texto', hint: 'Déjalo vacío para que se muestre. Escribe "no" para saltar directo a la home sin borrar el vídeo.', mobileable: false },
-          { clave: 'sonido', label: '¿Ofrecer sonido?', tipo: 'texto', hint: 'Déjalo vacío y el visitante activa el audio con un clic o toque. Escribe "no" para que la intro sea siempre muda. Ningún navegador permite arrancar con sonido en la primera visita, así que siempre hace falta ese gesto.', mobileable: false },
+          { clave: 'activo', label: '¿Mostrar vídeo de intro?', tipo: 'texto', hint: 'Déjalo vacío para que se muestre. Escribe "no" para saltar directo a la home sin borrar el vídeo.', mobileable: false, gestos: [] },
+          { clave: 'sonido', label: '¿Ofrecer sonido?', tipo: 'texto', hint: 'Déjalo vacío y el visitante activa el audio con un clic o toque. Escribe "no" para que la intro sea siempre muda. Ningún navegador permite arrancar con sonido en la primera visita, así que siempre hace falta ese gesto.', mobileable: false, gestos: [] },
         ],
       },
       {
@@ -55,11 +77,11 @@ export const CONTENT_SCHEMA: PageSchema[] = [
         label:   'Portada',
         hint:    'Por defecto la Home es SOLO imagen widescreen: el texto central está oculto y el pie con el nombre del proyecto sí se ve. El texto sigue guardado aunque no se muestre.',
         fields: [
-          { clave: 'mostrar_texto', label: '¿Mostrar el texto central sobre la imagen?', tipo: 'texto', hint: 'Escribe "si" para que aparezcan antetítulo, titular y subtítulo. Vacío o "no" = solo imagen.', mobileable: false },
+          { clave: 'mostrar_texto', label: '¿Mostrar el texto central sobre la imagen?', tipo: 'texto', hint: 'Escribe "si" para que aparezcan antetítulo, titular y subtítulo. Vacío o "no" = solo imagen.', mobileable: false, gestos: [] },
           { clave: 'eyebrow',  label: 'Antetítulo', tipo: 'texto' },
           { clave: 'titulo',   label: 'Titular',    tipo: 'texto' },
           { clave: 'subtitulo',label: 'Subtítulo',  tipo: 'texto' },
-          { clave: 'mostrar_pie', label: '¿Mostrar el pie con el proyecto?', tipo: 'texto', hint: 'El "01 / 10 · NOMBRE · UBICACIÓN" de la esquina inferior izquierda. Se muestra salvo que escribas "no".', mobileable: false },
+          { clave: 'mostrar_pie', label: '¿Mostrar el pie con el proyecto?', tipo: 'texto', hint: 'El "01 / 10 · NOMBRE · UBICACIÓN" de la esquina inferior izquierda. Se muestra salvo que escribas "no".', mobileable: false, gestos: [] },
         ],
       },
     ],
@@ -83,6 +105,23 @@ export const CONTENT_SCHEMA: PageSchema[] = [
         seccion: 'equipo',
         label:   'Sección equipo',
         hint:    'Encabezado sobre el grid. Los integrantes se editan en la tab «Equipo».',
+        fields: [
+          { clave: 'eyebrow', label: 'Antetítulo', tipo: 'texto' },
+          { clave: 'titulo',  label: 'Titular',    tipo: 'texto' },
+          { clave: 'intro',   label: 'Introducción', tipo: 'rich' },
+        ],
+      },
+    ],
+  },
+  {
+    pagina: 'mapa',
+    label:  'Mapa',
+    preview: '/preview/mapa',
+    sections: [
+      {
+        seccion: 'hero',
+        label:   'Encabezado',
+        hint:    'Texto sobre el mapa de obras en Madrid. Las obras y sus coordenadas se editan en la tab «Mapa».',
         fields: [
           { clave: 'eyebrow', label: 'Antetítulo', tipo: 'texto' },
           { clave: 'titulo',  label: 'Titular',    tipo: 'texto' },

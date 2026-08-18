@@ -55,6 +55,21 @@ por el equipo y generar un prompt preciso y accionable para un asistente de IA d
 - Flujo: borrador→en_revision→feedback_disponible→aprobado→programado→publicado
 - biz_dev crea/edita, partner aprueba/rechaza; avisos automáticos en cada transición
 
+### Web pública + Modo Diseño — fp_partner, fp_biz_dev
+- CMS clásico: app/team/marketing/web-publica/page.tsx, components/team/web-publica/*
+  (tabs Contenido/Proyectos/Equipo/FP Tools/Real Estate), tabla web_content (pagina,seccion,clave)
+- Sitio en staging: app/preview/* + components/public/site/* (SITE_BASE='/preview', gate FP)
+- Modo Diseño (Studio): app/team/marketing/web-publica/studio/page.tsx +
+  components/team/web-publica/studio/{StudioShell,Inspector}.tsx — el sitio se carga en un
+  <iframe> y el chrome de edición vive fuera; puente postMessage en lib/web-publica-studio.ts
+- Canvas: components/public/site/design/{DesignProvider,Editable,aplicarEstilo}.tsx.
+  Editable = passthrough en lectura; en Modo Diseño selecciona (1 clic) y edita texto (doble clic)
+- Estilo por bloque: web_content.estilo jsonb {desktop,mobile} con PASOS sobre los tokens
+  (escala/tracking/peso/align), NUNCA píxeles absolutos. lib/web-publica.ts: escalaFactor(),
+  fontSizeEscalado(), pickEstilo(). Gestos permitidos por campo: gestosDe() en web-publica-schema.ts
+- Server actions: app/actions/web-design.ts (saveBlockEstilo/saveBlockTexto/setInterruptor)
+- Migración web_design.sql (columnas estilo + encaje). Cableado hoy: Home (portada)
+
 ### Apps — todos los roles FP
 - Design Hunter: app/team/apps/design-hunter/, components/team/design-hunter/DesignHunterPage.tsx
 - Tablas: design_hunter_viajes, design_hunter_entries (media_urls text[])

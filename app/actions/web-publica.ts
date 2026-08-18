@@ -6,7 +6,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { sendEmail, wrapEmail } from '@/lib/email'
 import { crearEspacioCore, enviarCorreoBienvenida } from '@/lib/espacio/create'
 import { revalidatePath } from 'next/cache'
-import { slugifyProyecto, type WebProyecto, type ProyectoMedia } from '@/lib/web-publica'
+import { slugifyProyecto, type WebProyecto, type ProyectoMedia, type ProyectoCredito } from '@/lib/web-publica'
 import { resumenCualificacion } from '@/lib/contacto'
 import { LEADS_TO } from '@/lib/notificaciones'
 
@@ -22,7 +22,19 @@ async function requireMarketing() {
   if (!profile || !['fp_partner', 'fp_biz_dev'].includes(profile.rol)) throw new Error('Sin permisos.')
 }
 
-const SELECT = 'id, nombre, ubicacion, anio, nota, hero_url, hero_mobile_url, galeria, orden, activo, created_at, slug, descripcion_es, descripcion_en, tipologia_es, tipologia_en, superficie, glb_url, media'
+const CAMPOS = 'id, nombre, ubicacion, anio, nota, hero_url, hero_mobile_url, galeria, orden, activo, created_at, slug, descripcion_es, descripcion_en, tipologia_es, tipologia_en, superficie, glb_url, media'
+const SELECT = `${CAMPOS}, creditos`
+
+/**
+ * Lee pidiendo `creditos` y, si la migración todavía no está aplicada, reintenta
+ * sin esa columna. Mismo criterio que `getContent` con `estilo`: el sitio no se
+ * cae por una migración pendiente, solo deja de mostrar lo que aún no existe.
+ */
+async function leerProyectos<T>(construir: (select: string) => PromiseLike<{ data: T | null; error: { message: string } | null }>) {
+  const primero = await construir(SELECT)
+  if (primero.error && /creditos/i.test(primero.error.message)) return construir(CAMPOS)
+  return primero
+}
 
 function mapRow(r: any): WebProyecto {
   return {
@@ -45,6 +57,7 @@ function mapRow(r: any): WebProyecto {
     superficie:     r.superficie ?? null,
     glb_url:        r.glb_url ?? null,
     media:          Array.isArray(r.media) ? (r.media as ProyectoMedia[]) : [],
+    creditos:       Array.isArray(r.creditos) ? (r.creditos as ProyectoCredito[]) : [],
   }
 }
 
@@ -62,8 +75,8 @@ async function uniqueProyectoSlug(admin: ReturnType<typeof createAdminClient>, b
 /** Lectura pública para la parrilla del sitio real (solo activos, con slug). */
 export async function getProyectosSite(): Promise<WebProyecto[]> {
   const admin = createAdminClient()
-  const { data, error } = await admin.from('web_proyectos').select(SELECT)
-    .eq('activo', true).order('orden', { ascending: true }).order('created_at', { ascending: true })
+  const { data, error } = await leerProyectos((sel) => admin.from('web_proyectos').select(sel)
+    .eq('activo', true).order('orden', { ascending: true }).order('created_at', { ascending: true }))
   if (error) { console.error('[web-publica] getProyectosSite:', error.message); return [] }
   return (data ?? []).map(mapRow)
 }
@@ -71,7 +84,7 @@ export async function getProyectosSite(): Promise<WebProyecto[]> {
 /** Detalle público de un proyecto por slug. */
 export async function getProyectoBySlug(slug: string): Promise<WebProyecto | null> {
   const admin = createAdminClient()
-  const { data, error } = await admin.from('web_proyectos').select(SELECT).eq('slug', slug).eq('activo', true).maybeSingle()
+  const { data, error } = await leerProyectos((sel) => admin.from('web_proyectos').select(sel).eq('slug', slug).eq('activo', true).maybeSingle())
   if (error || !data) return null
   return mapRow(data)
 }
@@ -81,12 +94,12 @@ export async function getProyectoBySlug(slug: string): Promise<WebProyecto | nul
 /** Lectura pública para el teaser /wip. Solo proyectos activos. */
 export async function getWebProyectosPublic(): Promise<WebProyecto[]> {
   const admin = createAdminClient()
-  const { data, error } = await admin
+  const { data, error } = await leerProyectos((sel) => admin
     .from('web_proyectos')
-    .select(SELECT)
+    .select(sel)
     .eq('activo', true)
     .order('orden', { ascending: true })
-    .order('created_at', { ascending: true })
+    .order('created_at', { ascending: true }))
   if (error) {
     console.error('[web-publica] getPublic:', error.message)
     return []
@@ -98,11 +111,11 @@ export async function getWebProyectosPublic(): Promise<WebProyecto[]> {
 export async function getWebProyectosAdmin(): Promise<WebProyecto[]> {
   await requireMarketing()
   const admin = createAdminClient()
-  const { data, error } = await admin
+  const { data, error } = await leerProyectos((sel) => admin
     .from('web_proyectos')
-    .select(SELECT)
+    .select(sel)
     .order('orden', { ascending: true })
-    .order('created_at', { ascending: true })
+    .order('created_at', { ascending: true }))
   if (error) {
     console.error('[web-publica] getAdmin:', error.message)
     return []
@@ -172,6 +185,7 @@ export async function updateWebProyecto(
     superficie?: string | null
     glb_url?: string | null
     media?: ProyectoMedia[]
+    creditos?: ProyectoCredito[]
     /** Regenera el slug desde el nombre (útil para proyectos aún sin slug). */
     regenerarSlug?: boolean
   }
@@ -201,6 +215,7 @@ export async function updateWebProyecto(
     if (data.superficie !== undefined)     patch.superficie = data.superficie
     if (data.glb_url !== undefined)        patch.glb_url = data.glb_url
     if (data.media !== undefined)          patch.media = data.media
+    if (data.creditos !== undefined)       patch.creditos = data.creditos
 
     // Slug: se genera desde el nombre si se pide o si aún no tiene uno.
     if (data.regenerarSlug && data.nombre?.trim()) {

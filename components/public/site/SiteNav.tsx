@@ -10,16 +10,42 @@ import type { Locale } from '@/lib/web-publica'
 const TABS: { path: string; es: string; en: string }[] = [
   { path: '/estudio',     es: 'Estudio',     en: 'Studio' },
   { path: '/proyectos',   es: 'Proyectos',   en: 'Projects' },
+  { path: '/mapa',        es: 'Mapa',        en: 'Map' },
   { path: '/fp-tools',    es: 'FP Tools',    en: 'FP Tools' },
   { path: '/real-estate', es: 'Real Estate', en: 'Real Estate' },
   { path: '/contacto',    es: 'Contacto',    en: 'Contact' },
 ]
+
+// Umbrales del gesto móvil, en PÍXELES de arrastre, no en energía del resorte.
+// El resorte está amortiguado y no es monótono: soltando en distinto punto de la
+// oscilación, un barrido largo puede acabar por debajo de uno corto. Sirve para
+// que la hamburguesa respire (nadie mide eso), no para decidir si se abre un menú.
+// La lámina va por desplazamiento neto del dedo desde donde lo posaste: sube si
+// tiras, baja si vuelves, y al soltar solo cuenta dónde está.
+const ASOMO_DESDE = 50        // px de tirón antes de que la lámina asome siquiera
+const ASOMO_RECORRIDO = 170   // px en los que completa la subida
+const ABRIR_DESDE = 0.55      // fracción de asomo al soltar para que se quede (≈143 px)
+// Tras cerrar, el gesto queda sordo un momento: sin esto, cerrar el menú y rozar
+// la pantalla lo reabre, y eso deja de ser una invitación para ser una pelea.
+const ENFRIAMIENTO = 1100
 
 export function SiteNav() {
   const { locale, setLocale } = useSite()
   const pathname = usePathname()
   const [menuOpen, setMenuOpen] = useState(false)
   const headerRef = useRef<HTMLElement>(null)
+  const sheetRef = useRef<HTMLDivElement>(null)
+  const frioHasta = useRef(0)
+  const cierreY = useRef<number | null>(null)
+  // El resorte vive fuera de React y necesita saber si el menú está abierto sin
+  // volver a registrar sus listeners cada vez que cambia.
+  const menuOpenRef = useRef(false)
+  menuOpenRef.current = menuOpen
+
+  const cerrarMenu = () => {
+    setMenuOpen(false)
+    frioHasta.current = Date.now() + ENFRIAMIENTO
+  }
 
   // Páginas cuyo TOPE es un hero oscuro a sangre (texto del nav en blanco arriba).
   // El resto arrancan con fondo claro (texto en negro).
@@ -43,6 +69,17 @@ export function SiteNav() {
   // sitio. En vez de desperdiciarlo, su intensidad hace respirar las pestañas
   // ("si quieres ir a otro sitio, es por aquí").
   //
+  // En móvil no hay pestañas que encender y el pulgar necesita un destino, así
+  // que el gesto tiene DOS tiempos, con mecánicas distintas a propósito:
+  //   1. la hamburguesa respira con el resorte, igual que las pestañas aquí al
+  //      lado. Es ambiente: nadie mide una respiración.
+  //   2. la lámina de navegación asoma desde el pie atada al desplazamiento neto
+  //      del dedo. Aquí sí se mide, así que no puede ir por el resorte —está
+  //      amortiguado y no es monótono: según en qué punto de la oscilación
+  //      sueltes, un barrido largo acaba por debajo de uno corto.
+  // Al soltar se resuelve arriba o abajo. No es un disparador: es manipulación
+  // directa, se ve venir y se deshace volviendo con el dedo.
+  //
   // Dos reglas que aquí no se negocian:
   //  1. Solo se animan transform y opacity. La primera versión tocaba
   //     letter-spacing y font-weight, que son propiedades de layout: el navegador
@@ -54,17 +91,42 @@ export function SiteNav() {
   //     navegación entera la que respira, no una ola que la recorre.
   useEffect(() => {
     const el = headerRef.current
+    // El resorte escribe en <html> y no en el <header>: la lámina de navegación
+    // es hermana del header, y una custom property solo baja por el árbol.
+    const root = document.documentElement
     if (!el) return
-    el.style.setProperty('--hint', '0')
+    root.style.setProperty('--hint', '0')
+    root.style.setProperty('--peek', '0')
     if (!isHome) return
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
 
     const ac = new AbortController()
     const sig = { signal: ac.signal, passive: true } as AddEventListenerOptions
+
+    // Puerta común a los dos tiempos del gesto.
+    const permitido = () => {
+      if (menuOpenRef.current) return false
+      // El vídeo de intro está por encima de todo: mientras corre, este gesto no
+      // significa nada (la bandera la pone IntroVideo).
+      if (root.dataset.fpIntro) return false
+      if (Date.now() < frioHasta.current) return false
+      // Solo si de verdad no hay a dónde scrollear: el día que la Home crezca,
+      // el gesto vuelve a ser un scroll normal y esto se calla solo.
+      return document.documentElement.scrollHeight - window.innerHeight <= 4
+    }
+
+    // ── Tiempo 1: el resorte ────────────────────────────────────────────────
     // Resorte amortiguado: `target` es la energía que mete el gesto y se desinfla
     // sola en cuanto paras; `lift` la persigue con inercia. De ahí el rebote
     // mínimo al final, que es lo que separa esto de un fundido lineal.
-    let target = 0, lift = 0, vel = 0, raf = 0, lastTouchY = 0
+    let target = 0, lift = 0, vel = 0, raf = 0
+
+    const apagar = () => {
+      cancelAnimationFrame(raf)
+      target = 0; lift = 0; vel = 0; raf = 0
+      root.style.setProperty('--hint', '0')
+      root.classList.remove('nav-hinting')
+    }
 
     const tick = () => {
       target *= 0.885                      // el impulso se desinfla
@@ -72,40 +134,92 @@ export function SiteNav() {
       vel *= 0.76                          // amortiguación
       lift += vel
       if (target < 0.001 && Math.abs(lift) < 0.002 && Math.abs(vel) < 0.002) {
-        lift = 0; vel = 0; raf = 0
-        el.style.setProperty('--hint', '0')
-        el.classList.remove('nav-hinting')
+        apagar()
         return
       }
       // Se permite pasar de 1: ese exceso es el rebote, y en CSS solo engorda un
       // pelo la escala (opacidad y demás los recorta el navegador).
-      el.style.setProperty('--hint', Math.max(0, Math.min(1.06, lift)).toFixed(3))
+      root.style.setProperty('--hint', Math.max(0, Math.min(1.06, lift)).toFixed(3))
       raf = requestAnimationFrame(tick)
     }
 
     const bump = (delta: number) => {
-      // Solo si de verdad no hay a dónde scrollear: el día que la Home crezca,
-      // el gesto vuelve a ser un scroll normal y esto se calla solo.
-      if (document.documentElement.scrollHeight - window.innerHeight > 4) return
+      if (!permitido()) return
       // Techo por evento: un trackpad dispara ráfagas de decenas de eventos y sin
       // tope el primer roce ya saturaría el efecto.
       target = Math.min(1, target + Math.min(Math.abs(delta) / 300, 0.13))
-      if (!raf) { el.classList.add('nav-hinting'); raf = requestAnimationFrame(tick) }
+      if (!raf) { root.classList.add('nav-hinting'); raf = requestAnimationFrame(tick) }
     }
 
+    // ── Tiempo 2: la lámina, atada al dedo ──────────────────────────────────
+    // `asomo` es 0..1 y sale del tirón NETO desde donde se posó el dedo: tiras y
+    // sube, vuelves y baja. No hay estado oculto que adivinar.
+    let toqueY0 = 0, ultimaY = 0, asomo = 0
+
+    const pintarAsomo = (v: number) => {
+      asomo = v
+      root.style.setProperty('--peek', v.toFixed(3))
+      const hoja = sheetRef.current
+      if (!hoja) return
+      // El atributo quita la transición: durante el arrastre la lámina va pegada
+      // al dedo, y una curva de por medio la dejaría siempre un paso por detrás.
+      if (v > 0) hoja.dataset.peek = '1'
+      else delete hoja.dataset.peek
+    }
+
+    const esMovil = () => window.matchMedia('(max-width: 860px)').matches
+
     window.addEventListener('wheel', (e) => bump((e as WheelEvent).deltaY), sig)
-    window.addEventListener('touchstart', (e) => { lastTouchY = (e as TouchEvent).touches[0]?.clientY ?? 0 }, sig)
-    window.addEventListener('touchmove', (e) => {
-      const y = (e as TouchEvent).touches[0]?.clientY ?? lastTouchY
-      bump(y - lastTouchY)
-      lastTouchY = y
+
+    window.addEventListener('touchstart', (e) => {
+      const y = (e as TouchEvent).touches[0]?.clientY ?? 0
+      toqueY0 = y; ultimaY = y
     }, sig)
+
+    window.addEventListener('touchmove', (e) => {
+      const y = (e as TouchEvent).touches[0]?.clientY ?? ultimaY
+      const d = y - ultimaY
+      ultimaY = y
+      // Solo hacia ARRIBA (el dedo sube = "hay más abajo"). Hacia abajo el gesto
+      // significa "volver arriba": el sentido contrario, y abrir un menú con él
+      // sería contestar otra pregunta.
+      if (d < 0) bump(d)
+      if (!esMovil() || !permitido()) return
+      const tiron = Math.max(0, toqueY0 - y)
+      pintarAsomo(Math.max(0, Math.min(1, (tiron - ASOMO_DESDE) / ASOMO_RECORRIDO)))
+    }, sig)
+
+    window.addEventListener('touchend', () => {
+      // Al soltar se resuelve: por encima del umbral la lámina termina de subir
+      // sola, por debajo cae y no ha pasado nada. Nunca un estado a medias.
+      if (asomo >= ABRIR_DESDE && permitido()) {
+        pintarAsomo(0)
+        apagar()
+        setMenuOpen(true)
+      } else if (asomo > 0) {
+        pintarAsomo(0)
+      }
+    }, sig)
+
+    window.addEventListener('touchcancel', () => { if (asomo > 0) pintarAsomo(0) }, sig)
 
     return () => {
       ac.abort(); cancelAnimationFrame(raf)
-      el.style.setProperty('--hint', '0'); el.classList.remove('nav-hinting')
+      root.style.setProperty('--hint', '0')
+      root.style.setProperty('--peek', '0')
+      root.classList.remove('nav-hinting')
     }
   }, [isHome, pathname])
+
+  // Escape cierra. Un menú a pantalla completa sin salida de teclado es una
+  // trampa, y la hamburguesa no siempre está bajo el pulgar.
+  useEffect(() => {
+    if (!menuOpen) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') cerrarMenu() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menuOpen])
 
   const fg = isLight ? site.color.white : site.color.ink
   const isActive = (p: string) => pathname === href(p)
@@ -120,7 +234,7 @@ export function SiteNav() {
       )}
       {/* Absoluto, no fijo: anclado al tope del documento. Siempre transparente
           (sin banda ni borde); el color del texto se adapta a lo que hay debajo. */}
-      <header ref={headerRef} style={{
+      <header ref={headerRef} data-home={isHome ? '1' : undefined} style={{
         position: 'absolute', top: 0, left: 0, right: 0, zIndex: 50, height: 72,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: `0 ${site.gutter}`, fontFamily: site.font,
@@ -128,11 +242,18 @@ export function SiteNav() {
         // El halo del amago tiene que leerse sobre foto oscura y sobre crema.
         ['--glow' as string]: isLight ? 'rgba(255,255,255,0.14)' : 'rgba(20,20,20,0.07)',
       }}>
-        {/* Logo */}
+        {/* Isotipo. El logotipo completo se reserva para el cierre de página
+            (SiteFooter): la marca se firma entera al final, no en la cabecera.
+            La altura NO es la del logotipo que había aquí — un logotipo horizontal
+            a 22 px ocupa ~140 px de ancho y el isotipo ~43; manteniendo la altura
+            la marca se evaporaba. 26 px es una decisión óptica, mirando.
+            El `alt` sigue diciendo el nombre: en pantalla la marca pasa a ser una
+            forma, así que este es el único sitio donde queda escrito para un
+            lector de pantalla o un buscador. */}
         <Link href={href('/')} style={{ display: 'flex', alignItems: 'center', flex: 'none' }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={isLight ? '/FORMA_PRIMA_BLANCO.png' : '/FORMA_PRIMA_NEGRO.png'} alt="Forma Prima"
-            style={{ height: 22, width: 'auto', display: 'block', transition: `opacity .3s ${site.ease}` }} />
+          <img src={isLight ? '/ISOTIPO%20BLANCO%20cropped.png' : '/ISOTIPO%20NEGRO%20cropped.png'} alt="Forma Prima"
+            style={{ height: 26, width: 'auto', display: 'block', transition: `opacity .3s ${site.ease}` }} />
         </Link>
 
         {/* Tabs (desktop) */}
@@ -148,33 +269,48 @@ export function SiteNav() {
 
         {/* Hamburguesa (móvil) */}
         <button className="site-nav-burger" onClick={() => setMenuOpen(true)} aria-label="Menú"
-          style={{ display: 'none', background: 'none', border: 'none', cursor: 'pointer', flexDirection: 'column', gap: 5, padding: 4 }}>
+          style={{ display: 'none', background: 'none', border: 'none', cursor: 'pointer', flexDirection: 'column', alignItems: 'flex-end', gap: 5, padding: 4 }}>
+          {/* Con `prefers-reduced-motion` no hay resorte ni asomo: el gesto no
+              existe, así que la puerta tiene que estar escrita. */}
+          <span className="site-burger-txt" style={{ color: fg }}>{locale === 'en' ? 'Menu' : 'Menú'}</span>
           <span style={{ width: 22, height: 1.5, background: fg, display: 'block' }} />
           <span style={{ width: 22, height: 1.5, background: fg, display: 'block' }} />
         </button>
       </header>
 
-      {/* Menú móvil */}
-      {menuOpen && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: site.color.stage, color: site.color.white,
-          display: 'flex', flexDirection: 'column', padding: site.gutter, fontFamily: site.font }}>
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <button onClick={() => setMenuOpen(false)} aria-label="Cerrar"
-              style={{ background: 'none', border: 'none', color: '#fff', fontSize: 26, cursor: 'pointer', lineHeight: 1 }}>×</button>
-          </div>
-          <nav style={{ display: 'flex', flexDirection: 'column', gap: 22, marginTop: 40 }}>
-            {TABS.map((t) => (
-              <Link key={t.path} href={href(t.path)} onClick={() => setMenuOpen(false)}
-                style={{ fontSize: 26, fontWeight: 300, letterSpacing: '0.02em', color: '#fff', textDecoration: 'none' }}>
-                {locale === 'en' ? t.en : t.es}
-              </Link>
-            ))}
-          </nav>
-          <div style={{ marginTop: 'auto' }}>
-            <LangToggle locale={locale} setLocale={(l) => { setLocale(l) }} fg="#fff" />
-          </div>
+      {/* Lámina de navegación (móvil).
+          Montada siempre, no condicionada a `menuOpen`: es la MISMA pieza que
+          asoma con el dedo y la que queda abierta, así que la transición entre
+          los dos estados no puede ser un cambio de elemento. Fuera de pantalla
+          va con `visibility: hidden`, que también la saca del orden de tabulación
+          y del árbol de accesibilidad. */}
+      <div ref={sheetRef} className="site-sheet" data-open={menuOpen ? '1' : undefined}
+        aria-hidden={!menuOpen}
+        onTouchStart={(e) => { cierreY.current = e.touches[0]?.clientY ?? null }}
+        onTouchMove={(e) => {
+          // Barrido hacia abajo = cerrar. Un panel que sube con el dedo tiene que
+          // poder bajar con él.
+          const y0 = cierreY.current
+          const y = e.touches[0]?.clientY
+          if (y0 != null && y != null && y - y0 > 80) { cierreY.current = null; cerrarMenu() }
+        }}
+        style={{ background: site.color.stage, color: site.color.white, padding: site.gutter, fontFamily: site.font }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <button onClick={cerrarMenu} aria-label="Cerrar"
+            style={{ background: 'none', border: 'none', color: '#fff', fontSize: 26, cursor: 'pointer', lineHeight: 1 }}>×</button>
         </div>
-      )}
+        <nav style={{ display: 'flex', flexDirection: 'column', gap: 22, marginTop: 40 }}>
+          {TABS.map((t) => (
+            <Link key={t.path} href={href(t.path)} onClick={cerrarMenu}
+              style={{ fontSize: 26, fontWeight: 300, letterSpacing: '0.02em', color: '#fff', textDecoration: 'none' }}>
+              {locale === 'en' ? t.en : t.es}
+            </Link>
+          ))}
+        </nav>
+        <div style={{ marginTop: 'auto' }}>
+          <LangToggle locale={locale} setLocale={(l) => { setLocale(l) }} fg="#fff" />
+        </div>
+      </div>
 
       <style dangerouslySetInnerHTML={{ __html: `
         /* --hint (0..1, con rebote hasta 1.06) lo escribe el resorte del amago
@@ -235,13 +371,53 @@ export function SiteNav() {
         /* En móvil no hay pestañas que encender: respira la hamburguesa. También
            con transform, no con width/height. */
         .site-nav-burger { opacity: calc(0.78 + var(--hint, 0) * 0.22); }
-        .site-nav-burger span {
+        .site-nav-burger span:not(.site-burger-txt) {
           transform: scaleX(calc(1 + var(--hint, 0) * 0.2)) scaleY(calc(1 + var(--hint, 0) * 0.55));
           transform-origin: 50% 50%;
         }
 
+        /* Rótulo de la hamburguesa: oculto siempre, salvo en la Home de quien ha
+           pedido que no se mueva nada. Ahí no hay gesto que descubrir, así que la
+           navegación tiene que estar dicha con palabras. */
+        .site-burger-txt {
+          display: none; font-size: 8.5px; line-height: 1;
+          letter-spacing: ${site.track.wide}; text-transform: uppercase;
+          opacity: 0.75; margin-bottom: 3px;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          header[data-home="1"] .site-burger-txt { display: block; }
+        }
+
+        /* ── Lámina de navegación ────────────────────────────────────────────
+           --peek (0..1) lo escribe el resorte durante el arrastre: la lámina
+           sigue al dedo, frame a frame, sin transición que vaya por detrás. Al
+           soltar manda [data-open] o la vuelta al reposo, y ahí sí hay curva.
+           La visibilidad se retrasa lo que dura la caída para no cortarla. */
+        .site-sheet {
+          position: fixed; inset: 0; z-index: 60;
+          display: flex; flex-direction: column;
+          visibility: hidden; pointer-events: none;
+          transform: translateY(calc((1 - var(--peek, 0)) * 100%));
+          transition: transform .42s cubic-bezier(.22,1,.36,1), visibility 0s linear .42s;
+        }
+        .site-sheet[data-peek="1"] {
+          visibility: visible;
+          transition: none;
+          will-change: transform;
+        }
+        .site-sheet[data-open="1"] {
+          visibility: visible; pointer-events: auto;
+          transform: none;
+          transition: transform .52s cubic-bezier(.22,1,.36,1), visibility 0s;
+        }
+
         @media (prefers-reduced-motion: reduce) {
           .site-tab, .site-tab-txt, .site-tab::after, .site-tab::before { transition: none; }
+        }
+        /* Seis pestañas caben, pero no con 34 px de separación: entre el
+           breakpoint móvil y ~1100 px el aire cede antes que la etiqueta. */
+        @media (max-width: 1100px) {
+          .site-nav-desktop { gap: 22px !important; }
         }
         @media (max-width: 860px) {
           .site-nav-desktop { display: none !important; }

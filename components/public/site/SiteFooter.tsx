@@ -22,6 +22,7 @@ const INSTAGRAM = 'https://www.instagram.com/forma.prima/'
 const TABS: { path: string; es: string; en: string }[] = [
   { path: '/estudio',     es: 'Estudio',     en: 'Studio' },
   { path: '/proyectos',   es: 'Proyectos',   en: 'Projects' },
+  { path: '/mapa',        es: 'Mapa',        en: 'Map' },
   { path: '/fp-tools',    es: 'FP Tools',    en: 'FP Tools' },
   { path: '/real-estate', es: 'Real Estate', en: 'Real Estate' },
   { path: '/contacto',    es: 'Contacto',    en: 'Contact' },

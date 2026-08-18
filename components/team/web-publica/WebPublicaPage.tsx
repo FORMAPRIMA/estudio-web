@@ -6,25 +6,28 @@ import { ProyectosEditor } from './ProyectosEditor'
 import { EquipoEditor } from './EquipoEditor'
 import { FpToolsEditor } from './FpToolsEditor'
 import { PropiedadesEditor } from './PropiedadesEditor'
+import { MapaEditor } from './MapaEditor'
 import type { WebProyecto, ContentMap } from '@/lib/web-publica'
 import type { WebEquipo } from '@/lib/web-equipo'
 import type { WebFpTool } from '@/lib/web-fp-tools'
 import type { WebPropiedad } from '@/lib/web-propiedades'
+import type { MapaPunto } from '@/lib/web-mapa'
 
 const ORANGE = '#D85A30'
 const INK = '#1A1A1A'
 const BORDER = '#F0EEE8'
 
-type Tab = 'contenido' | 'proyectos' | 'equipo' | 'fp_tools' | 'propiedades'
+type Tab = 'contenido' | 'proyectos' | 'mapa' | 'equipo' | 'fp_tools' | 'propiedades'
 
 export function WebPublicaPage({
-  proyectos, content, equipo, tools, propiedades,
+  proyectos, content, equipo, tools, propiedades, mapaPuntos,
 }: {
   proyectos: WebProyecto[]
   content: Record<string, ContentMap>
   equipo: WebEquipo[]
   tools: WebFpTool[]
   propiedades: WebPropiedad[]
+  mapaPuntos: MapaPunto[]
 }) {
   const [tab, setTab] = useState<Tab>('contenido')
 
@@ -37,15 +40,24 @@ export function WebPublicaPage({
         <h1 style={{ fontSize: 28, fontWeight: 300, color: INK, letterSpacing: '-0.02em', margin: 0 }}>
           Web pública
         </h1>
-        <a href="/wip" target="_blank" rel="noopener noreferrer"
-          style={{ fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: ORANGE, fontWeight: 500, textDecoration: 'none' }}>
-          Ver teaser ↗
-        </a>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
+          {/* El Modo Diseño no sustituye a este editor: aquí se escribe y se sube
+              material, allí se ajusta cómo se ve sobre la propia página. */}
+          <a href="/team/marketing/web-publica/studio"
+            style={{ fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#fff',
+              fontWeight: 500, textDecoration: 'none', background: INK, padding: '7px 12px', borderRadius: 3 }}>
+            Modo Diseño
+          </a>
+          <a href="/wip" target="_blank" rel="noopener noreferrer"
+            style={{ fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: ORANGE, fontWeight: 500, textDecoration: 'none' }}>
+            Ver teaser ↗
+          </a>
+        </div>
       </div>
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 24, borderBottom: `1px solid ${BORDER}`, marginBottom: 28 }}>
-        {([['contenido', 'Contenido'], ['proyectos', 'Proyectos'], ['equipo', 'Equipo'], ['fp_tools', 'FP Tools'], ['propiedades', 'Real Estate']] as [Tab, string][]).map(([id, label]) => {
+        {([['contenido', 'Contenido'], ['proyectos', 'Proyectos'], ['mapa', 'Mapa'], ['equipo', 'Equipo'], ['fp_tools', 'FP Tools'], ['propiedades', 'Real Estate']] as [Tab, string][]).map(([id, label]) => {
           const active = tab === id
           return (
             <button key={id} onClick={() => setTab(id)}
@@ -61,7 +73,8 @@ export function WebPublicaPage({
       </div>
 
       {tab === 'contenido' && <ContenidoEditor content={content} />}
-      {tab === 'proyectos' && <ProyectosEditor proyectos={proyectos} />}
+      {tab === 'proyectos' && <ProyectosEditor proyectos={proyectos} equipo={equipo} />}
+      {tab === 'mapa' && <MapaEditor puntos={mapaPuntos} proyectos={proyectos} />}
       {tab === 'equipo' && <EquipoEditor equipo={equipo} />}
       {tab === 'fp_tools' && <FpToolsEditor tools={tools} />}
       {tab === 'propiedades' && <PropiedadesEditor propiedades={propiedades} />}

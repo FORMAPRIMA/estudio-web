@@ -5,6 +5,7 @@ import { getContentAdmin } from '@/app/actions/web-content'
 import { getEquipoAdmin } from '@/app/actions/web-equipo'
 import { getFpToolsAdmin } from '@/app/actions/web-fp-tools'
 import { getPropiedadesAdmin } from '@/app/actions/web-propiedades'
+import { getMapaPuntosAdmin } from '@/app/actions/web-mapa'
 import { WebPublicaPage } from '@/components/team/web-publica/WebPublicaPage'
 import { CONTENT_SCHEMA } from '@/lib/web-publica-schema'
 import type { ContentMap } from '@/lib/web-publica'
@@ -38,13 +39,14 @@ export default async function Page() {
     )
   }
 
-  const [proyectos, equipo, tools, propiedades, contentPairs] = await Promise.all([
+  const [proyectos, equipo, tools, propiedades, mapaPuntos, contentPairs] = await Promise.all([
     getWebProyectosAdmin(),
     getEquipoAdmin(),
     getFpToolsAdmin(),
     getPropiedadesAdmin(),
+    getMapaPuntosAdmin(),
     Promise.all(CONTENT_SCHEMA.map(async (p) => [p.pagina, await getContentAdmin(p.pagina)] as const)),
   ])
   const content: Record<string, ContentMap> = Object.fromEntries(contentPairs)
-  return <WebPublicaPage proyectos={proyectos} content={content} equipo={equipo} tools={tools} propiedades={propiedades} />
+  return <WebPublicaPage proyectos={proyectos} content={content} equipo={equipo} tools={tools} propiedades={propiedades} mapaPuntos={mapaPuntos} />
 }

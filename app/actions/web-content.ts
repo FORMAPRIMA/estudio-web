@@ -17,7 +17,12 @@ async function requireMarketing() {
   if (!profile || !['fp_partner', 'fp_biz_dev'].includes(profile.rol)) throw new Error('Sin permisos.')
 }
 
-const SELECT = 'id, pagina, seccion, clave, tipo, valor_es, valor_en, mobile_override, valor_mobile_es, valor_mobile_en, updated_at'
+const SELECT_BASE = 'id, pagina, seccion, clave, tipo, valor_es, valor_en, mobile_override, valor_mobile_es, valor_mobile_en, updated_at'
+// `estilo` lo añade la migración web_design.sql (Modo Diseño). Mientras no esté
+// ejecutada, pedirla haría fallar la query y la página se quedaría SIN CONTENIDO:
+// por eso se pide aparte y se reintenta sin ella. Con la migración puesta esto
+// nunca entra por el camino de fallback.
+const SELECT = `${SELECT_BASE}, estilo`
 
 function mapRow(r: any): WebContent {
   return {
@@ -31,8 +36,25 @@ function mapRow(r: any): WebContent {
     mobile_override: r.mobile_override ?? false,
     valor_mobile_es: r.valor_mobile_es ?? null,
     valor_mobile_en: r.valor_mobile_en ?? null,
+    estilo:          (r.estilo && typeof r.estilo === 'object' ? r.estilo : {}) as WebContent['estilo'],
     updated_at:      r.updated_at,
   }
+}
+
+/** SELECT con `estilo`, con reintento sin ella si la migración no está aplicada. */
+async function fetchRows(pagina: string, tag: string): Promise<WebContent[]> {
+  const admin = createAdminClient()
+  const { data, error } = await admin.from('web_content').select(SELECT).eq('pagina', pagina)
+  if (!error) return (data ?? []).map(mapRow)
+
+  const { data: base, error: baseError } = await admin
+    .from('web_content').select(SELECT_BASE).eq('pagina', pagina)
+  if (baseError) {
+    console.error(`[web-content] ${tag}:`, baseError.message)
+    return []
+  }
+  console.warn(`[web-content] ${tag}: sin columna estilo (falta ejecutar web_design.sql)`)
+  return (base ?? []).map(mapRow)
 }
 
 function toMap(rows: WebContent[]): ContentMap {
@@ -45,13 +67,7 @@ function toMap(rows: WebContent[]): ContentMap {
 
 /** Lectura pública para el sitio. Devuelve el contenido de una página como mapa. */
 export async function getContent(pagina: string): Promise<ContentMap> {
-  const admin = createAdminClient()
-  const { data, error } = await admin.from('web_content').select(SELECT).eq('pagina', pagina)
-  if (error) {
-    console.error('[web-content] getContent:', error.message)
-    return {}
-  }
-  return toMap((data ?? []).map(mapRow))
+  return toMap(await fetchRows(pagina, 'getContent'))
 }
 
 /** Lectura para el editor (gated). Mismo shape que getContent. */
@@ -61,13 +77,7 @@ export async function getContentAdmin(pagina: string): Promise<ContentMap> {
 }
 
 async function getContentRaw(pagina: string): Promise<ContentMap> {
-  const admin = createAdminClient()
-  const { data, error } = await admin.from('web_content').select(SELECT).eq('pagina', pagina)
-  if (error) {
-    console.error('[web-content] getContentRaw:', error.message)
-    return {}
-  }
-  return toMap((data ?? []).map(mapRow))
+  return toMap(await fetchRows(pagina, 'getContentRaw'))
 }
 
 // ── Mutación ───────────────────────────────────────────────────────────────

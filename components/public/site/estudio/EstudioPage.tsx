@@ -1,11 +1,14 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { site, display } from '../theme'
 import { useSite, href } from '../SiteProvider'
 import { Reveal } from '../Reveal'
 import { pick, type ContentMap } from '@/lib/web-publica'
 import type { WebEquipo } from '@/lib/web-equipo'
+import { Img } from '@/components/public/site/Img'
+import { EsqueletoFoto } from '@/components/public/site/Esqueleto'
 
 export function EstudioPage({ content, equipo }: { content: ContentMap; equipo: WebEquipo[] }) {
   const { locale, mobile } = useSite()
@@ -21,15 +24,33 @@ export function EstudioPage({ content, equipo }: { content: ContentMap; equipo: 
 
   return (
     <div style={{ fontFamily: site.font, background: site.color.cream, color: site.color.ink }}>
-      {/* Hero widescreen del equipo */}
-      <section style={{ position: 'relative', minHeight: '100vh', display: 'flex', alignItems: 'flex-end',
+      {/* Hero del equipo.
+          ESCRITORIO: foto a sangre a pantalla completa con el titular encima.
+          MÓVIL: hero PARTIDO — la foto es una banda a todo el ancho en su
+          proporción nativa y el texto baja debajo, sobre el crema.
+          El porqué: la foto del equipo es apaisada y `object-fit: cover` dentro
+          de una caja vertical de 390×844 solo puede enseñar la franja central —
+          se veía ~26% del ancho y faltaba media plantilla. No es un problema de
+          encuadre, es la aritmética del cover. Y el texto encima tampoco era el
+          problema: en 390 px cualquier titular sobreimpreso cae sobre la cara de
+          alguien. Separarlos arregla el recorte y la legibilidad de una vez.
+          El CMS admite además una imagen distinta para móvil en este bloque, así
+          que una toma vertical hecha a propósito entra sin tocar nada de esto. */}
+      <section className="est-hero" style={{ position: 'relative',
         background: site.color.stage, color: site.color.white, overflow: 'hidden' }}>
-        {heroImg && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={heroImg} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
-        )}
-        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0) 35%, rgba(0,0,0,0.55) 100%)' }} />
-        <div style={{ position: 'relative', zIndex: 2, padding: `0 ${site.gutter} 80px`, maxWidth: site.maxWidth, width: '100%', margin: '0 auto' }}>
+        {/* Sin `position` inline: el inline gana a la hoja y aquí la posición
+            cambia con el breakpoint (absoluta a sangre / en flujo en móvil). */}
+        <div className="est-hero-foto" style={{ overflow: 'hidden' }}>
+          {heroImg && (
+            <Img src={heroImg} alt="" contexto="hero" prioridad
+              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+          )}
+          {/* El velo solo protege texto cuando hay texto encima: en móvil el
+              titular ya no está aquí, así que se retira y la foto se ve limpia. */}
+          <div className="est-hero-velo" style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0) 35%, rgba(0,0,0,0.55) 100%)' }} />
+        </div>
+
+        <div className="est-hero-txt" style={{ maxWidth: site.maxWidth, width: '100%', margin: '0 auto', padding: `0 ${site.gutter}` }}>
           {heroEyebrow && (
             <Reveal as="p" style={{ fontSize: display.eyebrow, letterSpacing: site.track.ultra, textTransform: 'uppercase', opacity: 0.85, margin: '0 0 16px' }}>{heroEyebrow}</Reveal>
           )}
@@ -37,7 +58,8 @@ export function EstudioPage({ content, equipo }: { content: ContentMap; equipo: 
             <Reveal as="h1" delay={120} style={{ fontSize: display.hero, fontWeight: 300, lineHeight: 1.2, letterSpacing: '0', margin: 0, maxWidth: '24ch' }}>{heroTitulo}</Reveal>
           )}
         </div>
-        <div style={{ position: 'absolute', bottom: 28, left: '50%', transform: 'translateX(-50%)', zIndex: 2, fontSize: 10, letterSpacing: site.track.wide, textTransform: 'uppercase', opacity: 0.6 }}>
+
+        <div className="est-hero-scroll" style={{ fontSize: 10, letterSpacing: site.track.wide, textTransform: 'uppercase', opacity: 0.6 }}>
           {locale === 'en' ? 'Scroll' : 'Desliza'}
         </div>
       </section>
@@ -59,35 +81,39 @@ export function EstudioPage({ content, equipo }: { content: ContentMap; equipo: 
         {equipo.length > 0 && (
           <div className="equipo-grid" style={{ display: 'grid', gap: 'clamp(18px, 2.4vw, 34px)', marginTop: 'clamp(40px, 6vh, 70px)' }}>
             {equipo.map((m, i) => (
-              <Reveal key={m.id} delay={Math.min(i, 6) * 70}>
-                <Link href={href(`/estudio/${m.slug}`)} className="member-card" data-cursor={locale === 'en' ? 'View CV' : 'Ver CV'}
-                  style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}>
-                  <div className="member-photo" style={{ position: 'relative', width: '100%', overflow: 'hidden', background: '#e7e5df' }}>
-                    {m.foto_url && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={m.foto_url} alt={m.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    )}
-                    {(L(m.cv_corto_es, m.cv_corto_en)) && (
-                      <div className="member-cv" style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'flex-end', padding: 20,
-                        background: 'linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.1) 60%, rgba(0,0,0,0) 100%)', color: '#fff' }}>
-                        <p style={{ fontSize: 13, fontWeight: 300, lineHeight: 1.5, margin: 0 }}>{L(m.cv_corto_es, m.cv_corto_en)}</p>
-                      </div>
-                    )}
-                  </div>
-                  <div style={{ marginTop: 14 }}>
-                    <h3 style={{ fontSize: 16, fontWeight: 500, margin: 0, letterSpacing: '-0.01em' }}>{m.nombre}</h3>
-                    {L(m.rol_es, m.rol_en) && (
-                      <p style={{ fontSize: 11, letterSpacing: site.track.normal, textTransform: 'uppercase', opacity: 0.6, margin: '5px 0 0' }}>{L(m.rol_es, m.rol_en)}</p>
-                    )}
-                  </div>
-                </Link>
-              </Reveal>
+              <MiembroCard key={m.id} m={m} i={i} locale={locale} L={L} />
             ))}
           </div>
         )}
       </section>
 
       <style dangerouslySetInnerHTML={{ __html: `
+        /* ── Hero: a sangre en escritorio, partido en móvil ─────────────── */
+        .est-hero { min-height: 100dvh; display: flex; align-items: flex-end; }
+        .est-hero-foto { position: absolute; inset: 0; }
+        /* <Img> emite un <picture>, que es inline y sin alto propio: sin esto el
+           height:100% del <img> resuelve contra "auto" y el hero se desploma. */
+        .est-hero-foto picture { display: block; width: 100%; height: 100%; }
+        .est-hero-txt { position: relative; z-index: 2; padding-bottom: 80px; }
+        .est-hero-scroll {
+          position: absolute; bottom: 28px; left: 50%;
+          transform: translateX(-50%); z-index: 2;
+        }
+        @media (max-width: 760px) {
+          /* La sección deja de imponer alto: la marca la foto entera más el
+             texto. Un alto fijo aquí volvería a obligar a recortar algo. */
+          .est-hero { min-height: 0; display: block; padding-bottom: 46px; }
+          .est-hero-foto { position: static; inset: auto; width: 100%; }
+          .est-hero-foto picture { height: auto; }
+          .est-hero-foto img { height: auto !important; }
+          .est-hero-velo { display: none; }
+          .est-hero-txt { padding-top: 34px; padding-bottom: 0; }
+          .est-hero-scroll {
+            position: static; transform: none; display: block;
+            margin-top: 30px; text-align: center;
+          }
+        }
+
         /* Equipo: 1 por fila en móvil, 2 en tablet, 3 en escritorio */
         .equipo-grid { grid-template-columns: 1fr; }
         @media (min-width: 640px)  { .equipo-grid { grid-template-columns: repeat(2, 1fr); } }
@@ -101,5 +127,46 @@ export function EstudioPage({ content, equipo }: { content: ContentMap; equipo: 
         .member-card:hover .member-photo img { transform: scale(1.05); }
       ` }} />
     </div>
+  )
+}
+
+/** Tarjeta de un integrante. Componente aparte por el mismo motivo que la tarjeta
+ *  de proyecto: necesita saber si SU foto ya pintó para retirar el esqueleto, y un
+ *  hook no cabe dentro de un `.map()`. */
+function MiembroCard({ m, i, locale, L }: {
+  m: WebEquipo
+  i: number
+  locale: 'es' | 'en'
+  L: (es: string | null, en: string | null) => string
+}) {
+  const [cargada, setCargada] = useState(false)
+  const cv = L(m.cv_corto_es, m.cv_corto_en)
+
+  return (
+    <Reveal delay={Math.min(i, 6) * 70}>
+      <Link href={href(`/estudio/${m.slug}`)} className="member-card" data-cursor={locale === 'en' ? 'View CV' : 'Ver CV'}
+        style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}>
+        <div className="member-photo" style={{ position: 'relative', width: '100%', overflow: 'hidden', background: '#e7e5df' }}>
+          <EsqueletoFoto cargada={cargada || !m.foto_url} />
+          {m.foto_url && (
+            <Img src={m.foto_url} alt={m.nombre} contexto="rejillaEquipo"
+              onLoad={() => setCargada(true)}
+              style={{ position: 'relative', width: '100%', height: '100%', objectFit: 'cover' }} />
+          )}
+          {cv && (
+            <div className="member-cv" style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'flex-end', padding: 20,
+              background: 'linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.1) 60%, rgba(0,0,0,0) 100%)', color: '#fff' }}>
+              <p style={{ fontSize: 13, fontWeight: 300, lineHeight: 1.5, margin: 0 }}>{cv}</p>
+            </div>
+          )}
+        </div>
+        <div style={{ marginTop: 14 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 500, margin: 0, letterSpacing: '-0.01em' }}>{m.nombre}</h3>
+          {L(m.rol_es, m.rol_en) && (
+            <p style={{ fontSize: 11, letterSpacing: site.track.normal, textTransform: 'uppercase', opacity: 0.6, margin: '5px 0 0' }}>{L(m.rol_es, m.rol_en)}</p>
+          )}
+        </div>
+      </Link>
+    </Reveal>
   )
 }

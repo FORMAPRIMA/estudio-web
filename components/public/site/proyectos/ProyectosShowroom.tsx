@@ -13,6 +13,7 @@ import { PerspectiveCamera, Environment, Html, useGLTF } from '@react-three/drei
 import * as THREE from 'three'
 import { DEFAULT_PRESET } from '@/lib/showroom'
 import { site } from '../theme'
+import { EsqueletoPlinto } from '../Esqueleto'
 import { href } from '../SiteProvider'
 
 export interface MaquetaItem {
@@ -65,7 +66,10 @@ function Maqueta({ url }: { url: string }) {
 }
 
 function SlotLoader() {
-  return <Html center><div className="sr-slot-loader" /></Html>
+  // Antes: un spinner con borde de acento. Un spinner dice «el sistema está
+  // ocupado»; el plinto dice «aquí va a aterrizar una maqueta» y ocupa su hueco,
+  // con la misma sombra de contacto que tendrá el modelo cuando llegue.
+  return <Html center><EsqueletoPlinto /></Html>
 }
 
 let _shadowTex: THREE.CanvasTexture | null = null
@@ -350,8 +354,6 @@ const styles = `
   box-shadow: inset 0 0 240px 40px rgba(26,26,26,0.035);
 }
 .sr-hit { position: absolute; top: 0; bottom: 0; transform: translateX(-50%); z-index: 4; cursor: pointer; }
-.sr-slot-loader { width: 28px; height: 28px; border-radius: 50%; border: 2px solid rgba(26,26,26,.12); border-top-color: ${ACCENT}; animation: sr-spin .8s linear infinite; }
-@keyframes sr-spin { to { transform: rotate(360deg); } }
 .sr-cap-wrap { position: absolute; top: 15%; transform: translateX(-50%); display: flex; justify-content: center; pointer-events: none; z-index: 3; }
 .sr-cap { position: absolute; text-align: center; white-space: nowrap; display: flex; flex-direction: column; align-items: center; gap: 7px; }
 .sr-cap-eyebrow { font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: ${ACCENT}; font-weight: 600; }

@@ -315,6 +315,40 @@ Gestión de contenido para redes sociales.
   - `app/actions/marketing-posts.ts` — todas las acciones CRUD
 - **Time Tracker Sections** (`/team/marketing/time-tracker-sections`) — placeholder, en desarrollo
 
+- **Web pública** (`/team/marketing/web-publica`) — CMS del sitio real de formaprima.es
+  (`web_content` por `(pagina, seccion, clave)` + colecciones `web_proyectos`/`web_equipo`/
+  `web_fp_tools`/`web_propiedades`). El sitio vive en `app/preview/*` (staging con gate FP;
+  `SITE_BASE='/preview'` en `SiteProvider`) hasta el go-live.
+
+- **Modo Diseño** (`/team/marketing/web-publica/studio`) — edición del sitio **sobre la propia
+  página**, tipo Wix pero acotada. Acceso: `fp_partner`, `fp_biz_dev`.
+  - **Studio en iframe**: el sitio se carga dentro de un `<iframe>` y todo el chrome de edición
+    vive FUERA. Así se simulan anchos de dispositivo reales (1440/834/390), la UI no tapa el
+    diseño que se juzga, y **el código de edición nunca se sirve al visitante** (solo se monta si
+    el servidor dice `canDesign`, la URL trae `?design=1` y hay un Studio al otro lado).
+    Puente `postMessage` mismo-origen en `lib/web-publica-studio.ts`.
+  - 🔴 **Nada de píxeles absolutos.** `web_content.estilo jsonb` guarda **pasos sobre los tokens**
+    de `theme.ts`: `{desktop:{escala,tracking,peso,align}, mobile:{…}}`. Móvil **espeja** escritorio
+    y solo sobrescribe lo que trae. `escalaFactor()`/`fontSizeEscalado()` multiplican dentro de un
+    `calc()` para no perder el `clamp()` responsivo. Un ajuste hecho en un portátil sigue siendo
+    correcto en un móvil, y nadie puede escribirse un tamaño que rompa la escala tipográfica.
+  - **El esquema manda**: `gestos` por campo en `CONTENT_SCHEMA` (`gestosDe()`); `[]` = ese bloque
+    no se toca desde el canvas (interruptores, imagen/vídeo). El inspector solo pinta lo permitido.
+  - `components/public/site/design/`: `DesignProvider` (activación + puente + `useEstilo`/`usePropio`),
+    `Editable` (1 clic selecciona · doble clic edita texto con la tipografía real · Enter/Escape
+    confirman · pegado siempre en texto plano), `aplicarEstilo`.
+  - Detalles que importan: la rotación de fondos de la Home **se para** mientras se escribe (un
+    re-render borraría lo tecleado); el enlace a pantalla completa de la portada y la intro en vídeo
+    se retiran en Modo Diseño; el cursor custom también (usa `cursor:none`); los bloques apagados
+    por interruptor se pintan atenuados con su chapa «oculto» y un botón para encenderlos.
+  - Autoguardado con debounce + preview optimista; sin botón de guardar. `app/actions/web-design.ts`
+    (`saveBlockEstilo` merge sobre el jsonb, `saveBlockTexto` — en móvil activa `mobile_override` —,
+    `setInterruptor`).
+  - **Migración `web_design.sql` pendiente de ejecutar** (columnas `estilo` + `encaje`). Hasta
+    entonces el sitio se ve igual (la lectura reintenta sin la columna) pero **guardar avisa**.
+  - Cableado hoy: **Home** (portada: antetítulo, titular, subtítulo). Siguientes: Estudio y
+    Proyectos, y después el encaje de imágenes (recorte no destructivo con `encaje`: focal + zoom).
+
 **Flujo de aprobación:**
 `biz_dev` crea borrador → envía a revisión → `partner` aprueba o rechaza con feedback → `biz_dev` reenvía → `partner` aprueba → `biz_dev` programa → marca publicado
 
@@ -538,6 +572,7 @@ Registro de horas por proyecto y fase. Todos los roles FP.
 ### Marketing
 | Tabla | Propósito |
 |---|---|
+| `web_content` | Bloques del sitio público por `(pagina, seccion, clave)`: `valor_es/en`, override móvil y **`estilo jsonb`** (Modo Diseño: pasos sobre los tokens) + `encaje jsonb` (reservado) |
 | `marketing_posts` | Posts de Instagram/LinkedIn (titulo, caption, hashtags, status, red_social, autor_nombre) |
 | `marketing_post_media` | Media de cada post (url, tipo image/video, orden) |
 | `marketing_post_comentarios` | Comentarios/feedback en posts (autor_id, autor_nombre denormalizado) |
@@ -654,6 +689,8 @@ Registro de horas por proyecto y fase. Todos los roles FP.
 /team/memorias-calidad/proyectos/[id]   Memoria de ejecución por estancias
 /team/marketing             Índice de marketing
 /team/marketing/post-manager          Kanban de posts por red social
+/team/marketing/web-publica           CMS de la web pública (contenido, proyectos, equipo…)
+/team/marketing/web-publica/studio    Modo Diseño: ajustar el sitio sobre la propia página
 /team/marketing/time-tracker-sections Time tracker de secciones (en desarrollo)
 ```
 

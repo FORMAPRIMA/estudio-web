@@ -3,6 +3,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { site } from '../theme'
 import { pick, esNo, type ContentMap } from '@/lib/web-publica'
+import { useVariantes } from '../AssetsProvider'
+import { urlWebm, urlVariante } from '@/lib/web-publica/imagenes'
 
 // useLayoutEffect avisa por consola al renderizar en servidor; en SSR no hay nada
 // que medir, así que allí cae a useEffect (que tampoco se ejecuta).
@@ -38,6 +40,21 @@ export function IntroVideo({ content, locale, mobile }: { content: ContentMap; l
   const activo = pick(content, 'intro', 'activo', { locale, mobile })
   const videoUrl = pick(content, 'intro', 'video', { locale, mobile })
   const poster = pick(content, 'intro', 'poster', { locale, mobile })
+  // Variante AV1 del vídeo, si está registrada. La escalera de imagen no
+  // aplica a vídeo: aquí solo interesa saber si existe el WebM hermano.
+  const varVideo = useVariantes(videoUrl)
+  const webmUrl = varVideo ? urlWebm(videoUrl, varVideo) : null
+
+  // El póster es el único sitio del sitio donde no se puede usar <picture>: el
+  // atributo `poster` acepta UNA url y sin srcset. Así que se elige a mano el
+  // peldaño de 1920 —suficiente para un fotograma a pantalla completa, y se
+  // sustituye por el vídeo en cuanto arranca— en vez de servir el original de
+  // 0,85 MB. WebP y no AVIF porque algún Safari antiguo aún no decodifica AVIF
+  // en `poster` y quedarse sin póster se ve como un fogonazo negro.
+  const varPoster = useVariantes(poster)
+  const posterUrl = varPoster && varPoster.webp.length
+    ? urlVariante(poster, varPoster.stem, Math.min(...varPoster.webp.filter((w) => w >= 1080)) || Math.max(...varPoster.webp), 'webp')
+    : poster
   // Si hay vídeo subido, se reproduce salvo que el interruptor diga "no".
   const enabled = !!videoUrl && !esNo(activo)
   // El sonido se puede desactivar por CMS sin tocar el vídeo.
@@ -54,6 +71,7 @@ export function IntroVideo({ content, locale, mobile }: { content: ContentMap; l
   const videoRef = useRef<HTMLVideoElement>(null)
   const lastTap = useRef(0)
   const rampa = useRef(0)
+  const tapDesde = useRef<{ x: number; y: number } | null>(null)
 
   // Si ya se vio en esta pestaña hay que retirarlo ANTES de pintar, o asoma un
   // fogonazo negro al volver a la Home.
@@ -80,6 +98,18 @@ export function IntroVideo({ content, locale, mobile }: { content: ContentMap; l
   }, [enabled, ofreceSonido])
 
   useEffect(() => () => cancelAnimationFrame(rampa.current), [])
+
+  // Mientras la intro está en pantalla, el amago que enciende la navegación
+  // (SiteNav) tiene que callarse: el overlay está encima y abrir el menú detrás
+  // de un vídeo a pantalla completa no significa nada. Una bandera en <html> en
+  // vez de estado compartido: son dos componentes hermanos y no hay más que
+  // decirse que esto.
+  useEffect(() => {
+    const root = document.documentElement
+    if (enabled && show) root.dataset.fpIntro = '1'
+    else delete root.dataset.fpIntro
+    return () => { delete root.dataset.fpIntro }
+  }, [enabled, show])
 
   // Red de seguridad: si el vídeo no ha arrancado en 6 s (conexión mala, archivo
   // que no carga), nos quitamos de en medio. La invitación solo aparece cuando el
@@ -154,7 +184,20 @@ export function IntroVideo({ content, locale, mobile }: { content: ContentMap; l
 
   // Doble tap en táctil (dos toques < 320 ms). El primer toque ya activó el
   // sonido vía onClick, así que aquí solo queda saltar.
-  const onTouchEnd = () => {
+  //
+  // Un arrastre NO cuenta como toque: ahora que el documento está bloqueado, el
+  // dedo que barre la pantalla ya no scrollea nada, y sin este filtro dos barridos
+  // seguidos se leerían como doble toque y saltarían la pieza sin querer.
+  const onTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0]
+    tapDesde.current = t ? { x: t.clientX, y: t.clientY } : null
+  }
+
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const desde = tapDesde.current
+    const t = e.changedTouches[0]
+    tapDesde.current = null
+    if (desde && t && Math.hypot(t.clientX - desde.x, t.clientY - desde.y) > 10) return
     const now = Date.now()
     if (now - lastTap.current < 320) dismiss()
     lastTap.current = now
@@ -170,27 +213,54 @@ export function IntroVideo({ content, locale, mobile }: { content: ContentMap; l
     : { toque: t('Clic para escuchar', 'Click for sound'), entrar: t('Doble clic para saltar', 'Double-click to skip') }
 
   return (
-    <div onClick={activarSonido} onDoubleClick={dismiss} onTouchEnd={onTouchEnd}
+    <div onClick={activarSonido} onDoubleClick={dismiss}
+      onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}
       style={{
-        position: 'fixed', inset: 0, zIndex: 100, background: '#000', cursor: 'pointer',
+        // `height: 100dvh` y no `inset: 0`: la caja de un elemento fijo crece en
+        // móvil cuando la barra del navegador se retrae, y con `inset: 0` todo lo
+        // anclado al pie —la invitación— se deslizaba mientras el vídeo corría.
+        position: 'fixed', top: 0, left: 0, width: '100%', height: '100dvh',
+        zIndex: 100, background: '#000', cursor: 'pointer',
         opacity: fading ? 0 : 1, transition: `opacity .7s ${site.ease}`,
       }}>
       {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
       {/* Sin `loop`: la pieza se ve entera una vez y al acabar se funde sola hacia
           la Home. `onError` cierra igual — un rectángulo negro eterno porque el MP4
           no cargó sería peor que no tener intro. */}
-      <video ref={videoRef} src={videoUrl} poster={poster || undefined}
+      {/* Sin `src` en el <video>: con hijos <source> el atributo ganaría y nunca se
+          serviría el AV1. El WebM va primero porque pesa un 69% menos con la misma
+          calidad medida (VMAF 96,2); quien no lo soporte cae al MP4 original, que se
+          conserva intacto — recodificarlo lo empeoraba. */}
+      <video ref={videoRef} poster={posterUrl || undefined}
         autoPlay muted playsInline preload="auto"
         onPlaying={() => setListo(true)}
         onEnded={dismiss}
         onError={dismiss}
-        style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        style={{ width: '100%', height: '100%', objectFit: 'cover' }}>
+        {webmUrl && <source src={webmUrl} type="video/webm" />}
+        <source src={videoUrl} type="video/mp4" />
+      </video>
+
+      {/* Veladura al pie. La invitación va en NEGRO (decisión de marca: en blanco
+          se perdía sobre los fotogramas claros), y el negro sin base desaparecería
+          en los oscuros. Es el crema del sitio, no blanco, y a media opacidad: se
+          lee como una veladura de la propia pieza, no como una barra. */}
+      <div aria-hidden="true" style={{
+        position: 'absolute', left: 0, right: 0, bottom: 0, height: 240, zIndex: 1,
+        pointerEvents: 'none',
+        // Las paradas no son una rampa lineal: la franja de los 90 px de abajo
+        // —donde vive de verdad el texto— entra ya casi opaca, y el desvanecido
+        // se gasta por encima, donde no hay nada que leer. Una rampa recta dejaba
+        // la invitación justo en la mitad floja del degradado.
+        background: 'linear-gradient(to top, rgba(244,243,240,0.80) 0px, rgba(244,243,240,0.74) 90px, rgba(244,243,240,0.30) 165px, rgba(244,243,240,0) 240px)',
+        opacity: listo ? 1 : 0, transition: `opacity .9s ${site.ease} .25s`,
+      }} />
 
       {/* Invitación. No aparece hasta que el vídeo corre de verdad. */}
       <div style={{
-        position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+        position: 'absolute', inset: 0, zIndex: 2, display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 46, gap: 14,
-        pointerEvents: 'none', fontFamily: site.font, color: '#fff',
+        pointerEvents: 'none', fontFamily: site.font, color: site.color.ink,
         opacity: listo ? 1 : 0, transition: `opacity .9s ${site.ease} .25s`,
       }}>
         <div className={`iv-inv${sonando ? ' iv-on' : ''}`}
@@ -203,14 +273,21 @@ export function IntroVideo({ content, locale, mobile }: { content: ContentMap; l
           </span>
         </div>
 
-        {!sonando && (
-          <span className="iv-sec" style={{ fontSize: 9.5, letterSpacing: site.track.normal, textTransform: 'uppercase', opacity: 0.45 }}>
-            {t(`o ${gesto.entrar.toLowerCase()}`, `or ${gesto.entrar.toLowerCase()}`)}
-          </span>
-        )}
+        {/* Se apaga, no se desmonta. Al activar el sonido esta fila desaparecía
+            del flex y el bloque entero daba un salto de ~25 px justo en el
+            momento de más atención. Ahora el hueco se queda reservado. */}
+        <span className="iv-sec" aria-hidden={sonando || undefined} style={{
+          fontSize: 9.5, letterSpacing: site.track.normal, textTransform: 'uppercase',
+          opacity: sonando ? 0 : 0.55, visibility: sonando ? 'hidden' : 'visible',
+          transition: `opacity .45s ${site.ease}`,
+        }}>
+          {t(`o ${gesto.entrar.toLowerCase()}`, `or ${gesto.entrar.toLowerCase()}`)}
+        </span>
 
+        {/* Absoluto: en flujo empujaba la invitación hacia arriba al aparecer y
+            la dejaba caer al irse, cinco segundos después. */}
         {avisoSilencio && (
-          <span className="iv-fade" style={{ fontSize: 9.5, letterSpacing: site.track.tight, opacity: 0.55, textAlign: 'center', maxWidth: '30ch', lineHeight: 1.6 }}>
+          <span className="iv-fade" style={{ position: 'absolute', left: 0, right: 0, bottom: 12, margin: '0 auto', fontSize: 9.5, letterSpacing: site.track.tight, opacity: 0.65, textAlign: 'center', maxWidth: '30ch', lineHeight: 1.5 }}>
             {t('¿No oyes nada? Revisa el interruptor de silencio del teléfono.', 'No sound? Check your phone’s ringer switch.')}
           </span>
         )}
@@ -222,9 +299,9 @@ export function IntroVideo({ content, locale, mobile }: { content: ContentMap; l
           onClick={(e) => { e.stopPropagation(); silenciar() }}
           onDoubleClick={(e) => e.stopPropagation()}
           style={{
-            position: 'absolute', left: site.gutter, bottom: 42, zIndex: 2,
+            position: 'absolute', left: site.gutter, bottom: 42, zIndex: 3,
             background: 'none', border: 'none', padding: '8px 0', cursor: 'pointer',
-            color: '#fff', fontFamily: site.font, fontSize: 10,
+            color: site.color.ink, fontFamily: site.font, fontSize: 10,
             letterSpacing: site.track.ultra, textTransform: 'uppercase',
           }}>
           {t('Silenciar', 'Mute')}
@@ -255,10 +332,22 @@ export function IntroVideo({ content, locale, mobile }: { content: ContentMap; l
           50%      { opacity: 1;   transform: translateY(-2px); }
         }
 
+        /* En táctil la respiración pierde el vaivén y se queda en opacidad: dos
+           píxeles de sube-y-baja en un móvil sostenido con la mano no se leen
+           como respiración, se leen como temblor. En escritorio, con el cursor
+           quieto y la pantalla fija, sí funcionan. */
+        @media (hover: none) {
+          .iv-inv { animation-name: iv-breathe-plana; }
+        }
+        @keyframes iv-breathe-plana {
+          0%, 100% { opacity: 0.72; }
+          50%      { opacity: 1; }
+        }
+
         .iv-sec, .iv-fade { animation: iv-in .8s ease both .3s; }
         @keyframes iv-in { from { opacity: 0; } }
 
-        .iv-mute { opacity: 0.5; transition: opacity .3s ease; }
+        .iv-mute { opacity: 0.62; transition: opacity .3s ease; }
         .iv-mute:hover { opacity: 1; }
 
         @media (prefers-reduced-motion: reduce) {

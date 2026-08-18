@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { site } from './theme'
+import { useDesign } from './design/DesignProvider'
 
 // Cursor personalizado (anillo que sigue al ratón con easing y crece sobre
 // elementos interactivos, mostrando una etiqueta si tienen data-cursor).
@@ -11,6 +12,9 @@ import { site } from './theme'
 const SEL = 'a,button,[data-cursor],.fp-interactive'
 
 export function SiteCursor() {
+  // En Modo Diseño el cursor custom se retira: oculta el puntero del sistema con
+  // `cursor: none` y editar texto sin ver el cursor ni el caret es imposible.
+  const design = useDesign()
   const [active, setActive] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
   const ringRef = useRef<HTMLDivElement>(null)
@@ -19,8 +23,9 @@ export function SiteCursor() {
   useEffect(() => {
     const fine = window.matchMedia('(hover:hover) and (pointer:fine)').matches
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    if (fine && !reduce) setActive(true)
-  }, [])
+    if (fine && !reduce && !design.active) setActive(true)
+    else setActive(false)
+  }, [design.active])
 
   useEffect(() => {
     if (!active) return

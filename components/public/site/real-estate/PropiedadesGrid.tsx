@@ -6,6 +6,7 @@ import { useSite, href } from '../SiteProvider'
 import { Reveal } from '../Reveal'
 import { pick, type ContentMap } from '@/lib/web-publica'
 import type { WebPropiedad } from '@/lib/web-propiedades'
+import { Img } from '@/components/public/site/Img'
 
 export function PropiedadesGrid({ content, propiedades }: { content: ContentMap; propiedades: WebPropiedad[] }) {
   const { locale, mobile } = useSite()
@@ -47,7 +48,8 @@ export function PropiedadesGrid({ content, propiedades }: { content: ContentMap;
                   <div className="re-photo" style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3', overflow: 'hidden', background: '#e7e5df' }}>
                     {p.hero_url && (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={p.hero_url} alt={p.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <Img src={p.hero_url} alt={p.nombre} contexto="rejillaProyectos" prioridad={i < 3}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     )}
                     <span style={{ position: 'absolute', top: 14, left: 14, fontSize: 10, letterSpacing: site.track.normal, textTransform: 'uppercase', padding: '5px 10px', background: p.disponible ? site.color.ink : 'rgba(0,0,0,0.45)', color: '#fff' }}>{badge}</span>
                   </div>
