@@ -166,8 +166,19 @@ export async function reorderMapaPuntos(ids: string[]): Promise<{ success: true 
 export async function geocodificarPunto(id: string): Promise<{ success: true; lat: number; lng: number; encontrado: string } | { error: string }> {
   try {
     await requireMarketing()
-    const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
-    if (!token) return { error: 'Falta NEXT_PUBLIC_MAPBOX_TOKEN.' }
+    // Token de SERVIDOR si existe, y si no el público.
+    //
+    // El público va restringido por dominio, y una restricción de URL en Mapbox se
+    // comprueba contra la cabecera `Referer`. Esta llamada sale del servidor, que
+    // no manda Referer, así que con el token restringido Mapbox la rechazaría y
+    // «Situar» dejaría de funcionar. Por eso la geocodificación usa un token
+    // aparte, sin `NEXT_PUBLIC_`: así nunca se sirve al navegador y puede quedarse
+    // sin restringir sin exponer nada.
+    //
+    // Si no está configurado, se cae al público: mientras ese no esté restringido
+    // funciona igual, y así esto no rompe nada el día que se despliega.
+    const token = process.env.MAPBOX_TOKEN_SERVIDOR || process.env.NEXT_PUBLIC_MAPBOX_TOKEN
+    if (!token) return { error: 'Falta MAPBOX_TOKEN_SERVIDOR (o NEXT_PUBLIC_MAPBOX_TOKEN).' }
 
     const admin = createAdminClient()
     const { data: punto } = await admin.from('web_mapa_puntos').select('direccion, nombre').eq('id', id).maybeSingle()
