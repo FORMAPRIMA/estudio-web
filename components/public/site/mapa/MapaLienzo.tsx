@@ -13,7 +13,7 @@ import { useEffect, useRef, useState } from 'react'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { site } from '../theme'
-import { CAMARA, aGeoJSON, limites, tieneCoordenadas, type MapaPunto } from '@/lib/web-mapa'
+import { CAMARA, SIN_MARGENES, aGeoJSON, limites, tieneCoordenadas, type MapaPunto, type Margenes } from '@/lib/web-mapa'
 
 const FUENTE = 'fp-obras'
 /** Zoom al que se aterriza sobre una obra si se venía de más lejos. */
@@ -35,7 +35,59 @@ const DURACION_POR_GRADO = 250
  */
 const TRAMO_GRADOS = 90
 
-export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar, onSeleccionar, tapadoAbajo = 0, unDedo = false, onFallo }: {
+/** Respiro que se le suma a los márgenes en el encuadre general, para que ningún
+ *  punto quede pegado al canto de una ventana flotante. */
+const RESPIRO = 48
+
+/**
+ * El plano general: el núcleo de obras entero, dentro del hueco que dejan libre
+ * las ventanas. Vive fuera del componente porque lo piden dos sitios —el encuadre
+ * de entrada, instantáneo, y el botón «Ver todas», con vuelo— y la única
+ * diferencia entre los dos es la duración.
+ *
+ * Devuelve si ha podido encuadrar: sin ningún punto geocodificado no hay caja.
+ */
+function encuadrarTodo(m: mapboxgl.Map, puntos: MapaPunto[], mg: Margenes, duracion: number) {
+  const caja = limites(puntos)
+  if (!caja) return false
+  m.fitBounds(caja, {
+    // El zoom NO es el del estilo (15,25): con puntos de Ferraz a Fuente del Berro
+    // no cabe ni la mitad. Se calcula de los datos conservando rumbo y cabeceo.
+    padding: {
+      top:    mg.top    + RESPIRO,
+      right:  mg.right  + RESPIRO,
+      bottom: mg.bottom + RESPIRO,
+      left:   mg.left   + RESPIRO,
+    },
+    bearing: CAMARA.rumbo,
+    pitch: CAMARA.cabeceo,
+    duration: duracion,
+    maxZoom: 15,
+    essential: true,
+  })
+  return true
+}
+
+/**
+ * ¿Puede este navegador con el mapa?
+ *
+ * Se prueba un contexto WebGL 2 de verdad en vez de preguntárselo a la librería.
+ * `mapboxgl.supported()` existía en v2 y DESAPARECIÓ en v3 —el paquete de aquí es
+ * el 3.28— así que `mapboxgl.supported?.()` devolvía `undefined`, el `!` lo daba
+ * por «no soportado» y la página caía al plano estático SIEMPRE, en cualquier
+ * navegador. El mapa interactivo no llegaba a construirse nunca.
+ *
+ * WebGL 2 y no WebGL 1: es lo que pide mapbox-gl v3 para el basemap Standard.
+ */
+function soportaMapa() {
+  try {
+    return !!document.createElement('canvas').getContext('webgl2')
+  } catch {
+    return false
+  }
+}
+
+export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar, onSeleccionar, margenes = SIN_MARGENES, reencuadre = 0, onFallo }: {
   puntos: MapaPunto[]
   /**
    * DOS estados y no uno, porque son dos intenciones distintas.
@@ -51,14 +103,15 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
   onResaltar: (n: number | null) => void
   onSeleccionar: (n: number | null) => void
   /**
-   * Píxeles del lienzo tapados por abajo (la lámina, en móvil). Se los pasamos a
-   * Mapbox como `padding` para que centre en el área VISIBLE: sin esto, el punto
-   * al que vuelas aterriza debajo de la lámina y parece que no ha pasado nada.
+   * Píxeles del lienzo tapados por cada lado: el índice a la izquierda, la ficha a
+   * la derecha, el header arriba, la lámina abajo. Se los pasamos a Mapbox como
+   * `padding` para que centre en el HUECO VISIBLE: sin esto, el punto al que vuelas
+   * aterriza debajo de una ventana y parece que no ha pasado nada.
    */
-  tapadoAbajo?: number
-  /** Un dedo mueve el mapa. Solo cuando el mapa ocupa la pantalla entera: si no,
-   *  atrapa el scroll de la página y no puedes pasar de largo. */
-  unDedo?: boolean
+  margenes?: Margenes
+  /** Cada incremento pide un vuelo de vuelta al plano general (el botón «Ver
+   *  todas»). Un contador y no un booleano: el gesto se puede repetir. */
+  reencuadre?: number
   /** Sin WebGL o sin token: la página cae al plano de siempre. */
   onFallo: () => void
 }) {
@@ -70,21 +123,35 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
   useEffect(() => {
     const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
     if (!token || !contenedor.current) { onFallo(); return }
-    if (!mapboxgl.supported?.()) { onFallo(); return }
+    if (!soportaMapa()) { onFallo(); return }
 
     mapboxgl.accessToken = token
-    const m = new mapboxgl.Map({
-      container: contenedor.current,
-      style: CAMARA.estilo,
-      center: CAMARA.centro,
-      zoom: CAMARA.zoomRespaldo,
-      bearing: CAMARA.rumbo,
-      pitch: CAMARA.cabeceo,
-      minZoom: CAMARA.zoomMin,
-      maxZoom: CAMARA.zoomMax,
-      attributionControl: true,
-      cooperativeGestures: !unDedo,
-    })
+    let m: mapboxgl.Map
+    try {
+      m = new mapboxgl.Map({
+        container: contenedor.current,
+        style: CAMARA.estilo,
+        center: CAMARA.centro,
+        zoom: CAMARA.zoomRespaldo,
+        bearing: CAMARA.rumbo,
+        pitch: CAMARA.cabeceo,
+        minZoom: CAMARA.zoomMin,
+        maxZoom: CAMARA.zoomMax,
+        attributionControl: true,
+        // Un dedo mueve el mapa y la rueda hace zoom sin `Ctrl`. Los gestos
+        // cooperativos existen para no robarle el scroll a la página; aquí el mapa
+        // ES la página y la página no scrollea, así que no hay nada que robar.
+        cooperativeGestures: false,
+      })
+    } catch (e) {
+      // El constructor tira si el contexto WebGL se pierde entre la comprobación y
+      // aquí (memoria de GPU, pestaña en segundo plano). Sin este `catch` la
+      // excepción sube y se lleva por delante la página entera en vez de caer al
+      // plano estático, que es justo lo que el respaldo existe para evitar.
+      console.error('[mapa]', e)
+      onFallo()
+      return
+    }
     mapa.current = m
 
     m.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), 'bottom-right')
@@ -95,21 +162,18 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // A pantalla completa el mapa manda y un dedo lo mueve; embebido, dos dedos,
-  // porque si no se traga el scroll de la página.
-  useEffect(() => {
-    const m = mapa.current
-    if (!m) return
-    if (unDedo) m.setCooperativeGestures(false)
-    else m.setCooperativeGestures(true)
-  }, [unDedo])
-
   // El área útil del lienzo. Mapbox la usa en fitBounds y flyTo.
+  //
+  // Se desestructura en cuatro números en vez de depender del objeto: `margenes`
+  // se recalcula en cada render del padre y un objeto nuevo con los mismos valores
+  // dispararía este efecto —y con él un reencuadre de cámara— sin que nada haya
+  // cambiado de sitio.
+  const { top: mTop, right: mRight, bottom: mBottom, left: mLeft } = margenes
   useEffect(() => {
     const m = mapa.current
     if (!m || !listo) return
-    m.setPadding({ top: 0, right: 0, left: 0, bottom: tapadoAbajo ?? 0 })
-  }, [tapadoAbajo, listo])
+    m.setPadding({ top: mTop, right: mRight, bottom: mBottom, left: mLeft })
+  }, [mTop, mRight, mBottom, mLeft, listo])
 
   // ── Capas ─────────────────────────────────────────────────────────────────
   // Fuente GeoJSON + capas nativas, NO marcadores HTML: en un mapa con 63° de
@@ -232,19 +296,23 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
   useEffect(() => {
     const m = mapa.current
     if (!m || !listo || encuadrado.current) return
-    const caja = limites(puntos)
-    if (!caja) return
-    encuadrado.current = true
-    // El zoom NO es el del estilo (15,25): con puntos de Ferraz a Fuente del Berro
-    // no cabe ni la mitad. Se calcula de los datos conservando rumbo y cabeceo.
-    m.fitBounds(caja, {
-      padding: { top: 90, bottom: 70 + (tapadoAbajo ?? 0), left: 56, right: 56 },
-      bearing: CAMARA.rumbo,
-      pitch: CAMARA.cabeceo,
-      duration: 0,
-      maxZoom: 15,
-    })
-  }, [listo, puntos, tapadoAbajo])
+    if (encuadrarTodo(m, puntos, { top: mTop, right: mRight, bottom: mBottom, left: mLeft }, 0)) {
+      encuadrado.current = true
+    }
+  }, [listo, puntos, mTop, mRight, mBottom, mLeft])
+
+  // ── Volver al plano general ───────────────────────────────────────────────
+  // El botón «Ver todas». Deseleccionar y volver a ver la ciudad entera son dos
+  // intenciones distintas —seleccionar una obra jamás aleja la cámara— así que
+  // esta es la única puerta de vuelta, y llega como contador para poder repetirse.
+  const reencuadrePrevio = useRef(reencuadre)
+  useEffect(() => {
+    const m = mapa.current
+    if (!m || !listo || reencuadre === reencuadrePrevio.current) return
+    reencuadrePrevio.current = reencuadre
+    m.stop()   // por si venía orbitando
+    encuadrarTodo(m, puntos, { top: mTop, right: mRight, bottom: mBottom, left: mLeft }, 1500)
+  }, [reencuadre, listo, puntos, mTop, mRight, mBottom, mLeft])
 
   // ── Resaltado (hover / foco) ──────────────────────────────────────────────
   // Solo pinta. Ni una línea de cámara.

@@ -5,21 +5,20 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { site, display } from '../theme'
 import { useSite, href } from '../SiteProvider'
-import { Reveal } from '../Reveal'
 import { Img } from '../Img'
 import { pick, type ContentMap } from '@/lib/web-publica'
-import { datosDeTarjeta, tieneCoordenadas, type MapaPunto } from '@/lib/web-mapa'
+import { datosDeTarjeta, tieneCoordenadas, SIN_MARGENES, type MapaPunto, type Margenes } from '@/lib/web-mapa'
 
 // mapbox-gl solo se descarga cuando esta página se monta.
 const MapaLienzo = dynamic(() => import('./MapaLienzo'), { ssr: false })
 
 /**
  * Cuánto asoma la lámina en cada detención, EN UNIDADES CSS y no en píxeles
- * medidos. Los porcentajes van referidos a la propia lámina, que mide el 94% del
- * lienzo; así el navegador resuelve las alturas solo y no hace falta medir nada
- * para pintar. La primera versión dependía de un ResizeObserver, y una medida que
- * llega tarde —o que no llega— dejaba la lámina sin recorrido: se podía abrir y
- * no pasaba nada.
+ * medidos. Los porcentajes van referidos a la propia lámina, cuya altura la fija
+ * el CSS con `top` y `bottom`; así el navegador resuelve las alturas solo y no
+ * hace falta medir nada para pintar. La primera versión dependía de un
+ * ResizeObserver, y una medida que llega tarde —o que no llega— dejaba la lámina
+ * sin recorrido: se podía abrir y no pasaba nada.
  *
  * `ficha` es la que aparece con una obra elegida: cabe la foto y el mapa sigue
  * siendo lo que más se ve, que es de lo que va esta pantalla.
@@ -27,7 +26,7 @@ const MapaLienzo = dynamic(() => import('./MapaLienzo'), { ssr: false })
 const DETENTES = {
   peek:  '52px',
   ficha: '200px',
-  medio: '57.4%',   // ≈ 54% del lienzo
+  medio: '57.4%',
   alto:  '100%',
 } as const
 /** Fracción de la lámina que ocupa cada detención, para decidir a cuál se salta al
@@ -40,6 +39,21 @@ type Detente = keyof typeof DETENTES
 
 const MOVIL = '(max-width: 900px)'
 
+/**
+ * La rejilla de la pantalla, en píxeles y para la CÁMARA. El CSS tiene sus propias
+ * variables con los mismos nombres; estas son las que se le pasan a Mapbox como
+ * `padding`, y ahí no valen `clamp()` ni porcentajes.
+ *
+ * `TOPE` es el alto exacto del header del sitio (SiteNav): es lo que hace que las
+ * ventanas floten POR DEBAJO del isotipo y del menú respetando su margen, en vez
+ * de pelearse con ellos.
+ */
+const TOPE = 72
+/** Aire entre el header y las ventanas, y de las ventanas al suelo. */
+const AIRE = 20
+/** Lo que separa la lámina de los cantos en móvil, para que se lea como ventana. */
+const HUECO = 8
+
 export function MapaPage({ content, puntos }: { content: ContentMap; puntos: MapaPunto[] }) {
   const { locale, mobile } = useSite()
 
@@ -51,10 +65,14 @@ export function MapaPage({ content, puntos }: { content: ContentMap; puntos: Map
 
   const [esMovil, setEsMovil] = useState(false)
   const [detente, setDetente] = useState<Detente>('peek')
-  const [pantallaCompleta, setPantallaCompleta] = useState(false)
+  const [plegado, setPlegado] = useState(false)
+  /** Contador: cada incremento pide al lienzo un vuelo de vuelta al plano general. */
+  const [reencuadre, setReencuadre] = useState(0)
   /** Durante el arrastre, los píxeles que asoma. Fuera de él, null y manda el CSS. */
   const [arrastre, setArrastre] = useState<number | null>(null)
   const hojaRef = useRef<HTMLDivElement>(null)
+  const indiceRef = useRef<HTMLElement>(null)
+  const fichaRef = useRef<HTMLDivElement>(null)
 
   const eyebrow = pick(content, 'hero', 'eyebrow', { locale, mobile })
   const titulo = pick(content, 'hero', 'titulo', { locale, mobile })
@@ -65,6 +83,15 @@ export function MapaPage({ content, puntos }: { content: ContentMap; puntos: Map
   // ejecutar su efecto de encuadre inicial, que devolvía la cámara al plano general.
   const listados = useMemo(() => puntos.filter(tieneCoordenadas), [puntos])
   const total = listados.length
+
+  /**
+   * El mapa manda de verdad. Es lo que enciende la pantalla completa —sin scroll y
+   * sin footer— y por eso NO se da por hecho: sin WebGL, sin token o sin ningún
+   * punto geocodificado el atributo no se pone y la página vuelve sola al documento
+   * de siempre, con su plano estático. Una pantalla completa vacía no es un
+   * respaldo, es un agujero.
+   */
+  const inmersivo = !fallo && total > 0
 
   useEffect(() => {
     const mq = window.matchMedia(MOVIL)
@@ -82,17 +109,48 @@ export function MapaPage({ content, puntos }: { content: ContentMap; puntos: Map
   }, [])
 
   /**
-   * Píxeles del lienzo que tapa la lámina. Mapbox los necesita como número para
-   * centrar en el área VISIBLE: sin esto, la obra a la que vuelas aterriza debajo
-   * de la lámina y parece que no ha pasado nada.
+   * El hueco visible del lienzo: lo que queda cuando se descuentan el header y las
+   * ventanas flotantes. Mapbox lo necesita en píxeles para centrar ahí y no en el
+   * centro geométrico — sin esto, la obra a la que vuelas aterriza debajo del
+   * índice o debajo de la ficha y parece que no ha pasado nada.
    *
-   * Se actualiza al cambiar de detención y no durante el arrastre: reencuadrar la
-   * cámara mientras el dedo se mueve sería marear por marear.
+   * Se MIDEN las ventanas en vez de calcularlas: sus anchos son `clamp()` y el
+   * margen lateral del sitio también, así que reproducir aquí esa aritmética sería
+   * tener dos fuentes de verdad condenadas a discrepar. Medir es seguro porque
+   * esto solo alimenta a la cámara: no pinta nada, así que una medida que llega
+   * tarde reencuadra un poco después, no deja la pantalla rota.
    */
-  const [tapado, setTapado] = useState(CABECERA)
-  useEffect(() => {
-    setTapado(esMovil ? pxDe(detente) : 0)
-  }, [detente, esMovil, pxDe])
+  const [margenes, setMargenes] = useState<Margenes>(SIN_MARGENES)
+  const medir = useCallback(() => {
+    const ancho = window.innerWidth
+    const nuevo: Margenes = esMovil
+      ? { top: TOPE, right: 0, bottom: pxDe(detente) + HUECO, left: 0 }
+      : {
+          top: TOPE + AIRE,
+          left: Math.round(indiceRef.current?.getBoundingClientRect().right ?? 0) + AIRE,
+          right: fichaRef.current
+            ? Math.round(ancho - fichaRef.current.getBoundingClientRect().left) + AIRE
+            : AIRE,
+          bottom: AIRE,
+        }
+    // Sin esta comparación, cada medida crearía un objeto nuevo, el estado
+    // cambiaría siempre y el efecto se realimentaría sin parar.
+    setMargenes((prev) =>
+      prev.top === nuevo.top && prev.right === nuevo.right &&
+      prev.bottom === nuevo.bottom && prev.left === nuevo.left ? prev : nuevo)
+  }, [esMovil, detente, pxDe])
+
+  // `useLayoutEffect` y no `useEffect`: se mide después de que el navegador haya
+  // colocado la ficha que acaba de entrar, pero antes de pintar.
+  useLayoutEffect(() => {
+    if (!inmersivo) return
+    medir()
+    const ro = new ResizeObserver(medir)
+    if (indiceRef.current) ro.observe(indiceRef.current)
+    if (fichaRef.current) ro.observe(fichaRef.current)
+    window.addEventListener('resize', medir)
+    return () => { ro.disconnect(); window.removeEventListener('resize', medir) }
+  }, [medir, inmersivo, seleccionado, plegado])
 
   // Elegir una obra baja la lámina a la ficha: el mapa tiene que verse mientras la
   // cámara vuela, que es exactamente lo que no pasaba con la lista debajo.
@@ -106,17 +164,14 @@ export function MapaPage({ content, puntos }: { content: ContentMap; puntos: Map
     else setDetente((d) => (d === 'ficha' ? 'peek' : d))
   }, [seleccionado])
 
-  // A pantalla completa se bloquea el documento: si no, el dedo que mueve el mapa
-  // arrastra también la página de detrás.
+  // Escape cierra la ficha. Una ventana que solo se cierra con la × del ratón es
+  // una ventana que no se puede cerrar con el teclado.
   useEffect(() => {
-    if (!pantallaCompleta) return
-    const html = document.documentElement
-    const previo = html.style.cssText
-    html.style.overflow = 'hidden'
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setPantallaCompleta(false) }
+    if (seleccionado == null) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSeleccionado(null) }
     window.addEventListener('keydown', onKey)
-    return () => { html.style.cssText = previo; window.removeEventListener('keydown', onKey) }
-  }, [pantallaCompleta])
+    return () => window.removeEventListener('keydown', onKey)
+  }, [seleccionado])
 
   const onFallo = useCallback(() => setFallo(true), [])
   const alternar = useCallback((n: number | null) => {
@@ -127,6 +182,9 @@ export function MapaPage({ content, puntos }: { content: ContentMap; puntos: Map
     if (seleccionado == null || !total) return
     setSeleccionado(((seleccionado - 1 + paso + total) % total) + 1)
   }
+  /** «Ver todas»: soltar la obra Y volver a la ciudad entera. Son dos cosas, y la
+   *  segunda no tenía hasta ahora ninguna puerta. */
+  const verTodas = () => { setSeleccionado(null); setReencuadre((n) => n + 1) }
 
   const punto = seleccionado != null ? listados[seleccionado - 1] : null
   /** Lo que asoma, como valor CSS: píxeles mientras se arrastra, token si no. */
@@ -160,106 +218,121 @@ export function MapaPage({ content, puntos }: { content: ContentMap; puntos: Map
 
   const cuenta = `${total} ${locale === 'en' ? 'works' : 'obras'}`
 
-  return (
-    <main className={`fp-mapa${pantallaCompleta ? ' fp-mapa-pc' : ''}`}
-      style={{ fontFamily: site.font, background: site.color.cream, color: site.color.ink, minHeight: '100dvh',
-        padding: `120px ${site.gutter} clamp(60px, 10vh, 120px)` }}>
-      <div style={{ maxWidth: site.maxWidth, margin: '0 auto' }}>
-        <header className="fp-mapa-header" style={{ marginBottom: 'clamp(30px, 5vh, 54px)' }}>
-          {eyebrow && <Reveal as="p" style={{ fontSize: display.eyebrow, letterSpacing: site.track.ultra, textTransform: 'uppercase', color: site.color.accent, margin: '0 0 16px' }}>{eyebrow}</Reveal>}
-          {titulo && <Reveal as="h1" delay={100} style={{ fontSize: display.hero, fontWeight: 300, letterSpacing: '0', lineHeight: 1.2, margin: 0, maxWidth: '22ch' }}>{titulo}</Reveal>}
-          {intro && <Reveal as="p" className="fp-mapa-intro" delay={180} style={{ fontSize: 'clamp(0.95rem, 1.4vw, 1.1rem)', fontWeight: 300, lineHeight: 1.6, opacity: 0.7, margin: '22px 0 0', maxWidth: '56ch', whiteSpace: 'pre-wrap' }}>{intro}</Reveal>}
-        </header>
-
-        {total === 0 ? (
-          <Respaldo locale={locale} motivo="sin-datos" />
-        ) : (
-          <div className="fp-mapa-grid">
-            <div className="fp-mapa-caja">
-              {fallo ? <Respaldo locale={locale} motivo="sin-webgl" /> : (
-                <>
-                  <MapaLienzo puntos={listados} resaltado={resaltado} seleccionado={seleccionado}
-                    onResaltar={setResaltado} onSeleccionar={alternar} onFallo={onFallo}
-                    tapadoAbajo={esMovil ? tapado : 0}
-                    unDedo={pantallaCompleta} />
-
-                  {/* En escritorio la tarjeta va anclada al LIENZO y no a la
-                      coordenada: un Popup de Mapbox cruzaría la pantalla nadando
-                      durante la órbita, y con 63° de cabeceo los que caen al
-                      horizonte se empequeñecen. En móvil su sitio es la lámina. */}
-                  {punto && !esMovil && (
-                    <Ficha punto={punto} locale={locale} onCerrar={() => setSeleccionado(null)} />
-                  )}
-
-                  {/* Pantalla completa, solo móvil. Es lo que permite que UN dedo
-                      mueva el mapa: embebido no puede, porque se tragaría el scroll
-                      de la página y no habría manera de pasar de largo. */}
-                  <button type="button" className="fp-mapa-pc-btn" data-cursor=""
-                    aria-label={pantallaCompleta
-                      ? (locale === 'en' ? 'Exit full screen' : 'Salir de pantalla completa')
-                      : (locale === 'en' ? 'Full screen' : 'Pantalla completa')}
-                    onClick={() => setPantallaCompleta((v) => !v)}>
-                    {pantallaCompleta ? '✕' : '⤢'}
-                  </button>
-
-                </>
-              )}
-
-                  {/* ── Lámina (móvil) ─────────────────────────────────────── */}
-                  <div className="fp-mapa-hoja" ref={hojaRef} style={{
-                    // El navegador resuelve el recorrido solo: la lámina mide
-                    // siempre lo mismo y solo cambia cuánto se baja.
-                    transform: `translateY(calc(100% - ${asoma}))`,
-                    transition: arrastre == null ? `transform .34s ${site.ease}` : 'none',
-                  }}>
-                    <div className="fp-mapa-asa" onPointerDown={onAsaBajar} onPointerMove={onAsaMover}
-                      onPointerUp={onAsaSoltar} onPointerCancel={onAsaSoltar}
-                      role="separator" aria-label={locale === 'en' ? 'Resize list' : 'Ajustar la lista'}>
-                      <span />
-                    </div>
-
-                    {punto ? (
-                      <FichaCompacta punto={punto} locale={locale} indice={seleccionado!} total={total}
-                        onMover={mover} onCerrar={() => setSeleccionado(null)}
-                        onAbrirLista={() => setDetente('medio')} />
-                    ) : (
-                      <button type="button" className="fp-mapa-hoja-cab"
-                        onClick={() => setDetente(detente === 'peek' ? 'medio' : 'peek')}>
-                        <span className="fp-mapa-cuenta">{cuenta}</span>
-                        <span className="fp-mapa-pista">
-                          {detente === 'peek' ? (locale === 'en' ? 'See the list' : 'Ver la lista') : (locale === 'en' ? 'Hide' : 'Ocultar')}
-                        </span>
-                      </button>
-                    )}
-
-                    {/* El área que scrollea es solo la VISIBLE. Si la lista midiera
-                        la lámina entera, al arrastrar hacia arriba aparecería ya
-                        desplazada por dentro. */}
-                    <div className="fp-mapa-hoja-lista"
-                      style={{ maxHeight: `calc(${asoma} - ${punto ? DETENTES.ficha : `${CABECERA}px`})` }}>
-                      <Lista listados={listados} seleccionado={seleccionado} resaltado={resaltado}
-                        locale={locale} conFoto onElegir={alternar} onResaltar={setResaltado} />
-                    </div>
-                  </div>
-            </div>
-
-            {/* La lista de escritorio. No es un adorno del mapa: un <canvas> es
-                invisible para Google y para un lector de pantalla, y hay quien no
-                tiene WebGL. Resuelve las tres cosas y es cómoda con teclado. */}
-            <nav className="fp-mapa-lista" aria-label={locale === 'en' ? 'Works' : 'Obras'}>
-              <div className="fp-mapa-cab">
-                <p className="fp-mapa-cuenta">{cuenta}</p>
-                {seleccionado != null && (
-                  <button type="button" className="fp-mapa-todas" data-cursor="" onClick={() => setSeleccionado(null)}>
-                    {locale === 'en' ? 'See all' : 'Ver todas'}
-                  </button>
-                )}
-              </div>
-              <Lista listados={listados} seleccionado={seleccionado} resaltado={resaltado}
-                locale={locale} onElegir={alternar} onResaltar={setResaltado} />
+  // ── Respaldo: sin mapa, la página es un documento normal ────────────────────
+  if (!inmersivo) {
+    return (
+      <main className="fp-mapa" style={{ fontFamily: site.font, background: site.color.cream, color: site.color.ink,
+        minHeight: '100dvh', padding: `120px ${site.gutter} clamp(60px, 10vh, 120px)` }}>
+        <div style={{ maxWidth: site.maxWidth, margin: '0 auto' }}>
+          <header style={{ marginBottom: 'clamp(30px, 5vh, 54px)' }}>
+            {eyebrow && <p style={{ fontSize: display.eyebrow, letterSpacing: site.track.ultra, textTransform: 'uppercase', color: site.color.accent, margin: '0 0 16px' }}>{eyebrow}</p>}
+            {titulo && <h1 style={{ fontSize: display.hero, fontWeight: 300, lineHeight: 1.2, margin: 0, maxWidth: '22ch' }}>{titulo}</h1>}
+            {intro && <p style={{ fontSize: 'clamp(0.95rem, 1.4vw, 1.1rem)', fontWeight: 300, lineHeight: 1.6, opacity: 0.7, margin: '22px 0 0', maxWidth: '56ch', whiteSpace: 'pre-wrap' }}>{intro}</p>}
+          </header>
+          <Respaldo locale={locale} motivo={total === 0 ? 'sin-datos' : 'sin-webgl'} />
+          {total > 0 && (
+            <nav className="fp-mapa-doc-lista" aria-label={locale === 'en' ? 'Works' : 'Obras'}>
+              <p className="fp-mapa-cuenta">{cuenta}</p>
+              <Lista listados={listados} seleccionado={null} resaltado={null}
+                locale={locale} onElegir={() => {}} onResaltar={() => {}} />
             </nav>
+          )}
+        </div>
+        <style dangerouslySetInnerHTML={{ __html: CSS }} />
+      </main>
+    )
+  }
+
+  // ── Pantalla inmersiva ──────────────────────────────────────────────────────
+  return (
+    <main className="fp-mapa" data-inmersivo="1"
+      style={{ fontFamily: site.font, background: '#eceae5', color: site.color.ink,
+        // Lo que asoma la lámina, en píxeles, para que la atribución de Mapbox se
+        // suba por encima de ella. Es requisito de uso: no puede quedar tapada.
+        ['--fp-asomo' as string]: `${margenes.bottom}px` }}>
+
+      <MapaLienzo puntos={listados} resaltado={resaltado} seleccionado={seleccionado}
+        onResaltar={setResaltado} onSeleccionar={alternar} onFallo={onFallo}
+        margenes={margenes} reencuadre={reencuadre} />
+
+      {/* El isotipo y el menú son negros sobre lo que haya debajo, y debajo hay
+          una ciudad que a veces es una manzana oscura. Este velo es lo que les
+          devuelve el suelo sin tocar SiteNav ni ponerle una banda. */}
+      <div className="fp-mapa-velo" aria-hidden="true" />
+
+      {/* ── Ventana de índice ─────────────────────────────────────────────── */}
+      <aside ref={indiceRef} className="fp-mapa-indice" data-plegado={plegado ? '1' : undefined}
+        aria-label={locale === 'en' ? 'Works' : 'Obras'}>
+        <div className="fp-mapa-indice-titulo">
+          {eyebrow && <p className="fp-mapa-eyebrow">{eyebrow}</p>}
+          {titulo && <h1 className="fp-mapa-h1">{titulo}</h1>}
+          {intro && !punto && <p className="fp-mapa-intro">{intro}</p>}
+        </div>
+
+        <div className="fp-mapa-barra">
+          <p className="fp-mapa-cuenta">{cuenta}</p>
+          <div className="fp-mapa-barra-acc">
+            <button type="button" className="fp-mapa-mini-btn" data-cursor="" onClick={verTodas}>
+              {locale === 'en' ? 'See all' : 'Ver todas'}
+            </button>
+            <button type="button" className="fp-mapa-mini-btn" data-cursor=""
+              aria-expanded={!plegado} onClick={() => setPlegado((v) => !v)}>
+              {plegado
+                ? (locale === 'en' ? 'Show' : 'Mostrar')
+                : (locale === 'en' ? 'Hide' : 'Ocultar')}
+            </button>
           </div>
+        </div>
+
+        <div className="fp-mapa-indice-cuerpo">
+          <Lista listados={listados} seleccionado={seleccionado} resaltado={resaltado}
+            locale={locale} onElegir={alternar} onResaltar={setResaltado} />
+        </div>
+      </aside>
+
+      {/* ── Ventana de ficha (escritorio) ─────────────────────────────────────
+          Anclada al LIENZO y no a la coordenada: un Popup de Mapbox cruzaría la
+          pantalla nadando durante la órbita, y con 63° de cabeceo los que caen al
+          horizonte se empequeñecen. En móvil su sitio es la lámina. */}
+      {punto && !esMovil && (
+        <Ficha refCaja={fichaRef} punto={punto} locale={locale} indice={seleccionado!} total={total}
+          onMover={mover} onCerrar={() => setSeleccionado(null)} />
+      )}
+
+      {/* ── Lámina (móvil) ────────────────────────────────────────────────── */}
+      <div className="fp-mapa-hoja" ref={hojaRef} style={{
+        // El navegador resuelve el recorrido solo: la lámina mide siempre lo mismo
+        // y solo cambia cuánto se baja.
+        transform: `translateY(calc(100% - ${asoma}))`,
+        transition: arrastre == null ? `transform .34s ${site.ease}` : 'none',
+      }}>
+        <div className="fp-mapa-asa" onPointerDown={onAsaBajar} onPointerMove={onAsaMover}
+          onPointerUp={onAsaSoltar} onPointerCancel={onAsaSoltar}
+          role="separator" aria-label={locale === 'en' ? 'Resize list' : 'Ajustar la lista'}>
+          <span />
+        </div>
+
+        {punto ? (
+          <FichaCompacta punto={punto} locale={locale} indice={seleccionado!} total={total}
+            onMover={mover} onCerrar={() => setSeleccionado(null)}
+            onAbrirLista={() => setDetente('medio')} />
+        ) : (
+          <button type="button" className="fp-mapa-hoja-cab"
+            onClick={() => setDetente(detente === 'peek' ? 'medio' : 'peek')}>
+            <span className="fp-mapa-cuenta">{cuenta}</span>
+            <span className="fp-mapa-pista">
+              {detente === 'peek' ? (locale === 'en' ? 'See the list' : 'Ver la lista') : (locale === 'en' ? 'Hide' : 'Ocultar')}
+            </span>
+          </button>
         )}
+
+        {/* El área que scrollea es solo la VISIBLE. Si la lista midiera la lámina
+            entera, al arrastrar hacia arriba aparecería ya desplazada por dentro. */}
+        <div className="fp-mapa-hoja-lista"
+          style={{ maxHeight: `calc(${asoma} - ${punto ? DETENTES.ficha : `${CABECERA}px`})` }}>
+          <Lista listados={listados} seleccionado={seleccionado} resaltado={resaltado}
+            locale={locale} onElegir={alternar} onResaltar={setResaltado} />
+        </div>
       </div>
 
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
@@ -268,9 +341,12 @@ export function MapaPage({ content, puntos }: { content: ContentMap; puntos: Map
 }
 
 // ── Lista ─────────────────────────────────────────────────────────────────────
-function Lista({ listados, seleccionado, resaltado, locale, conFoto, onElegir, onResaltar }: {
+// Un <canvas> es invisible para Google y para un lector de pantalla, y hay quien
+// no tiene WebGL. Esta lista resuelve las tres cosas y es cómoda con teclado: no
+// es un adorno del mapa, es su otra mitad.
+function Lista({ listados, seleccionado, resaltado, locale, onElegir, onResaltar }: {
   listados: MapaPunto[]; seleccionado: number | null; resaltado: number | null
-  locale: 'es' | 'en'; conFoto?: boolean
+  locale: 'es' | 'en'
   onElegir: (n: number) => void; onResaltar: (n: number | null) => void
 }) {
   return (
@@ -291,25 +367,20 @@ function Lista({ listados, seleccionado, resaltado, locale, conFoto, onElegir, o
               onMouseLeave={() => onResaltar(null)}
               onFocus={() => onResaltar(n)}
               onBlur={() => onResaltar(null)}>
-              {/* Con 22 obras fotografiadas, una miniatura dice en un teléfono lo
-                  que ninguna fila de texto puede. Sin foto queda el número, que es
-                  el mismo que se pinta en el mapa. */}
-              {conFoto
-                ? (
-                  <span className="fp-mapa-mini">
-                    {imagen
-                      ? <Img src={imagen} alt="" contexto="miniaturaMapa" />
-                      : <span className="fp-mapa-mini-n">{String(n).padStart(2, '0')}</span>}
-                  </span>
-                )
-                : <span className="fp-mapa-n">{String(n).padStart(2, '0')}</span>}
+              {/* Sobre un mapa, una miniatura identifica una obra antes que
+                  cualquier fila de texto. Sin foto queda el número, que es el
+                  mismo que se pinta en el punto. */}
+              <span className="fp-mapa-mini">
+                {imagen
+                  ? <Img src={imagen} alt="" contexto="miniaturaMapa" />
+                  : <span className="fp-mapa-mini-n">{String(n).padStart(2, '0')}</span>}
+              </span>
               <span className="fp-mapa-txt">
                 <span className="fp-mapa-nombre">{p.nombre}</span>
                 {(descriptor || p.anio) && (
                   <span className="fp-mapa-sub">{[descriptor, p.anio].filter(Boolean).join(' · ')}</span>
                 )}
               </span>
-              {!conFoto && p.anio && <span className="fp-mapa-anio">{p.anio}</span>}
             </button>
           </li>
         )
@@ -350,12 +421,25 @@ function FichaCompacta({ punto, locale, indice, total, onMover, onCerrar, onAbri
   )
 }
 
-/** Tarjeta de escritorio, anclada a la esquina del lienzo. */
-function Ficha({ punto, locale, onCerrar }: { punto: MapaPunto; locale: 'es' | 'en'; onCerrar: () => void }) {
+/**
+ * Ventana de la obra elegida (escritorio). Va a la derecha, alineada con el menú,
+ * mientras el índice se queda a la izquierda alineado con el isotipo: se puede
+ * mirar una obra sin perder de vista dónde cae dentro de las demás.
+ *
+ * Recibe la ref de su caja porque su ancho es lo que le dice a la cámara cuánto
+ * lienzo tiene tapado por ese lado. Va como prop con nombre propio y no como
+ * `ref`: en React 18 `ref` no es una prop y llegaría vacía.
+ */
+function Ficha({ punto, locale, indice, total, onMover, onCerrar, refCaja }: {
+  punto: MapaPunto; locale: 'es' | 'en'; indice: number; total: number
+  onMover: (paso: 1 | -1) => void; onCerrar: () => void
+  refCaja: React.RefObject<HTMLDivElement>
+}) {
   const { imagen, descriptor, slug } = datosDeTarjeta(punto, locale)
   const meta = [descriptor, punto.anio].filter(Boolean).join(' · ')
   return (
-    <div className="fp-mapa-ficha" data-sinfoto={imagen ? undefined : '1'}>
+    <div ref={refCaja} className="fp-mapa-ficha" data-sinfoto={imagen ? undefined : '1'}
+      aria-label={locale === 'en' ? 'Selected work' : 'Obra seleccionada'}>
       <button type="button" className="fp-mapa-cerrar" data-cursor="" aria-label={locale === 'en' ? 'Close' : 'Cerrar'} onClick={onCerrar}>×</button>
       {imagen && (
         <div className="fp-mapa-ficha-foto">
@@ -371,6 +455,11 @@ function Ficha({ punto, locale, onCerrar }: { punto: MapaPunto; locale: 'es' | '
             {locale === 'en' ? 'View project' : 'Ver proyecto'} →
           </Link>
         )}
+        <div className="fp-mapa-ficha-nav">
+          <button type="button" data-cursor="" onClick={() => onMover(-1)} aria-label={locale === 'en' ? 'Previous' : 'Anterior'}>‹</button>
+          <span>{indice} / {total}</span>
+          <button type="button" data-cursor="" onClick={() => onMover(1)} aria-label={locale === 'en' ? 'Next' : 'Siguiente'}>›</button>
+        </div>
       </div>
     </div>
   )
@@ -395,40 +484,156 @@ function Respaldo({ locale, motivo }: { locale: 'es' | 'en'; motivo: 'sin-webgl'
 }
 
 const CSS = `
-.fp-mapa-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 290px;
-  gap: clamp(20px, 3vw, 40px);
-  align-items: stretch;
-}
-.fp-mapa-caja {
-  position: relative;
-  height: clamp(420px, 70vh, 760px);
-  overflow: hidden;
-  background: #eceae5;
-  border: 1px solid ${site.color.ink}12;
-}
-.fp-mapa-lienzo { position: absolute; inset: 0; }
+/* ── La pantalla ───────────────────────────────────────────────────────────
+   El mapa deja de ser una figura dentro de un artículo y pasa a ser la página:
+   a sangre, de canto a canto, con el contenido montado encima. Solo cuando el
+   mapa está vivo (data-inmersivo): si cae al plano estático, esto no aplica y
+   la página vuelve a ser un documento con su scroll y su footer. */
+.fp-mapa[data-inmersivo="1"] {
+  --fp-tope: 72px;                       /* alto exacto de SiteNav */
+  --fp-aire: clamp(14px, 1.8vh, 24px);
+  --fp-margen: ${site.gutter};           /* el mismo gutter que el header */
+  --fp-hueco: 8px;
+  /* Las ventanas nunca tapan la atribución de Mapbox (abajo) ni el control de
+     zoom (abajo a la derecha): son requisito de uso y de manejo. */
+  --fp-alto-izq: calc(100dvh - var(--fp-tope) - var(--fp-aire) * 2 - 34px);
+  --fp-alto-der: calc(100dvh - var(--fp-tope) - var(--fp-aire) * 2 - 116px);
 
-/* ── Tarjeta de escritorio ─────────────────────────────────────────────── */
-.fp-mapa-ficha {
-  position: absolute; left: 18px; bottom: 18px; z-index: 3; width: 264px;
-  background: ${site.color.cream};
-  box-shadow: 0 18px 44px -22px rgba(20,20,20,.55), 0 0 0 1px ${site.color.ink}0f;
-  animation: fp-ficha-entra .24s cubic-bezier(.22,1,.36,1) both;
+  position: relative;
+  height: 100dvh;
+  overflow: hidden;
 }
-@keyframes fp-ficha-entra { from { opacity: 0; transform: translateY(8px); } }
+
+/* Pantalla única: ni scroll de documento ni footer. En CSS y no con una clase
+   puesta desde un efecto, para que no haya un fotograma de página larga antes de
+   la hidratación. */
+html:has(.fp-mapa[data-inmersivo="1"])            { overflow: hidden; overscroll-behavior: none; }
+.fp-site:has(.fp-mapa[data-inmersivo="1"]) footer { display: none; }
+
+.fp-mapa-lienzo { position: absolute; inset: 0; z-index: 0; }
+
+/* El suelo del header. Sin él, el isotipo negro desaparece cuando debajo pasa
+   una manzana en sombra. */
+.fp-mapa-velo {
+  position: absolute; top: 0; left: 0; right: 0; height: 132px; z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(to bottom, rgba(244,243,240,.72), rgba(244,243,240,0));
+}
+
+/* Los controles de Mapbox, en la tinta del sitio y sin su cromo de serie. */
+.fp-mapa[data-inmersivo="1"] .mapboxgl-ctrl-group {
+  background: rgba(244,243,240,.86);
+  box-shadow: 0 10px 30px -18px rgba(20,20,20,.6), 0 0 0 1px rgba(20,20,20,.10);
+  border-radius: 2px;
+}
+
+/* ── Superficie común de las ventanas ──────────────────────────────────────
+   Cantos rectos y filete de pelo: el sitio es editorial, no un panel de control.
+   El desenfoque hace que el mapa siga estando debajo sin robarle legibilidad al
+   texto. */
+.fp-mapa-indice, .fp-mapa-ficha {
+  position: absolute; z-index: 12;
+  top: calc(var(--fp-tope) + var(--fp-aire));
+  background: rgba(244,243,240,.86);
+  -webkit-backdrop-filter: blur(16px) saturate(1.08);
+  backdrop-filter: blur(16px) saturate(1.08);
+  border: 1px solid rgba(20,20,20,.10);
+  border-radius: 2px;
+  box-shadow: 0 26px 60px -34px rgba(20,20,20,.6);
+}
+/* Sin desenfoque, texto negro sobre la ciudad. El crema opaco no es un adorno. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .fp-mapa-indice, .fp-mapa-ficha { background: ${site.color.cream}; }
+}
+
+/* ── Ventana de índice ─────────────────────────────────────────────────────
+   Su canto izquierdo cae exactamente bajo el isotipo: las dos piezas usan el
+   mismo gutter, así que la alineación no hay que perseguirla. */
+.fp-mapa-indice {
+  left: var(--fp-margen);
+  width: clamp(268px, 21vw, 322px);
+  max-height: var(--fp-alto-izq);
+  display: flex; flex-direction: column;
+  animation: fp-ventana-entra .3s cubic-bezier(.22,1,.36,1) both;
+}
+.fp-mapa-indice-titulo { flex: none; padding: 18px 18px 0; }
+.fp-mapa-eyebrow {
+  font-size: 9.5px; letter-spacing: ${site.track.ultra}; text-transform: uppercase;
+  color: ${site.color.accent}; margin: 0 0 9px;
+}
+.fp-mapa-h1 {
+  font-size: clamp(1.05rem, 1.5vw, 1.45rem); font-weight: 300; line-height: 1.22;
+  letter-spacing: -0.01em; margin: 0;
+}
+.fp-mapa-intro {
+  font-size: 12px; font-weight: 300; line-height: 1.55; opacity: .62; margin: 10px 0 0;
+  white-space: pre-wrap;
+  /* Cuatro líneas: la ventana es del índice, no del texto de presentación. */
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden;
+}
+.fp-mapa-barra {
+  flex: none; display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  padding: 14px 18px 12px; border-bottom: 1px solid rgba(20,20,20,.09);
+}
+.fp-mapa-barra-acc { display: flex; align-items: baseline; gap: 12px; }
+.fp-mapa-cuenta {
+  font-size: 10px; letter-spacing: ${site.track.wide}; text-transform: uppercase;
+  opacity: .45; margin: 0;
+}
+.fp-mapa-mini-btn {
+  background: none; border: none; padding: 0 0 2px; cursor: pointer; font-family: inherit;
+  color: inherit; font-size: 10px; letter-spacing: ${site.track.normal};
+  text-transform: uppercase; opacity: .55; border-bottom: 1px solid rgba(20,20,20,.30);
+  transition: opacity .2s ${site.ease};
+}
+.fp-mapa-mini-btn:hover, .fp-mapa-mini-btn:focus-visible { opacity: 1; }
+.fp-mapa-indice-cuerpo {
+  flex: 1; min-height: 0; overflow-y: auto; padding: 4px 18px 14px;
+  overscroll-behavior: contain;
+}
+/* Plegada: queda la pastilla del contador. Lo que se pide siempre en cuanto algo
+   flota sobre un mapa es poder ver el mapa entero. */
+.fp-mapa-indice[data-plegado="1"] { width: auto; }
+.fp-mapa-indice[data-plegado="1"] .fp-mapa-indice-titulo,
+.fp-mapa-indice[data-plegado="1"] .fp-mapa-indice-cuerpo { display: none; }
+.fp-mapa-indice[data-plegado="1"] .fp-mapa-barra { border-bottom: none; padding: 13px 16px; }
+
+/* ── Ventana de ficha (escritorio) ─────────────────────────────────────────
+   Canto derecho alineado con el menú, por la misma razón que el índice con el
+   isotipo. */
+.fp-mapa-ficha {
+  right: var(--fp-margen);
+  width: clamp(280px, 23vw, 344px);
+  max-height: var(--fp-alto-der);
+  overflow-y: auto; overscroll-behavior: contain;
+  animation: fp-ficha-entra .26s cubic-bezier(.22,1,.36,1) both;
+}
+@keyframes fp-ventana-entra { from { opacity: 0; transform: translateY(8px); } }
+@keyframes fp-ficha-entra   { from { opacity: 0; transform: translateX(10px); } }
 .fp-mapa-ficha-foto { position: relative; width: 100%; aspect-ratio: 16 / 10; overflow: hidden; background: #e7e5df; }
 .fp-mapa-ficha-foto img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.fp-mapa-ficha-txt { padding: 13px 15px 15px; display: flex; flex-direction: column; gap: 6px; }
+.fp-mapa-ficha-txt { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 6px; }
 .fp-mapa-ficha-nombre { font-size: 15px; font-weight: 400; margin: 0; letter-spacing: -0.01em; }
 .fp-mapa-ficha-meta { font-size: 10px; letter-spacing: ${site.track.normal}; text-transform: uppercase; opacity: .5; margin: 0; }
 .fp-mapa-ficha-dir { font-size: 11.5px; font-weight: 300; opacity: .6; margin: 0; }
 .fp-mapa-ficha-link {
   margin-top: 5px; font-size: 10px; letter-spacing: ${site.track.normal}; text-transform: uppercase;
   color: inherit; text-decoration: none; align-self: flex-start;
-  border-bottom: 1px solid ${site.color.ink}33; padding-bottom: 2px;
+  border-bottom: 1px solid rgba(20,20,20,.20); padding-bottom: 2px;
 }
+/* Con las dos ventanas a la vista, hojear las obras desde la ficha es el gesto
+   natural: el índice va marcando por dónde vas. */
+.fp-mapa-ficha-nav {
+  display: flex; align-items: center; gap: 12px; margin-top: 12px;
+  padding-top: 11px; border-top: 1px solid rgba(20,20,20,.09);
+}
+.fp-mapa-ficha-nav button {
+  width: 28px; height: 28px; border-radius: 50%; border: 1px solid rgba(20,20,20,.14);
+  background: none; font-size: 15px; line-height: 1; color: inherit; cursor: pointer;
+  font-family: inherit; transition: background .2s ${site.ease};
+}
+.fp-mapa-ficha-nav button:hover { background: rgba(20,20,20,.06); }
+.fp-mapa-ficha-nav span { font-size: 10px; opacity: .45; font-variant-numeric: tabular-nums; }
 .fp-mapa-cerrar {
   position: absolute; top: 6px; right: 8px; z-index: 2; background: none; border: none;
   cursor: pointer; line-height: 1; font-size: 19px; color: ${site.color.cream};
@@ -436,76 +641,75 @@ const CSS = `
 }
 .fp-mapa-ficha[data-sinfoto="1"] .fp-mapa-cerrar { color: ${site.color.ink}; text-shadow: none; }
 
-/* ── Lista ─────────────────────────────────────────────────────────────── */
-.fp-mapa-lista { height: clamp(420px, 70vh, 760px); overflow-y: auto; padding-right: 4px; }
-.fp-mapa-cab { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
-.fp-mapa-cuenta { font-size: 10px; letter-spacing: ${site.track.wide}; text-transform: uppercase; opacity: .45; margin: 0; }
-.fp-mapa-todas {
-  background: none; border: none; padding: 0; cursor: pointer; font-family: inherit; color: inherit;
-  font-size: 10px; letter-spacing: ${site.track.normal}; text-transform: uppercase; opacity: .55;
-  border-bottom: 1px solid ${site.color.ink}30;
-}
-.fp-mapa-todas:hover, .fp-mapa-todas:focus-visible { opacity: 1; }
+/* ── Lista ─────────────────────────────────────────────────────────────────
+   Filas con miniatura también en escritorio: sobre un mapa la foto identifica
+   una obra mucho antes que una fila de texto. */
 .fp-mapa-ol { list-style: none; margin: 0; padding: 0; }
-.fp-mapa-ol li { border-bottom: 1px solid ${site.color.ink}0f; }
+.fp-mapa-ol li + li { border-top: 1px solid rgba(20,20,20,.08); }
 .fp-mapa-ol button {
-  display: grid; grid-template-columns: 3.2ch 1fr auto; gap: 12px; align-items: baseline;
-  width: 100%; padding: 11px 0; background: none; border: none; cursor: pointer;
-  font-family: inherit; color: inherit; text-align: left; opacity: .72;
+  display: grid; grid-template-columns: 44px 1fr; gap: 12px; align-items: center;
+  width: 100%; padding: 8px 0; background: none; border: none; cursor: pointer;
+  font-family: inherit; color: inherit; text-align: left; opacity: .74;
   transition: opacity .25s ${site.ease};
 }
 .fp-mapa-ol button:hover, .fp-mapa-ol button[data-res], .fp-mapa-ol button[data-sel] { opacity: 1; }
 .fp-mapa-ol button:focus-visible { outline: 1px solid ${site.color.ink}; outline-offset: 2px; }
-.fp-mapa-n { font-size: 10.5px; font-variant-numeric: tabular-nums; opacity: .4; letter-spacing: .1em; }
-.fp-mapa-nombre { font-size: 13.5px; font-weight: 300; display: block; }
+.fp-mapa-ol button[data-sel] {
+  /* Un filete al canto y no un fondo: un fondo compite con las fotos, que es
+     justo lo que aquí tiene que mandar. */
+  box-shadow: inset 3px 0 0 ${site.color.ink};
+  padding-left: 10px; margin-left: -10px;
+}
+.fp-mapa-mini {
+  width: 44px; height: 34px; border-radius: 2px; overflow: hidden; background: #e7e5df;
+  display: flex; align-items: center; justify-content: center;
+}
+.fp-mapa-mini img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.fp-mapa-mini-n { font-size: 10px; opacity: .35; font-variant-numeric: tabular-nums; }
+.fp-mapa-txt { min-width: 0; }
+.fp-mapa-nombre { font-size: 13px; font-weight: 300; display: block; }
 .fp-mapa-ol button[data-sel] .fp-mapa-nombre { font-weight: 400; }
-.fp-mapa-sub { display: none; }
-.fp-mapa-anio { font-size: 10.5px; opacity: .4; font-variant-numeric: tabular-nums; }
+.fp-mapa-sub {
+  display: block; font-size: 9.5px; letter-spacing: ${site.track.tight};
+  text-transform: uppercase; opacity: .45; margin-top: 2px;
+}
 
-/* ── Móvil ─────────────────────────────────────────────────────────────── */
-.fp-mapa-hoja, .fp-mapa-pc-btn { display: none; }
+/* Documento de respaldo (sin WebGL / sin puntos). */
+.fp-mapa-doc-lista { margin-top: clamp(34px, 5vh, 60px); max-width: 520px; }
+.fp-mapa-doc-lista .fp-mapa-cuenta { margin-bottom: 12px; }
+
+/* ── Lámina (móvil) ────────────────────────────────────────────────────────
+   Solo existe en móvil: en escritorio el índice y la ficha son las ventanas. */
+.fp-mapa-hoja { display: none; }
 
 @media (max-width: 900px) {
-  /* El mapa deja de ser un recuadro DENTRO de la página y pasa a ser la página:
-     a sangre de lado a lado y ocupando casi todo el alto. Un mapa de 340 px con
-     34 filas de texto debajo no es un mapa con lista, es una lista con un mapa de
-     adorno — y aquí el 95% de las visitas llegan desde un teléfono. */
-  .fp-mapa-grid { display: block; }
-  .fp-mapa-caja {
-    height: min(74dvh, calc(100dvh - 168px));
-    margin-left: calc(-1 * ${site.gutter});
-    margin-right: calc(-1 * ${site.gutter});
-    border-left: none; border-right: none;
-  }
-  .fp-mapa-intro { display: none; }   /* el sitio de un párrafo largo no es este */
-  .fp-mapa-header { margin-bottom: 18px !important; }
-  .fp-mapa-lista { display: none; }   /* en móvil la lista vive dentro de la lámina */
+  .fp-mapa-indice, .fp-mapa-ficha { display: none; }
 
-  /* Pantalla completa: el mapa se despega de la página, y solo entonces un dedo
-     puede moverlo sin robarle el scroll a nadie. */
-  .fp-mapa-pc .fp-mapa-caja {
-    position: fixed; inset: 0; z-index: 70; height: auto; margin: 0; border: none;
-  }
-  .fp-mapa-pc-btn {
-    display: flex; align-items: center; justify-content: center;
-    position: absolute; top: 12px; right: 12px; z-index: 6;
-    width: 38px; height: 38px; border-radius: 50%;
-    background: ${site.color.cream}; border: 1px solid ${site.color.ink}14;
-    box-shadow: 0 6px 18px -8px rgba(20,20,20,.5);
-    font-size: 15px; line-height: 1; color: ${site.color.ink}; cursor: pointer;
+  /* El control de zoom sobra donde se navega con el dedo, pero la atribución NO
+     se toca: es requisito de uso de Mapbox. Sube justo por encima de lo que asoma
+     la lámina —sea la detención que sea— para que nunca quede debajo. */
+  .fp-mapa[data-inmersivo="1"] .mapboxgl-ctrl-group { display: none; }
+  .fp-mapa[data-inmersivo="1"] .mapboxgl-ctrl-bottom-left,
+  .fp-mapa[data-inmersivo="1"] .mapboxgl-ctrl-bottom-right {
+    /* El tope evita que, con la lámina del todo arriba, la atribución se suba
+       hasta el isotipo. Ahí queda detrás de la lámina, que es donde tiene que
+       estar: el mapa ya no se ve. */
+    bottom: min(calc(var(--fp-asomo, 60px) + 6px), calc(100dvh - 150px));
+    transition: bottom .34s ${site.ease};
   }
 
-  /* ── La lámina ───────────────────────────────────────────────────────── */
   .fp-mapa-hoja {
     display: flex; flex-direction: column;
-    position: absolute; left: 0; right: 0; bottom: 0; z-index: 5;
-    /* Mide siempre lo mismo; lo que cambia es cuánto se baja. Los porcentajes de
-       DETENTES van referidos a esta altura, así que fijarla aquí es lo que hace
-       que el recorrido de la lámina no dependa de ninguna medida en JavaScript. */
-    height: 94%;
+    position: absolute; z-index: 12;
+    /* Despegada de los cantos: así se lee como ventana y no como un cajón. El
+       alto lo fijan top y bottom, y los porcentajes de DETENTES van referidos
+       a él — por eso el recorrido de la lámina no depende de ninguna medida
+       tomada en JavaScript. */
+    top: calc(var(--fp-tope) + var(--fp-aire));
+    bottom: var(--fp-hueco); left: var(--fp-hueco); right: var(--fp-hueco);
     background: ${site.color.cream};
-    border-radius: 14px 14px 0 0;
-    box-shadow: 0 -14px 40px -20px rgba(20,20,20,.5);
+    border-radius: 16px;
+    box-shadow: 0 -14px 44px -22px rgba(20,20,20,.55), 0 0 0 1px rgba(20,20,20,.08);
     will-change: transform;
   }
   .fp-mapa-asa {
@@ -515,52 +719,40 @@ const CSS = `
        scroll de la página y la lámina no se mueve. */
     touch-action: none;
   }
-  .fp-mapa-asa span { width: 38px; height: 4px; border-radius: 2px; background: ${site.color.ink}22; display: block; }
+  .fp-mapa-asa span { width: 38px; height: 4px; border-radius: 2px; background: rgba(20,20,20,.13); display: block; }
 
   .fp-mapa-hoja-cab {
     flex: none; display: flex; align-items: baseline; justify-content: space-between;
-    padding: 0 ${site.gutter} 12px; background: none; border: none; width: 100%;
+    padding: 0 18px 12px; background: none; border: none; width: 100%;
     font-family: inherit; color: inherit; cursor: pointer;
   }
   .fp-mapa-pista { font-size: 10px; letter-spacing: ${site.track.normal}; text-transform: uppercase; opacity: .45; }
 
   .fp-mapa-hoja-lista {
     flex: 1; min-height: 0; overflow-y: auto;
-    padding: 0 ${site.gutter} 20px;
+    /* El relleno va DENTRO, en el <ol>, y no aquí. Con la ficha abierta esta caja
+       vale exactamente 0 de alto, y una caja de 0 con 20 px de padding sigue
+       midiendo 20: por ahí asomaba media miniatura de la lista bajo la ficha. */
+    padding: 0;
     /* Que el rebote de la lista no arrastre la página de detrás. */
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
   }
+  .fp-mapa-hoja-lista .fp-mapa-ol { padding: 0 18px 20px; }
 
-  /* Filas con miniatura y 56 px de alto: eso es un dedo, no un puntero. */
+  /* Filas de dedo, no de puntero. */
   .fp-mapa-hoja-lista .fp-mapa-ol button {
-    grid-template-columns: 56px 1fr; gap: 14px; align-items: center;
-    padding: 9px 0; opacity: 1;
+    grid-template-columns: 56px 1fr; gap: 14px; padding: 9px 0; opacity: 1;
   }
-  .fp-mapa-mini {
-    width: 56px; height: 42px; border-radius: 3px; overflow: hidden; background: #e7e5df;
-    display: flex; align-items: center; justify-content: center;
-  }
-  .fp-mapa-mini img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .fp-mapa-mini-n { font-size: 11px; opacity: .35; font-variant-numeric: tabular-nums; }
+  .fp-mapa-hoja-lista .fp-mapa-mini { width: 56px; height: 42px; border-radius: 3px; }
   .fp-mapa-hoja-lista .fp-mapa-nombre { font-size: 15px; font-weight: 400; }
-  .fp-mapa-hoja-lista .fp-mapa-sub {
-    display: block; font-size: 10px; letter-spacing: ${site.track.tight};
-    text-transform: uppercase; opacity: .45; margin-top: 3px;
-  }
-  .fp-mapa-hoja-lista .fp-mapa-anio { display: none; }
-  .fp-mapa-hoja-lista .fp-mapa-ol button[data-sel] {
-    /* Marcada con un filete al canto y no con un fondo: un fondo compite con las
-       fotos, que es justo lo que aquí tiene que mandar. */
-    box-shadow: inset 3px 0 0 ${site.color.ink};
-    padding-left: 12px; margin-left: -12px;
-  }
+  .fp-mapa-hoja-lista .fp-mapa-sub { font-size: 10px; margin-top: 3px; }
 
   /* ── Ficha dentro de la lámina ───────────────────────────────────────── */
   .fp-mapa-fc {
     flex: none; position: relative;
     display: grid; grid-template-columns: 128px 1fr; gap: 14px;
-    padding: 0 ${site.gutter} 16px;
+    padding: 0 18px 16px;
   }
   .fp-mapa-fc-foto {
     width: 128px; aspect-ratio: 4 / 3; border-radius: 3px; overflow: hidden; background: #e7e5df;
@@ -575,24 +767,24 @@ const CSS = `
     margin-top: 4px; align-self: flex-start; background: none; border: none; padding: 0 0 2px;
     font-family: inherit; font-size: 10px; letter-spacing: ${site.track.normal};
     text-transform: uppercase; color: inherit; text-decoration: none; cursor: pointer;
-    border-bottom: 1px solid ${site.color.ink}33;
+    border-bottom: 1px solid rgba(20,20,20,.20);
   }
   .fp-mapa-fc-nav { display: flex; align-items: center; gap: 14px; margin-top: auto; padding-top: 8px; }
   .fp-mapa-fc-nav button {
-    width: 34px; height: 34px; border-radius: 50%; border: 1px solid ${site.color.ink}18;
+    width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(20,20,20,.10);
     background: none; font-size: 17px; line-height: 1; color: inherit; cursor: pointer;
     font-family: inherit;
   }
   .fp-mapa-fc-nav span { font-size: 10.5px; opacity: .45; font-variant-numeric: tabular-nums; }
   .fp-mapa-fc-x {
-    position: absolute; top: -4px; right: calc(${site.gutter} - 6px);
+    position: absolute; top: -4px; right: 12px;
     background: none; border: none; font-size: 20px; line-height: 1; color: ${site.color.ink};
     opacity: .4; cursor: pointer; padding: 4px 6px;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .fp-mapa-ficha { animation: none; }
+  .fp-mapa-indice, .fp-mapa-ficha { animation: none; }
   .fp-mapa-hoja { transition: none !important; }
 }
 `

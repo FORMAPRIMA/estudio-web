@@ -89,6 +89,18 @@ export const CAMARA = {
   zoomMin: 10.5,
 } as const
 
+/**
+ * Píxeles del lienzo que tapan las ventanas flotantes por cada lado.
+ *
+ * No es una preferencia de encuadre: es la diferencia entre el lienzo y el HUECO
+ * VISIBLE. Mapbox centra en el rectángulo que resulta de restarle esto al lienzo,
+ * así que sin estos cuatro números el vuelo a una obra la deja debajo del índice
+ * o debajo de la ficha y parece que no ha pasado nada.
+ */
+export type Margenes = { top: number; right: number; bottom: number; left: number }
+
+export const SIN_MARGENES: Margenes = { top: 0, right: 0, bottom: 0, left: 0 }
+
 /** A partir de aquí, un punto está en otra ciudad. El área metropolitana de Madrid
  *  no llega a 50 km, así que 100 es holgado y no necesita afinarse. */
 const KM_OTRA_CIUDAD = 100
