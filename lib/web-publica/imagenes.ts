@@ -144,7 +144,10 @@ export const SIZES = {
    * original para pintarlo a 264 px, que es justo lo que la escalera de variantes
    * vino a evitar.
    */
-  fichaMapa: '(min-width: 901px) 264px, 100vw',
+  // La ventana flotante mide clamp(280px, 23vw, 344px). Decía 264 px, que era el
+  // ancho de la tarjeta anterior: el navegador se bajaba una variante más pequeña
+  // de la que necesitaba y la foto se veía blanda.
+  fichaMapa: '(min-width: 1496px) 344px, (min-width: 901px) 23vw, 128px',
 
   /** Miniatura de la lista del mapa en móvil: 56 px de ancho, siempre. */
   miniaturaMapa: '56px',

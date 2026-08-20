@@ -7,7 +7,10 @@ import { site, display } from '../theme'
 import { useSite, href } from '../SiteProvider'
 import { Img } from '../Img'
 import { pick, type ContentMap } from '@/lib/web-publica'
-import { datosDeTarjeta, tieneCoordenadas, SIN_MARGENES, type MapaPunto, type Margenes } from '@/lib/web-mapa'
+import {
+  datosDeTarjeta, tieneCoordenadas, ordenarPorSede, sedesConObra, sedeDe, etiquetaSede,
+  SIN_MARGENES, SEDE_CASA, type MapaPunto, type Margenes, type SedeCodigo,
+} from '@/lib/web-mapa'
 
 // mapbox-gl solo se descarga cuando esta página se monta.
 const MapaLienzo = dynamic(() => import('./MapaLienzo'), { ssr: false })
@@ -66,8 +69,10 @@ export function MapaPage({ content, puntos }: { content: ContentMap; puntos: Map
   const [esMovil, setEsMovil] = useState(false)
   const [detente, setDetente] = useState<Detente>('peek')
   const [plegado, setPlegado] = useState(false)
-  /** Contador: cada incremento pide al lienzo un vuelo de vuelta al plano general. */
+  /** Contador: cada incremento pide al lienzo el encuadre general de `sede`. */
   const [reencuadre, setReencuadre] = useState(0)
+  /** La sede que se está mirando. Arranca en casa —España— siempre. */
+  const [sede, setSede] = useState<SedeCodigo>(SEDE_CASA)
   /** Durante el arrastre, los píxeles que asoma. Fuera de él, null y manda el CSS. */
   const [arrastre, setArrastre] = useState<number | null>(null)
   const hojaRef = useRef<HTMLDivElement>(null)
@@ -81,8 +86,15 @@ export function MapaPage({ content, puntos }: { content: ContentMap; puntos: Map
   // useMemo NO es una optimización aquí, es corrección: sin él este filtro devuelve
   // un array nuevo en cada render, el lienzo lo ve como un prop distinto y vuelve a
   // ejecutar su efecto de encuadre inicial, que devolvía la cámara al plano general.
-  const listados = useMemo(() => puntos.filter(tieneCoordenadas), [puntos])
+  //
+  // Ordenado por sede: es el array del que sale la NUMERACIÓN —el número del punto
+  // en el mapa es su índice aquí, y el de la lista también— así que agrupar por país
+  // agrupa los números solo, sin romper que las dos series sean la misma.
+  const listados = useMemo(() => ordenarPorSede(puntos.filter(tieneCoordenadas)), [puntos])
   const total = listados.length
+  /** Solo las sedes que tienen obra. Con todo en Madrid es una, y el conmutador ni
+   *  se pinta: la pantalla queda exactamente como estaba. */
+  const sedes = useMemo(() => sedesConObra(listados), [listados])
 
   /**
    * El mapa manda de verdad. Es lo que enciende la pantalla completa —sin scroll y
@@ -182,9 +194,22 @@ export function MapaPage({ content, puntos }: { content: ContentMap; puntos: Map
     if (seleccionado == null || !total) return
     setSeleccionado(((seleccionado - 1 + paso + total) % total) + 1)
   }
-  /** «Ver todas»: soltar la obra Y volver a la ciudad entera. Son dos cosas, y la
-   *  segunda no tenía hasta ahora ninguna puerta. */
+  /** «Ver todas»: soltar la obra Y volver al plano general de la sede que se mira.
+   *  Son dos cosas, y la segunda no tenía hasta ahora ninguna puerta. */
   const verTodas = () => { setSeleccionado(null); setReencuadre((n) => n + 1) }
+  /** Cambiar de sede mueve la cámara y lleva la lista a su grupo. Las dos cosas: un
+   *  conmutador que solo hiciera una de ellas dejaría la mitad de la pantalla
+   *  hablando de otro país. */
+  const irASede = (s: SedeCodigo) => {
+    setSede(s)
+    setSeleccionado(null)
+    setReencuadre((n) => n + 1)
+    const id = `${esMovil ? 'hoja' : 'indice'}-sede-${s}`
+    // Tras el render, que es cuando el título del grupo existe en su sitio.
+    requestAnimationFrame(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }
 
   const punto = seleccionado != null ? listados[seleccionado - 1] : null
   /** Lo que asoma, como valor CSS: píxeles mientras se arrastra, token si no. */
@@ -234,7 +259,8 @@ export function MapaPage({ content, puntos }: { content: ContentMap; puntos: Map
             <nav className="fp-mapa-doc-lista" aria-label={locale === 'en' ? 'Works' : 'Obras'}>
               <p className="fp-mapa-cuenta">{cuenta}</p>
               <Lista listados={listados} seleccionado={null} resaltado={null}
-                locale={locale} onElegir={() => {}} onResaltar={() => {}} />
+                locale={locale} sedes={sedes} idPrefijo="doc"
+                onElegir={() => {}} onResaltar={() => {}} />
             </nav>
           )}
         </div>
@@ -253,7 +279,7 @@ export function MapaPage({ content, puntos }: { content: ContentMap; puntos: Map
 
       <MapaLienzo puntos={listados} resaltado={resaltado} seleccionado={seleccionado}
         onResaltar={setResaltado} onSeleccionar={alternar} onFallo={onFallo}
-        margenes={margenes} reencuadre={reencuadre} />
+        margenes={margenes} reencuadre={reencuadre} sedeEncuadre={sede} />
 
       {/* El isotipo y el menú son negros sobre lo que haya debajo, y debajo hay
           una ciudad que a veces es una manzana oscura. Este velo es lo que les
@@ -284,9 +310,12 @@ export function MapaPage({ content, puntos }: { content: ContentMap; puntos: Map
           </div>
         </div>
 
+        <Sedes sedes={sedes} activa={sede} locale={locale} onIr={irASede} />
+
         <div className="fp-mapa-indice-cuerpo">
           <Lista listados={listados} seleccionado={seleccionado} resaltado={resaltado}
-            locale={locale} onElegir={alternar} onResaltar={setResaltado} />
+            locale={locale} sedes={sedes} idPrefijo="indice"
+            onElegir={alternar} onResaltar={setResaltado} />
         </div>
       </aside>
 
@@ -330,8 +359,13 @@ export function MapaPage({ content, puntos }: { content: ContentMap; puntos: Map
             entera, al arrastrar hacia arriba aparecería ya desplazada por dentro. */}
         <div className="fp-mapa-hoja-lista"
           style={{ maxHeight: `calc(${asoma} - ${punto ? DETENTES.ficha : `${CABECERA}px`})` }}>
+          {/* En móvil el conmutador va DENTRO del área que scrollea, y no en la
+              cabecera: la cabecera mide exactamente los 52 px de la detención en
+              reposo, y meterle una fila más partiría el recorrido de la lámina. */}
+          <Sedes sedes={sedes} activa={sede} locale={locale} onIr={irASede} />
           <Lista listados={listados} seleccionado={seleccionado} resaltado={resaltado}
-            locale={locale} onElegir={alternar} onResaltar={setResaltado} />
+            locale={locale} sedes={sedes} idPrefijo="hoja"
+            onElegir={alternar} onResaltar={setResaltado} />
         </div>
       </div>
 
@@ -340,23 +374,56 @@ export function MapaPage({ content, puntos }: { content: ContentMap; puntos: Map
   )
 }
 
+/**
+ * Conmutador de sedes. Con una sola sede no se pinta: el estudio empezó en Madrid
+ * y la pantalla no tiene por qué anunciar una geografía que no existe todavía.
+ */
+function Sedes({ sedes, activa, locale, onIr }: {
+  sedes: SedeCodigo[]; activa: SedeCodigo; locale: 'es' | 'en'; onIr: (s: SedeCodigo) => void
+}) {
+  if (sedes.length < 2) return null
+  return (
+    <nav className="fp-mapa-sedes" aria-label={locale === 'en' ? 'Places' : 'Sedes'}>
+      {sedes.map((s) => (
+        <button key={s} type="button" data-cursor="" data-activa={s === activa ? '1' : undefined}
+          aria-current={s === activa || undefined} onClick={() => onIr(s)}>
+          {etiquetaSede(s, locale)}
+        </button>
+      ))}
+    </nav>
+  )
+}
+
 // ── Lista ─────────────────────────────────────────────────────────────────────
 // Un <canvas> es invisible para Google y para un lector de pantalla, y hay quien
 // no tiene WebGL. Esta lista resuelve las tres cosas y es cómoda con teclado: no
 // es un adorno del mapa, es su otra mitad.
-function Lista({ listados, seleccionado, resaltado, locale, onElegir, onResaltar }: {
+//
+// No FILTRA por sede, agrupa. Un índice enseña el archivo entero; lo que hace el
+// conmutador es llevarte a un sitio de él, no esconderte el resto.
+function Lista({ listados, seleccionado, resaltado, locale, sedes, idPrefijo, onElegir, onResaltar }: {
   listados: MapaPunto[]; seleccionado: number | null; resaltado: number | null
-  locale: 'es' | 'en'
+  locale: 'es' | 'en'; sedes: SedeCodigo[]
+  /** La lista se pinta dos veces —índice y lámina—, así que los anclas de grupo
+   *  necesitan prefijo: dos elementos con el mismo id no se pueden desplazar. */
+  idPrefijo: string
   onElegir: (n: number) => void; onResaltar: (n: number | null) => void
 }) {
+  let sedePrevia: SedeCodigo | null = null
   return (
     <ol className="fp-mapa-ol">
       {listados.map((p, i) => {
         const n = i + 1
         const sel = seleccionado === n
         const { imagen, descriptor } = datosDeTarjeta(p, locale)
+        const s = sedeDe(p)
+        const abreGrupo = sedes.length > 1 && s !== sedePrevia
+        sedePrevia = s
         return (
-          <li key={p.id}>
+          <li key={p.id} data-grupo={abreGrupo ? '1' : undefined}>
+            {abreGrupo && (
+              <p className="fp-mapa-sede-tit" id={`${idPrefijo}-sede-${s}`}>{etiquetaSede(s, locale)}</p>
+            )}
             <button type="button" data-sel={sel ? '1' : undefined} data-res={resaltado === n ? '1' : undefined}
               data-cursor="" aria-current={sel || undefined}
               onClick={() => onElegir(n)}
@@ -512,6 +579,20 @@ html:has(.fp-mapa[data-inmersivo="1"])            { overflow: hidden; overscroll
 
 .fp-mapa-lienzo { position: absolute; inset: 0; z-index: 0; }
 
+/* El velo del salto largo. Tapa el MAPA y nada más: el índice y la ficha se quedan
+   quietos mientras cambia el suelo. Cruzar un océano con la cámara pedía teselas de
+   todo lo sobrevolado y el mapa se veía deshacerse; ahora se funde, se salta y no se
+   destapa hasta que el destino está servido. */
+.fp-mapa-corte {
+  position: absolute; inset: 0; z-index: 2; pointer-events: none;
+  background: ${site.color.cream};
+  opacity: 0; transition: opacity .38s ${site.ease};
+}
+.fp-mapa-corte[data-visible="1"] { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .fp-mapa-corte { transition: none; }
+}
+
 /* El suelo del header. Sin él, el isotipo negro desaparece cuando debajo pasa
    una manzana en sombra. */
 .fp-mapa-velo {
@@ -591,11 +672,39 @@ html:has(.fp-mapa[data-inmersivo="1"])            { overflow: hidden; overscroll
   flex: 1; min-height: 0; overflow-y: auto; padding: 4px 18px 14px;
   overscroll-behavior: contain;
 }
+
+/* ── Sedes ─────────────────────────────────────────────────────────────── */
+.fp-mapa-sedes {
+  flex: none; display: flex; flex-wrap: wrap; gap: 4px 14px;
+  padding: 10px 18px 11px; border-bottom: 1px solid rgba(20,20,20,.09);
+}
+.fp-mapa-sedes button {
+  background: none; border: none; padding: 0 0 2px; cursor: pointer; font-family: inherit;
+  color: inherit; font-size: 9.5px; letter-spacing: ${site.track.normal};
+  text-transform: uppercase; opacity: .42; border-bottom: 1px solid transparent;
+  transition: opacity .2s ${site.ease};
+}
+.fp-mapa-sedes button:hover, .fp-mapa-sedes button:focus-visible { opacity: .8; }
+.fp-mapa-sedes button[data-activa] { opacity: 1; border-bottom-color: ${site.color.ink}; }
+
+/* Título de grupo. Pegado al scroll: recorriendo 26 obras de Madrid siempre se sabe
+   en qué país se está. */
+.fp-mapa-sede-tit {
+  position: sticky; top: 0; z-index: 1;
+  margin: 0 0 2px; padding: 9px 0 6px;
+  background: ${site.color.cream};
+  font-size: 9.5px; letter-spacing: ${site.track.wide}; text-transform: uppercase;
+  opacity: .42;
+}
+.fp-mapa-ol li[data-grupo] { border-top: none; }
 /* Plegada: queda la pastilla del contador. Lo que se pide siempre en cuanto algo
    flota sobre un mapa es poder ver el mapa entero. */
 .fp-mapa-indice[data-plegado="1"] { width: auto; }
 .fp-mapa-indice[data-plegado="1"] .fp-mapa-indice-titulo,
+.fp-mapa-indice[data-plegado="1"] .fp-mapa-sedes,
 .fp-mapa-indice[data-plegado="1"] .fp-mapa-indice-cuerpo { display: none; }
+/* Con conmutador debajo, el filete de la barra sobra: serían dos rayas juntas. */
+.fp-mapa-barra:has(+ .fp-mapa-sedes) { border-bottom: none; }
 .fp-mapa-indice[data-plegado="1"] .fp-mapa-barra { border-bottom: none; padding: 13px 16px; }
 
 /* ── Ventana de ficha (escritorio) ─────────────────────────────────────────
@@ -610,8 +719,17 @@ html:has(.fp-mapa[data-inmersivo="1"])            { overflow: hidden; overscroll
 }
 @keyframes fp-ventana-entra { from { opacity: 0; transform: translateY(8px); } }
 @keyframes fp-ficha-entra   { from { opacity: 0; transform: translateX(10px); } }
-.fp-mapa-ficha-foto { position: relative; width: 100%; aspect-ratio: 16 / 10; overflow: hidden; background: #e7e5df; }
-.fp-mapa-ficha-foto img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* La foto manda su proporción, la ventana se adapta.
+   Antes había un 16/10 fijo con object-fit: cover, y eso recortaba cada foto que no
+   fuera apaisada — un interior en vertical perdía el techo y el suelo. No hace falta
+   medir nada ni esperar al load: <Img> ya emite width/height de la imagen real
+   cuando está en el manifiesto, así que el navegador reserva el hueco exacto y no
+   hay salto de maquetación.
+   El techo de 52vh es solo para que una vertical muy alta no se coma la pantalla;
+   ahí object-fit: contain encaja sin recortar, que es de lo que se trata. */
+.fp-mapa-ficha-foto { position: relative; width: 100%; overflow: hidden; background: #e7e5df; }
+.fp-mapa-ficha-foto img,
+.fp-mapa-ficha-foto picture { width: 100%; height: auto; display: block; max-height: 52vh; object-fit: contain; }
 .fp-mapa-ficha-txt { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 6px; }
 .fp-mapa-ficha-nombre { font-size: 15px; font-weight: 400; margin: 0; letter-spacing: -0.01em; }
 .fp-mapa-ficha-meta { font-size: 10px; letter-spacing: ${site.track.normal}; text-transform: uppercase; opacity: .5; margin: 0; }
@@ -754,11 +872,13 @@ html:has(.fp-mapa[data-inmersivo="1"])            { overflow: hidden; overscroll
     display: grid; grid-template-columns: 128px 1fr; gap: 14px;
     padding: 0 18px 16px;
   }
+  /* Misma regla que en escritorio: la foto trae su proporción y aquí no se recorta.
+     El techo es más bajo porque la ficha comparte los 200 px de la detención. */
   .fp-mapa-fc-foto {
-    width: 128px; aspect-ratio: 4 / 3; border-radius: 3px; overflow: hidden; background: #e7e5df;
+    width: 128px; border-radius: 3px; overflow: hidden; background: #e7e5df;
     display: flex; align-items: center; justify-content: center;
   }
-  .fp-mapa-fc-foto img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .fp-mapa-fc-foto img { width: 100%; height: auto; display: block; max-height: 150px; object-fit: contain; }
   .fp-mapa-fc-sinfoto { font-size: 15px; opacity: .3; font-variant-numeric: tabular-nums; }
   .fp-mapa-fc-txt { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding-right: 22px; }
   .fp-mapa-fc-nombre { font-size: 17px; font-weight: 400; margin: 0; letter-spacing: -0.01em; }
