@@ -1644,3 +1644,664 @@ div:hover > .tt-avatar-overlay {
   display: block;
   position: relative;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   FP VISUAL LAB — /team/apps/visual-lab
+   Showroom de suelo sobre maqueta 3D. Mobile-first: la base es el
+   iPhone (el visor ocupa la pantalla y los paneles viven en un
+   bottom sheet); el escritorio se activa en min-width 1024px, el
+   mismo breakpoint donde /team suelta la barra superior de 56 px.
+═══════════════════════════════════════════════════════════════ */
+
+.vl-shell {
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - 56px);
+  background: #F8F7F4;
+  color: #1A1A1A;
+  overflow: hidden;
+}
+
+/* ── Cabecera ── */
+.vl-header {
+  flex: 0 0 auto;
+  background: #fff;
+  border-bottom: 1px solid #E8E6E0;
+  padding: 9px 16px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.vl-header-id { min-width: 0; }
+.vl-eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: #1A1A1A50;
+  margin: 0 0 3px;
+}
+.vl-title {
+  font-size: 19px;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vl-subtitle {
+  font-size: 11px;
+  color: #1A1A1A70;
+  margin: 3px 0 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Segmentado Showroom / Consola */
+.vl-seg {
+  display: flex;
+  gap: 4px;
+  background: #F0EEE8;
+  border-radius: 4px;
+  padding: 3px;
+}
+.vl-seg button {
+  flex: 1;
+  padding: 7px 12px;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border-radius: 3px;
+  color: #1A1A1A70;
+  background: transparent;
+  transition: background .15s, color .15s;
+  white-space: nowrap;
+}
+.vl-seg button[data-on='1'] {
+  background: #fff;
+  color: #1A1A1A;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .06);
+}
+
+/* ── Cuerpo ── */
+.vl-main {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+.vl-canvas-wrap {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(125% 95% at 50% 12%, #FFFFFF 0%, #F4F3EF 46%, #E6E4DE 100%);
+}
+.vl-canvas-wrap canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+.vl-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(72% 62% at 50% 44%, rgba(255, 255, 255, 0) 42%, rgba(10, 10, 10, .10) 100%);
+}
+
+/* ── Placa de firma ──
+   El render fotorrealista está tomado desde el POV maestro de la escena, así
+   que tapa la maqueta hasta que ésta está encuadrada igual: al desvanecerse,
+   foto y 3D coinciden. Visible desde el primer pintado — hace de pantalla de
+   carga mientras three.js llega. */
+.vl-plate {
+  position: absolute;
+  inset: 0;
+  z-index: 35;
+  /* se come el gesto que la descarta: si no, ese mismo toque llegaría al
+     canvas y seleccionaría una parcela por debajo de la foto */
+  pointer-events: auto;
+  opacity: 1;
+  visibility: visible;
+  overflow: hidden;
+  background: #E6E4DE;
+  transition: opacity .72s cubic-bezier(.4, 0, .2, 1);
+}
+/* El zoom lento va en la imagen, no en la placa: si escalase el contenedor,
+   la chapa "Render" se saldría del encuadre */
+.vl-plate img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transform: scale(var(--vl-plate-k, 1.035));
+  transition: transform 2.6s cubic-bezier(.22, 1, .36, 1);
+}
+.vl-plate-badge {
+  position: absolute;
+  right: 14px;
+  top: 14px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 11px;
+  background: rgba(26, 26, 26, .52);
+  backdrop-filter: blur(8px);
+  border-radius: 3px;
+  font-size: 10px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: #fff;
+}
+.vl-plate-badge i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #D85A30;
+}
+
+/* Mientras three.js llega en su propio chunk — va por delante de la placa */
+.vl-cargando {
+  position: absolute;
+  left: 50%;
+  bottom: 108px;
+  transform: translateX(-50%);
+  z-index: 36;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .92);
+  backdrop-filter: blur(8px);
+  white-space: nowrap;
+  pointer-events: none;
+  animation: vl-in .4s .5s both;
+}
+
+/* Etiqueta flotante de hover (solo puntero fino) */
+.vl-hover-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 12;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .16s linear;
+}
+.vl-hover-card {
+  transform: translate(-50%, -100%);
+  background: #fff;
+  border: 1px solid #E8E6E0;
+  border-radius: 4px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, .1);
+  padding: 8px 12px 9px;
+  white-space: nowrap;
+}
+
+/* Paneles flotantes: en móvil no existen, viven dentro del sheet */
+.vl-panel-left,
+.vl-panel-right,
+.vl-legend { display: none; }
+
+/* Botón Vista firma — por delante de la placa, es lo único que sigue vivo */
+.vl-firma {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  z-index: 36;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 13px;
+  background: rgba(255, 255, 255, .93);
+  backdrop-filter: blur(12px);
+  border: 1px solid #E8E6E0;
+  border-radius: 4px;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #1A1A1A;
+  transition: border-color .15s;
+}
+.vl-firma:hover { border-color: #D85A30; }
+.vl-firma i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #D85A30;
+  display: block;
+}
+
+/* Slider de sol — flotante sólo en escritorio; en móvil vive dentro del sheet */
+.vl-sol {
+  display: none;
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  z-index: 14;
+  bottom: 12px;
+  padding: 11px 16px 13px;
+  background: rgba(255, 255, 255, .95);
+  backdrop-filter: blur(16px);
+  border: 1px solid #E8E6E0;
+  border-radius: 4px;
+}
+
+/* ── Bottom sheet (móvil) ── */
+.vl-sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-top-left-radius: 14px;
+  border-top-right-radius: 14px;
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, .18);
+  transition: height .22s cubic-bezier(.4, 0, .2, 1);
+  overflow: hidden;
+}
+.vl-sheet-handle {
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  cursor: grab;
+  touch-action: none;
+}
+.vl-sheet-handle span {
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: #D8D5CE;
+}
+/* Cabecera del sheet: los tres números que se leen sin abrirlo */
+.vl-sheet-peek {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 16px 12px;
+  border-bottom: 1px solid #F0EEE8;
+}
+.vl-sheet-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 12px 16px 24px;
+}
+
+/* Datos de la parcela: en 390 px tres columnas no dejan sitio a
+   "Valle sobre cornisa"; el escritorio sí las recupera */
+.vl-datos {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+}
+
+/* ── Ficha de parcela ── */
+.vl-ficha {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  background: #fff;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  animation: vl-up .3s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+@keyframes vl-up { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+@keyframes vl-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes vl-panel { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+
+/* ── Tarjetas y bloques compartidos ── */
+.vl-card {
+  background: rgba(255, 255, 255, .96);
+  border: 1px solid #E8E6E0;
+  border-radius: 4px;
+}
+.vl-label {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #1A1A1A50;
+}
+.vl-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid #F0EEE8;
+}
+.vl-row:last-child { border-bottom: none; }
+
+/* Lista de modos de lectura */
+.vl-modo {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 10px 14px;
+  text-align: left;
+  border-left: 3px solid transparent;
+  background: transparent;
+  transition: background .15s;
+}
+.vl-modo:hover { background: #FAF9F6; }
+.vl-modo[data-on='1'] { border-left-color: #D85A30; background: #FAF9F6; }
+.vl-modo span:first-child { font-size: 10px; color: #1A1A1A40; }
+.vl-modo[data-on='1'] span:first-child { color: #D85A30; }
+.vl-modo span:last-child {
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: #1A1A1A70;
+}
+.vl-modo[data-on='1'] span:last-child { color: #1A1A1A; }
+
+/* Chips de filtro */
+.vl-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid #E8E6E0;
+  border-radius: 999px;
+  background: transparent;
+  color: #1A1A1A70;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  transition: border-color .15s, background .15s, color .15s;
+}
+.vl-chip[data-on='1'] { background: #1A1A1A; border-color: #1A1A1A; color: #fff; }
+.vl-chip i { width: 7px; height: 7px; display: block; flex: 0 0 auto; }
+.vl-chip b { font-weight: 400; color: #1A1A1A40; }
+.vl-chip[data-on='1'] b { color: #FFFFFF80; }
+
+.vl-chip-sq {
+  border-radius: 3px;
+  flex: 1;
+  justify-content: center;
+  padding: 8px 6px;
+}
+
+/* Botones de acción */
+.vl-btn {
+  display: block;
+  width: 100%;
+  padding: 13px;
+  text-align: center;
+  border-radius: 4px;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.vl-btn-primary { background: #D85A30; color: #fff; }
+.vl-btn-primary:hover { background: #B8471F; }
+.vl-btn-ghost { border: 1px solid #E8E6E0; color: #1A1A1A; }
+.vl-btn-ghost:hover { border-color: #C9C6BE; }
+.vl-btn-plain { color: #1A1A1A70; }
+.vl-btn-plain:hover { color: #1A1A1A; }
+
+/* Sliders */
+.vl-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 2px;
+  background: rgba(10, 10, 10, .16);
+  outline: none;
+  margin: 0;
+  accent-color: #D85A30;
+}
+.vl-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #D85A30;
+  border: 3px solid #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .22);
+  cursor: pointer;
+}
+.vl-range::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: #D85A30;
+  cursor: pointer;
+}
+
+/* Toast */
+.vl-toast {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 24px;
+  z-index: 90;
+  padding: 11px 20px;
+  background: #1A1A1A;
+  color: #F2F2F0;
+  border-radius: 4px;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  max-width: calc(100% - 32px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  animation: vl-up .35s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+/* Modal de cotización */
+.vl-modal-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 70;
+  background: rgba(26, 26, 26, .42);
+  animation: vl-in .22s both;
+}
+.vl-modal {
+  position: absolute;
+  z-index: 71;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 92%;
+  overflow-y: auto;
+  background: #fff;
+  border-top-left-radius: 14px;
+  border-top-right-radius: 14px;
+  animation: vl-up .35s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+/* ── Consola ── */
+.vl-consola {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  background: #F8F7F4;
+  animation: vl-in .2s both;
+}
+.vl-consola-nav {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 2px;
+  padding: 0 12px;
+  background: #fff;
+  border-bottom: 1px solid #E8E6E0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.vl-consola-nav::-webkit-scrollbar { display: none; }
+.vl-consola-nav button {
+  flex: 0 0 auto;
+  padding: 12px 12px 10px;
+  font-size: 12px;
+  color: #1A1A1A70;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  white-space: nowrap;
+}
+.vl-consola-nav button[data-on='1'] { color: #1A1A1A; border-bottom-color: #D85A30; }
+.vl-consola-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 16px 12px 28px;
+}
+
+/* Tiles de KPI de la consola */
+.vl-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1px;
+  background: #E8E6E0;
+  border: 1px solid #E8E6E0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.vl-tile { background: #fff; padding: 10px 12px; }
+.vl-tile-k {
+  font-size: 9.5px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: #1A1A1A50;
+}
+.vl-tile-v { font-size: 17px; margin-top: 3px; }
+
+/* Inventario: en móvil son tarjetas, en escritorio una tabla */
+.vl-inv-table { display: none; }
+.vl-inv-card {
+  background: #fff;
+  border: 1px solid #E8E6E0;
+  border-radius: 4px;
+  padding: 12px 14px 14px;
+  margin-bottom: 8px;
+}
+
+.vl-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #E8E6E0;
+  border-radius: 4px;
+  background: #fff;
+  font-size: 14px; /* < 16px hace zoom en iOS al enfocar; 14 con -webkit-text-size-adjust basta */
+  color: #1A1A1A;
+  outline: none;
+}
+.vl-input:focus { border-color: #D85A30; }
+
+/* Fila de chips desplazable horizontalmente sin barra visible */
+.vl-scrollx {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+  -webkit-overflow-scrolling: touch;
+}
+.vl-scrollx::-webkit-scrollbar { display: none; }
+
+/* ═══ Escritorio ═══════════════════════════════════════════════ */
+@media (min-width: 1024px) {
+  .vl-shell { height: 100dvh; }
+
+  .vl-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 12px 28px;
+  }
+  .vl-title { font-size: 22px; }
+  .vl-seg { flex: 0 0 auto; }
+  .vl-seg button { flex: 0 0 auto; padding: 8px 18px; }
+
+  .vl-firma { left: 328px; top: 18px; }
+
+  .vl-sheet { display: none; }
+
+  .vl-panel-left {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    position: absolute;
+    left: 18px;
+    top: 18px;
+    bottom: 18px;
+    width: 296px;
+    z-index: 20;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    animation: vl-up .7s cubic-bezier(.16, 1, .3, 1) both;
+  }
+  .vl-panel-right {
+    display: block;
+    position: absolute;
+    right: 18px;
+    top: 18px;
+    width: 240px;
+    z-index: 20;
+    padding: 14px 16px 16px;
+    animation: vl-up .8s cubic-bezier(.16, 1, .3, 1) .12s both;
+  }
+  .vl-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 20px;
+    position: absolute;
+    left: 328px;
+    bottom: 18px;
+    max-width: 600px;
+    z-index: 20;
+    padding: 11px 18px 12px;
+    animation: vl-up .9s cubic-bezier(.16, 1, .3, 1) .2s both;
+  }
+
+  .vl-sol {
+    display: block;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    bottom: 84px;
+    width: 360px;
+  }
+
+  .vl-datos { grid-template-columns: repeat(3, 1fr); }
+
+  .vl-ficha {
+    left: auto;
+    width: 428px;
+    border-left: 1px solid #E8E6E0;
+    animation: vl-panel .45s cubic-bezier(.16, 1, .3, 1) both;
+  }
+
+  .vl-modal {
+    left: 50%;
+    right: auto;
+    top: 50%;
+    bottom: auto;
+    transform: translate(-50%, -50%);
+    width: 640px;
+    max-height: 88%;
+    border-radius: 4px;
+    border: 1px solid #E8E6E0;
+  }
+
+  .vl-consola-nav { padding: 0 28px; }
+  .vl-consola-body { padding: 22px 28px 32px; }
+  .vl-tiles { grid-template-columns: repeat(6, 1fr); }
+  .vl-inv-table { display: block; }
+  .vl-inv-card { display: none; }
+  .vl-toast { bottom: 26px; }
+}

@@ -132,6 +132,39 @@ export default async function AppsPage() {
           </Link>
         )}
 
+        <Link href="/team/apps/visual-lab" style={{ textDecoration: 'none' }}>
+          <div
+            className="apps-card"
+            style={{
+              background: '#fff',
+              borderRadius: 4,
+              padding: '28px 24px',
+              cursor: 'pointer',
+            }}
+          >
+            <div style={{
+              width: 40, height: 40, borderRadius: 4,
+              background: '#D85A3015',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 20, marginBottom: 16,
+            }}>
+              ⛰
+            </div>
+            <p style={{ fontSize: 13, fontWeight: 500, color: '#1A1A1A', marginBottom: 6, letterSpacing: '-0.01em' }}>
+              FP Visual Lab
+            </p>
+            <p style={{ fontSize: 11, color: '#1A1A1A70', fontWeight: 300, lineHeight: 1.5, marginBottom: 20 }}>
+              Showroom de suelo sobre maqueta 3D: disponibilidad, precio por parcela, cotizaciones y consola comercial.
+            </p>
+            <span style={{
+              fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase',
+              color: '#D85A30', fontWeight: 500,
+            }}>
+              Abrir →
+            </span>
+          </div>
+        </Link>
+
         <Link href="/team/apps/quiniela" style={{ textDecoration: 'none' }}>
           <div
             className="apps-card"
