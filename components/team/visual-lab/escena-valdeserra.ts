@@ -16,7 +16,7 @@ import * as THREE from 'three'
 import {
   type Parcela, type ModoId, type EstadoId,
   ESTADOS, TIPOS, ETAPAS, VIAS, h0, vaguada, grad, off, hash,
-} from '@/lib/visual-lab/domain'
+} from '@/lib/visual-lab/valdeserra'
 
 export interface POV { az: number; pol: number; rad: number; tx: number; ty: number; tz: number }
 

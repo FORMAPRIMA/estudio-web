@@ -5,7 +5,7 @@ import {
   type Parcela, type EstadoId, type Palancas, type CotEmitida, type LogEntry,
   TIPOS, ESTADOS, VIAS,
   pm2Con, colocado, eur, mm, num, C,
-} from '@/lib/visual-lab/domain'
+} from '@/lib/visual-lab/valdeserra'
 
 type Vista = 'inventario' | 'precios' | 'cotizaciones' | 'actividad'
 

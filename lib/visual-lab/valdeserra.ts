@@ -19,25 +19,8 @@ export type ViaId = 'AV' | 'C1' | 'C2' | 'C3' | 'P1' | 'P2'
 export type EtapaId = 1 | 2 | 3
 export type ModoId = 'disponibilidad' | 'caracter' | 'etapas' | 'topografia' | 'precio' | 'conjunto'
 
-/* ── Paleta ──────────────────────────────────────────────────────────────
-   Los colores del artefacto original (dorado #B08A52 sobre crema) se
-   sustituyen por los tokens de la plataforma: naranja FP como acento,
-   verde/azul/oro de los módulos de finanzas y DD Visits. */
-export const C = {
-  ink: '#1A1A1A',
-  cream: '#F8F7F4',
-  card: '#FFFFFF',
-  accent: '#D85A30',
-  border: '#E8E6E0',
-  borderSoft: '#F0EEE8',
-  muted: '#1A1A1A70',
-  faint: '#1A1A1A50',
-  green: '#3D8B5F',
-  blue: '#5B7FA6',
-  gold: '#8A6220',
-  plum: '#8A5A72',
-  grey: '#9C9C96',
-} as const
+import { C, hash, eur, mm, num, dec } from './ui'
+export { C, hash, eur, mm, num, dec }
 
 export const TIPOS: Record<TipoId, { label: string; color: string }> = {
   MIRADOR: { label: 'Mirador', color: C.plum },
@@ -112,13 +95,6 @@ export interface Via {
 }
 
 /* ── Utilidades numéricas ─────────────────────────────────────────────── */
-
-/** FNV-1a → [0,1). Determinista: el mismo trazado sale igual en cada carga. */
-export function hash(s: string): number {
-  let h = 2166136261
-  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) }
-  return ((h >>> 0) % 100000) / 100000
-}
 
 const sq = (v: number) => v * v
 
@@ -448,17 +424,6 @@ export function accionDe(e: EstadoId): string {
     : e === 'opcion' ? 'Convertir a reserva'
       : e === 'reservado' ? 'Registrar venta' : 'Liberar parcela'
 }
-
-/* ── Formateadores ────────────────────────────────────────────────────── */
-
-export const eur = (n: number) =>
-  new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n)
-
-export const mm = (n: number) => (n / 1e6).toFixed(1).replace('.', ',') + ' M€'
-
-export const num = (n: number) => new Intl.NumberFormat('es-ES').format(Math.round(n))
-
-export const dec = (n: number, d = 1) => n.toFixed(d).replace('.', ',')
 
 /* ── Persistencia local ───────────────────────────────────────────────── */
 

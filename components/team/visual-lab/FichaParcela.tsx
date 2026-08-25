@@ -6,7 +6,7 @@ import {
   FICHA_TABS, FICHA_HINT, FICHA_CAPTION,
   datosParcela, parametrosUrb, planPago, accionDe,
   eur, num, C,
-} from '@/lib/visual-lab/domain'
+} from '@/lib/visual-lab/valdeserra'
 
 interface Props {
   u: Parcela

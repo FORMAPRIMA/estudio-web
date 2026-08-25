@@ -9,8 +9,8 @@ import {
   buildConjunto, pm2Con, precioDe, colocado, cotizar, siguienteEstado,
   cargarLocal, guardarLocal,
   eur, mm, num, dec,
-} from '@/lib/visual-lab/domain'
-import type { Escena } from './escena'
+} from '@/lib/visual-lab/valdeserra'
+import type { Escena } from './escena-valdeserra'
 import FichaParcela from './FichaParcela'
 import CotizacionModal from './CotizacionModal'
 import Consola from './Consola'
@@ -18,7 +18,7 @@ import Consola from './Consola'
 type SheetPos = 'peek' | 'medio' | 'full'
 const SHEET_H: Record<SheetPos, string> = { peek: '90px', medio: '48%', full: '88%' }
 
-export default function VisualLabPage() {
+export default function ValdeserraPage() {
   // El conjunto es determinista: se genera una vez y se muta en sitio
   // (estado comercial y precio). `rev` es lo que fuerza el repintado.
   const conj = useMemo(() => buildConjunto(), [])
@@ -131,7 +131,7 @@ export default function VisualLabPage() {
     // three.js pesa: se carga aparte para que la UI pinte antes que la maqueta
     let vivo = true
     let t: ReturnType<typeof setTimeout> | null = null
-    import('./escena').then(({ Escena }) => {
+    import('./escena-valdeserra').then(({ Escena }) => {
       if (!vivo) return
       const e = new Escena({
         canvas, wrap, labelEl: labelRef.current, units,
@@ -473,7 +473,7 @@ export default function VisualLabPage() {
       <header className="vl-header">
         <div className="vl-header-id">
           <p className="vl-eyebrow">
-            <Link href="/team/apps" style={{ color: 'inherit' }}>Apps</Link> · FP Visual Lab
+            <Link href="/team/apps/visual-lab" style={{ color: 'inherit' }}>← FP Visual Lab</Link> · Suelo
           </p>
           <h1 className="vl-title">Valdeserra</h1>
           <p className="vl-subtitle">Colmenar Viejo · residencial de alto estándar · {units.length} parcelas</p>

@@ -250,42 +250,60 @@ Panel de gestión interna: avisos, mejoras/bugs, datos personales del equipo.
 ### 5.8 Apps (`/team/apps`)
 Aplicaciones internas. Acceso: todos los roles FP.
 
-- **FP Visual Lab** (`/team/apps/visual-lab`) — **todos los roles FP** — `components/team/visual-lab/VisualLabPage.tsx`
-  - Showroom de suelo sobre **maqueta 3D generada por código** (Valdeserra, Colmenar Viejo): 35 parcelas
-    sobre una ladera continua, viario, club, control de acceso y arbolado. Port del artefacto
-    `FP Urbanizacion.dc.html` de Claude Design, **restilado a la plataforma** (Inter, naranja `#D85A30`,
-    tarjetas blancas con borde `#E8E6E0`, micro-etiquetas de 10 px). Es una **pieza comercial**: enseña a
-    promotores que además del proyecto les damos la plataforma de venta, gestión y trazabilidad.
-  - **Nada está en BD y es a propósito**: la urbanización es determinista (`hash` FNV sobre el id, mismo
-    trazado en cada carga) y lo único que se persiste son los cambios de estado comercial, la lista de
-    precios recalculada, las cotizaciones y la bitácora — en `localStorage` (`fp.visual-lab.valdeserra.v1`).
-    Si algún día hay una promoción real, el sitio donde entra es `buildConjunto()`.
-  - **Dos pantallas**: *Showroom* (visor 3D con 6 modos de lectura — disponibilidad, carácter, fases,
-    topografía, precio €/m², conjunto —, filtros por fase/carácter/superficie/precio/pendiente, exageración
-    del relieve, hora solar y ficha de parcela con plan de pago) y *Consola* (inventario, matriz de precios
-    con motor de palancas y GDV recalculado, cotizaciones emitidas y bitácora).
-  - **Mobile-first de verdad**: en < 1024 px el visor ocupa la pantalla y los paneles viven en un *bottom
-    sheet* de tres posiciones (mismo patrón que Repasos); la ficha y la cotización son hojas a pantalla
-    completa; el inventario pasa de tabla a tarjetas; el FOV se abre en vertical (46° vs 32°) y la cámara se
-    acerca un 26%, porque si no el trazado sale diminuto con medio fotograma de cielo.
-  - `lib/visual-lab/domain.ts` — modelo puro sin React ni three: geometría del trazado (`VIAS`/`BANDAS`,
-    Catmull-Rom, paralelas, `h0` de la ladera), `buildConjunto()`, motor de precio (`pm2Con` con palancas),
-    `cotizar()`, paleta y formateadores.
-  - `components/team/visual-lab/escena.ts` — clase imperativa con three.js. Frente al original: **arbolado
-    en `InstancedMesh`** (4 draw calls en vez de ~250), malla de terreno y shadow map de menor resolución en
-    móvil, y `pausar()` cuando la consola tapa el visor. Se importa con `import()` dinámico: three.js va en
-    su propio chunk y la ruta baja de 188 kB a 13 kB de primer pintado.
+- **FP Visual Lab** (`/team/apps/visual-lab`) — **todos los roles FP** (`lib/visual-lab/guard.ts`)
+  - **Plataforma de comercialización 3D** para desarrollos inmobiliarios: es la pieza que se le enseña a un
+    promotor para decirle que además de proyectar le damos las herramientas de venta, gestión y trazabilidad.
+    Port del proyecto de Claude Design del mismo nombre (6 artboards), **restilado a la plataforma**: Inter en
+    vez de Jost, naranja FP `#D85A30` en vez del dorado, tarjetas blancas con borde `#E8E6E0`, y la
+    microtipografía subida de 8,5 a 10-11 px (a 1440 se leía; en un móvil no).
+  - **Un hub y tres showrooms**:
+    | Ruta | Qué es | Artboard de origen |
+    |---|---|---|
+    | `/visual-lab` | **Portafolio**: cartera de 3 activos + pipeline (tabla, curva de absorción, mix, escenarios) | `FP Portafolio` |
+    | `/visual-lab/mendez-alvaro-32` | Torre residencial, 118 viviendas en 24 plantas | `FP Visual Lab Showroom` |
+    | `/visual-lab/la-dehesa` | Parque comercial de renta, 35 locales | `FP Plaza Comercial` |
+    | `/visual-lab/valdeserra` | Suelo residencial, 35 parcelas en ladera | `FP Urbanizacion` |
+  - **Nada está en BD y es a propósito**: los tres conjuntos son deterministas (`hash` FNV sobre el id, misma
+    geometría en cada carga) y lo único que se persiste son los cambios de estado comercial, los precios
+    recalculados, las cotizaciones/propuestas y la bitácora — en `localStorage`, una clave por activo
+    (`fp.visual-lab.{valdeserra,dehesa,mendez}.v1`). Si algún día hay una promoción real, el sitio donde entra
+    es el `buildConjunto()` de su módulo.
+  - **Cada showroom tiene la misma anatomía**: *Showroom* (visor 3D con modos de lectura, filtros, ficha de
+    unidad y modal de cotización/propuesta) y *Consola* (inventario, motor de precio/valoración, documentos
+    emitidos y bitácora). Lo que cambia es el negocio:
+    - **Méndez Álvaro 32** — se vende. Precio por m² útil con primas de altura/vista/orientación; cotización
+      con IVA, AJD y **cuota de hipoteca francesa**. Su modo propio es **Plantas**, que despieza el edificio
+      subiendo cada forjado, y **Vista**, que mete la cámara *dentro* de la vivienda mirando afuera.
+      La consola tiene el **plano de apilamiento** (una fila por planta, una celda por vivienda).
+    - **La Dehesa** — se alquila. No hay GDV sino **renta €/m²/mes** y el número final es el **NOI
+      capitalizado a un yield de salida** (dos sliders en la consola: opex y yield). El flujo peatonal se
+      calcula por **gravedad comercial** respecto a las anclas y la plaza, y es lo que sostiene la renta.
+    - **Valdeserra** — se vende suelo. Precio €/m² de suelo con primas por cota y carácter; plan de pago sin
+      intereses. Modo **Topografía** con lectura hipsométrica y exageración del relieve regulable.
+  - **Placa de firma** (`public/visual-lab/firma-{valdeserra,dehesa,mendez}-{1280,2560}.jpg`, con `srcset`):
+    cada render está tomado desde el **POV maestro** de su escena (ver `POV-manifest.md` del proyecto de
+    diseño), así que la maqueta arranca en ese mismo encuadre **detrás** de la foto: al desvanecerse, imagen
+    y 3D coinciden y el corte no se nota. Hace además de pantalla de carga mientras llega el chunk de
+    three.js. `sol = 790` por defecto (tarde baja) para igualar la luz del render. La placa tiene
+    `pointer-events: auto` a propósito: **el gesto que la descarta no debe además seleccionar una unidad**.
+  - **Mobile-first de verdad**, no un escritorio encogido: en < 1024 px el visor ocupa la pantalla y los
+    paneles bajan a un *bottom sheet* de tres posiciones (el patrón de Repasos), la ficha y el modal son hojas
+    a pantalla completa, y el inventario pasa de tabla a tarjetas. En vertical el FOV se abre (46-48° en los
+    conjuntos horizontales, 42° en la torre) y la cámara se acerca, porque con los valores del original el
+    trazado salía diminuto con medio fotograma de cielo.
+  - **Rendimiento**: arbolado y coches en `InstancedMesh` (4-6 draw calls en vez de cientos), malla de terreno
+    y shadow map de menor resolución en móvil, `pausar()` cuando la consola tapa el visor, y three.js con
+    `import()` dinámico — cada ruta pesa 6-14 kB de primer pintado en vez de ~190.
+  - `lib/visual-lab/`: `ui.ts` (paleta + formateadores compartidos; `num()` usa `useGrouping:'always'` para
+    que "7.546" y "38.560" se alineen) · `cartera.ts` (los 3 activos, series de absorción, pipeline) ·
+    `valdeserra.ts` / `dehesa.ts` / `mendez.ts` (un modelo puro por activo, sin React ni three) · `guard.ts`
+  - `components/team/visual-lab/`: `PortafolioPage` · `{Valdeserra,Dehesa,Mendez}Page` ·
+    `escena-{valdeserra,dehesa,mendez}.ts` (clases imperativas de three.js) · `Consola{,Dehesa,Mendez}` ·
+    `FichaParcela` · `CotizacionModal`
   - Estilos en clases `.vl-*` al final de `app/globals.css` (mobile-first; escritorio en `min-width: 1024px`).
-  - **Placa de firma** (`public/visual-lab/firma-valdeserra-{1280,2560}.jpg`, con `srcset`): el render
-    fotorrealista está tomado desde el **POV maestro** de la escena (`POV_FIRMA`, ver `POV-manifest.md` del
-    proyecto de diseño), así que la maqueta arranca en ese mismo encuadre **detrás** de la foto: al
-    desvanecerse, imagen y 3D coinciden y el corte no se nota. Hace además de pantalla de carga mientras
-    llega el chunk de three.js. La luz por defecto es `sol = 790` (tarde baja) justamente para igualar la
-    del render. La placa tiene `pointer-events: auto` a propósito: **el gesto que la descarta no debe
-    además seleccionar una parcela** por debajo. `Vista firma` la trae de vuelta tras volar al POV.
-  - **Pendiente**: los cuatro huecos de la ficha (aéreo/plano/vista/villa tipo) son placeholders. Los otros
-    dos renders del manifiesto (Torre Méndez Álvaro 32 y Parque Comercial La Dehesa) existen pero no se han
-    subido al repo porque sus artboards aún no están portados.
+  - **Pendiente**: los huecos de documentación gráfica de las fichas (plano/render/recorrido/vídeo, etc.) son
+    placeholders. Los otros dos artboards del proyecto de diseño (`Plan Abaco` — el plan de producto de
+    ÁBACO — y `Guia 3D Blender MCP`) son **documentos**, no apps, y no se han portado.
 
 - **Design Hunter** (`/team/apps/design-hunter`) — `components/team/design-hunter/DesignHunterPage.tsx`
   - Registro visual de inspiración/referencias organizados por viajes (`design_hunter_viajes`)
@@ -715,7 +733,10 @@ Registro de horas por proyecto y fase. Todos los roles FP.
 /team/equipo                Gestión del equipo (solo fp_partner)
 /team/perfil                Perfil personal
 /team/apps                  Índice de apps
-/team/apps/visual-lab       FP Visual Lab — showroom de suelo 3D (?parcela=II-07 abre una ficha)
+/team/apps/visual-lab       FP Visual Lab — portafolio de desarrollo (cartera + pipeline)
+/team/apps/visual-lab/mendez-alvaro-32  Showroom torre residencial (?vivienda=14C abre una ficha)
+/team/apps/visual-lab/la-dehesa         Showroom parque comercial (?local=A-05)
+/team/apps/visual-lab/valdeserra        Showroom de suelo (?parcela=II-07)
 /team/apps/design-hunter    Design Hunter (inspiración/referencias)
 /team/apps/repasos          Repasos de obra — índice de proyectos
 /team/apps/repasos/[id]     Repasos de obra — visor del plano con pins

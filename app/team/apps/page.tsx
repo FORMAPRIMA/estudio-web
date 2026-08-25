@@ -154,7 +154,7 @@ export default async function AppsPage() {
               FP Visual Lab
             </p>
             <p style={{ fontSize: 11, color: '#1A1A1A70', fontWeight: 300, lineHeight: 1.5, marginBottom: 20 }}>
-              Showroom de suelo sobre maqueta 3D: disponibilidad, precio por parcela, cotizaciones y consola comercial.
+              Cartera de desarrollo con showroom 3D por activo: torre residencial, parque comercial y suelo. Inventario, precios y consola comercial.
             </p>
             <span style={{
               fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase',

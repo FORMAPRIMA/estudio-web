@@ -3,7 +3,7 @@
 import {
   type Parcela, type CotConfig,
   TIPOS, cotizar, eur, num, C,
-} from '@/lib/visual-lab/domain'
+} from '@/lib/visual-lab/valdeserra'
 
 interface Props {
   u: Parcela

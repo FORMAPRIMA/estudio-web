@@ -2305,3 +2305,101 @@ div:hover > .tt-avatar-overlay {
   .vl-inv-card { display: none; }
   .vl-toast { bottom: 26px; }
 }
+
+/* ── FP Visual Lab · Portafolio (el hub de la cartera) ────────────── */
+
+.vl-port-kpis {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  background: #fff;
+  border-bottom: 1px solid #E8E6E0;
+}
+.vl-port-kpi {
+  padding: 16px 16px 18px;
+  border-right: 1px solid #F0EEE8;
+  border-bottom: 1px solid #F0EEE8;
+  min-width: 0;
+}
+
+.vl-port-body { padding: 20px 16px 32px; }
+
+.vl-port-cards {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+.vl-port-card {
+  background: #fff;
+  border: 1px solid #E8E6E0;
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: border-color .15s;
+}
+.vl-port-card:hover { border-color: #D85A30; }
+
+.vl-port-hitos { margin-top: 4px; }
+
+/* Tabla del pipeline */
+.vl-pipe-row {
+  display: grid;
+  grid-template-columns: 2.1fr 1.2fr 1fr 1fr 1fr 1.2fr .9fr 1fr;
+  padding: 0 18px;
+}
+
+/* Ficha del activo: hoja a pantalla completa en móvil, cajón en escritorio */
+.vl-port-ficha {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  top: 10%;
+  z-index: 81;
+  background: #fff;
+  border-top-left-radius: 14px;
+  border-top-right-radius: 14px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  animation: vl-up .4s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+@media (min-width: 700px) {
+  .vl-port-kpis { grid-template-columns: repeat(3, 1fr); }
+  .vl-port-cards { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (min-width: 1024px) {
+  .vl-port-kpis { grid-template-columns: repeat(5, 1fr); }
+  .vl-port-kpi { padding: 22px 22px 24px; }
+  .vl-port-body { padding: 26px 28px 40px; }
+  .vl-port-cards { grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .vl-port-hitos {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 32px;
+  }
+  .vl-port-ficha {
+    left: auto;
+    top: 0;
+    width: 460px;
+    border-radius: 0;
+    border-left: 1px solid #E8E6E0;
+    animation: vl-panel .45s cubic-bezier(.16, 1, .3, 1) both;
+  }
+}
+
+/* Consola de la torre: la tabla y el plano de apilamiento conviven en
+   escritorio; en móvil el plano se va debajo */
+.vl-mz-inv { display: block; }
+.vl-mz-aside { margin-top: 14px; }
+
+@media (min-width: 1024px) {
+  .vl-mz-inv {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 280px;
+    gap: 20px;
+    align-items: start;
+  }
+  .vl-mz-aside { margin-top: 0; }
+}
