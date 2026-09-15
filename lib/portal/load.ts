@@ -59,6 +59,11 @@ export async function loadPortalData(
       .select('id, seccion, concepto, monto, status, fecha_pago_acordada, numero_factura, clientes_ids')
       .eq('proyecto_id', proyectoId)
       .not('seccion', 'in', `(${SECCIONES_PRIVADAS.map(s => `"${s}"`).join(',')})`)
+      // CRÍTICO: cualquier factura dirigida a un proveedor queda fuera del portal,
+      // aunque su sección sea pública. Es el caso de los rappels y descuentos de
+      // proveedores de mobiliario, que viven en "Compra de mobiliario" junto a los
+      // suplidos del cliente: el cliente no debe saber que existen.
+      .is('proveedor_id', null)
       .order('seccion').order('created_at'),
     admin.from('proyecto_pagos_constructora')
       .select('id, concepto, importe_estimado, fecha_estimada, status')

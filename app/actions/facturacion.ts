@@ -39,6 +39,10 @@ export async function createFactura(data: {
   try {
     await requirePartner()
     const admin = createAdminClient()
+    // Destinatario único y excluyente: con proveedor, cero clientes. `clientes_ids`
+    // es lo que filtra el portal del cliente, así que dejarlo poblado en una
+    // factura a proveedor la haría visible a quien nunca debe verla.
+    const proveedorId = data.proveedor_id ?? null
     const { data: row, error } = await admin
       .from('facturas')
       .insert({
@@ -48,8 +52,8 @@ export async function createFactura(data: {
         monto:               data.monto ?? 0,
         fecha_pago_acordada: data.fecha_pago_acordada ?? null,
         status:              'acordada_contrato',
-        clientes_ids:        data.clientes_ids ?? [],
-        proveedor_id:        data.proveedor_id ?? null,
+        clientes_ids:        proveedorId ? [] : (data.clientes_ids ?? []),
+        proveedor_id:        proveedorId,
       })
       .select('id')
       .single()
@@ -89,7 +93,15 @@ export async function updateFactura(
   try {
     await requirePartner()
     const admin = createAdminClient()
-    const { error } = await admin.from('facturas').update(data).eq('id', id)
+
+    // Destinatario excluyente (ver createFactura): asignar proveedor vacía los
+    // clientes, y asignar clientes quita el proveedor. Se refuerza aquí y no solo
+    // en la UI porque de este par depende quién puede ver y recibir la factura.
+    const patch = { ...data }
+    if (patch.proveedor_id) patch.clientes_ids = []
+    else if (patch.clientes_ids && patch.clientes_ids.length > 0) patch.proveedor_id = null
+
+    const { error } = await admin.from('facturas').update(patch).eq('id', id)
     if (error) return { error: error.message }
 
     // Cascade status change to linked facturas_emitidas if one exists
@@ -273,10 +285,13 @@ export async function emitirFacturaDesdeContrato(
       proyectoCliente: ClienteData | null
     } | null
 
-    // ── Resolver proveedor según sección (CRÍTICO) ────────────────────────────
-    // Secciones privadas (márgenes) JAMÁS se facturan al cliente:
-    //  - "Margen prorrateado de obra" → constructora del proyecto (constructor_id)
-    //  - "Margen de mobiliario"       → proveedor de muebles (factura.proveedor_id)
+    // ── Resolver destinatario (CRÍTICO) ───────────────────────────────────────
+    // El destinatario lo manda la propia factura, no solo su sección:
+    //  - Cualquier factura con `proveedor_id` → se factura a ese proveedor. Cubre
+    //    los rappels y descuentos de proveedores de mobiliario, que viven en
+    //    "Compra de mobiliario" (sección pública, donde los suplidos sí van al cliente).
+    //  - "Margen prorrateado de obra" sin proveedor fijado → constructora del proyecto.
+    // Las facturas a proveedor nunca pueden acabar vinculadas a un cliente.
     const seccion: string = f.seccion
     const esSeccionPrivada = SECCIONES_PRIVADAS.includes(seccion)
     let proveedorId: string | null = (f as unknown as { proveedor_id?: string | null }).proveedor_id ?? null
@@ -285,38 +300,39 @@ export async function emitirFacturaDesdeContrato(
     }
     if (esSeccionPrivada && !proveedorId) {
       return {
-        error: seccion === SECCION_CONSTRUCTORA
-          ? 'Esta factura es "Margen prorrateado de obra" y debe facturarse a la constructora. Asigna una constructora al proyecto antes de emitirla.'
-          : 'Esta factura es "Margen de mobiliario" y debe facturarse al proveedor de muebles. Asigna el proveedor a la factura antes de emitirla.',
+        error: 'Esta factura es "Margen prorrateado de obra" y debe facturarse a la constructora. Asigna una constructora al proyecto, o un proveedor a la factura, antes de emitirla.',
       }
     }
 
-    // ── Billing recipient: proveedor (constructor/muebles) OR clients ─────────
+    // ── Billing recipient: proveedor (constructora / mobiliario) OR clients ───
     let cliente: ClienteData | null = null
     let clienteLabel = 'Cliente por definir'
+    // Datos fiscales del receptor cuando es un proveedor. Se mantienen aparte de
+    // `cliente` porque `facturas_emitidas.cliente_id` tiene FK a clientes(id):
+    // meter ahí un id de proveedor rompe el insert (23503) y contamina el array
+    // `facturas.clientes_ids` que usa el portal para decidir qué ve cada cliente.
+    let receptorProveedor: {
+      id: string; nombre: string; nif: string | null; direccion: string | null
+    } | null = null
 
     if (proveedorId) {
-      // Bill the constructor — use proveedor fiscal data
       const { data: prov } = await admin
         .from('proveedores')
         .select('id, nombre, razon_social, nif_cif, direccion_fiscal, direccion')
         .eq('id', proveedorId)
-        .single()
-      if (prov) {
-        const nombreFiscal = (prov as unknown as { razon_social?: string | null }).razon_social ?? prov.nombre
-        const direccionFiscal = (prov as unknown as { direccion_fiscal?: string | null }).direccion_fiscal ?? prov.direccion ?? null
-        cliente = {
-          id:                    prov.id,
-          nombre:                nombreFiscal,
-          apellidos:             null,
-          empresa:               nombreFiscal,
-          nif_cif:               prov.nif_cif ?? null,
-          direccion_facturacion: direccionFiscal,
-          ciudad:                null,
-          codigo_postal:         null,
-        }
-        clienteLabel = nombreFiscal
+        .maybeSingle()
+      if (!prov) {
+        return { error: 'El proveedor asignado a esta factura ya no existe. Revísalo antes de emitirla.' }
       }
+      const nombreFiscal = (prov as unknown as { razon_social?: string | null }).razon_social ?? prov.nombre
+      const direccionFiscal = (prov as unknown as { direccion_fiscal?: string | null }).direccion_fiscal ?? prov.direccion ?? null
+      receptorProveedor = {
+        id:        prov.id,
+        nombre:    nombreFiscal,
+        nif:       prov.nif_cif ?? null,
+        direccion: direccionFiscal,
+      }
+      clienteLabel = nombreFiscal
     } else {
       // Load clients assigned to this factura (clientes_ids array)
       const clientesIds: string[] = (f as unknown as { clientes_ids?: string[] }).clientes_ids ?? []
@@ -361,8 +377,13 @@ export async function emitirFacturaDesdeContrato(
     const numero          = Math.max(maxRow?.numero ?? 0, offset) + 1
     const numero_completo = formatNumeroCompleto(serie, año, numero)
 
-    const descripcionItem = proyecto?.direccion
-      ? `${f.concepto} — ${proyecto.direccion}`
+    // La dirección del proyecto es el domicilio del cliente: en una factura a
+    // proveedor se referencia el proyecto por su código, no por dónde vive nadie.
+    const referenciaProyecto = receptorProveedor
+      ? (proyecto?.codigo ?? null)
+      : (proyecto?.direccion ?? null)
+    const descripcionItem = referenciaProyecto
+      ? `${f.concepto} — ${referenciaProyecto}`
       : f.concepto
 
     const items = [{
@@ -392,10 +413,13 @@ export async function emitirFacturaDesdeContrato(
         emisor_cp:         cfg.codigo_postal ?? null,
         emisor_email:      cfg.email         ?? null,
         emisor_telefono:   cfg.telefono      ?? null,
-        cliente_id:        cliente?.id       ?? null,
+        receptor_tipo:     receptorProveedor ? 'proveedor' : 'cliente',
+        proveedor_id:      receptorProveedor?.id ?? null,
+        // cliente_id SOLO cuando el receptor es un cliente real (FK a clientes.id)
+        cliente_id:        receptorProveedor ? null : (cliente?.id ?? null),
         cliente_nombre:    clienteLabel,
-        cliente_nif:       cliente?.nif_cif  ?? null,
-        cliente_direccion: cliente?.direccion_facturacion ?? null,
+        cliente_nif:       receptorProveedor ? receptorProveedor.nif       : (cliente?.nif_cif ?? null),
+        cliente_direccion: receptorProveedor ? receptorProveedor.direccion : (cliente?.direccion_facturacion ?? null),
         proyecto_id:       proyecto?.id      ?? null,
         proyecto_nombre:   proyecto
           ? `${proyecto.codigo ? proyecto.codigo + ' · ' : ''}${proyecto.nombre}`

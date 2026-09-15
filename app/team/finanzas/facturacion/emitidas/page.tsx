@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import FacturasEmitidasPage from '@/components/team/finanzas/FacturasEmitidasPage'
 import { getEstudioConfig } from '@/app/actions/facturasEmitidas'
-import { SECCIONES_PRIVADAS, SECCION_CONSTRUCTORA } from '@/lib/finanzas/costs'
+import { SECCION_CONSTRUCTORA, esFacturaNoCliente } from '@/lib/finanzas/costs'
 import type { PrefillData } from '@/components/team/finanzas/FacturasEmitidasPage'
 
 export const metadata = { title: 'Facturas emitidas · Facturación' }
@@ -31,7 +31,7 @@ export default async function Page({
   ] = await Promise.all([
     admin
       .from('facturas_emitidas')
-      .select('id, numero_completo, serie, fecha_emision, fecha_operacion, cliente_id, cliente_nombre, cliente_contacto, cliente_nif, cliente_direccion, proyecto_id, proyecto_nombre, seccion, items, tipo_iva, base_imponible, cuota_iva, tipo_irpf, cuota_irpf, total, iban, forma_pago, condiciones_pago, notas, mencion_legal, es_rectificativa, factura_original_id, motivo_rectificacion, estado, created_at')
+      .select('id, numero_completo, serie, fecha_emision, fecha_operacion, receptor_tipo, proveedor_id, cliente_id, cliente_nombre, cliente_contacto, cliente_nif, cliente_direccion, proyecto_id, proyecto_nombre, seccion, items, tipo_iva, base_imponible, cuota_iva, tipo_irpf, cuota_irpf, total, iban, forma_pago, condiciones_pago, notas, mencion_legal, es_rectificativa, factura_original_id, motivo_rectificacion, estado, created_at')
       .order('año', { ascending: false })
       .order('numero', { ascending: false }),
     admin
@@ -97,6 +97,7 @@ export default async function Page({
         facturaOrigenId:  f.id,
         concepto:         f.concepto,
         monto:            f.monto,
+        proveedorId:      undefined,
         clienteId:        cliente?.id        ?? '',
         clienteContacto:  clienteNombreCompleto,
         clienteEmpresa:   cliente?.empresa   ?? '',
@@ -121,11 +122,15 @@ export default async function Page({
         iban:            estudioConfig?.iban           ?? '',
       }
 
-      // ── Secciones privadas (márgenes): facturar al PROVEEDOR, no al cliente ──
-      // "Margen prorrateado de obra" → constructora del proyecto (constructor_id)
-      // "Margen de mobiliario"       → proveedor de muebles (factura.proveedor_id)
+      // ── Facturas a PROVEEDOR: nunca se facturan al cliente ───────────────────
+      // Lo decide el destinatario de la factura, no solo su sección:
+      //  - "Margen prorrateado de obra" → constructora del proyecto (constructor_id)
+      //  - Cualquier factura con proveedor_id → ese proveedor. Es el caso de los
+      //    rappels y descuentos de proveedores de mobiliario, que están en
+      //    "Compra de mobiliario", una sección donde los suplidos sí van al cliente.
       const seccionF = f.seccion as string | null
-      if (seccionF && SECCIONES_PRIVADAS.includes(seccionF)) {
+      const provIdF  = (f as Record<string, unknown>).proveedor_id as string | null
+      if (esFacturaNoCliente({ seccion: seccionF, proveedorId: provIdF })) {
         // Nunca al cliente: borra cualquier email/identidad de cliente del prefill
         prefill.clienteId      = ''
         prefill.clienteContacto = ''
@@ -136,16 +141,18 @@ export default async function Page({
         prefill.clienteEmailCC = ''
 
         // Rellena con los datos fiscales del proveedor correspondiente
-        let provId = (f as Record<string, unknown>).proveedor_id as string | null
+        let provId = provIdF
         if (seccionF === SECCION_CONSTRUCTORA && !provId) provId = proyecto?.constructor_id ?? null
         if (provId) {
           const { data: prov } = await admin
             .from('proveedores')
-            .select('id, nombre, razon_social, nif_cif, direccion_fiscal, direccion')
+            .select('id, nombre, razon_social, nif_cif, direccion_fiscal, direccion, contacto_nombre, condiciones_pago')
             .eq('id', provId)
-            .single()
+            .maybeSingle()
           if (prov) {
+            prefill.proveedorId      = prov.id as string
             prefill.clienteEmpresa   = (prov.razon_social as string | null) ?? prov.nombre
+            prefill.clienteContacto  = (prov.contacto_nombre as string | null) ?? ''
             prefill.clienteNif       = (prov.nif_cif as string | null) ?? ''
             prefill.clienteDireccion = (prov.direccion_fiscal as string | null) ?? (prov.direccion as string | null) ?? ''
           }

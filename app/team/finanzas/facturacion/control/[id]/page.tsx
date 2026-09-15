@@ -38,7 +38,7 @@ export default async function Page({ params }: { params: { id: string } }) {
   // Try to select clientes_ids; if the column doesn't exist yet (migration pending),
   // fall back to the base query so facturas still appear.
   const BASE_SELECT = 'id, seccion, concepto, numero_factura, monto, fecha_emision, fecha_pago_acordada, fecha_cobro, status, notas, factura_emitida_id, created_at'
-  const [facturasResult, { data: proyectoClientes }, { data: comprasMobRows }] = await Promise.all([
+  const [facturasResult, { data: proyectoClientes }, { data: comprasMobRows }, { data: proveedoresRows }] = await Promise.all([
     admin
       .from('facturas')
       .select(`${BASE_SELECT}, clientes_ids, proveedor_id, margen_estimado_pct`)
@@ -53,6 +53,12 @@ export default async function Page({ params }: { params: { id: string } }) {
       .select('monto')
       .eq('proyecto_id', params.id)
       .eq('categoria', CATEGORIA_MOBILIARIO),
+    // Base completa de proveedores: cualquiera puede ser destinatario de una factura
+    // (rappel o descuento de un proveedor de mobiliario, margen a la constructora…).
+    admin
+      .from('proveedores')
+      .select('id, nombre, razon_social, tipo, email, nif_cif')
+      .order('nombre'),
   ])
 
   // Total de compras de mobiliario que vacían el depósito del proyecto
@@ -170,6 +176,13 @@ export default async function Page({ params }: { params: { id: string } }) {
         margen_estimado_pct: ((f as Record<string, unknown>).margen_estimado_pct as number | null) ?? null,
       }))}
       secciones={allSecciones}
+      proveedores={(proveedoresRows ?? []).map(pv => ({
+        id:      pv.id as string,
+        nombre:  ((pv as { razon_social?: string | null }).razon_social) ?? (pv.nombre as string),
+        tipo:    (pv.tipo    as string | null) ?? null,
+        email:   (pv.email   as string | null) ?? null,
+        nif_cif: (pv.nif_cif as string | null) ?? null,
+      }))}
       comprasMobiliario={comprasMobiliario}
       mobiliarioLiquidado={mobiliarioLiquidado}
       todosClientes={todosClientes}

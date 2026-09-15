@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sendEmail, wrapEmail } from '@/lib/email'
-import { esSeccionNoCliente } from '@/lib/finanzas/costs'
+import { esFacturaNoCliente } from '@/lib/finanzas/costs'
 import { resolveProveedorDestino } from '@/lib/finanzas/proveedorDestino'
+import { assertSinClientesEnDestinatarios, ClienteEnDestinatariosError } from '@/lib/finanzas/guardCliente'
 
 export async function POST(
   _req: NextRequest,
@@ -27,7 +28,8 @@ export async function POST(
       .from('facturas_emitidas')
       .select(`
         id, numero_completo, fecha_emision, cliente_nombre, cliente_contacto,
-        cliente_id, proyecto_id, proyecto_nombre, seccion, factura_origen_id, total, base_imponible, tipo_iva, cuota_iva,
+        cliente_id, receptor_tipo, proveedor_id,
+        proyecto_id, proyecto_nombre, seccion, factura_origen_id, total, base_imponible, tipo_iva, cuota_iva,
         condiciones_pago, iban, forma_pago,
         clientes(id, email, email_cc)
       `)
@@ -38,21 +40,29 @@ export async function POST(
       return NextResponse.json({ error: 'Factura no encontrada.' }, { status: 404 })
     }
 
-    // ── Guard CRÍTICO: márgenes internos JAMÁS reciben recordatorio al cliente ─
+    // ── Guard CRÍTICO: una factura a proveedor JAMÁS recuerda el pago al cliente ─
+    // Lo decide el destinatario, no solo la sección: un rappel de mobiliario vive
+    // en una sección pública y aun así nunca puede salir hacia el cliente.
     let seccionF: string | null = (factura.seccion as string | null) ?? null
-    if (!seccionF && factura.factura_origen_id) {
-      const { data: fSec } = await admin
-        .from('facturas').select('seccion').eq('id', factura.factura_origen_id).maybeSingle()
-      seccionF = (fSec?.seccion as string | undefined) ?? null
+    let proveedorF: string | null = (factura.proveedor_id as string | null) ?? null
+    if (factura.factura_origen_id && (!seccionF || !proveedorF)) {
+      const { data: fRow } = await admin
+        .from('facturas').select('seccion, proveedor_id').eq('id', factura.factura_origen_id).maybeSingle()
+      seccionF   = seccionF   ?? ((fRow?.seccion as string | undefined) ?? null)
+      proveedorF = proveedorF ?? ((fRow?.proveedor_id as string | undefined) ?? null)
     }
-    // Márgenes internos: el recordatorio va al PROVEEDOR, nunca al cliente.
-    const esPrivada = esSeccionNoCliente(seccionF)
+    const esPrivada = esFacturaNoCliente({
+      seccion:      seccionF,
+      proveedorId:  proveedorF,
+      receptorTipo: factura.receptor_tipo as string | null,
+    })
     let proveedorDestino: Awaited<ReturnType<typeof resolveProveedorDestino>> = null
     if (esPrivada) {
       proveedorDestino = await resolveProveedorDestino(admin, {
         facturaOrigenId: factura.factura_origen_id ?? null,
         proyectoId:      factura.proyecto_id ?? null,
         seccion:         seccionF,
+        proveedorId:     proveedorF,
       })
       if (!proveedorDestino?.email) {
         return NextResponse.json({ error: 'El proveedor de esta factura no tiene email registrado.' }, { status: 422 })
@@ -128,6 +138,21 @@ export async function POST(
     `
 
     const subject = `Recordatorio · Factura ${factura.numero_completo}${factura.proyecto_nombre ? ` · ${factura.proyecto_nombre}` : ''}`
+
+    // Red de seguridad antes de enviar (ver lib/finanzas/guardCliente.ts).
+    if (esPrivada) {
+      try {
+        await assertSinClientesEnDestinatarios(admin, {
+          proyectoId: factura.proyecto_id ?? null,
+          to: [toEmail], cc: ccEmail ? [ccEmail] : [],
+        })
+      } catch (guardErr) {
+        if (guardErr instanceof ClienteEnDestinatariosError) {
+          return NextResponse.json({ error: guardErr.message }, { status: 409 })
+        }
+        throw guardErr
+      }
+    }
 
     const result = await sendEmail({
       to:      toEmail,

@@ -187,7 +187,7 @@ Sistema de control financiero completo.
 | `/operativas/costes` | `CostesOperativasPage` | Costes fijos del estudio, salarios del equipo |
 | `/operativas/proyectos` | `ProyectosAnalisisPage` → `ProyectoFinanzasDetalle` | P&L por proyecto |
 | `/macro/costes` | `CostesGeneralesPage` | Costes fijos + variables + historial |
-| `/facturacion/control` | `FacturacionKanbanPage` → `FacturacionProyectoDetalle` | Facturas por proyecto (kanban) |
+| `/facturacion/control` | `FacturacionKanbanPage` → `FacturacionProyectoDetalle` | Facturas por proyecto (kanban). Cada factura se dirige **a clientes o a un proveedor** (excluyente) |
 | `/facturacion/emitidas` | `FacturasEmitidasPage` | Facturas emitidas en PDF |
 | `/facturacion/empresa` | `InfoEmpresaPage` | Datos fiscales del estudio |
 | `/team/gastos` (fuera de finanzas) | `ScannerPage` | Gastos y facturas: escaneo con OCR (IA) + autocrop (jscanify). Partner ve todo; el resto de roles FP solo sube y ve SUS gastos (modo "personal") |
@@ -202,6 +202,8 @@ Sistema de control financiero completo.
 - Helpers: `lib/finanzas/salaryHistory.ts`, `lib/finanzas/fixedCostHistory.ts`
 
 **Facturas emitidas** (`facturas_emitidas`):
+- **Destinatario explícito**: `receptor_tipo` (`cliente` | `proveedor`) + `proveedor_id`.
+  Con `proveedor`, `cliente_id` va SIEMPRE a null (hay FK a `clientes` y un CHECK en BD)
 - Se generan desde contratos (`emitirFacturaDesdeContrato` en `facturacion.ts`)
 - O se crean manualmente desde la lista de emitidas
 - Numeración: serie `F`, formato `F-NNN`, con offset configurable en `estudio_config`
@@ -563,8 +565,8 @@ Registro de horas por proyecto y fase. Todos los roles FP.
 ### Finanzas
 | Tabla | Propósito |
 |---|---|
-| `facturas` | Facturas vinculadas a contratos (seccion, monto, status, clientes_ids) |
-| `facturas_emitidas` | Facturas reales emitidas (número, emisor, cliente, items, IVA, IRPF) |
+| `facturas` | Facturas vinculadas a contratos (seccion, monto, status, clientes_ids **o** proveedor_id) |
+| `facturas_emitidas` | Facturas reales emitidas (número, emisor, receptor_tipo/proveedor_id/cliente_id, items, IVA, IRPF) |
 | `costos_fijos` | Costes fijos actuales del estudio |
 | `costos_fijos_historia` | Histórico de costes fijos (valid_from / valid_to) |
 | `costos_variables` | Costes variables (pueden estar vinculados a un proyecto_id) |
@@ -911,6 +913,24 @@ No modificar sin entender el flujo de envelopes y el sistema de autenticación J
 `/portal/[id]` no usa Supabase Auth. Usa `PORTAL_SECRET` para firmar/verificar tokens.
 `ClientPortalGate.tsx` verifica el token antes de renderizar. No confundir con el flujo `/area-privada` (que sí usa Auth).
 
+### 🔴 Destinatario de una factura: `esFacturaNoCliente()` en `lib/finanzas/costs.ts`
+**El guard de envío es por DESTINATARIO, no por sección.** Una factura tiene prohibido el
+canal cliente si (a) su sección es privada, o (b) tiene un proveedor asignado — sea cual
+sea su sección. El caso (b) existe porque los **rappels y descuentos de proveedores de
+mobiliario** viven en `'Compra de mobiliario'`, una sección donde los suplidos SÍ se
+facturan al cliente. El cliente normalmente no sabe que el estudio recibe un margen por su
+compra de mobiliario: que le llegue uno de esos correos es un incidente de confianza sin
+vuelta atrás.
+
+- `esFacturaNoCliente({ seccion, proveedorId, receptorTipo })` → **usar en todo envío**
+- `esSeccionNoCliente(seccion)` → solo para filtrar por sección en queries (portal)
+- `lib/finanzas/guardCliente.ts` → **red de seguridad**: cruza los destinatarios finales
+  contra los emails de los clientes del proyecto y aborta con 409 antes de `sendEmail`.
+  Llamado en `emit`, `reenviar` y `recordatorio`. No sustituye al guard de arriba: lo verifica
+- `facturas.proveedor_id` y `facturas.clientes_ids` son **excluyentes** (se refuerza en
+  `createFactura`/`updateFactura`, no solo en la UI): `clientes_ids` es lo que filtra el portal
+- El portal del cliente y la plataforma interna excluyen `proveedor_id IS NOT NULL`
+
 ### 🟡 `SECCIONES_PRIVADAS` en `lib/finanzas/costs.ts`
 La sección `'Margen prorrateado de obra'` nunca debe mostrarse al cliente (se factura a
 la constructora). Verificar siempre al añadir nuevas vistas de facturación.
@@ -926,6 +946,13 @@ usa `suplido × %` hasta que se **liquida** (`proyectos.mobiliario_liquidado`), 
 que se congela el margen real. En el P&L el mobiliario aporta **margen neto**, no el suplido
 bruto (evita duplicar ingresos). En la facturación por proyecto se puede **mover facturas
 entre secciones** ("Mover a…" en la fila expandida).
+
+**Dos naturalezas conviven en la sección** y hay que separarlas en todo cálculo:
+- **Suplido** (`proveedor_id` null) → lo paga el cliente, alimenta el depósito.
+- **Rappel / descuento** (`proveedor_id` puesto) → lo paga el proveedor de muebles por ser
+  interioristas. Es **margen íntegro, no suplido**, y el cliente ni lo ve ni debe verlo.
+  Sumarlo al suplido inflaría el depósito y falsearía presupuesto de compra y consumo.
+  `margen = suplidos − compras + rappels`, tanto en el depósito como en el P&L.
 
 ### 🟡 Propuesta: `calcPropuesta()` en `lib/propuestas/config.ts`
 Los honorarios se calculan sobre el PEM (Presupuesto de Ejecución Material) con splits

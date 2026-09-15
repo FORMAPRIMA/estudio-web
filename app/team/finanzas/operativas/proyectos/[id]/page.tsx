@@ -188,30 +188,48 @@ export default async function Page({ params }: { params: { id: string } }) {
   // ── Mobiliario: pass-through con margen ──────────────────────────────────────
   // El suplido bruto NO es ingreso del estudio; solo cuenta el margen (estimado
   // mientras no se liquide, real al liquidar). Evita inflar la rentabilidad.
-  const pctMap = new Map<string, number>()
+  const pctMap  = new Map<string, number>()
+  const provMap = new Map<string, string>()   // factura.id → proveedor_id (si lo tiene)
   const { data: pctRows } = await admin
-    .from('facturas').select('id, margen_estimado_pct').eq('proyecto_id', params.id)
+    .from('facturas').select('id, margen_estimado_pct, proveedor_id').eq('proyecto_id', params.id)
   for (const r of (pctRows ?? [])) {
     const v = (r as { margen_estimado_pct?: number | null }).margen_estimado_pct
     if (v != null) pctMap.set(r.id, Number(v))
+    const pv = (r as { proveedor_id?: string | null }).proveedor_id
+    if (pv) provMap.set(r.id, pv)
   }
   let mobiliarioLiquidado = false
   const { data: liqRow } = await admin
     .from('proyectos').select('mobiliario_liquidado').eq('id', params.id).maybeSingle()
   if (liqRow) mobiliarioLiquidado = Boolean((liqRow as { mobiliario_liquidado?: boolean }).mobiliario_liquidado)
 
+  // "Compra de mobiliario" mezcla dos naturalezas y hay que separarlas:
+  //  · Suplidos (sin proveedor): los paga el cliente y alimentan el depósito.
+  //  · Rappels / descuentos (con proveedor): los paga el proveedor de muebles por
+  //    ser interioristas. Son margen íntegro, no suplido. Contarlos como suplido
+  //    inflaría el depósito y el margen saldría mal por ambos lados.
   const mobFacturas  = (facturas ?? []).filter(f => f.seccion === SECCION_MOBILIARIO)
-  const mobEstimado  = mobFacturas.reduce((s, f) => s + f.monto * ((pctMap.get(f.id) ?? 0) / 100), 0)
+  const esRappel     = (f: { id: string }) => !!provMap.get(f.id)
+  const mobSuplidos  = mobFacturas.filter(f => !esRappel(f))
+  const mobRappels   = mobFacturas.filter(f =>  esRappel(f))
+
   const mobCompras   = ((costosVariablesProyecto ?? []) as unknown as { categoria: string; monto: number }[])
     .filter(c => c.categoria === CATEGORIA_MOBILIARIO)
     .reduce((s, c) => s + Number(c.monto ?? 0), 0)
-  const mobSuplido   = mobFacturas.reduce((s, f) => s + f.monto, 0)
-  const mobReal      = mobSuplido - mobCompras
+  const mobSuplido   = mobSuplidos.reduce((s, f) => s + f.monto, 0)
+  const mobRappel    = mobRappels .reduce((s, f) => s + f.monto, 0)
+  // El rappel es margen tanto en la previsión como en la liquidación.
+  const mobEstimado  = mobSuplidos.reduce((s, f) => s + f.monto * ((pctMap.get(f.id) ?? 0) / 100), 0) + mobRappel
+  const mobReal      = mobSuplido - mobCompras + mobRappel
   const mobEfectivo  = mobiliarioLiquidado ? mobReal : mobEstimado
-  const mobEstimadoCobrado = mobFacturas.filter(f => f.status === 'pagada')
-    .reduce((s, f) => s + f.monto * ((pctMap.get(f.id) ?? 0) / 100), 0)
-  const mobSuplidoCobrado  = mobFacturas.filter(f => f.status === 'pagada').reduce((s, f) => s + f.monto, 0)
-  const mobEfectivoCobrado = mobiliarioLiquidado ? Math.max(0, mobSuplidoCobrado - mobCompras) : mobEstimadoCobrado
+
+  const mobRappelCobrado   = mobRappels.filter(f => f.status === 'pagada').reduce((s, f) => s + f.monto, 0)
+  const mobEstimadoCobrado = mobSuplidos.filter(f => f.status === 'pagada')
+    .reduce((s, f) => s + f.monto * ((pctMap.get(f.id) ?? 0) / 100), 0) + mobRappelCobrado
+  const mobSuplidoCobrado  = mobSuplidos.filter(f => f.status === 'pagada').reduce((s, f) => s + f.monto, 0)
+  const mobEfectivoCobrado = mobiliarioLiquidado
+    ? Math.max(0, mobSuplidoCobrado - mobCompras) + mobRappelCobrado
+    : mobEstimadoCobrado
 
   // Aggregate billing by section
   const STATUS_ORDER = ['acordada_contrato', 'cobrable', 'enviada', 'pagada', 'impagada']

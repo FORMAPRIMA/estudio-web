@@ -34,6 +34,12 @@ interface ConstructorInfo {
   direccion_fiscal: string | null; iban: string | null
 }
 
+/** Proveedor de la base de datos, elegible como destinatario de cualquier factura. */
+interface ProveedorInfo {
+  id: string; nombre: string; tipo: string | null
+  email: string | null; nif_cif: string | null
+}
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const STATUS_META: Record<string, { label: string; color: string; bg: string }> = {
@@ -80,6 +86,7 @@ const INPUT: CSSProperties = {
 
 export default function FacturacionProyectoDetalle({
   proyecto, cliente: initialCliente, facturas: initialFacturas, secciones, todosClientes, constructor,
+  proveedores,
   comprasMobiliario, mobiliarioLiquidado: initialLiquidado,
 }: {
   proyecto: ProyectoInfo
@@ -88,6 +95,7 @@ export default function FacturacionProyectoDetalle({
   secciones: string[]
   todosClientes: ClienteInfo[]
   constructor: ConstructorInfo | null
+  proveedores: ProveedorInfo[]
   comprasMobiliario: number
   mobiliarioLiquidado: boolean
 }) {
@@ -382,14 +390,25 @@ export default function FacturacionProyectoDetalle({
           const secCobrado  = secFacturas.filter(f => f.status === 'pagada').reduce((s, f) => s + f.monto, 0)
           const isAdding    = addingSeccion === seccion
 
-          const showClienteCol = todosClientes.length > 1 || !!constructor
+          // Siempre visible: es la única vía para dirigir una factura a un proveedor
+          // (rappel de mobiliario), incluso en proyectos de un solo cliente.
+          const showClienteCol = true
           const isMobiliario   = seccion === SECCION_MOBILIARIO
           const colCount       = 8 + (showClienteCol ? 1 : 0) + (isMobiliario ? 1 : 0)
 
-          // Depósito de mobiliario: suplido cobrado − compras = margen
-          const margenEstimado    = secFacturas.reduce((s, f) => s + f.monto * ((f.margen_estimado_pct ?? 0) / 100), 0)
-          const presupuestoCompra = secTotal - margenEstimado           // lo que esperas gastar en muebles
-          const margenReal        = secTotal - comprasMobiliario         // lo que queda del depósito
+          // Depósito de mobiliario. Dos naturalezas distintas conviven en la sección:
+          //  · Suplidos (sin proveedor) → los cobra el cliente, alimentan el depósito.
+          //  · Rappels / descuentos (con proveedor) → los paga el proveedor por ser
+          //    interioristas. NO son suplido: son margen directo, y el cliente ni los
+          //    ve ni debe verlos. Sumarlos al suplido inflaría el depósito y falsearía
+          //    tanto el presupuesto de compra como el consumo.
+          const mobSuplidos = secFacturas.filter(f => !f.proveedor_id)
+          const mobRappels  = secFacturas.filter(f =>  f.proveedor_id)
+          const suplidoTotal      = mobSuplidos.reduce((s, f) => s + f.monto, 0)
+          const rappelTotal       = mobRappels .reduce((s, f) => s + f.monto, 0)
+          const margenEstimado    = mobSuplidos.reduce((s, f) => s + f.monto * ((f.margen_estimado_pct ?? 0) / 100), 0) + rappelTotal
+          const presupuestoCompra = suplidoTotal - (margenEstimado - rappelTotal)  // lo que esperas gastar en muebles
+          const margenReal        = suplidoTotal - comprasMobiliario + rappelTotal // lo que queda del depósito
           const consumoPct        = presupuestoCompra > 0
             ? Math.round((comprasMobiliario / presupuestoCompra) * 100)
             : (comprasMobiliario > 0 ? 100 : 0)
@@ -404,8 +423,13 @@ export default function FacturacionProyectoDetalle({
                 {secTotal > 0 && (
                   <>
                     <span style={{ fontSize: 11, color: '#AAA' }}>
-                      € {fmtE0.format(secTotal)} {isMobiliario ? 'suplido' : 'contratado'}
+                      € {fmtE0.format(isMobiliario ? suplidoTotal : secTotal)} {isMobiliario ? 'suplido' : 'contratado'}
                     </span>
+                    {isMobiliario && rappelTotal > 0 && (
+                      <span style={{ fontSize: 11, color: '#1D6A9E' }}>
+                        🔒 € {fmtE0.format(rappelTotal)} rappel proveedor
+                      </span>
+                    )}
                     {secCobrado > 0 && (
                       <span style={{ fontSize: 11, color: '#1D9E75', fontWeight: 500 }}>€ {fmtE0.format(secCobrado)} cobrado</span>
                     )}
@@ -444,6 +468,7 @@ export default function FacturacionProyectoDetalle({
                         emitiendo={emitiendo === f.id}
                         todosClientes={todosClientes}
                         constructor={constructor}
+                        proveedores={proveedores}
                         showMargenPct={isMobiliario}
                         secciones={secciones}
                         onToggleExpand={() => setExpandedIds(prev => {
@@ -480,6 +505,7 @@ export default function FacturacionProyectoDetalle({
                   <AddFacturaForm
                     clientes={todosClientes}
                     constructor={constructor}
+                    proveedores={proveedores}
                     onConfirm={(data) => handleAdd(seccion, data)}
                     onCancel={() => setAddingSeccion(null)}
                   />
@@ -499,7 +525,8 @@ export default function FacturacionProyectoDetalle({
                 {/* Mobiliario: depósito y liquidación */}
                 {isMobiliario && secFacturas.length > 0 ? (
                   <MobiliarioDeposito
-                    suplido={secTotal}
+                    suplido={suplidoTotal}
+                    rappel={rappelTotal}
                     margenEstimado={margenEstimado}
                     presupuestoCompra={presupuestoCompra}
                     compras={comprasMobiliario}
@@ -558,6 +585,7 @@ function ClienteMultiSelect({
   selectedIds,
   onChange,
   constructor: constructorOpt,
+  proveedores = [],
   proveedorId,
   onProveedorChange,
   compact = false,
@@ -566,11 +594,13 @@ function ClienteMultiSelect({
   selectedIds: Set<string>
   onChange: (ids: string[]) => void
   constructor?: ConstructorInfo | null
+  proveedores?: ProveedorInfo[]
   proveedorId?: string | null
   onProveedorChange?: (id: string | null) => void
   compact?: boolean
 }) {
   const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
   const [dropPos, setDropPos] = useState({ top: 0, left: 0, minWidth: 0 })
   const btnRef = useRef<HTMLButtonElement>(null)
   const dropRef = useRef<HTMLDivElement>(null)
@@ -606,31 +636,46 @@ function ClienteMultiSelect({
     onChange(Array.from(next))
   }
 
-  const toggleConstructor = () => {
-    if (!constructorOpt || !onProveedorChange) return
-    if (proveedorId === constructorOpt.id) {
-      onProveedorChange(null)
-    } else {
-      onProveedorChange(constructorOpt.id)
-    }
+  // Un proveedor y unos clientes son destinatarios mutuamente excluyentes:
+  // elegir proveedor limpia los clientes (y el server lo refuerza en updateFactura).
+  const toggleProveedor = (id: string) => {
+    if (!onProveedorChange) return
+    onProveedorChange(proveedorId === id ? null : id)
   }
 
+  // La constructora del proyecto se fija arriba; el resto de la base de proveedores
+  // va debajo, buscable. Sin duplicar la constructora en ambas listas.
   const constructorSelected = !!(constructorOpt && proveedorId === constructorOpt.id)
+  const proveedoresResto = proveedores.filter(pv => pv.id !== constructorOpt?.id)
+  const q = query.trim().toLowerCase()
+  const proveedoresFiltrados = q
+    ? proveedoresResto.filter(pv =>
+        [pv.nombre, pv.tipo, pv.nif_cif].filter(Boolean).join(' ').toLowerCase().includes(q))
+    : proveedoresResto
+  const proveedorSel = proveedorId
+    ? (proveedores.find(pv => pv.id === proveedorId) ?? null)
+    : null
+  const algunProveedor = constructorSelected || !!proveedorSel || !!proveedorId
+
   const selected = clientes.filter(c => selectedIds.has(c.id))
   const label = constructorSelected
     ? constructorOpt!.nombre
-    : selected.length === 0
-      ? 'Sin asignar'
-      : selected.length === 1
-        ? (selected[0].empresa ?? [selected[0].nombre, selected[0].apellidos].filter(Boolean).join(' '))
-        : `${selected.length} clientes`
+    : proveedorSel
+      ? proveedorSel.nombre
+      : proveedorId
+        ? 'Proveedor'
+        : selected.length === 0
+          ? 'Sin asignar'
+          : selected.length === 1
+            ? (selected[0].empresa ?? [selected[0].nombre, selected[0].apellidos].filter(Boolean).join(' '))
+            : `${selected.length} clientes`
 
-  const hasSelection = constructorSelected || selected.length > 0
+  const hasSelection = algunProveedor || selected.length > 0
   const triggerStyle: CSSProperties = compact
     ? {
         background: 'none', border: '1px solid transparent', borderRadius: 4,
         padding: '3px 8px', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit',
-        color: hasSelection ? (constructorSelected ? '#1D6A9E' : '#1A1A1A') : '#AAA',
+        color: hasSelection ? (algunProveedor ? '#1D6A9E' : '#1A1A1A') : '#AAA',
         display: 'flex', alignItems: 'center', gap: 5, maxWidth: 150,
       }
     : {
@@ -687,7 +732,7 @@ function ClienteMultiSelect({
               <>
                 <button
                   type="button"
-                  onClick={toggleConstructor}
+                  onClick={() => toggleProveedor(constructorOpt.id)}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 10,
                     width: '100%', padding: '8px 14px',
@@ -715,30 +760,95 @@ function ClienteMultiSelect({
                     <div style={{ fontSize: 10, color: '#378ADD', whiteSpace: 'nowrap' }}>Constructor</div>
                   </div>
                 </button>
-                {clientes.length > 0 && (
-                  <div style={{ margin: '4px 14px', borderTop: '1px solid #F0EEE8' }} />
+              </>
+            )}
+
+            {/* Resto de proveedores de la base de datos, buscable. Aquí es donde se
+                elige el proveedor de mobiliario al que se le factura un rappel. */}
+            {proveedoresResto.length > 0 && onProveedorChange && (
+              <>
+                {proveedoresResto.length > 6 && (
+                  <div style={{ padding: '4px 14px 8px' }}>
+                    <input
+                      autoFocus
+                      value={query}
+                      onChange={e => setQuery(e.target.value)}
+                      placeholder="Buscar proveedor…"
+                      style={{
+                        width: '100%', height: 28, padding: '0 9px', fontSize: 11,
+                        border: '1px solid #E8E6E0', borderRadius: 4, fontFamily: 'inherit',
+                        color: '#1A1A1A', background: '#FBFAF7',
+                      }}
+                    />
+                  </div>
+                )}
+                {proveedoresFiltrados.map(pv => {
+                  const sel = proveedorId === pv.id
+                  return (
+                    <button
+                      key={pv.id}
+                      type="button"
+                      onClick={() => toggleProveedor(pv.id)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        width: '100%', padding: '8px 14px',
+                        background: sel ? '#EEF4FD' : 'transparent',
+                        border: 'none', cursor: 'pointer', textAlign: 'left',
+                        borderLeft: sel ? '2px solid #378ADD' : '2px solid transparent',
+                        transition: 'background 0.1s',
+                      }}
+                      onMouseEnter={e => { if (!sel) (e.currentTarget as HTMLElement).style.background = '#F8F7F4' }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = sel ? '#EEF4FD' : 'transparent' }}
+                    >
+                      <div style={{
+                        width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
+                        border: sel ? '2px solid #378ADD' : '2px solid #D0CEC9',
+                        background: sel ? '#378ADD' : '#fff',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        {sel && <span style={{ color: '#fff', fontSize: 10, fontWeight: 700, lineHeight: 1 }}>✓</span>}
+                      </div>
+                      <div style={{ flex: 1, overflow: 'hidden' }}>
+                        <div style={{ fontSize: 12, color: '#1A1A1A', fontWeight: sel ? 600 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {pv.nombre}
+                        </div>
+                        <div style={{ fontSize: 10, color: pv.email ? '#378ADD' : '#D9822B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {pv.tipo ?? 'Proveedor'}{pv.email ? '' : ' · sin email'}
+                        </div>
+                      </div>
+                    </button>
+                  )
+                })}
+                {q && proveedoresFiltrados.length === 0 && (
+                  <div style={{ padding: '8px 14px', fontSize: 11, color: '#AAA', fontStyle: 'italic' }}>
+                    Ningún proveedor coincide
+                  </div>
                 )}
               </>
             )}
+
+            {clientes.length > 0 && (constructorOpt || proveedoresResto.length > 0) && (
+              <div style={{ margin: '6px 14px 2px', borderTop: '1px solid #F0EEE8' }} />
+            )}
             {clientes.map(c => {
-              const checked = !constructorSelected && selectedIds.has(c.id)
+              const checked = !algunProveedor && selectedIds.has(c.id)
               const nombre = [c.nombre, c.apellidos].filter(Boolean).join(' ')
               const sublabel = c.empresa ?? null
               return (
                 <button
                   key={c.id}
                   type="button"
-                  onClick={() => { if (constructorSelected) return; toggle(c.id) }}
+                  onClick={() => { if (algunProveedor) return; toggle(c.id) }}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 10,
                     width: '100%', padding: '8px 14px',
                     background: checked ? '#FDF3EE' : 'transparent',
-                    border: 'none', cursor: constructorSelected ? 'default' : 'pointer', textAlign: 'left',
+                    border: 'none', cursor: algunProveedor ? 'default' : 'pointer', textAlign: 'left',
                     borderLeft: checked ? '2px solid #D85A30' : '2px solid transparent',
                     transition: 'background 0.1s',
-                    opacity: constructorSelected ? 0.45 : 1,
+                    opacity: algunProveedor ? 0.45 : 1,
                   }}
-                  onMouseEnter={e => { if (!checked && !constructorSelected) (e.currentTarget as HTMLElement).style.background = '#F8F7F4' }}
+                  onMouseEnter={e => { if (!checked && !algunProveedor) (e.currentTarget as HTMLElement).style.background = '#F8F7F4' }}
                   onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = checked ? '#FDF3EE' : 'transparent' }}
                 >
                   <div style={{
@@ -764,10 +874,10 @@ function ClienteMultiSelect({
               )
             })}
           </div>
-          {(constructorSelected || selected.length > 0) && (
-            <div style={{ padding: '6px 14px 10px', borderTop: '1px solid #F0EEE8', fontSize: 10, color: '#AAA' }}>
-              {constructorSelected
-                ? constructorOpt!.nombre
+          {(algunProveedor || selected.length > 0) && (
+            <div style={{ padding: '6px 14px 10px', borderTop: '1px solid #F0EEE8', fontSize: 10, color: algunProveedor ? '#1D6A9E' : '#AAA' }}>
+              {algunProveedor
+                ? `🔒 ${constructorSelected ? constructorOpt!.nombre : (proveedorSel?.nombre ?? 'Proveedor')} — no se envía al cliente`
                 : selected.map(c => [c.nombre, c.apellidos].filter(Boolean).join(' ')).join(' · ')
               }
             </div>
@@ -781,7 +891,7 @@ function ClienteMultiSelect({
 // ── Factura Row ───────────────────────────────────────────────────────────────
 
 function FacturaRow({
-  factura, editCell, editingStatus, expanded, emitiendo, todosClientes, constructor,
+  factura, editCell, editingStatus, expanded, emitiendo, todosClientes, constructor, proveedores,
   showMargenPct, secciones,
   onToggleExpand, onEditCell, onCommitCell, onCancelEdit,
   onEditStatus, onCommitStatus, onCancelStatus, onDelete,
@@ -794,6 +904,7 @@ function FacturaRow({
   emitiendo: boolean
   todosClientes: ClienteInfo[]
   constructor: ConstructorInfo | null
+  proveedores: ProveedorInfo[]
   showMargenPct: boolean
   secciones: string[]
   onToggleExpand: () => void
@@ -811,7 +922,8 @@ function FacturaRow({
   onProveedorChange: (id: string | null) => void
 }) {
   const rowRouter = useRouter()
-  const showClienteCol = todosClientes.length > 1 || !!constructor
+  // Igual que en la cabecera de sección: siempre visible (ver showClienteCol arriba).
+  const showClienteCol = true
   const colCount = 8 + (showClienteCol ? 1 : 0) + (showMargenPct ? 1 : 0)
   const meta = STATUS_META[factura.status] ?? STATUS_META.acordada_contrato
   const isActive = (field: string) => editCell?.id === factura.id && editCell.field === field
@@ -918,6 +1030,7 @@ function FacturaRow({
               selectedIds={new Set(factura.clientes_ids)}
               onChange={onClientesChange}
               constructor={constructor}
+              proveedores={proveedores}
               proveedorId={factura.proveedor_id}
               onProveedorChange={onProveedorChange}
               compact
@@ -929,7 +1042,18 @@ function FacturaRow({
         {/* Monto */}
         <td style={{ ...TD, textAlign: 'right' }}><InlineNum field="monto" value={factura.monto} /></td>
         {/* % Margen estimado (interno, solo mobiliario) */}
-        {showMargenPct && (
+        {/* En un rappel a proveedor el importe ES el margen: el % no aplica. */}
+        {showMargenPct && factura.proveedor_id && (
+          <td style={{ ...TD, textAlign: 'right' }}>
+            <span
+              title="Rappel a proveedor: el importe íntegro es margen, no lleva % estimado"
+              style={{ fontSize: 10, color: '#1D6A9E', fontWeight: 600, letterSpacing: '0.04em' }}
+            >
+              100 %
+            </span>
+          </td>
+        )}
+        {showMargenPct && !factura.proveedor_id && (
           <td style={{ ...TD, textAlign: 'right' }}>
             {isActive('margen_estimado_pct') ? (
               <input
@@ -1104,10 +1228,12 @@ function FacturaRow({
 // ── Mobiliario: depósito y liquidación ──────────────────────────────────────────
 
 function MobiliarioDeposito({
-  suplido, margenEstimado, presupuestoCompra, compras, margenReal, consumoPct,
+  suplido, rappel, margenEstimado, presupuestoCompra, compras, margenReal, consumoPct,
   liquidado, onToggleLiquidado, proyectoId, router,
 }: {
   suplido: number
+  /** Rappels y descuentos facturados a proveedores. Margen directo, nunca suplido. */
+  rappel: number
   margenEstimado: number
   presupuestoCompra: number
   compras: number
@@ -1158,9 +1284,12 @@ function MobiliarioDeposito({
       </div>
 
       {/* Métricas */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 0, background: '#fff', border: '1px solid #E8E6E0', borderRadius: 8, overflow: 'hidden' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${rappel > 0 ? 5 : 4}, 1fr)`, gap: 0, background: '#fff', border: '1px solid #E8E6E0', borderRadius: 8, overflow: 'hidden' }}>
         <DepBox label="Suplido cobrado"  value={`€ ${fmtE0.format(suplido)}`} />
         <DepBox label="Compras" value={`€ ${fmtE0.format(compras)}`} color={sobrepasado ? '#E53E3E' : undefined} />
+        {rappel > 0 && (
+          <DepBox label="🔒 Rappel proveedor" value={`€ ${fmtE0.format(rappel)}`} color="#1D6A9E" />
+        )}
         <DepBox
           label={liquidado ? 'Margen real' : 'Margen estimado'}
           value={`€ ${fmtE0.format(margenEfectivo)}`}
@@ -1246,10 +1375,11 @@ function AplazarInline({ onAplazar }: { onAplazar: (date: string) => void }) {
 // ── Add Form ──────────────────────────────────────────────────────────────────
 
 function AddFacturaForm({
-  clientes, constructor, onConfirm, onCancel,
+  clientes, constructor, proveedores, onConfirm, onCancel,
 }: {
   clientes: ClienteInfo[]
   constructor: ConstructorInfo | null
+  proveedores: ProveedorInfo[]
   onConfirm: (data: { concepto: string; monto: string; fecha_pago_acordada: string; clientes_ids: string[]; proveedor_id: string | null }) => void
   onCancel: () => void
 }) {
@@ -1275,6 +1405,7 @@ function AddFacturaForm({
           selectedIds={selectedIds}
           onChange={ids => { setSelectedIds(new Set(ids)); setSelectedProveedorId(null) }}
           constructor={constructor}
+          proveedores={proveedores}
           proveedorId={selectedProveedorId}
           onProveedorChange={id => { setSelectedProveedorId(id); setSelectedIds(new Set()) }}
         />

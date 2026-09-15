@@ -7,8 +7,9 @@ import { getEstudioConfig } from '@/app/actions/facturasEmitidas'
 import { FacturaEmitidaPDF } from '@/components/pdfs/FacturaEmitidaPDF'
 import type { FacturaPDFData } from '@/components/pdfs/FacturaEmitidaPDF'
 import { sendEmail, wrapEmail } from '@/lib/email'
-import { esSeccionNoCliente } from '@/lib/finanzas/costs'
+import { esFacturaNoCliente } from '@/lib/finanzas/costs'
 import { resolveProveedorDestino } from '@/lib/finanzas/proveedorDestino'
+import { assertSinClientesEnDestinatarios, ClienteEnDestinatariosError } from '@/lib/finanzas/guardCliente'
 import type { ExtraEmail } from '@/app/actions/emitirFactura'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -64,20 +65,29 @@ export async function POST(
       return NextResponse.json({ error: 'Factura no encontrada' }, { status: 404 })
     }
 
-    // ── Márgenes internos: el reenvío va SIEMPRE al proveedor, nunca al cliente ─
+    // ── Facturas a proveedor: el reenvío va SIEMPRE al proveedor, nunca al cliente ─
+    // Lo decide el destinatario, no solo la sección (un rappel de mobiliario está
+    // en una sección pública y tampoco puede salir hacia el cliente).
     let seccionF: string | null = (f.seccion as string | null) ?? null
-    if (!seccionF && f.factura_origen_id) {
-      const { data: fSec } = await admin
-        .from('facturas').select('seccion').eq('id', f.factura_origen_id).maybeSingle()
-      seccionF = (fSec?.seccion as string | undefined) ?? null
+    let proveedorF: string | null = (f.proveedor_id as string | null) ?? null
+    if (f.factura_origen_id && (!seccionF || !proveedorF)) {
+      const { data: fRow } = await admin
+        .from('facturas').select('seccion, proveedor_id').eq('id', f.factura_origen_id).maybeSingle()
+      seccionF   = seccionF   ?? ((fRow?.seccion as string | undefined) ?? null)
+      proveedorF = proveedorF ?? ((fRow?.proveedor_id as string | undefined) ?? null)
     }
-    const esPrivada = esSeccionNoCliente(seccionF)
+    const esPrivada = esFacturaNoCliente({
+      seccion:      seccionF,
+      proveedorId:  proveedorF,
+      receptorTipo: f.receptor_tipo as string | null,
+    })
     let proveedorDestino: Awaited<ReturnType<typeof resolveProveedorDestino>> = null
     if (esPrivada) {
       proveedorDestino = await resolveProveedorDestino(admin, {
         facturaOrigenId: f.factura_origen_id ?? null,
         proyectoId:      f.proyecto_id ?? null,
         seccion:         seccionF,
+        proveedorId:     proveedorF,
       })
       if (!proveedorDestino?.email) {
         return NextResponse.json({
@@ -260,6 +270,21 @@ export async function POST(
     `
 
     // ── Send ──────────────────────────────────────────────────────────────────
+    // Red de seguridad antes de enviar (ver lib/finanzas/guardCliente.ts).
+    if (esPrivada) {
+      try {
+        await assertSinClientesEnDestinatarios(admin, {
+          proyectoId: f.proyecto_id ?? null,
+          to: toList, cc, bcc,
+        })
+      } catch (guardErr) {
+        if (guardErr instanceof ClienteEnDestinatariosError) {
+          return NextResponse.json({ error: guardErr.message }, { status: 409 })
+        }
+        throw guardErr
+      }
+    }
+
     const emailResult = await sendEmail({
       to:      toList,
       cc,

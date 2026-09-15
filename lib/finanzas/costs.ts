@@ -33,12 +33,38 @@ export const SECCION_MOBILIARIO = 'Compra de mobiliario'
 export const CATEGORIA_MOBILIARIO = 'Compra de mobiliario'
 
 /**
- * Secciones cuya factura JAMÁS debe enviarse al cliente: se factura a un proveedor
- * (constructora o proveedor de muebles), no al cliente. CRÍTICO para no filtrar
- * márgenes internos. Usado como guard en todos los endpoints de envío.
+ * Secciones cuya factura JAMÁS debe enviarse al cliente por el hecho de serlo.
+ * Es una condición de SECCIÓN, no de destinatario: sirve para filtrar por sección
+ * en consultas (portal del cliente, plataforma interna) donde no hay más contexto.
+ *
+ * ⚠️ NO la uses como guard de envío: una factura puede ir a un proveedor aunque su
+ * sección sea pública (rappel de mobiliario). Para eso está `esFacturaNoCliente()`.
  */
 export function esSeccionNoCliente(seccion: string | null | undefined): boolean {
   return !!seccion && SECCIONES_PRIVADAS.includes(seccion)
+}
+
+/**
+ * GUARD MAESTRO de envío. Responde a "¿esta factura tiene prohibido el canal cliente?".
+ *
+ * Es verdad en dos casos:
+ *  1. La sección es privada por naturaleza (margen de obra → constructora).
+ *  2. La factura tiene un PROVEEDOR como destinatario, sea cual sea su sección.
+ *     Caso típico: rappel/descuento de un proveedor de mobiliario dentro de
+ *     "Compra de mobiliario", una sección donde los suplidos SÍ van al cliente.
+ *
+ * El caso 2 es el importante: el cliente normalmente no sabe que recibimos un
+ * margen por su compra de mobiliario, y enterarse por un email automático sería
+ * un incidente serio. Ante la duda, esta función devuelve true.
+ */
+export function esFacturaNoCliente(f: {
+  seccion?:     string | null
+  proveedorId?: string | null
+  receptorTipo?: string | null
+}): boolean {
+  if (f.receptorTipo === 'proveedor') return true
+  if (f.proveedorId) return true
+  return esSeccionNoCliente(f.seccion)
 }
 
 const IVA = 0.21

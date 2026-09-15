@@ -62,6 +62,9 @@ export default async function Page({ params }: { params: { id: string } }) {
           .select('id, seccion, concepto, monto, status, fecha_pago_acordada, numero_factura')
           .eq('proyecto_id', params.id)
           .not('seccion', 'in', `(${SECCIONES_PRIVADAS.map(s => `"${s}"`).join(',')})`)
+          // Esta vista replica lo que ve el cliente: fuera las facturas a proveedor
+          // (rappels y descuentos de mobiliario), aunque su sección sea pública.
+          .is('proveedor_id', null)
           .order('seccion')
           .order('created_at')
       : Promise.resolve({ data: [] }),

@@ -18,7 +18,7 @@ import {
 } from '@/app/actions/facturasEmitidas'
 import type { ExtraEmail } from '@/app/actions/emitirFactura'
 import { calcTotals } from '@/lib/facturasUtils'
-import { esSeccionNoCliente } from '@/lib/finanzas/costs'
+import { esFacturaNoCliente } from '@/lib/finanzas/costs'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -28,6 +28,9 @@ interface FacturaEmitida {
   serie:                string
   fecha_emision:        string
   fecha_operacion:      string | null
+  /** 'cliente' | 'proveedor'. Con 'proveedor' el canal cliente queda cerrado. */
+  receptor_tipo:        string | null
+  proveedor_id:         string | null
   cliente_id:           string | null
   cliente_nombre:       string
   cliente_contacto:     string | null
@@ -355,9 +358,16 @@ function CreateModal({
   const today = new Date().toISOString().split('T')[0]
 
   const isEdit = !!editData
-  // CRÍTICO: facturas de márgenes internos jamás se envían al cliente
+  // CRÍTICO: una factura dirigida a un proveedor jamás se envía al cliente.
+  // No basta con mirar la sección: un rappel de mobiliario está en una sección
+  // pública ("Compra de mobiliario") y tampoco puede salir hacia el cliente.
   const seccionEfectiva = editData?.seccion ?? prefill?.seccion ?? null
-  const bloqueadaParaCliente = esSeccionNoCliente(seccionEfectiva)
+  const proveedorEfectivo = editData?.proveedor_id ?? prefill?.proveedorId ?? null
+  const bloqueadaParaCliente = esFacturaNoCliente({
+    seccion:      seccionEfectiva,
+    proveedorId:  proveedorEfectivo,
+    receptorTipo: editData?.receptor_tipo ?? null,
+  })
 
   // For edit mode: look up the client record and original invoice number
   const editClienteLookup = editData?.cliente_id
@@ -524,7 +534,10 @@ function CreateModal({
       emisor_cp:            emisorCp        || null,
       emisor_email:         emisorEmail     || null,
       emisor_telefono:      emisorTelefono  || null,
-      cliente_id:           clienteId       || null,
+      // Receptor proveedor → cliente_id vacío (FK a clientes + CHECK en BD)
+      receptor_tipo:        bloqueadaParaCliente ? 'proveedor' as const : 'cliente' as const,
+      proveedor_id:         bloqueadaParaCliente ? proveedorEfectivo : null,
+      cliente_id:           bloqueadaParaCliente ? null : (clienteId || null),
       cliente_nombre:       clienteNombre,
       cliente_contacto:     clienteEmpresa.trim() ? clienteContacto.trim() || null : null,
       cliente_nif:          clienteNif      || null,
@@ -1504,6 +1517,8 @@ export interface PrefillData {
   facturaOrigenId:  string
   concepto:         string
   monto:            number
+  /** Proveedor destinatario. Si viene, la factura NO va al cliente. */
+  proveedorId?:     string
   clienteId:        string
   clienteContacto:  string
   clienteEmpresa:   string
@@ -1600,7 +1615,7 @@ function AsignarProyectoCell({
           style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-start', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left', maxWidth: 220 }}>
           <span style={{ fontSize: 11, color: '#555', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>{factura.proyecto_nombre}</span>
           {factura.seccion && (
-            esSeccionNoCliente(factura.seccion) ? (
+            esFacturaNoCliente({ seccion: factura.seccion, proveedorId: factura.proveedor_id, receptorTipo: factura.receptor_tipo }) ? (
               <span title="A proveedor · no enviar al cliente" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#DC2626', background: '#FEF2F2', border: '1px solid #F4D6D2', padding: '1px 6px', borderRadius: 3 }}>🔒 {factura.seccion}</span>
             ) : (
               <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#D85A30', background: '#FDF0EC', padding: '1px 6px', borderRadius: 3 }}>{factura.seccion}</span>

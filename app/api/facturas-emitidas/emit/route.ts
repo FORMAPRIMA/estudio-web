@@ -9,8 +9,9 @@ import { FacturaEmitidaPDF } from '@/components/pdfs/FacturaEmitidaPDF'
 import type { FacturaPDFData } from '@/components/pdfs/FacturaEmitidaPDF'
 import { calcTotals } from '@/lib/facturasUtils'
 import { sendEmail, wrapEmail } from '@/lib/email'
-import { esSeccionNoCliente } from '@/lib/finanzas/costs'
+import { esFacturaNoCliente } from '@/lib/finanzas/costs'
 import { resolveProveedorDestino } from '@/lib/finanzas/proveedorDestino'
+import { assertSinClientesEnDestinatarios, ClienteEnDestinatariosError } from '@/lib/finanzas/guardCliente'
 import type { ExtraEmail } from '@/app/actions/emitirFactura'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -41,25 +42,36 @@ export async function POST(req: NextRequest) {
       clientesAdicionales?: { nombre: string; apellidos: string | null; email: string | null; email_cc: string | null }[]
     }
 
-    // ── Sección de la factura: define destinatario (cliente vs proveedor) ─────
+    // ── Destinatario: cliente o proveedor ────────────────────────────────────
+    // Lo decide la factura, no solo su sección. Un rappel de mobiliario vive en una
+    // sección pública ("Compra de mobiliario", donde los suplidos sí van al cliente)
+    // y aun así jamás puede salir hacia el cliente.
     const adminGuard = createAdminClient()
     let seccionEnvio: string | null = input.seccion ?? null
-    if (!seccionEnvio && input.factura_origen_id) {
-      const { data: fSec } = await adminGuard
-        .from('facturas').select('seccion').eq('id', input.factura_origen_id).maybeSingle()
-      seccionEnvio = (fSec?.seccion as string | undefined) ?? null
+    let proveedorOrigen: string | null = input.proveedor_id ?? null
+    if (input.factura_origen_id && (!seccionEnvio || !proveedorOrigen)) {
+      const { data: fRow } = await adminGuard
+        .from('facturas').select('seccion, proveedor_id').eq('id', input.factura_origen_id).maybeSingle()
+      seccionEnvio    = seccionEnvio    ?? ((fRow?.seccion as string | undefined) ?? null)
+      proveedorOrigen = proveedorOrigen ?? ((fRow?.proveedor_id as string | undefined) ?? null)
     }
-    const esPrivada = esSeccionNoCliente(seccionEnvio)
+    const esPrivada = esFacturaNoCliente({
+      seccion:      seccionEnvio,
+      proveedorId:  proveedorOrigen,
+      receptorTipo: input.receptor_tipo,
+    })
 
     // ── Resolver destinatario ─────────────────────────────────────────────────
-    // Márgenes internos → SIEMPRE al proveedor (constructora / proveedor de muebles),
-    // NUNCA al cliente. El email se resuelve en servidor desde la BD de proveedores.
+    // Facturas a proveedor → SIEMPRE al proveedor (constructora, proveedor de
+    // mobiliario), NUNCA al cliente. El email se resuelve en servidor desde la BD
+    // de proveedores: nunca se acepta del cliente del navegador.
     let proveedorDestino: Awaited<ReturnType<typeof resolveProveedorDestino>> = null
     if (esPrivada) {
       proveedorDestino = await resolveProveedorDestino(adminGuard, {
         facturaOrigenId: input.factura_origen_id ?? null,
         proyectoId:      input.proyecto_id ?? null,
         seccion:         seccionEnvio,
+        proveedorId:     proveedorOrigen,
       })
       if (!proveedorDestino?.email) {
         return NextResponse.json({
@@ -78,7 +90,13 @@ export async function POST(req: NextRequest) {
     const PARTNERS_CC = (partnerProfiles ?? []).map((p: { email: string }) => p.email).filter(Boolean)
 
     // ── 1. Crear factura ────────────────────────────────────────────────────
-    const created = await createFacturaEmitida(input)
+    // El receptor se persiste ya resuelto en servidor, para que reenvíos y
+    // recordatorios posteriores no dependan de volver a deducirlo.
+    const created = await createFacturaEmitida({
+      ...input,
+      receptor_tipo: esPrivada ? 'proveedor' : 'cliente',
+      proveedor_id:  esPrivada ? (proveedorDestino?.id ?? proveedorOrigen) : null,
+    })
     if ('error' in created) {
       return NextResponse.json({ error: created.error }, { status: 422 })
     }
@@ -270,6 +288,24 @@ export async function POST(req: NextRequest) {
     `
 
     // ── 8. Enviar ───────────────────────────────────────────────────────────
+    // Red de seguridad: si por cualquier vía un email del cliente se hubiera
+    // colado en una factura a proveedor, no se envía. Ver lib/finanzas/guardCliente.ts.
+    if (esPrivada) {
+      try {
+        await assertSinClientesEnDestinatarios(admin, {
+          proyectoId: input.proyecto_id ?? null,
+          to: toList, cc, bcc,
+        })
+      } catch (guardErr) {
+        if (guardErr instanceof ClienteEnDestinatariosError) {
+          return NextResponse.json({
+            error: `Factura creada (${numero_completo}) pero NO enviada. ${guardErr.message}`,
+          }, { status: 409 })
+        }
+        throw guardErr
+      }
+    }
+
     const emailResult = await sendEmail({
       to:      toList,
       cc,

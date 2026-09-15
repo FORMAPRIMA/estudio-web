@@ -10,19 +10,26 @@ export interface ProveedorDestino {
 }
 
 /**
- * Resuelve el PROVEEDOR al que debe facturarse/enviarse una factura de sección privada:
- *  - "Margen prorrateado de obra" → constructora del proyecto (proyectos.constructor_id),
- *     o el proveedor de la factura si está fijado.
- *  - "Margen de mobiliario"       → proveedor de la factura (facturas.proveedor_id).
- * Devuelve null si no hay proveedor asignado.
+ * Resuelve el PROVEEDOR destinatario de una factura, por orden de prioridad:
+ *  1. `proveedorId` explícito de la propia factura emitida (receptor_tipo='proveedor').
+ *  2. `facturas.proveedor_id` de la factura de contrato de origen. Cubre tanto el
+ *     margen de obra como los rappels/descuentos de proveedores de mobiliario.
+ *  3. Solo para "Margen prorrateado de obra" sin proveedor fijado: la constructora
+ *     del proyecto (`proyectos.constructor_id`).
+ * Devuelve null si no hay proveedor asignado por ninguna vía.
  */
 export async function resolveProveedorDestino(
   admin: AdminClient,
-  opts: { facturaOrigenId: string | null; proyectoId: string | null; seccion: string | null },
+  opts: {
+    facturaOrigenId: string | null
+    proyectoId:      string | null
+    seccion:         string | null
+    proveedorId?:    string | null
+  },
 ): Promise<ProveedorDestino | null> {
-  let provId: string | null = null
+  let provId: string | null = opts.proveedorId ?? null
 
-  if (opts.facturaOrigenId) {
+  if (!provId && opts.facturaOrigenId) {
     const { data: fc } = await admin
       .from('facturas').select('proveedor_id').eq('id', opts.facturaOrigenId).maybeSingle()
     provId = (fc?.proveedor_id as string | null) ?? null

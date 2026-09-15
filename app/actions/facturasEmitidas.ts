@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { calcTotals, formatNumeroCompleto } from '@/lib/facturasUtils'
-import { SECCION_ORDER } from '@/lib/finanzas/costs'
+import { SECCION_ORDER, esFacturaNoCliente } from '@/lib/finanzas/costs'
 export { calcTotals, formatNumeroCompleto }
 
 const PATH = '/team/finanzas/facturacion/emitidas'
@@ -39,6 +39,11 @@ export interface CreateFacturaInput {
   emisor_cp?:       string | null
   emisor_email?:    string | null
   emisor_telefono?: string | null
+  // Destinatario. 'proveedor' cierra el canal cliente en todos los envíos
+  // (ver esFacturaNoCliente en lib/finanzas/costs.ts). Con receptor_tipo
+  // 'proveedor', cliente_id debe ir vacío: hay FK a clientes(id) y un CHECK en BD.
+  receptor_tipo?:     'cliente' | 'proveedor'
+  proveedor_id?:      string | null
   cliente_id?:        string | null
   cliente_nombre:     string
   cliente_contacto?:  string | null
@@ -118,6 +123,14 @@ export async function createFacturaEmitida(
     const numero_completo = formatNumeroCompleto(input.serie, año, numero)
     const totals          = calcTotals(input.items, input.tipo_iva, input.tipo_irpf)
 
+    // Receptor proveedor: por tipo explícito, por proveedor_id, o por sección privada.
+    // Ante cualquiera de las tres señales se cierra el canal cliente.
+    const esAProveedor = esFacturaNoCliente({
+      seccion:      input.seccion,
+      proveedorId:  input.proveedor_id,
+      receptorTipo: input.receptor_tipo,
+    })
+
     const { data: row, error } = await admin
       .from('facturas_emitidas')
       .insert({
@@ -134,7 +147,9 @@ export async function createFacturaEmitida(
         emisor_cp:         input.emisor_cp ?? null,
         emisor_email:      input.emisor_email ?? null,
         emisor_telefono:   input.emisor_telefono ?? null,
-        cliente_id:        input.cliente_id ?? null,
+        receptor_tipo:     esAProveedor ? 'proveedor' : 'cliente',
+        proveedor_id:      esAProveedor ? (input.proveedor_id ?? null) : null,
+        cliente_id:        esAProveedor ? null : (input.cliente_id ?? null),
         cliente_nombre:    input.cliente_nombre,
         cliente_contacto:  input.cliente_contacto ?? null,
         cliente_nif:       input.cliente_nif ?? null,
@@ -285,6 +300,12 @@ export async function updateFacturaEmitida(
     const admin  = createAdminClient()
     const totals = calcTotals(input.items, input.tipo_iva, input.tipo_irpf)
 
+    const esEdicionAProveedor = esFacturaNoCliente({
+      seccion:      input.seccion,
+      proveedorId:  input.proveedor_id,
+      receptorTipo: input.receptor_tipo,
+    })
+
     const { error } = await admin.from('facturas_emitidas').update({
       fecha_emision:        input.fecha_emision,
       fecha_operacion:      input.fecha_operacion      ?? null,
@@ -295,7 +316,12 @@ export async function updateFacturaEmitida(
       emisor_cp:            input.emisor_cp            ?? null,
       emisor_email:         input.emisor_email         ?? null,
       emisor_telefono:      input.emisor_telefono      ?? null,
-      cliente_id:           input.cliente_id           ?? null,
+      // El destinatario se reescribe en cada edición para que no pueda quedar a
+      // medias (p. ej. un cliente_id superviviente en una factura a proveedor).
+      // El CHECK de la BD rechaza la combinación incoherente de todos modos.
+      receptor_tipo:        esEdicionAProveedor ? 'proveedor' : 'cliente',
+      proveedor_id:         esEdicionAProveedor ? (input.proveedor_id ?? null) : null,
+      cliente_id:           esEdicionAProveedor ? null : (input.cliente_id ?? null),
       cliente_nombre:       input.cliente_nombre,
       cliente_contacto:     input.cliente_contacto     ?? null,
       cliente_nif:          input.cliente_nif          ?? null,
@@ -390,7 +416,7 @@ export async function asignarProyectoSeccion(
 
     const { data: emitida, error: emErr } = await admin
       .from('facturas_emitidas')
-      .select('id, base_imponible, estado, factura_origen_id, cliente_id, numero_completo')
+      .select('id, base_imponible, estado, factura_origen_id, cliente_id, numero_completo, receptor_tipo, proveedor_id')
       .eq('id', emitidaId)
       .single()
     if (emErr || !emitida) return { error: emErr?.message ?? 'Factura no encontrada.' }
@@ -458,6 +484,12 @@ export async function asignarProyectoSeccion(
     }
 
     if (!facturaId) {
+      // El destinatario de la fila contable hereda el de la emitida. En una factura
+      // a proveedor, `clientes_ids` va vacío a propósito: es el array con el que el
+      // portal decide qué facturas ve cada cliente.
+      const esAProveedor = (emitida as { receptor_tipo?: string | null }).receptor_tipo === 'proveedor'
+      const provIdEmitida = (emitida as { proveedor_id?: string | null }).proveedor_id ?? null
+
       const { data: nueva, error: insErr } = await admin
         .from('facturas')
         .insert({
@@ -466,7 +498,8 @@ export async function asignarProyectoSeccion(
           concepto,
           monto,
           status,
-          clientes_ids:         emitida.cliente_id ? [emitida.cliente_id] : [],
+          clientes_ids:         esAProveedor || !emitida.cliente_id ? [] : [emitida.cliente_id],
+          proveedor_id:         esAProveedor ? provIdEmitida : null,
           creada_desde_emitida: true,
           factura_emitida_id:   emitidaId,
         })
