@@ -8,7 +8,7 @@ import { crearEspacioCore, enviarCorreoBienvenida } from '@/lib/espacio/create'
 import { revalidatePath } from 'next/cache'
 import { slugifyProyecto, type WebProyecto, type ProyectoMedia, type ProyectoCredito } from '@/lib/web-publica'
 import { resumenCualificacion } from '@/lib/contacto'
-import { LEADS_TO } from '@/lib/notificaciones'
+import { LEADS_TO } from '@/lib/email/destinatarios'
 
 const PATH = '/team/marketing/web-publica'
 

@@ -6,6 +6,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { PropuestaPDF } from '@/components/pdfs/PropuestaPDF'
 import type { PropuestaPDFData } from '@/components/pdfs/PropuestaPDF'
 import { sendEmail, wrapEmail } from '@/lib/email'
+import { getPartnersCC, repartirDestinatarios } from '@/lib/email/destinatarios'
 import type { ServicioId } from '@/lib/propuestas/config'
 import { mapInteriorismoRatios } from '@/lib/propuestas/build'
 import { getPlantillaServicios } from '@/app/actions/plantillaPropuestas'
@@ -161,22 +162,17 @@ export async function POST(
       attachments = [{ filename: `Propuesta-${numeroLabel || 'Forma-Prima'}.pdf`, content: buffer }]
     }
 
-    // Build internal CC list:
-    // - Partner sends → CC all partners (sender included as they're a partner)
-    // - Manager sends → CC sender + all partners
-    const { data: partnerProfiles } = await admin
-      .from('profiles')
-      .select('email')
-      .eq('rol', 'fp_partner')
-
-    const partnerEmails = (partnerProfiles ?? []).map(p => p.email).filter(Boolean) as string[]
-    const ccEmails: string[] = profile.rol === 'fp_manager'
-      ? Array.from(new Set([profile.email, ...partnerEmails].filter((e): e is string => !!e)))
-      : partnerEmails
+    // Copia interna: los socios siempre, y además quien envía si no es socio
+    // (así un manager o biz dev conserva el hilo de su propia propuesta).
+    const partnerEmails = await getPartnersCC()
+    const reparto = repartirDestinatarios({
+      to: [lead.email],
+      cc: profile.rol === 'fp_partner' ? partnerEmails : [profile.email, ...partnerEmails],
+    })
 
     const result = await sendEmail({
-      to:      lead.email,
-      cc:      ccEmails.length ? ccEmails : undefined,
+      to:      reparto.to,
+      cc:      reparto.cc.length ? reparto.cc : undefined,
       subject: `Propuesta de honorarios${numeroLabel ? ` ${numeroLabel}` : ''}${propuesta.titulo ? ` · ${propuesta.titulo}` : ''}`,
       html:    wrapEmail(body),
       attachments,

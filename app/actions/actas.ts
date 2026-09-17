@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { sendEmail, wrapEmail } from '@/lib/email'
+import { getPartnersCC, repartirDestinatarios } from '@/lib/email/destinatarios'
 import Anthropic from '@anthropic-ai/sdk'
 import type { ActaLabels } from '@/components/pdfs/ActaVisitaObraPDF'
 
@@ -652,13 +653,8 @@ export async function sendActaByEmail(
     const hasConstructor = data.constructorEmails.length > 0
     if (!hasCliente && !hasConstructor) return { success: true }
 
-    // Fetch fp_partner emails — always CC'd on every email
-    const admin = createAdminClient()
-    const { data: partners } = await admin
-      .from('profiles')
-      .select('email')
-      .eq('rol', 'fp_partner')
-    const partnerEmails: string[] = (partners ?? []).map((p: any) => p.email as string).filter(Boolean)
+    // Copia interna a los socios (ver lib/email/destinatarios.ts)
+    const partnerEmails = await getPartnersCC()
 
     // Download only the PDFs that are actually needed
     let clientPdfBuffer: Buffer | null = null
@@ -721,10 +717,10 @@ export async function sendActaByEmail(
       })
 
       const pdfFilenameCliente = `Acta_visita_${idioma.toUpperCase()}_${data.fecha}_${proyNorm}.pdf`
-      const ccPartners = partnerEmails.filter(e => !data.clienteEmails.includes(e))
+      const reparto = repartirDestinatarios({ to: data.clienteEmails, cc: partnerEmails })
       const r = await sendEmail({
-        to:          data.clienteEmails,
-        cc:          ccPartners.length ? ccPartners : undefined,
+        to:          reparto.to,
+        cc:          reparto.cc.length ? reparto.cc : undefined,
         subject:     en ? subjectEn : subjectEs,
         html:        wrapEmail(bodyHtml),
         attachments: clientPdfBuffer ? [{ filename: pdfFilenameCliente, content: clientPdfBuffer }] : undefined,
@@ -751,10 +747,10 @@ export async function sendActaByEmail(
       })
 
       const pdfFilenameConstructor = `Acta_visita_ES_${data.fecha}_${proyNorm}.pdf`
-      const ccPartners = partnerEmails.filter(e => !data.constructorEmails.includes(e))
+      const reparto = repartirDestinatarios({ to: data.constructorEmails, cc: partnerEmails })
       const r = await sendEmail({
-        to:          data.constructorEmails,
-        cc:          ccPartners.length ? ccPartners : undefined,
+        to:          reparto.to,
+        cc:          reparto.cc.length ? reparto.cc : undefined,
         subject:     subjectEs,
         html:        wrapEmail(bodyHtml),
         attachments: constructorPdfBuffer ? [{ filename: pdfFilenameConstructor, content: constructorPdfBuffer }] : undefined,

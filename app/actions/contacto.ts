@@ -6,7 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sendEmail, wrapEmail } from '@/lib/email'
-import { LEADS_TO } from '@/lib/notificaciones'
+import { LEADS_TO } from '@/lib/email/destinatarios'
 import {
   CAMPOS_PARCIAL, EMAIL_RE, telefonoUtil, resumenCualificacion,
   type CampoParcial, type ContactoParcial,

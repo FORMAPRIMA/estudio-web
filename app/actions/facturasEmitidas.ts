@@ -5,7 +5,9 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { calcTotals, formatNumeroCompleto } from '@/lib/facturasUtils'
 import { SECCION_ORDER, esFacturaNoCliente } from '@/lib/finanzas/costs'
+import { getPartnersCCDetallado, type PartnerCC } from '@/lib/email/destinatarios'
 export { calcTotals, formatNumeroCompleto }
+export type { PartnerCC }
 
 const PATH = '/team/finanzas/facturacion/emitidas'
 
@@ -246,27 +248,13 @@ export interface ClienteDelProyecto {
   email_cc: string | null
 }
 
-export interface PartnerCC {
-  nombre: string
-  email: string
-}
 
+/**
+ * Envoltorio como Server Action para que la UI pueda enseñar quién irá en copia.
+ * La regla vive en lib/email/destinatarios.ts, que es lo que usan los envíos.
+ */
 export async function getPartnerCCEmails(): Promise<PartnerCC[]> {
-  try {
-    const admin = createAdminClient()
-    const { data } = await admin
-      .from('profiles')
-      .select('nombre, apellidos, email')
-      .eq('rol', 'fp_partner')
-    return (data ?? [])
-      .filter((p: { email: string | null }) => !!p.email)
-      .map((p: { nombre: string | null; apellidos: string | null; email: string }) => ({
-        nombre: [p.nombre, p.apellidos].filter(Boolean).join(' ').trim() || p.email,
-        email:  p.email,
-      }))
-  } catch {
-    return []
-  }
+  return getPartnersCCDetallado()
 }
 
 export async function getClientesDelProyecto(

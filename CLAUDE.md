@@ -73,7 +73,10 @@ estudio-web/
 │   ├── dashboard/          # avisos-permisos.ts (esAvisoVisiblePara, VISIBLE_ROLES_*)
 │   ├── design-hunter.ts    # Tipos DesignHunterEntry, isVideoUrl()
 │   ├── docusign/           # auth.ts + client.ts (DocuSign integration)
-│   ├── email.ts            # sendEmail() + wrapEmail() con template de Resend
+│   ├── email/              # Todo lo que sale por Resend
+│   │   ├── index.ts        #   sendEmail() + wrapEmail() (única puerta de envío)
+│   │   ├── destinatarios.ts#   getPartnersCC(), repartirDestinatarios(), LEADS_TO
+│   │   └── facturaBody.ts  #   cuerpo del correo de factura (emit + reenviar)
 │   ├── facturasUtils.ts    # calcTotals(), formatNumeroCompleto()
 │   ├── finanzas/           # costs.ts, fixedCostHistory.ts, salaryHistory.ts
 │   ├── fp-execution/       # domain.ts (tipos Fpe*), schedule.ts
@@ -929,6 +932,22 @@ vuelta atrás.
 - `facturas.proveedor_id` y `facturas.clientes_ids` son **excluyentes** (se refuerza en
   `createFactura`/`updateFactura`, no solo en la UI): `clientes_ids` es lo que filtra el portal
 - El portal del cliente y la plataforma interna excluyen `proveedor_id IS NOT NULL`
+
+### 🟡 Envío de correo: una sola puerta, un solo reparto
+Todo sale por `sendEmail()` (`lib/email/index.ts`), con remitente fijo `contacto@formaprima.es`.
+
+- **Destinatarios internos**: `lib/email/destinatarios.ts`. `getPartnersCC()` (solo `fp_partner`:
+  facturas y propuestas llevan información que no debe llegar a managers) y `LEADS_TO`. Si alguien
+  entra o sale del estudio, se toca aquí y en ningún otro sitio.
+- **`repartirDestinatarios({to, cc, bcc})`** limpia y deduplica con prioridad TO > CC > BCC.
+  Usarlo siempre antes de `sendEmail`: sin él, quien está en dos listas recibe el correo dos veces
+  y aparece duplicado en la cabecera que ve el cliente.
+- **`replyTo` en camelCase**. El SDK de Resend lo mapea él mismo a `reply_to`; pasar la clave en
+  snake_case la descarta en silencio y TypeScript no lo detecta dentro de un spread condicional.
+- **Cuerpo de factura**: `lib/email/facturaBody.ts`, compartido por `emit` y `reenviar`. El
+  recordatorio de pago NO lo usa: es otro correo (sin conceptos ni totales).
+- `scripts/test-factura-email.ts` comprueba las reglas que no pueden fallar en silencio
+  (un proveedor nunca recibe el enlace al área de cliente) sin enviar nada.
 
 ### 🟡 `SECCIONES_PRIVADAS` en `lib/finanzas/costs.ts`
 La sección `'Margen prorrateado de obra'` nunca debe mostrarse al cliente (se factura a

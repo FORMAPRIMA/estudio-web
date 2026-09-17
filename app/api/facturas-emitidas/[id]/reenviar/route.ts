@@ -10,12 +10,10 @@ import { sendEmail, wrapEmail, type ExtraEmail } from '@/lib/email'
 import { esFacturaNoCliente } from '@/lib/finanzas/costs'
 import { resolveProveedorDestino } from '@/lib/finanzas/proveedorDestino'
 import { assertSinClientesEnDestinatarios, ClienteEnDestinatariosError } from '@/lib/finanzas/guardCliente'
+import { getPartnersCC, repartirDestinatarios } from '@/lib/email/destinatarios'
+import { buildFacturaEmailBody } from '@/lib/email/facturaBody'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-
-function eur(n: number) {
-  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(n)
-}
 
 export async function POST(
   req: NextRequest,
@@ -108,11 +106,8 @@ export async function POST(
       factura_original_numero = orig?.numero_completo ?? null
     }
 
-    // ── Partners CC ──────────────────────────────────────────────────────────
-    // Solo fp_partner: facturación es información sensible que NO debe llegar a managers
-    const { data: partnerProfiles } = await admin
-      .from('profiles').select('email').eq('rol', 'fp_partner')
-    const PARTNERS_CC = (partnerProfiles ?? []).map((p: { email: string }) => p.email).filter(Boolean)
+    // Copia interna a los socios (ver lib/email/destinatarios.ts)
+    const PARTNERS_CC = await getPartnersCC()
 
     // ── Generate PDF ─────────────────────────────────────────────────────────
     const pdfData: FacturaPDFData = {
@@ -163,14 +158,20 @@ export async function POST(
     const toAdicional  = adicionales.map(c => c.email).filter((e): e is string => !!e?.trim()).map(e => e.trim())
     const ccAdicional  = adicionales.map(c => c.email_cc).filter((e): e is string => !!e?.trim()).map(e => e.trim())
 
-    // Márgenes internos: SOLO al proveedor (nunca cliente ni clientes adicionales).
-    const toList = esPrivada
-      ? [proveedorDestino!.email!.trim()]
-      : [emailCliente.trim(), ...toExtra, ...toAdicional].filter(Boolean)
-    const cc     = esPrivada
-      ? [...PARTNERS_CC, ...(proveedorDestino!.emailCc ? [proveedorDestino!.emailCc.trim()] : [])]
-      : [...PARTNERS_CC, ...ccExtra, ...ccAdicional]
-    const bcc    = esPrivada ? [] : bccExtra
+    // Facturas a proveedor: SOLO al proveedor (nunca cliente ni clientes adicionales).
+    const { to: toList, cc, bcc } = repartirDestinatarios(
+      esPrivada
+        ? {
+            to:  [proveedorDestino!.email],
+            cc:  [...PARTNERS_CC, proveedorDestino!.emailCc],
+            bcc: [],
+          }
+        : {
+            to:  [emailCliente, ...toExtra, ...toAdicional],
+            cc:  [...PARTNERS_CC, ...ccExtra, ...ccAdicional],
+            bcc: bccExtra,
+          }
+    )
 
     // ── Greeting ──────────────────────────────────────────────────────────────
     const mainNombre = esPrivada
@@ -184,89 +185,21 @@ export async function POST(
       ? allNombres.slice(0, -1).join(', ') + ' y ' + allNombres[allNombres.length - 1]
       : allNombres[0]
 
-    // ── Items table ───────────────────────────────────────────────────────────
-    const itemsRows = (f.items as { descripcion: string; cantidad: number; precio_unitario: number; subtotal: number }[]).map(item => `
-      <tr>
-        <td style="padding:9px 0;border-bottom:1px solid #F0EEE8;font-size:13px;color:#3A3A3A;line-height:1.4;">${item.descripcion}</td>
-        <td style="padding:9px 0;border-bottom:1px solid #F0EEE8;font-size:13px;color:#888;text-align:right;white-space:nowrap;padding-left:16px;">${item.cantidad} × ${eur(item.precio_unitario)}</td>
-        <td style="padding:9px 0;border-bottom:1px solid #F0EEE8;font-size:13px;color:#3A3A3A;text-align:right;white-space:nowrap;padding-left:16px;font-weight:600;">${eur(item.subtotal)}</td>
-      </tr>`).join('')
-
-    const showIrpf = !!f.tipo_irpf && f.cuota_irpf > 0
-
     // ── Email body ────────────────────────────────────────────────────────────
-    const cuerpoIntroHtml = cuerpoIntro?.trim()
-      ? `<p style="margin:0 0 28px;font-size:14px;color:#555555;line-height:1.75;">${cuerpoIntro.trim()}</p>`
-      : ''
-
-    const bodyHtml = `
-      <p style="margin:0 0 22px;font-size:22px;font-weight:300;color:#1A1A1A;line-height:1.3;">Estimado/a ${saludoNombre},</p>
-
-      ${cuerpoIntroHtml}
-
-      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:4px;">
-        <thead>
-          <tr>
-            <td style="padding:6px 0;border-bottom:1.5px solid #1A1A1A;font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#AAAAAA;">Concepto</td>
-            <td style="padding:6px 0;border-bottom:1.5px solid #1A1A1A;font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#AAAAAA;text-align:right;padding-left:16px;">Detalle</td>
-            <td style="padding:6px 0;border-bottom:1.5px solid #1A1A1A;font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#AAAAAA;text-align:right;padding-left:16px;">Importe</td>
-          </tr>
-        </thead>
-        <tbody>${itemsRows}</tbody>
-      </table>
-
-      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:32px;">
-        <tr><td width="45%"></td><td>
-          <table width="100%" cellpadding="0" cellspacing="0">
-            <tr>
-              <td style="padding:6px 0;font-size:12px;color:#AAAAAA;">Base imponible</td>
-              <td style="padding:6px 0;font-size:12px;color:#555;text-align:right;">${eur(f.base_imponible)}</td>
-            </tr>
-            <tr>
-              <td style="padding:6px 0;font-size:12px;color:#AAAAAA;">IVA (${f.tipo_iva}%)</td>
-              <td style="padding:6px 0;font-size:12px;color:#555;text-align:right;">${eur(f.cuota_iva)}</td>
-            </tr>
-            ${showIrpf ? `
-            <tr>
-              <td style="padding:6px 0;font-size:12px;color:#AAAAAA;">Retención IRPF (${f.tipo_irpf}%)</td>
-              <td style="padding:6px 0;font-size:12px;color:#555;text-align:right;">−${eur(f.cuota_irpf)}</td>
-            </tr>` : ''}
-            <tr><td colspan="2" style="padding:4px 0 0;"><div style="height:1px;background:#E6E4DF;"></div></td></tr>
-            <tr>
-              <td style="padding:10px 16px;background:#1A1A1A;font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#F0EDE8;">Total a pagar</td>
-              <td style="padding:10px 16px;background:#1A1A1A;font-size:17px;font-weight:700;color:#ffffff;text-align:right;letter-spacing:-0.3px;">${eur(f.total)}</td>
-            </tr>
-          </table>
-        </td></tr>
-      </table>
-
-      ${config?.iban ? `
-      <div style="background:#F8F7F4;border-left:3px solid #D85A30;padding:16px 20px;margin-bottom:32px;">
-        <p style="margin:0 0 10px;font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#AAAAAA;">Datos de pago</p>
-        ${config.banco_nombre ? `<p style="margin:0 0 5px;font-size:13px;color:#3A3A3A;font-weight:600;">${config.banco_nombre}</p>` : ''}
-        <p style="margin:0 0 4px;font-size:13px;color:#555555;font-family:'Courier New',monospace;">IBAN: ${config.iban}</p>
-        ${config.banco_swift ? `<p style="margin:0;font-size:12px;color:#888888;font-family:'Courier New',monospace;">SWIFT/BIC: ${config.banco_swift}</p>` : ''}
-      </div>` : ''}
-
-      ${includeCTA && f.proyecto_id && !esPrivada ? `
-      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:32px;">
-        <tr>
-          <td style="background:#1A1A1A;padding:24px 28px;">
-            <div style="height:2px;background:#D85A30;margin-bottom:20px;opacity:0.7;"></div>
-            <p style="margin:0 0 4px;font-size:9px;font-weight:700;letter-spacing:1.8px;text-transform:uppercase;color:#666060;">Área de cliente</p>
-            <p style="margin:0 0 18px;font-size:15px;font-weight:300;color:#F0EDE8;line-height:1.5;">Consulta el avance de tu proyecto,<br/>documentación y facturas en un solo lugar.</p>
-            <a href="${process.env.NEXT_PUBLIC_SITE_URL ?? 'https://portal.formaprima.es'}/portal/${f.proyecto_id}" style="display:inline-block;background:#D85A30;color:#ffffff;font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;text-decoration:none;padding:12px 28px;">
-              Acceder a mi área &rarr;
-            </a>
-          </td>
-        </tr>
-      </table>` : ''}
-
-      <p style="margin:0 0 6px;font-size:14px;color:#555555;line-height:1.75;">Quedamos a su disposición para cualquier consulta.</p>
-      <p style="margin:0;font-size:14px;color:#555555;line-height:1.75;">
-        Un cordial saludo,<br/><strong style="color:#1A1A1A;">Equipo Forma Prima</strong>
-      </p>
-    `
+    const bodyHtml = buildFacturaEmailBody({
+      saludoNombre,
+      esParaProveedor: esPrivada,
+      introHtml:       cuerpoIntro,
+      items:           f.items as { descripcion: string; cantidad: number; precio_unitario: number; subtotal: number }[],
+      tipoIva:         f.tipo_iva,
+      baseImponible:   f.base_imponible,
+      cuotaIva:        f.cuota_iva,
+      tipoIrpf:        f.tipo_irpf,
+      cuotaIrpf:       f.cuota_irpf,
+      total:           f.total,
+      banco:           config,
+      ctaProyectoId:   includeCTA ? (f.proyecto_id ?? null) : null,
+    })
 
     // ── Send ──────────────────────────────────────────────────────────────────
     // Red de seguridad antes de enviar (ver lib/finanzas/guardCliente.ts).
