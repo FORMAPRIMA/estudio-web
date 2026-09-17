@@ -6,11 +6,10 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getEstudioConfig } from '@/app/actions/facturasEmitidas'
 import { FacturaEmitidaPDF } from '@/components/pdfs/FacturaEmitidaPDF'
 import type { FacturaPDFData } from '@/components/pdfs/FacturaEmitidaPDF'
-import { sendEmail, wrapEmail } from '@/lib/email'
+import { sendEmail, wrapEmail, type ExtraEmail } from '@/lib/email'
 import { esFacturaNoCliente } from '@/lib/finanzas/costs'
 import { resolveProveedorDestino } from '@/lib/finanzas/proveedorDestino'
 import { assertSinClientesEnDestinatarios, ClienteEnDestinatariosError } from '@/lib/finanzas/guardCliente'
-import type { ExtraEmail } from '@/app/actions/emitirFactura'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 

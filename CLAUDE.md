@@ -802,7 +802,6 @@ Registro de horas por proyecto y fase. Todos los roles FP.
 /api/cron/docs-faltantes            GET  — avisa de documentos pendientes
 /api/cron/facturas-cobrables        GET  — avisa de facturas por cobrar
 /api/cron/fpe-reminders             GET  — recordatorios FPE
-/api/test-email                     GET  — test de envío de email
 ```
 
 ---

@@ -9,6 +9,15 @@ const FROM = 'FORMA PRIMA Assistant <contacto@formaprima.es>'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+/**
+ * Destinatario extra que el usuario añade a mano al enviar un documento,
+ * indicando en qué campo va. Lo usan los formularios de envío de facturas.
+ */
+export interface ExtraEmail {
+  email: string
+  tipo:  'to' | 'cc' | 'bcc'
+}
+
 export interface SendEmailOptions {
   to:       string | string[]
   subject:  string
@@ -49,7 +58,10 @@ export async function sendEmail(
       html:        opts.html,
       ...(opts.cc        && { cc:        Array.isArray(opts.cc)  ? opts.cc  : [opts.cc]  }),
       ...(opts.bcc       && { bcc:       Array.isArray(opts.bcc) ? opts.bcc : [opts.bcc] }),
-      ...(opts.replyTo   && { reply_to:  opts.replyTo }),
+      // `replyTo` (camelCase): el SDK lo mapea él mismo a `reply_to` en la API.
+      // Pasar `reply_to` aquí NO funciona — se descarta en silencio, y TypeScript
+      // no lo detecta porque va dentro de un spread condicional.
+      ...(opts.replyTo   && { replyTo:   opts.replyTo }),
       ...(opts.attachments && {
         attachments: opts.attachments.map(a => ({
           filename: a.filename,

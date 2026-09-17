@@ -16,7 +16,7 @@ import {
   type ClienteDelProyecto,
   type PartnerCC,
 } from '@/app/actions/facturasEmitidas'
-import type { ExtraEmail } from '@/app/actions/emitirFactura'
+import type { ExtraEmail } from '@/lib/email'
 import { calcTotals } from '@/lib/facturasUtils'
 import { esFacturaNoCliente } from '@/lib/finanzas/costs'
 
