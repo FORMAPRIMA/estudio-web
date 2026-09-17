@@ -376,8 +376,11 @@ export async function createActaVisita(
       acta_url = admin.storage.from('portal').getPublicUrl(clientePath).data.publicUrl
     }
 
-    // If only constructor was generated, use that as the main acta_url
-    if (!doCliente && doConstructor) acta_url = acta_constructor_url
+    // `acta_url` es el acta DEL CLIENTE: es la que se publica en su portal y la
+    // que se le adjunta por email. Si no se generó, se queda vacía — nunca hereda
+    // la del constructor, que lleva otras instrucciones y otras fotos
+    // (instruccionesConstructor / fotos_constructor). El portal ya tolera null y
+    // simplemente no ofrece documento.
 
     // 5 — Format asistentes as comma-separated string
     const asistenteStr = data.asistentes.map(a => a.nombre).join(', ')
@@ -399,7 +402,7 @@ export async function createActaVisita(
       titulo:               data.titulo,
       asistentes:           asistenteStr || null,
       notas:                notas || null,
-      acta_url,
+      acta_url:             acta_url || null,
       acta_constructor_url: acta_constructor_url || null,
       floorfy_url:          data.floorfy_url || null,
       visible_cliente:      data.visible_cliente,
@@ -661,19 +664,27 @@ export async function sendActaByEmail(
     let clientPdfBuffer: Buffer | null = null
     let constructorPdfBuffer: Buffer | null = null
 
-    if (hasCliente && data.acta_url) {
+    // CRÍTICO: cada acta va a su destinatario y solo a él. Los dos PDFs dicen cosas
+    // distintas a propósito (instruccionesConstructor vs instrucciones,
+    // fotos_constructor vs fotos_cliente), así que uno NUNCA sustituye al otro:
+    // mandarle al cliente el acta del constructor filtraría instrucciones internas.
+    // Si falta el PDF que toca, se aborta el envío y se dice por qué.
+    if (hasCliente) {
+      if (!data.acta_url) {
+        return { error: 'No hay acta de cliente para esta visita. Genérala antes de enviarla, o desmarca a los clientes del envío.' }
+      }
       const r = await fetch(data.acta_url)
       if (!r.ok) return { error: `No se pudo descargar el PDF del cliente: ${r.status}` }
       clientPdfBuffer = Buffer.from(await r.arrayBuffer())
     }
-    if (hasConstructor && data.acta_constructor_url) {
+    if (hasConstructor) {
+      if (!data.acta_constructor_url) {
+        return { error: 'No hay acta de constructor para esta visita. Genérala antes de enviarla, o desmarca a la constructora del envío.' }
+      }
       const r = await fetch(data.acta_constructor_url)
       if (!r.ok) return { error: `No se pudo descargar el PDF del constructor: ${r.status}` }
       constructorPdfBuffer = Buffer.from(await r.arrayBuffer())
     }
-    // Fallback: if only one PDF was generated, reuse it for both
-    if (!clientPdfBuffer && constructorPdfBuffer) clientPdfBuffer = constructorPdfBuffer
-    if (!constructorPdfBuffer && clientPdfBuffer) constructorPdfBuffer = clientPdfBuffer
 
     const idioma    = data.idioma ?? 'es'
     const en        = idioma === 'en'
