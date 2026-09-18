@@ -8,6 +8,7 @@ import { Reveal } from '../Reveal'
 import { esVideoUrl, type WebProyecto, type ProyectoMedia, type ProyectoMediaTipo, type ProyectoCredito, type CreditoGrupo } from '@/lib/web-publica'
 import type { WebEquipo } from '@/lib/web-equipo'
 import { Img } from '@/components/public/site/Img'
+import { useManifiesto } from '@/components/public/site/AssetsProvider'
 import { EsqueletoPlinto } from '@/components/public/site/Esqueleto'
 
 // Visor 3D: Three.js solo en cliente y bajo demanda.
@@ -101,8 +102,14 @@ export function ProyectoDetalle({ proyecto, equipo = [] }: { proyecto: WebProyec
           <div style={{ width: '100%', height: 'clamp(360px, 60vh, 640px)' }}>
             <ModeloViewer url={proyecto.glb_url} />
           </div>
+          {/* El pie dice lo que hay que hacer ANTES de tocar nada: el visor nace
+              bloqueado para no quedarse con la rueda mientras se baja por la ficha
+              (ver ModeloViewer). «Arrastra para girar» describía el estado que solo
+              existe después del clic. */}
           <p style={{ fontSize: 11, letterSpacing: site.track.normal, textTransform: 'uppercase', opacity: 0.45, marginTop: 12 }}>
-            {locale === 'en' ? 'Drag to rotate' : 'Arrastra para girar'}
+            {locale === 'en'
+              ? 'Click the model to rotate and zoom · Esc to exit'
+              : 'Pulsa la maqueta para girarla y hacer zoom · Esc para salir'}
           </p>
         </section>
       )}
@@ -130,6 +137,49 @@ export function ProyectoDetalle({ proyecto, equipo = [] }: { proyecto: WebProyec
           border-top: 1px solid ${site.color.ink}14;
         }
 
+        /* ── Fila de láminas ────────────────────────────────────────────────
+           Ver repartirEnFilas(): la apaisada va sola, las verticales de dos en
+           dos. Aquí solo se ejecuta ese reparto.
+
+           Las dos de una pareja salen con la MISMA ALTURA sin calcular nada: el
+           flex-basis es 0 y cada figura crece en proporción a su ratio, así que
+           los anchos quedan en la misma proporción que los originales y, a igual
+           proporción, igual altura. Es la fila justificada de toda la vida.
+
+           El tope de alto es la red de seguridad para el caso raro —dos fotos muy
+           verticales, o una apaisada en una ventana muy baja—: la lámina nunca
+           sale más alta que la pantalla. Cuando salta, el navegador reduce
+           también el ancho para mantener la proporción; no recorta ni deforma. */
+        .fig-fila {
+          display: flex;
+          align-items: flex-start;
+          gap: clamp(16px, 2.4vw, 34px);
+        }
+        .fig-fila--ancha { --lamina-alto: clamp(360px, 88vh, 920px); }
+        /* Una vertical suelta (serie impar) se queda a media columna, con el
+           mismo eje izquierdo que la pareja de arriba. */
+        .fig-fila--suelta .fig-lamina { max-width: calc(50% - clamp(8px, 1.2vw, 17px)); }
+
+        .fig-lamina { flex: 1 1 0; min-width: 0; }
+        .fig-media { overflow: hidden; line-height: 0; }
+        /* El <picture> del componente Img no debe interponer una caja entre el
+           contenedor y el bitmap: sin esto el tope de alto no lo alcanza. */
+        .fig-media picture { display: contents; }
+        .fig-media img,
+        .fig-media video {
+          display: block;
+          width: 100%;
+          height: auto;
+          max-height: var(--lamina-alto, clamp(360px, 84vh, 880px));
+        }
+        @media (max-width: 760px) {
+          /* En una columna estrecha no hay pareja que valga: cada lámina a todo
+             el ancho, y sin tope de alto —el ancho ya es el tope. */
+          .fig-fila { flex-direction: column; gap: clamp(28px, 5vh, 48px); }
+          .fig-fila--suelta .fig-lamina { max-width: 100%; }
+          .fig-lamina, .fig-fila--ancha { --lamina-alto: none; }
+        }
+
         /* ── Pie de lámina ──────────────────────────────────────────────────
            Cinco constantes tomadas de cómo tratan el pie El Croquis, 2G, A+U,
            Detail y Divisare: índice numérico ligado a la lámina · medida corta,
@@ -140,7 +190,7 @@ export function ProyectoDetalle({ proyecto, equipo = [] }: { proyecto: WebProyec
           display: grid;
           grid-template-columns: 3.2ch 1fr;
           gap: 0 15px;
-          margin-top: 16px;
+          margin-top: 9px;
           align-items: start;
         }
         .fig-idx {
@@ -244,55 +294,111 @@ function creditoEtiqueta(tipo: ProyectoMediaTipo, locale: 'es' | 'en') {
   return locale === 'en' ? 'Photography' : 'Fotografía'
 }
 
+/**
+ * Reparto de la serie en filas. La galería deja de ser una columna de fotos a
+ * todo lo ancho —donde una vertical salía más alta que la pantalla y una
+ * cuadrada dejaba media página en blanco— y pasa a maquetarse por proporción:
+ *
+ *   · apaisada (≥ 1.2)  → fila para ella sola, a todo el ancho de la columna
+ *   · vertical o cuadrada → de dos en dos, y entre las dos llenan la columna
+ *
+ * El emparejado usa el truco de la fila justificada: cada figura crece en
+ * proporción a su ratio (`flex-grow: ratio`), así las dos salen EXACTAMENTE con
+ * la misma altura, sus anchos suman el ancho disponible y los pies arrancan a la
+ * misma línea. Nada se recorta ni se deforma: solo se elige a qué tamaño se
+ * pinta cada original.
+ *
+ * Sin entrada en el manifiesto (foto recién subida) o si es vídeo no sabemos la
+ * proporción, así que va sola a todo el ancho, que es lo que hacía siempre.
+ */
+const RATIO_APAISADA = 1.2
+
+type Lamina = { m: ProyectoMedia; i: number; ratio: number }
+type Fila = { clase: 'ancha'; laminas: [Lamina] } | { clase: 'par'; laminas: Lamina[] }
+
+function repartirEnFilas(laminas: Lamina[]): Fila[] {
+  const filas: Fila[] = []
+  let pendientes: Lamina[] = []
+  const volcar = () => {
+    while (pendientes.length) filas.push({ clase: 'par', laminas: pendientes.splice(0, 2) })
+  }
+  for (const l of laminas) {
+    if (l.ratio >= RATIO_APAISADA) {
+      // Una apaisada corta la racha: las verticales que hubiera acumuladas se
+      // emparejan antes, para que el orden de la serie no se altere nunca.
+      volcar()
+      filas.push({ clase: 'ancha', laminas: [l] })
+    } else {
+      pendientes.push(l)
+    }
+  }
+  volcar()
+  return filas
+}
+
 function MediaSection({ titulo, items, locale, tipo }: { titulo: string; items: ProyectoMedia[]; locale: 'es' | 'en'; tipo: ProyectoMediaTipo }) {
   const plano = tipo === 'plano'
+  const manifiesto = useManifiesto()
   // Las láminas se numeran solo si en esta sección hay algo escrito. Si no hay ni
   // un pie ni una autoría, una columna de números sueltos bajo cada foto sería
   // ruido; y si hay texto, se numeran TODAS para que la serie no salte.
   const numerar = items.some((m) => (locale === 'en' ? m.caption_en : m.caption_es) || m.credito)
+
+  const filas = repartirEnFilas(items.map((m, i) => {
+    const v = manifiesto[m.url]
+    const ratio = !v || !v.h || esVideoUrl(m.url) ? RATIO_APAISADA : v.w / v.h
+    return { m, i, ratio }
+  }))
+
   return (
     <section style={{ maxWidth: site.maxWidth, margin: '0 auto', padding: `0 ${site.gutter} clamp(48px, 8vh, 96px)` }}>
       <Reveal as="h2" style={{ fontSize: display.h2, fontWeight: 300, letterSpacing: '-0.01em', margin: '0 0 clamp(24px, 4vh, 44px)' }}>{titulo}</Reveal>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'clamp(18px, 3vh, 40px)' }}>
-        {items.map((m, i) => {
-          const caption = (locale === 'en' ? m.caption_en : m.caption_es) || ''
-          const isVid = esVideoUrl(m.url)
-          return (
-            <Reveal key={m.url + i}>
-              <figure style={{ margin: 0 }}>
-                <div style={{ width: '100%', overflow: 'hidden', background: plano ? '#fff' : '#e7e5df', border: plano ? `1px solid ${site.color.ink}12` : 'none' }}>
-                  {isVid ? (
-                    // La maqueta orbital se reproduce sola en bucle; el vídeo genérico con controles.
-                    // eslint-disable-next-line jsx-a11y/media-has-caption
-                    <video src={m.url} style={{ width: '100%', height: 'auto', display: 'block' }}
-                      controls={tipo === 'video'} autoPlay={tipo === 'maqueta'} muted={tipo === 'maqueta'} loop={tipo === 'maqueta'} playsInline preload="metadata" />
-                  ) : (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <Img src={m.url} alt={caption} contexto="galeria"
-                      style={{ width: '100%', height: 'auto', display: 'block', objectFit: plano ? 'contain' : 'cover' }} />
-                  )}
-                </div>
-                {numerar && (
-                  // Pie a dos columnas: índice tabular, filete, y el texto en
-                  // MEDIDA CORTA. Ese es el cambio que más hace de todos: un pie a
-                  // todo el ancho de una imagen de 1440 px se lee como un párrafo
-                  // de web; a 44 caracteres se lee como un pie de publicación.
-                  <figcaption className="fig-pie">
-                    <span className="fig-idx">{String(i + 1).padStart(2, '0')}</span>
-                    <span className="fig-txt">
-                      {caption && <span className="fig-desc">{caption}</span>}
-                      {m.credito && (
-                        <span className="fig-cred">
-                          {creditoEtiqueta(tipo, locale)} — {m.credito}
-                        </span>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'clamp(28px, 4.5vh, 56px)' }}>
+        {filas.map((fila, f) => (
+          <Reveal key={fila.laminas[0].m.url + f}>
+            {/* La fila de una sola vertical (número impar en la serie) se queda a
+                media columna en vez de estirarse: una suelta a todo lo ancho
+                rompería el ritmo que acaba de establecer la pareja anterior. */}
+            <div className={fila.clase === 'par' ? (fila.laminas.length === 1 ? 'fig-fila fig-fila--suelta' : 'fig-fila') : 'fig-fila fig-fila--ancha'}>
+              {fila.laminas.map(({ m, i, ratio }) => {
+                const caption = (locale === 'en' ? m.caption_en : m.caption_es) || ''
+                const isVid = esVideoUrl(m.url)
+                return (
+                  <figure key={m.url + i} className="fig-lamina" style={{ margin: 0, flexGrow: ratio }}>
+                    <div className="fig-media" style={{ background: plano ? '#fff' : '#e7e5df', border: plano ? `1px solid ${site.color.ink}12` : 'none' }}>
+                      {isVid ? (
+                        // La maqueta orbital se reproduce sola en bucle; el vídeo genérico con controles.
+                        // eslint-disable-next-line jsx-a11y/media-has-caption
+                        <video src={m.url}
+                          controls={tipo === 'video'} autoPlay={tipo === 'maqueta'} muted={tipo === 'maqueta'} loop={tipo === 'maqueta'} playsInline preload="metadata" />
+                      ) : (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <Img src={m.url} alt={caption} contexto={fila.clase === 'ancha' ? 'galeria' : 'galeriaPar'} />
                       )}
-                    </span>
-                  </figcaption>
-                )}
-              </figure>
-            </Reveal>
-          )
-        })}
+                    </div>
+                    {numerar && (
+                      // Pie a dos columnas: índice tabular, filete, y el texto en
+                      // MEDIDA CORTA. Ese es el cambio que más hace de todos: un pie a
+                      // todo el ancho de una imagen de 1440 px se lee como un párrafo
+                      // de web; a 44 caracteres se lee como un pie de publicación.
+                      <figcaption className="fig-pie">
+                        <span className="fig-idx">{String(i + 1).padStart(2, '0')}</span>
+                        <span className="fig-txt">
+                          {caption && <span className="fig-desc">{caption}</span>}
+                          {m.credito && (
+                            <span className="fig-cred">
+                              {creditoEtiqueta(tipo, locale)} — {m.credito}
+                            </span>
+                          )}
+                        </span>
+                      </figcaption>
+                    )}
+                  </figure>
+                )
+              })}
+            </div>
+          </Reveal>
+        ))}
       </div>
     </section>
   )

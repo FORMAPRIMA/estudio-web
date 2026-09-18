@@ -172,10 +172,26 @@ export const SIZES = {
     '(min-width: 1600px) 410px, (min-width: 1440px) calc((1440px - 10vw - 68px) / 3), ' +
     '(min-width: 980px) 28.4vw, (min-width: 640px) 43.8vw, (min-width: 400px) 90vw, calc(100vw - 40px)',
 
-  /** Bloque de galería: el ancho útil del contenedor. Medido: 1280 px a 1728 px. */
+  /** Lámina de galería a todo el ancho del contenedor (la apaisada, que va sola). */
   galeria:
     '(min-width: 1600px) 1280px, (min-width: 1440px) calc(1440px - 10vw), ' +
     '(min-width: 400px) 90vw, calc(100vw - 40px)',
+
+  /**
+   * Lámina emparejada: dos por fila con gap clamp(16px, 2.4vw, 34px), apiladas a
+   * todo el ancho por debajo de 760 px. Media columna, no una columna entera:
+   * pedir `galeria` aquí se bajaba el doble de píxeles de los que se pintan.
+   */
+  galeriaPar:
+    '(min-width: 1600px) 623px, (min-width: 1440px) calc((1440px - 10vw - 34px) / 2), ' +
+    '(min-width: 761px) calc((90vw - 2.4vw) / 2), (min-width: 400px) 90vw, calc(100vw - 40px)',
+
+  /**
+   * Render que sustituye a la maqueta al pasar el cursor por el showroom: una
+   * placa del 24% del ancho de la ventana (el paso entre maquetas), a media
+   * ventana con dos columnas y casi entera con una sola.
+   */
+  maquetaShowroom: '(min-width: 1024px) 24vw, (min-width: 760px) 36vw, 78vw',
 
   /**
    * Retrato de la ficha de miembro: grid 1fr / 1.2fr con gap clamp(30px, 5vw, 72px),

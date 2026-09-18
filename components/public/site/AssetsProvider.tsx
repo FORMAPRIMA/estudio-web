@@ -16,6 +16,16 @@ export function AssetsProvider({ manifiesto, children }: { manifiesto: Manifiest
   return <AssetsContext.Provider value={manifiesto}>{children}</AssetsContext.Provider>
 }
 
+/**
+ * El manifiesto entero. Lo necesita quien decide la MAQUETA a partir de las
+ * proporciones —la galería de proyecto empareja verticales y deja sola la
+ * apaisada—, porque esa decisión se toma sobre la lista completa y antes de
+ * pintar ninguna imagen, así que no puede resolverse con un hook por <img>.
+ */
+export function useManifiesto(): Manifiesto {
+  return useContext(AssetsContext)
+}
+
 /** Variantes de una URL, o null si no está registrada (se sirve el original). */
 export function useVariantes(url: string | null | undefined): Variantes | null {
   const manifiesto = useContext(AssetsContext)
