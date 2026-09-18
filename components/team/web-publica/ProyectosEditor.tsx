@@ -296,7 +296,7 @@ function ProyectoCard({ proyecto, index, total, onMove, busy, equipo }: {
           {/* Media tipada */}
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <label style={labelStyle}>Galería de la página — fotos, renders, planos, maquetas, vídeos</label>
+              <label style={labelStyle}>Galería de la página — fotos, renders, planimetría, maquetas, vídeos</label>
               <button onClick={() => mediaInput.current?.click()} disabled={anyBusy} style={uploadBtn(anyBusy)}>{uploading === 'media' ? 'Subiendo…' : '+ Añadir imágenes / vídeos'}</button>
               <input ref={mediaInput} type="file" accept="image/*,video/*" multiple hidden onChange={onMediaFiles} />
             </div>
@@ -308,7 +308,7 @@ function ProyectoCard({ proyecto, index, total, onMove, busy, equipo }: {
                     <select value={m.tipo} onChange={(e) => setMedia(i, { tipo: e.target.value as ProyectoMediaTipo })} style={{ ...inputStyle, width: 120, padding: '6px 8px' }}>
                       <option value="foto">Foto</option>
                       <option value="render">Render</option>
-                      <option value="plano">Plano</option>
+                      <option value="plano">Planimetría</option>
                       <option value="maqueta">Maqueta</option>
                       <option value="video">Vídeo</option>
                     </select>
@@ -325,6 +325,11 @@ function ProyectoCard({ proyecto, index, total, onMove, busy, equipo }: {
                 ))}
               </div>
             )}
+            <p style={{ fontSize: 11, color: `${INK}45`, margin: '8px 0 0' }}>
+              La planimetría va en <strong style={{ fontWeight: 500 }}>PNG</strong> (exporta el plano desde el CAD, no subas el PDF) y
+              sale en la ficha entre la maqueta 3D y los renders. El <strong style={{ fontWeight: 500 }}>pie</strong> es donde va el tipo
+              de plano —«Planta baja», «Sección transversal»—, y la <strong style={{ fontWeight: 500 }}>autoría</strong>, quién lo delineó.
+            </p>
           </div>
 
           {/* Maqueta 3D interactiva (GLB) */}

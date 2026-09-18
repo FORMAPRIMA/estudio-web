@@ -21,12 +21,16 @@ const ModeloViewer = dynamic(() => import('./ModeloViewer'), {
   ),
 })
 
+// El orden de esta lista ES el orden de la ficha. La planimetría abre la serie
+// —justo detrás de la maqueta 3D y delante de los renders— porque es el registro
+// que explica el proyecto: primero se entiende la planta, después se mira la
+// imagen. El resto va como estaba.
 const GRUPOS: { tipo: ProyectoMediaTipo; es: string; en: string }[] = [
-  { tipo: 'foto',    es: 'Fotografías',       en: 'Photography' },
-  { tipo: 'render',  es: 'Renders',           en: 'Renders' },
-  { tipo: 'plano',   es: 'Planos y esquemas', en: 'Drawings & diagrams' },
-  { tipo: 'maqueta', es: 'Maqueta',           en: 'Model' },
-  { tipo: 'video',   es: 'Vídeo',             en: 'Video' },
+  { tipo: 'plano',   es: 'Planimetría',  en: 'Drawings' },
+  { tipo: 'foto',    es: 'Fotografías',  en: 'Photography' },
+  { tipo: 'render',  es: 'Renders',      en: 'Renders' },
+  { tipo: 'maqueta', es: 'Maqueta',      en: 'Model' },
+  { tipo: 'video',   es: 'Vídeo',        en: 'Video' },
 ]
 
 export function ProyectoDetalle({ proyecto, equipo = [] }: { proyecto: WebProyecto; equipo?: WebEquipo[] }) {
