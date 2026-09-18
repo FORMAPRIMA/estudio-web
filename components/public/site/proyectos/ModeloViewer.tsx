@@ -15,6 +15,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, Center, useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
 import { site } from '../theme'
+import { useSite } from '../SiteProvider'
 
 const FOV = 42
 /** Fracción del lienzo que la maqueta puede llegar a ocupar con el zoom al máximo.
@@ -173,31 +174,120 @@ function Sombra({ medidas }: { medidas: Medidas | null }) {
   )
 }
 
+/**
+ * El visor está BLOQUEADO hasta que se pulsa.
+ *
+ * Un lienzo 3D en mitad de una página larga se queda con la rueda del ratón: al
+ * bajar por la ficha, el cursor cruza la maqueta y lo que era un scroll se
+ * convierte en un zoom. La página deja de responder a lo que el visitante cree
+ * que está haciendo, y además el encuadre de la maqueta queda deshecho.
+ *
+ * La solución es la de Sketchfab y la de los mapas embebidos: la interacción 3D
+ * no se hereda de pasar por encima, se pide. Hasta ese clic un velo cubre el
+ * lienzo y la rueda es de la página; la maqueta sigue girando sola, que es lo
+ * que invita a pulsar. Tres salidas devuelven la rueda a la página —Escape, un
+ * clic fuera, o que el visor se salga de pantalla al seguir bajando—, y ninguna
+ * exige puntería: nadie se queda atrapado dentro del visor.
+ */
 export default function ModeloViewer({ url }: { url: string }) {
+  const { locale } = useSite()
   const [medidas, setMedidas] = useState<Medidas | null>(null)
+  const [activo, setActivo] = useState(false)
+  const caja = useRef<HTMLDivElement>(null)
   const controls = useRef<any>(null)
   const onMedir = useCallback((m: Medidas) => setMedidas(m), [])
 
+  useEffect(() => {
+    if (!activo) return
+    const tecla = (e: KeyboardEvent) => { if (e.key === 'Escape') setActivo(false) }
+    const fuera = (e: PointerEvent) => {
+      if (caja.current && !caja.current.contains(e.target as Node)) setActivo(false)
+    }
+    // Seguir bajando por la ficha también suelta el visor: si ya no se ve, no
+    // tiene por qué seguir quedándose con la rueda.
+    const io = new IntersectionObserver(([e]) => { if (!e.isIntersecting) setActivo(false) }, { threshold: 0.3 })
+    if (caja.current) io.observe(caja.current)
+    window.addEventListener('keydown', tecla)
+    window.addEventListener('pointerdown', fuera)
+    return () => {
+      window.removeEventListener('keydown', tecla)
+      window.removeEventListener('pointerdown', fuera)
+      io.disconnect()
+    }
+  }, [activo])
+
   return (
-    <Canvas camera={{ fov: FOV, position: [3, 1.8, 4] }} dpr={[1, 2]} style={{ width: '100%', height: '100%' }}>
-      <color attach="background" args={[site.color.cream]} />
-      <ambientLight intensity={0.65} />
-      <directionalLight position={[6, 8, 6]} intensity={1.15} />
-      <directionalLight position={[-6, 4, -4]} intensity={0.4} />
-      <Suspense fallback={null}>
-        {/* <Center> deja el modelo centrado en el origen, que es lo que da por
-            supuesto el cálculo de la esfera envolvente. */}
-        <Center>
-          <Modelo url={url} onMedir={onMedir} />
-        </Center>
-        <Sombra medidas={medidas} />
-      </Suspense>
-      <Encuadre medidas={medidas} controls={controls} />
-      <OrbitControls ref={controls} enablePan={false} autoRotate autoRotateSpeed={0.6}
-        // Suelo de la órbita: mirar una maqueta desde debajo del terreno no
-        // enseña nada y rompe la sombra de contacto.
-        maxPolarAngle={Math.PI / 2 - 0.04}
-        minPolarAngle={0.12} />
-    </Canvas>
+    <div ref={caja} className={`maqueta${activo ? ' maqueta--activa' : ''}`}>
+      <Canvas camera={{ fov: FOV, position: [3, 1.8, 4] }} dpr={[1, 2]}
+        style={{ width: '100%', height: '100%', touchAction: activo ? 'none' : 'pan-y' }}>
+        <color attach="background" args={[site.color.cream]} />
+        <ambientLight intensity={0.65} />
+        <directionalLight position={[6, 8, 6]} intensity={1.15} />
+        <directionalLight position={[-6, 4, -4]} intensity={0.4} />
+        <Suspense fallback={null}>
+          {/* <Center> deja el modelo centrado en el origen, que es lo que da por
+              supuesto el cálculo de la esfera envolvente. */}
+          <Center>
+            <Modelo url={url} onMedir={onMedir} />
+          </Center>
+          <Sombra medidas={medidas} />
+        </Suspense>
+        <Encuadre medidas={medidas} controls={controls} />
+        {/* `enabled` se queda en true y lo que se apaga son los dos gestos: con
+            los controles deshabilitados del todo, drei se salta el update() y la
+            maqueta dejaría de girar sola, que es justo el reclamo. */}
+        <OrbitControls ref={controls} enablePan={false}
+          enableZoom={activo} enableRotate={activo}
+          autoRotate={!activo} autoRotateSpeed={0.6}
+          // Suelo de la órbita: mirar una maqueta desde debajo del terreno no
+          // enseña nada y rompe la sombra de contacto.
+          maxPolarAngle={Math.PI / 2 - 0.04}
+          minPolarAngle={0.12} />
+      </Canvas>
+
+      {!activo && (
+        <button type="button" className="maqueta-velo" onClick={() => setActivo(true)}
+          aria-label={locale === 'en' ? 'Activate the 3D model' : 'Activar la maqueta 3D'}>
+          <span className="maqueta-chapa">{locale === 'en' ? 'Click to explore' : 'Pulsa para explorar'}</span>
+        </button>
+      )}
+      {activo && (
+        <span className="maqueta-salida" aria-hidden>{locale === 'en' ? 'Esc to exit' : 'Esc para salir'}</span>
+      )}
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        .maqueta { position: relative; width: 100%; height: 100%; }
+        /* El velo no pinta nada encima de la maqueta: solo se queda con el ratón.
+           Es un <button> y no un <div> para que también se llegue con el tabulador. */
+        .maqueta-velo {
+          position: absolute; inset: 0;
+          display: flex; align-items: flex-end; justify-content: center;
+          padding-bottom: 6%;
+          background: none; border: 0; cursor: pointer;
+          font: inherit; color: inherit;
+        }
+        .maqueta-chapa, .maqueta-salida {
+          font-size: 10px;
+          letter-spacing: ${site.track.normal};
+          text-transform: uppercase;
+          padding: 7px 14px;
+          border: 1px solid ${site.color.ink}1f;
+          border-radius: 999px;
+          background: ${site.color.cream}d9;
+          backdrop-filter: blur(2px);
+        }
+        .maqueta-chapa { opacity: 0.5; transition: opacity 0.25s ease, border-color 0.25s ease; }
+        .maqueta-velo:hover .maqueta-chapa,
+        .maqueta-velo:focus-visible .maqueta-chapa { opacity: 0.92; border-color: ${site.color.ink}3d; }
+        .maqueta-velo:focus { outline: none; }
+
+        .maqueta-salida {
+          position: absolute; top: 10px; right: 10px;
+          opacity: 0.55; pointer-events: none;
+        }
+        .maqueta--activa { cursor: grab; }
+        .maqueta--activa:active { cursor: grabbing; }
+      ` }} />
+    </div>
   )
 }
