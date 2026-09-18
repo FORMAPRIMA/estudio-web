@@ -149,7 +149,7 @@ Funnel comercial completo. Acceso: `fp_partner`, `fp_manager`, `fp_biz_dev`.
 - **Business development** (`/team/captacion/business-development`) — CRM estratégico de **partners** (agencias, promotoras, fondos, family offices, prescriptores, constructoras…), distinto de Leads (que son clientes potenciales). Port fiel del artifact de Ana ("CRM estratégico Forma Prima"), restilado a la plataforma. Acceso: `fp_partner`, `fp_manager`, `fp_biz_dev` (sub-tab justo encima de Leads).
   - **Motor de scoring** (`lib/business-development/engine.ts`, port de `crm-data.js`): 7 criterios (potencial, fit, valor, acceso, temporalidad, posicionamiento, facilidad) + bonuses/penalties → `finalScore`/`tierOf`; métricas derivadas `deriveMetrics` (EBV/PTC/ROE/timing/partnership type); regla de elegibilidad `applyEligibility` (exclusión de constructoras de Madrid, con excepciones); `leadReminder`, `strategicRecommendation`. Tipos en `types.ts`; `seed.ts` = 58 empresas (fallback si la migración no está aplicada).
   - **12 vistas** (componente único `components/team/business-development/BusinessDevelopmentClient.tsx`, clase React con `React.createElement`, `// @ts-nocheck`): Executive Dashboard · Weekly Update (IA en lenguaje natural) · Weekly Update Log (con deshacer) · Lead Reminders · tablas España/Ecuador/México/Master · Priority Ranking · Pipeline · Research Queue · Partner Profiles · Action Center · Import/Export Excel (paquete `xlsx`) · Admin & Reglas · ficha por empresa. Sub-nav lateral clara propia dentro del contenido.
-  - **Persistencia**: `app/actions/business-development.ts` (`requireCaptacionRole`, service_role) — `getBusinessDevelopmentData`, `saveCompanies` (upsert del array completo), `replaceWeeklyLog`, `setRule`, `restoreSeed`, `crearLeadDesdePartner`. Tablas `bd_companies`/`bd_weekly_log`/`bd_config` (RLS sin políticas). **Migración `business_development.sql` pendiente de ejecutar** (hasta entonces usa el SEED en solo-lectura).
+  - **Persistencia**: `app/actions/business-development.ts` (`requireCaptacionRole`, service_role) — `getBusinessDevelopmentData`, `saveCompanies` (upsert del array completo), `replaceWeeklyLog`, `setRule`, `restoreSeed`, `crearLeadDesdePartner`. Tablas `bd_companies`/`bd_weekly_log`/`bd_config` (RLS sin políticas). Migración `business_development.sql` ✅ aplicada (verificado 18 sep 2026). El SEED de `seed.ts` ya solo es fallback.
   - **IA**: `app/api/business-development/asistente/route.ts` (Claude Haiku) — redacta hipótesis comercial y interpreta el Weekly Update. Con fallback heurístico.
   - **Puente con Leads**: botón "Generar lead" en la ficha → `crearLeadDesdePartner` inserta en `leads` (`origen='Business development'`, `bd_company_id`), sin duplicar.
 - **Leads** — `app/actions/leads.ts` + `LeadsPage.tsx`
@@ -332,7 +332,7 @@ Aplicaciones internas. Acceso: todos los roles FP.
   - `lib/repasos/domain.ts` (tipos, `OFICIOS`, `ESTADOS`, `VISIBILIDADES`, `esVisiblePara`, `nextCodigo`, filtros) · `lib/repasos/data.ts` (**no es `'use server'` a propósito**: si `loadProyectoData` fuese Server Action, cualquiera podría pedir los repasos internos de un proyecto) · `lib/repasos/auth.ts` (validación de token) · `lib/repasos/upload.ts` (compresión de fotos, rasterizado de planos)
   - `app/actions/repasos.ts` — todas las mutaciones (`requireAnyFP()`)
   - Estilos en clases `.rp-*` al final de `app/globals.css` (mobile-first; desktop a partir de `min-width: 1024px`, el mismo breakpoint donde el layout de `/team` quita la barra superior de 56 px)
-  - Tablas `repaso_*` + bucket público `repasos`. Solo `service_role` (RLS sin políticas). **Migración `repasos_obra.sql` pendiente de ejecutar**
+  - Tablas `repaso_*` + bucket público `repasos`. Solo `service_role` (RLS sin políticas). Migración `repasos_obra.sql` ✅ aplicada (verificado 18 sep 2026)
 
 - **Control de obra** (`/team/apps/control-obra`) — **`fp_partner` + allowlist por email** (`CONTROL_OBRA_ALLOWED_EMAILS` en `lib/control-obra/domain.ts`; incluye a Aitana `acascante@formaprima.es`) — `components/team/control-obra/ControlObraPage.tsx`
   - Control económico de obra por proyecto. Parte de un **baseline congelado** (presupuesto firmado) y registra los cambios encima (subidas de precio, cantidades, partidas nuevas, partidas no ejecutadas), con motivo interno y comentario para el cliente.
@@ -358,7 +358,7 @@ Aplicaciones internas. Acceso: todos los roles FP.
   - `components/pdfs/DossierBancarioPDF.tsx` y `components/pdfs/PropuestaTraspasoPDF.tsx` (patrón import dinámico; formateadores con `useGrouping:'always'` para uniformar miles)
   - `app/api/modelo-cafe/{dossier-pdf,propuesta-pdf}/route.ts` — POST que renderizan los PDFs (`fp_partner`)
   - `app/actions/modelo-cafe.ts` — CRUD de escenarios + `getCapex()`/`saveCapex()` (`requirePartner()`)
-  - Tablas `modelo_cafe_escenarios` (inputs jsonb, es_base; seed escenario base) y `modelo_cafe_capex` (items jsonb, fila única 'default'). Solo `service_role` (RLS sin políticas). **Migración `modelo_cafe_capex.sql` pendiente de ejecutar** (hasta entonces el CAPEX usa los valores por defecto y el guardado avisa)
+  - Tablas `modelo_cafe_escenarios` (inputs jsonb, es_base; seed escenario base) y `modelo_cafe_capex` (items jsonb, fila única 'default'). Solo `service_role` (RLS sin políticas). Migración `modelo_cafe_capex.sql` ✅ aplicada (verificado 18 sep 2026). `CAPEX_DEFAULT` ya solo es el punto de partida de una instalación nueva
 
 ### 5.9 Marketing (`/team/marketing`) — `fp_partner`, `fp_biz_dev`
 Gestión de contenido para redes sociales.
@@ -404,8 +404,8 @@ Gestión de contenido para redes sociales.
   - Autoguardado con debounce + preview optimista; sin botón de guardar. `app/actions/web-design.ts`
     (`saveBlockEstilo` merge sobre el jsonb, `saveBlockTexto` — en móvil activa `mobile_override` —,
     `setInterruptor`).
-  - **Migración `web_design.sql` pendiente de ejecutar** (columnas `estilo` + `encaje`). Hasta
-    entonces el sitio se ve igual (la lectura reintenta sin la columna) pero **guardar avisa**.
+  - Migración `web_design.sql` ✅ aplicada (verificado 18 sep 2026) — columnas `estilo` + `encaje`. El reintento
+    de lectura sin la columna y el aviso al guardar ya no hacen falta.
   - Cableado hoy: **Home** (portada: antetítulo, titular, subtítulo). Siguientes: Estudio y
     Proyectos, y después el encaje de imágenes (recorte no destructivo con `encaje`: focal + zoom).
 
@@ -484,9 +484,9 @@ denormalizado por obra; **no comparten tablas** (sería la migración natural si
 - `app/actions/warehouse.ts` (items, favoritos, subcapítulos) · `app/actions/memorias.ts` (estancias e items)
 - Tablas `presupuesto_*`, `warehouse_items`, `warehouse_favoritos`, `memoria_estancias`,
   `memoria_estancia_items` + bucket público `warehouse`. Solo `service_role`.
-  `memorias_calidad_v2.sql` ✅ ejecutada · **`memorias_calidad_v3_niveles_iva.sql` pendiente de ejecutar**
-  (multi-nivel, favoritos en tabla y precios con IVA). Hasta entonces `normalizarWarehouseItem` /
-  `normalizarEstanciaItem` traducen las filas del esquema antiguo para que las pantallas no se caigan.
+  `memorias_calidad_v2.sql` y `memorias_calidad_v3_niveles_iva.sql` ✅ aplicadas (verificado 18 sep 2026) —
+  multi-nivel, favoritos en tabla y precios con IVA. `normalizarWarehouseItem` /
+  `normalizarEstanciaItem` traducían el esquema antiguo y ya no tienen nada que traducir.
 - Pendiente: manual PDF del módulo (el anterior describía el flujo FPE y se eliminó)
 
 ### 5.11 Time Tracker (`/team/time-tracker`)
@@ -520,8 +520,8 @@ Registro de horas por proyecto y fase. Todos los roles FP.
 - `visible_para text[]` restringe la categoría a ciertas personas (mismo patrón que `ofertas_fp`).
 - 🔴 Los prefijos `IPROJ_`/`OFERTA_` están reservados: una categoría con ese código se confundiría con un
   proyecto interno o una oferta.
-- **Migración `timetracker_categorias.sql` pendiente de ejecutar**. Hasta entonces `CATEGORIAS_FALLBACK`
-  mantiene las 9 de siempre en la rejilla y el editor se muestra en solo lectura con un aviso.
+- Migración `timetracker_categorias.sql` ✅ aplicada (verificado 18 sep 2026). `CATEGORIAS_FALLBACK` y el editor en
+  solo lectura eran para antes de aplicarla; ya no se activan.
 - Ojo: el **calendario de equipo** (`calendario_eventos`, con visto bueno de socios) es un sistema
   paralelo y desconectado — pedir vacaciones ahí no las marca en la rejilla.
 
@@ -1011,13 +1011,13 @@ actualizarlo en **ambos**: `lib/types/index.ts` Y `middleware.ts`.
 - Naming audit completo: `create/update/send` prefijos, variables descriptivas
 - Design Hunter (multiselección, vídeos, thumbnails, lightbox, vista Stories)
 - Marketing Post Manager (kanban, tabs Instagram/LinkedIn, media upload, flujo de aprobación, avisos)
-- Repasos de obra (pins sobre plano, visibilidad de 3 niveles, enlaces externos, trazabilidad) — **pendiente ejecutar `repasos_obra.sql`**
+- Repasos de obra (pins sobre plano, visibilidad de 3 niveles, enlaces externos, trazabilidad)
 - Time Tracker: categorías internas gestionables desde la UI con tipo `trabajo_interno`/`ausencia`, y
-  análisis que separa horas marcadas de horas trabajadas — **pendiente ejecutar `timetracker_categorias.sql`**
+  análisis que separa horas marcadas de horas trabajadas
 - Memorias de calidades v2 + v3: warehouse por subcapítulo con productos multi-nivel y Favorito FP por
   nivel, precios con y sin IVA, modo cliente, alta por URL con IA, memoria de anteproyecto automática y
   memoria de ejecución por estancias con control económico y PDF por proveedor
-  — **pendiente ejecutar `memorias_calidad_v3_niveles_iva.sql`**; falta el manual PDF del módulo
+  — falta el manual PDF del módulo
 
 ### 🚧 En progreso / incompleto
 - `/team/finanzas/facturacion/dashboard` — ruta existe pero redirige o está vacía
@@ -1026,6 +1026,13 @@ actualizarlo en **ambos**: `lib/types/index.ts` Y `middleware.ts`.
 - `/team/marketing/time-tracker-sections` — placeholder, en desarrollo
 
 ### 📋 Notas de deuda técnica
+- **Fallbacks de migración ya muertos.** Las seis migraciones que este fichero daba por pendientes
+  están aplicadas (verificado contra la BD el 18 sep 2026). El código que las esperaba sigue ahí y
+  ya no se activa nunca: `CATEGORIAS_FALLBACK` (time tracker), `CAPEX_DEFAULT` como modo solo
+  lectura (modelo café), el SEED en solo lectura de business development, `normalizarWarehouseItem`
+  / `normalizarEstanciaItem` (memorias), el reintento de lectura sin `estilo` y el aviso al guardar
+  (Modo Diseño), y el fallback sin `clientes_ids` en `facturacion/control/[id]/page.tsx`. Quitarlo
+  es seguro pero conviene hacerlo módulo a módulo, comprobando en cada uno que la columna está.
 - `next.config.mjs` usa `serverExternalPackages` (key de Next.js 15), genera warning en Next.js 14. Funciona pero produce un warning de config en cada build.
 - Los estilos inline en el área interna hacen el código verboso. No hay plan de migrar a Tailwind (decisión consciente para control total de UI).
 - `lib/data/mock.ts` usa datos estáticos para la web pública. No hay CMS conectado.
