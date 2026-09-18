@@ -12,7 +12,18 @@ export default async function Page() {
   // La parrilla de Proyectos es el grid de maquetas 3D: proyectos con GLB subido.
   const maquetas: MaquetaItem[] = proyectos
     .filter((p) => p.glb_url && p.slug)
-    .map((p) => ({ slug: p.slug as string, nombre: p.nombre, eyebrow: p.tipologia_es || p.nota, glb_url: p.glb_url as string }))
+    .map((p) => ({
+      slug: p.slug as string,
+      nombre: p.nombre,
+      eyebrow: p.tipologia_es || p.nota,
+      eyebrow_en: p.tipologia_en || p.nota,
+      // El showroom enseña el arranque de la ficha y su render principal: la
+      // misma descripción y la misma foto, no un segundo texto que mantener.
+      descripcion: p.descripcion_es,
+      descripcion_en: p.descripcion_en,
+      hero_url: p.hero_url,
+      glb_url: p.glb_url as string,
+    }))
 
   // Sin maquetas todavía → parrilla editorial de respaldo (para no dejarlo vacío).
   if (maquetas.length === 0) {
