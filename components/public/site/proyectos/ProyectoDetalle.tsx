@@ -162,25 +162,38 @@ export function ProyectoDetalle({ proyecto, equipo = [] }: { proyecto: WebProyec
         .fig-fila--ancha { --lamina-alto: clamp(360px, 88vh, 920px); }
         /* Una vertical suelta (serie impar) se queda a media columna, con el
            mismo eje izquierdo que la pareja de arriba. */
-        .fig-fila--suelta .fig-lamina { max-width: calc(50% - clamp(8px, 1.2vw, 17px)); }
+        .fig-fila--suelta .fig-lamina {
+          max-width: min(calc(50% - clamp(8px, 1.2vw, 17px)),
+                         calc(var(--lamina-alto, clamp(360px, 84vh, 880px)) * var(--ratio, 999)));
+        }
 
-        .fig-lamina { flex: 1 1 0; min-width: 0; }
+        /* El tope de alto se aplica AQUÍ, como tope de ancho derivado de la
+           proporción de la lámina (--ratio, que pone la figura), y no como un
+           max-height sobre el bitmap. Un max-height junto a width: 100% no
+           reduce el ancho: recorta el alto y deja la imagen estirada — es lo que
+           aplastaba los planos apaisados (un 4:3 se pintaba a 1,57:1). Traducido
+           a ancho, la proporción se mantiene siempre y el alto nunca se pasa.
+           Sin --ratio (proporción desconocida) no hay tope: nunca se deforma. */
+        .fig-lamina {
+          flex: 1 1 0;
+          min-width: 0;
+          max-width: calc(var(--lamina-alto, clamp(360px, 84vh, 880px)) * var(--ratio, 999));
+        }
         .fig-media { overflow: hidden; line-height: 0; }
         /* El <picture> del componente Img no debe interponer una caja entre el
-           contenedor y el bitmap: sin esto el tope de alto no lo alcanza. */
+           contenedor y el bitmap: sin esto la lámina no gobierna el ancho. */
         .fig-media picture { display: contents; }
         .fig-media img,
         .fig-media video {
           display: block;
           width: 100%;
           height: auto;
-          max-height: var(--lamina-alto, clamp(360px, 84vh, 880px));
         }
         @media (max-width: 760px) {
           /* En una columna estrecha no hay pareja que valga: cada lámina a todo
              el ancho, y sin tope de alto —el ancho ya es el tope. */
           .fig-fila { flex-direction: column; gap: clamp(28px, 5vh, 48px); }
-          .fig-fila--suelta .fig-lamina { max-width: 100%; }
+          .fig-lamina, .fig-fila--suelta .fig-lamina { max-width: 100%; }
           .fig-lamina, .fig-fila--ancha { --lamina-alto: none; }
         }
 
@@ -317,7 +330,11 @@ function creditoEtiqueta(tipo: ProyectoMediaTipo, locale: 'es' | 'en') {
  */
 const RATIO_APAISADA = 1.2
 
-type Lamina = { m: ProyectoMedia; i: number; ratio: number }
+// `ratio` es el del REPARTO (apaisada o no) y `ratioReal` el de la imagen, que
+// solo se conoce si está en el manifiesto. Se separan porque el vídeo se reparte
+// como apaisado aunque su proporción sea otra, y porque una lámina de proporción
+// desconocida no debe recibir un tope de ancho inventado: sin ratioReal no hay tope.
+type Lamina = { m: ProyectoMedia; i: number; ratio: number; ratioReal: number | null }
 type Fila = { clase: 'ancha'; laminas: [Lamina] } | { clase: 'par'; laminas: Lamina[] }
 
 function repartirEnFilas(laminas: Lamina[]): Fila[] {
@@ -350,8 +367,9 @@ function MediaSection({ titulo, items, locale, tipo }: { titulo: string; items: 
 
   const filas = repartirEnFilas(items.map((m, i) => {
     const v = manifiesto[m.url]
-    const ratio = !v || !v.h || esVideoUrl(m.url) ? RATIO_APAISADA : v.w / v.h
-    return { m, i, ratio }
+    const ratioReal = v && v.h ? v.w / v.h : null
+    const ratio = ratioReal === null || esVideoUrl(m.url) ? RATIO_APAISADA : ratioReal
+    return { m, i, ratio, ratioReal }
   }))
 
   return (
@@ -364,12 +382,16 @@ function MediaSection({ titulo, items, locale, tipo }: { titulo: string; items: 
                 media columna en vez de estirarse: una suelta a todo lo ancho
                 rompería el ritmo que acaba de establecer la pareja anterior. */}
             <div className={fila.clase === 'par' ? (fila.laminas.length === 1 ? 'fig-fila fig-fila--suelta' : 'fig-fila') : 'fig-fila fig-fila--ancha'}>
-              {fila.laminas.map(({ m, i, ratio }) => {
+              {fila.laminas.map(({ m, i, ratio, ratioReal }) => {
                 const caption = (locale === 'en' ? m.caption_en : m.caption_es) || ''
                 const isVid = esVideoUrl(m.url)
                 return (
-                  <figure key={m.url + i} className="fig-lamina" style={{ margin: 0, flexGrow: ratio }}>
-                    <div className="fig-media" style={{ background: plano ? '#fff' : '#e7e5df', border: plano ? `1px solid ${site.color.ink}12` : 'none' }}>
+                  <figure key={m.url + i} className="fig-lamina" style={{ margin: 0, flexGrow: ratio, '--ratio': ratioReal ?? 999 } as React.CSSProperties}>
+                    {/* La planimetría llega en PNG con canal alfa: va sin fondo y sin
+                        borde, para que el papel del plano sea la propia hoja crema de la
+                        página y no una ventana blanca recortada encima. Las demás láminas
+                        conservan el gris de reserva, que es lo que se ve mientras carga. */}
+                    <div className="fig-media" style={{ background: plano ? 'transparent' : '#e7e5df' }}>
                       {isVid ? (
                         // La maqueta orbital se reproduce sola en bucle; el vídeo genérico con controles.
                         // eslint-disable-next-line jsx-a11y/media-has-caption
