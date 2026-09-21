@@ -1,5 +1,6 @@
 import type { MetadataRoute } from 'next'
 import { SITE_URL } from '@/lib/web-publica/base'
+import { TABS, TABS_VISIBLES } from '@/lib/web-publica/navegacion'
 import { getWebProyectosPublic } from '@/app/actions/web-publica'
 import { getPropiedadesPublic } from '@/app/actions/web-propiedades'
 import { getEquipoPublic } from '@/app/actions/web-equipo'
@@ -20,16 +21,30 @@ import { getFpToolsIndice } from '@/app/actions/web-fp-tools'
  */
 export const dynamic = 'force-dynamic'
 
-/** Las páginas que existen siempre, estén o no llenas. */
+/** Cada sección con el peso que se le da. La lista de secciones NO se repite
+ *  aquí: sale de la navegación, así que una sección oculta desaparece del sitemap
+ *  sola, sin que nadie tenga que acordarse. */
+const PESO: Record<string, { prioridad: number; frecuencia: 'weekly' | 'monthly' }> = {
+  '/estudio':     { prioridad: 0.8, frecuencia: 'monthly' },
+  '/proyectos':   { prioridad: 0.9, frecuencia: 'weekly'  },
+  '/mapa':        { prioridad: 0.7, frecuencia: 'monthly' },
+  '/fp-tools':    { prioridad: 0.8, frecuencia: 'monthly' },
+  '/real-estate': { prioridad: 0.8, frecuencia: 'weekly'  },
+  '/contacto':    { prioridad: 0.6, frecuencia: 'monthly' },
+}
+
 const FIJAS: { ruta: string; prioridad: number; frecuencia: 'weekly' | 'monthly' }[] = [
-  { ruta: '',             prioridad: 1.0,  frecuencia: 'weekly'  },
-  { ruta: '/estudio',     prioridad: 0.8,  frecuencia: 'monthly' },
-  { ruta: '/proyectos',   prioridad: 0.9,  frecuencia: 'weekly'  },
-  { ruta: '/mapa',        prioridad: 0.7,  frecuencia: 'monthly' },
-  { ruta: '/fp-tools',    prioridad: 0.8,  frecuencia: 'monthly' },
-  { ruta: '/real-estate', prioridad: 0.8,  frecuencia: 'weekly'  },
-  { ruta: '/contacto',    prioridad: 0.6,  frecuencia: 'monthly' },
+  { ruta: '', prioridad: 1.0, frecuencia: 'weekly' },   // la Home
+  ...TABS_VISIBLES.map((t) => ({
+    ruta: t.path,
+    prioridad: PESO[t.path]?.prioridad ?? 0.6,
+    frecuencia: PESO[t.path]?.frecuencia ?? ('monthly' as const),
+  })),
 ]
+
+/** Las fichas de una sección oculta tampoco se ofrecen: de nada sirve esconder
+ *  /real-estate si el sitemap sigue listando cada propiedad. */
+const OCULTA = (ruta: string) => TABS.some((t) => t.oculta && ruta.startsWith(`${t.path}/`))
 
 async function seguro<T>(p: Promise<T>, quien: string, vacio: T): Promise<T> {
   try { return await p } catch (e) {
@@ -62,7 +77,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: f.frecuencia,
       priority: f.prioridad,
     })),
-    ...fichas.map((f) => ({
+    ...fichas.filter((f) => !OCULTA(f.ruta)).map((f) => ({
       url: `${SITE_URL}${f.ruta}`,
       lastModified: ahora,
       changeFrequency: 'monthly' as const,

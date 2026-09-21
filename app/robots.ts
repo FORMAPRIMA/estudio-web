@@ -1,5 +1,6 @@
 import type { MetadataRoute } from 'next'
 import { SITE_URL } from '@/lib/web-publica/base'
+import { RUTAS_OCULTAS } from '@/lib/web-publica/navegacion'
 
 /**
  * robots.txt.
@@ -32,6 +33,10 @@ export default function robots(): MetadataRoute.Robots {
         '/quiniela',
         '/repasos',
         '/cumple-macarena',
+        // Secciones del sitio todavía en construcción. Siguen respondiendo por
+        // URL directa —se están montando— pero no se ofrecen al rastreador: una
+        // sección a medias indexada es peor que una sección sin indexar.
+        ...RUTAS_OCULTAS,
       ],
     },
     sitemap: `${SITE_URL}/sitemap.xml`,

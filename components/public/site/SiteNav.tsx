@@ -4,17 +4,10 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { site } from './theme'
+import { TABS_VISIBLES } from '@/lib/web-publica/navegacion'
 import { useSite, href, SITE_BASE } from './SiteProvider'
 import type { Locale } from '@/lib/web-publica'
 
-const TABS: { path: string; es: string; en: string }[] = [
-  { path: '/estudio',     es: 'Estudio',     en: 'Studio' },
-  { path: '/proyectos',   es: 'Proyectos',   en: 'Projects' },
-  { path: '/mapa',        es: 'Mapa',        en: 'Map' },
-  { path: '/fp-tools',    es: 'FP Tools',    en: 'FP Tools' },
-  { path: '/real-estate', es: 'Real Estate', en: 'Real Estate' },
-  { path: '/contacto',    es: 'Contacto',    en: 'Contact' },
-]
 
 // Umbrales del gesto móvil, en PÍXELES de arrastre, no en energía del resorte.
 // El resorte está amortiguado y no es monótono: soltando en distinto punto de la
@@ -267,7 +260,7 @@ export function SiteNav() {
 
         {/* Tabs (desktop) */}
         <nav className="site-nav-desktop" style={{ display: 'flex', gap: 34, alignItems: 'center', position: 'relative' }}>
-          {TABS.map((t) => (
+          {TABS_VISIBLES.map((t) => (
             <Link key={t.path} href={href(t.path)} className="site-tab" data-cursor=""
               data-active={isActive(t.path) ? '1' : undefined} style={{ color: fg }}>
               <span className="site-tab-txt">{locale === 'en' ? t.en : t.es}</span>
@@ -309,7 +302,7 @@ export function SiteNav() {
             style={{ background: 'none', border: 'none', color: '#fff', fontSize: 26, cursor: 'pointer', lineHeight: 1 }}>×</button>
         </div>
         <nav style={{ display: 'flex', flexDirection: 'column', gap: 22, marginTop: 40 }}>
-          {TABS.map((t) => (
+          {TABS_VISIBLES.map((t) => (
             <Link key={t.path} href={href(t.path)} onClick={cerrarMenu}
               style={{ fontSize: 26, fontWeight: 300, letterSpacing: '0.02em', color: '#fff', textDecoration: 'none' }}>
               {locale === 'en' ? t.en : t.es}

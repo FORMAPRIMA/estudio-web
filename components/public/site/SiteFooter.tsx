@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import { site, display } from './theme'
 import { useSite, href, SITE_BASE } from './SiteProvider'
 import { Reveal } from './Reveal'
+import { TABS_VISIBLES } from '@/lib/web-publica/navegacion'
 
 // Cierre del sitio. Va EN EL FLUJO al final de cada página, no como barra fija:
 // un footer flotante que aparece y desaparece no puede sostener columnas de
@@ -19,14 +20,6 @@ const ISOTIPO = '/ISOTIPO%20NEGRO%20cropped.png'
 const WORDMARK = '/FORMA_PRIMA_NEGRO.png'
 const INSTAGRAM = 'https://www.instagram.com/forma.prima/'
 
-const TABS: { path: string; es: string; en: string }[] = [
-  { path: '/estudio',     es: 'Estudio',     en: 'Studio' },
-  { path: '/proyectos',   es: 'Proyectos',   en: 'Projects' },
-  { path: '/mapa',        es: 'Mapa',        en: 'Map' },
-  { path: '/fp-tools',    es: 'FP Tools',    en: 'FP Tools' },
-  { path: '/real-estate', es: 'Real Estate', en: 'Real Estate' },
-  { path: '/contacto',    es: 'Contacto',    en: 'Contact' },
-]
 
 export interface FooterDatos {
   email: string
@@ -89,7 +82,7 @@ export function SiteFooter({ datos, anio }: { datos: FooterDatos; anio: number }
 
           <Reveal y={18} delay={120}>
             <Columna titulo={t('Navegación', 'Navigation')}>
-              {TABS.map((tab) => (
+              {TABS_VISIBLES.map((tab) => (
                 <Enlace key={tab.path} href={href(tab.path)}>{locale === 'en' ? tab.en : tab.es}</Enlace>
               ))}
             </Columna>
