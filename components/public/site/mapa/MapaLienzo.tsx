@@ -102,7 +102,7 @@ function soportaMapa() {
   }
 }
 
-export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar, onSeleccionar, margenes = SIN_MARGENES, reencuadre = 0, sedeEncuadre = SEDE_CASA, onFallo }: {
+export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar, onSeleccionar, margenes = SIN_MARGENES, reencuadre = 0, sedeEncuadre = SEDE_CASA, entradaAutomatica = false, onFallo }: {
   puntos: MapaPunto[]
   /**
    * DOS estados y no uno, porque son dos intenciones distintas.
@@ -130,6 +130,14 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
   reencuadre?: number
   /** A qué sede encuadra el contador de arriba. */
   sedeEncuadre?: SedeCodigo
+  /**
+   * La obra marcada es la de ENTRADA, no una que haya elegido el visitante.
+   *
+   * Cambia dos cosas: no se vuela hasta ella —la cámara ya está encuadrada ahí, y
+   * volar sería deshacer el encuadre de entrada para volver al mismo sitio— y su
+   * órbita se comporta como la de entrada: se retira al primer gesto y no vuelve.
+   */
+  entradaAutomatica?: boolean
   /** Sin WebGL o sin token: la página cae al plano de siempre. */
   onFallo: () => void
 }) {
@@ -498,6 +506,11 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
     if (!p) return
     m.setFeatureState({ source: FUENTE, id: seleccionado - 1 }, { sel: true })
 
+    // La obra de ENTRADA se marca y ya está. La cámara la tiene encuadrada desde
+    // el encuadre inicial, así que volar hasta ella sería animar para no ir a
+    // ninguna parte — y de paso subir el zoom por encima del que abre la página.
+    if (entradaAutomatica) { destino.current = null; return }
+
     // `flyTo`, no `easeTo`. No son dos maneras de lo mismo: easeTo interpola en
     // línea recta y a zoom alto eso pasa como un borrón. flyTo implementa la curva
     // de Van Wijk y Nuij —se eleva lo justo, recorre, y baja—, que es como el ojo
@@ -525,7 +538,7 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
 
     m.flyTo({ ...meta, curve: 1.2, speed: 0.85, essential: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seleccionado, listo, puntos, mTop, mRight, mBottom, mLeft])
+  }, [seleccionado, listo, puntos, entradaAutomatica, mTop, mRight, mBottom, mLeft])
 
   // ── La órbita ─────────────────────────────────────────────────────────────
   // Se engancha al ATERRIZAJE del vuelo (`moveend`), no al clic: si arrancara a la
@@ -539,11 +552,14 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
     const m = mapa.current
     if (!m || !listo) return
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-    // Sin obra elegida la órbita es la de ENTRADA: la ciudad girando despacio
-    // mientras nadie ha tocado nada. Solo puede empezar cuando el encuadre ya está
-    // hecho —si no, giraría sobre el centro de respaldo— y no vuelve nunca después
-    // de que el visitante haya tomado el mando.
-    if (seleccionado == null && (!encuadrado || intervenido.current)) return
+    // La órbita de ENTRADA es la ciudad girando despacio mientras nadie ha tocado
+    // nada. Que el mapa abra con una obra marcada no la convierte en elegida: esa
+    // obra la ha puesto la página, así que su órbita sigue siendo la de entrada.
+    // Solo puede empezar cuando el encuadre ya está hecho —si no, giraría sobre el
+    // centro de respaldo— y no vuelve nunca después de que el visitante tome el
+    // mando. La de una obra que SÍ ha elegido él vuelve siempre: la ha pedido.
+    const esEntrada = seleccionado == null || entradaAutomatica
+    if (esEntrada && (!encuadrado || intervenido.current)) return
     // Mientras el velo está echado no se gira: una animación de cámara en marcha
     // impide que `idle` llegue, y el velo se quedaría hasta el tope.
     if (corte) return
@@ -590,10 +606,14 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
     // disparaba dos animaciones de cámara compitiendo.
     m.on('moveend', alAterrizar)
 
-    // La órbita de ENTRADA no tiene aterrizaje al que engancharse: el encuadre ya
-    // ocurrió, y con `duration: 0` su `moveend` se disparó antes de que este efecto
-    // existiera. Así que arranca ella sola.
-    if (seleccionado == null) {
+    // Sin vuelo en el aire no hay aterrizaje al que engancharse, así que arranca
+    // ella sola. Es el caso del encuadre de entrada —que ya ocurrió, y con
+    // `duration: 0` su `moveend` se disparó antes de que este efecto existiera— y
+    // también el de la obra de entrada, que se marca sin volar. La condición mira
+    // el VUELO y no la selección: preguntando por `seleccionado == null`, abrir con
+    // una obra puesta dejaba la órbita esperando un aterrizaje que no iba a llegar,
+    // y la ciudad no giraba nunca.
+    if (destino.current == null) {
       girar()
       if (!continua) vivo = false
     }
@@ -603,7 +623,7 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
       m.off('moveend', alAterrizar)
       m.stop()
     }
-  }, [seleccionado, listo, encuadrado, corte])
+  }, [seleccionado, listo, encuadrado, corte, entradaAutomatica])
 
   return (
     <>

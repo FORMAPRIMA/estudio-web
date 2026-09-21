@@ -60,14 +60,45 @@ const HUECO = 8
 export function MapaPage({ content, puntos }: { content: ContentMap; puntos: MapaPunto[] }) {
   const { locale, mobile } = useSite()
 
+  // useMemo NO es una optimización aquí, es corrección: sin él este filtro devuelve
+  // un array nuevo en cada render, el lienzo lo ve como un prop distinto y vuelve a
+  // ejecutar su efecto de encuadre inicial, que devolvía la cámara al plano general.
+  //
+  // Ordenado por sede: es el array del que sale la NUMERACIÓN —el número del punto
+  // en el mapa es su índice aquí, y el de la lista también— así que agrupar por país
+  // agrupa los números solo, sin romper que las dos series sean la misma.
+  const listados = useMemo(() => ordenarPorSede(puntos.filter(tieneCoordenadas)), [puntos])
+  const total = listados.length
+  /** Solo las sedes que tienen obra. Con todo en Madrid es una, y el conmutador ni
+   *  se pinta: la pantalla queda exactamente como estaba. */
+  const sedes = useMemo(() => sedesConObra(listados), [listados])
+
   // DOS estados, no uno. El hover solo enciende; el clic viaja. Cuando los dos
   // compartían variable, rozar la lista con el ratón disparaba un vuelo de cámara.
   const [resaltado, setResaltado] = useState<number | null>(null)
-  const [seleccionado, setSeleccionado] = useState<number | null>(null)
+
+  /**
+   * El mapa ABRE con la primera obra marcada y su ficha abierta.
+   *
+   * Un plano vacío no dice de qué va esta pantalla: hay que pinchar un punto para
+   * descubrir que los puntos son obras con ficha. Abriendo con una puesta, la
+   * pantalla se explica sola. Es la misma obra sobre la que ya estaba encuadrada
+   * la cámara, así que no hay viaje: es un estado compuesto, no una animación
+   * colocándose.
+   */
+  const [seleccionado, setSeleccionado] = useState<number | null>(total ? 1 : null)
+  /**
+   * Esa primera obra NO la ha elegido nadie. La distinción importa para la órbita:
+   * la de entrada se retira en cuanto el visitante toca el mapa y no vuelve, y la
+   * de una obra elegida a mano sí vuelve — porque esa sí la ha pedido él.
+   */
+  const [autoSeleccion, setAutoSeleccion] = useState(true)
   const [fallo, setFallo] = useState(false)
 
   const [esMovil, setEsMovil] = useState(false)
-  const [detente, setDetente] = useState<Detente>('peek')
+  // Arranca en 'ficha' si el mapa abre con obra puesta: si arrancara en 'peek'
+  // la lámina daría un salto de 52 a 200 px nada más pintar.
+  const [detente, setDetente] = useState<Detente>(total ? 'ficha' : 'peek')
   const [plegado, setPlegado] = useState(false)
   /** Contador: cada incremento pide al lienzo el encuadre general de `sede`. */
   const [reencuadre, setReencuadre] = useState(0)
@@ -83,18 +114,6 @@ export function MapaPage({ content, puntos }: { content: ContentMap; puntos: Map
   const titulo = pick(content, 'hero', 'titulo', { locale, mobile })
   const intro = pick(content, 'hero', 'intro', { locale, mobile })
 
-  // useMemo NO es una optimización aquí, es corrección: sin él este filtro devuelve
-  // un array nuevo en cada render, el lienzo lo ve como un prop distinto y vuelve a
-  // ejecutar su efecto de encuadre inicial, que devolvía la cámara al plano general.
-  //
-  // Ordenado por sede: es el array del que sale la NUMERACIÓN —el número del punto
-  // en el mapa es su índice aquí, y el de la lista también— así que agrupar por país
-  // agrupa los números solo, sin romper que las dos series sean la misma.
-  const listados = useMemo(() => ordenarPorSede(puntos.filter(tieneCoordenadas)), [puntos])
-  const total = listados.length
-  /** Solo las sedes que tienen obra. Con todo en Madrid es una, y el conmutador ni
-   *  se pinta: la pantalla queda exactamente como estaba. */
-  const sedes = useMemo(() => sedesConObra(listados), [listados])
 
   /**
    * El mapa manda de verdad. Es lo que enciende la pantalla completa —sin scroll y
@@ -187,21 +206,24 @@ export function MapaPage({ content, puntos }: { content: ContentMap; puntos: Map
 
   const onFallo = useCallback(() => setFallo(true), [])
   const alternar = useCallback((n: number | null) => {
+    setAutoSeleccion(false)
     setSeleccionado((prev) => (prev === n ? null : n))
   }, [])
   /** Recorre la lista dando la vuelta al final. */
   const mover = (paso: 1 | -1) => {
     if (seleccionado == null || !total) return
+    setAutoSeleccion(false)
     setSeleccionado(((seleccionado - 1 + paso + total) % total) + 1)
   }
   /** «Ver todas»: soltar la obra Y volver al plano general de la sede que se mira.
    *  Son dos cosas, y la segunda no tenía hasta ahora ninguna puerta. */
-  const verTodas = () => { setSeleccionado(null); setReencuadre((n) => n + 1) }
+  const verTodas = () => { setAutoSeleccion(false); setSeleccionado(null); setReencuadre((n) => n + 1) }
   /** Cambiar de sede mueve la cámara y lleva la lista a su grupo. Las dos cosas: un
    *  conmutador que solo hiciera una de ellas dejaría la mitad de la pantalla
    *  hablando de otro país. */
   const irASede = (s: SedeCodigo) => {
     setSede(s)
+    setAutoSeleccion(false)
     setSeleccionado(null)
     setReencuadre((n) => n + 1)
     const id = `${esMovil ? 'hoja' : 'indice'}-sede-${s}`
@@ -279,7 +301,8 @@ export function MapaPage({ content, puntos }: { content: ContentMap; puntos: Map
 
       <MapaLienzo puntos={listados} resaltado={resaltado} seleccionado={seleccionado}
         onResaltar={setResaltado} onSeleccionar={alternar} onFallo={onFallo}
-        margenes={margenes} reencuadre={reencuadre} sedeEncuadre={sede} />
+        margenes={margenes} reencuadre={reencuadre} sedeEncuadre={sede}
+        entradaAutomatica={autoSeleccion} />
 
       {/* El isotipo y el menú son negros sobre lo que haya debajo, y debajo hay
           una ciudad que a veces es una manzana oscura. Este velo es lo que les
