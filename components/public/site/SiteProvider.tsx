@@ -4,10 +4,10 @@ import { createContext, useContext, useEffect, useState } from 'react'
 import { MOBILE_QUERY } from './theme'
 import type { Locale } from '@/lib/web-publica'
 
-// Base de rutas del sitio. En staging vive bajo /preview (gated); en el go-live
-// se cambia a '' para servirlo en las rutas reales.
-export const SITE_BASE = '/preview'
-export const href = (path: string) => `${SITE_BASE}${path === '/' ? '' : path}` || '/'
+// Base de rutas del sitio (vacía: la web vive en la raíz).
+// Reexportadas: viven en un módulo neutro para que también las puedan leer los
+// Server Components (ver lib/web-publica/base.ts).
+export { SITE_BASE, href } from '@/lib/web-publica/base'
 
 interface SiteCtx {
   locale: Locale

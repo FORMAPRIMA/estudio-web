@@ -222,7 +222,16 @@ export function SiteNav() {
   }, [menuOpen])
 
   const fg = isLight ? site.color.white : site.color.ink
-  const isActive = (p: string) => pathname === href(p)
+  /**
+   * La pestaña se enciende también dentro de la sección, no solo en su portada.
+   * Con coincidencia exacta, abrir un proyecto o una capacidad —/proyectos/<slug>,
+   * /fp-tools/<slug>— apagaba el menú entero y la cabecera dejaba de decir dónde
+   * estabas. El `/` del final evita que /real-estate encienda /real.
+   */
+  const isActive = (p: string) => {
+    const base = href(p)
+    return pathname === base || pathname.startsWith(`${base}/`)
+  }
 
   return (
     <>

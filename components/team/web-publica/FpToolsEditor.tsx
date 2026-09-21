@@ -3,8 +3,12 @@
 import { useState, useTransition, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { subirArchivo } from '@/lib/web-publica/subida'
-import { createFpTool, updateFpTool, deleteFpTool, reorderFpTools } from '@/app/actions/web-fp-tools'
+import { createFpTool, updateFpTool, deleteFpTool, reorderFpTools, renombrarSlugFpTool } from '@/app/actions/web-fp-tools'
 import type { WebFpTool } from '@/lib/web-fp-tools'
+import { FpToolBloquesEditor } from './FpToolBloquesEditor'
+// La base del sitio público se importa, no se copia: así este enlace sigue a
+// SITE_BASE si el sitio vuelve a montarse bajo un prefijo.
+import { SITE_BASE } from '@/components/public/site/SiteProvider'
 
 const ORANGE = '#D85A30', INK = '#1A1A1A', BORDER = '#F0EEE8'
 
@@ -42,6 +46,8 @@ export function FpToolsEditor({ tools }: { tools: WebFpTool[] }) {
       <p style={{ fontSize: 13, color: `${INK}60`, marginBottom: 28, fontWeight: 300, maxWidth: 620, lineHeight: 1.5 }}>
         Capacidades que os diferencian del arquitecto tradicional (Visual Lab, presupuestos paramétricos, portal de
         cliente, Urban Analyst…). Se muestran como escaparate comercial. El orden aquí es el orden en la web.
+        Cada capacidad tiene además su propia página, que abre con su vídeo explicativo: se monta desde
+        «Subpágina», abajo en cada ficha.
       </p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {tools.map((t, i) => <ToolCard key={t.id} tool={t} index={i} total={tools.length} onMove={move} busy={isPending} />)}
@@ -59,13 +65,17 @@ function ToolCard({ tool, index, total, onMove, busy }: { tool: WebFpTool; index
     tagline_es: tool.tagline_es ?? '', tagline_en: tool.tagline_en ?? '',
     descripcion_es: tool.descripcion_es ?? '', descripcion_en: tool.descripcion_en ?? '',
     imagen_url: tool.imagen_url,
+    video_url: tool.video_url, video_poster_url: tool.video_poster_url,
     cta_label_es: tool.cta_label_es ?? '', cta_label_en: tool.cta_label_en ?? '', cta_url: tool.cta_url ?? '',
     activo: tool.activo,
   })
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [abierta, setAbierta] = useState(false)
   const imgInput = useRef<HTMLInputElement>(null)
+  const vidInput = useRef<HTMLInputElement>(null)
+  const posInput = useRef<HTMLInputElement>(null)
   const set = <K extends keyof typeof d>(k: K, v: (typeof d)[K]) => { setD((p) => ({ ...p, [k]: v })); setSaved(false) }
 
   const onImg = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -73,6 +83,31 @@ function ToolCard({ tool, index, total, onMove, busy }: { tool: WebFpTool; index
     setBusyKey('img'); setError(null); const res = await uploadImage(file); setBusyKey(null)
     if ('error' in res) { setError(res.error); return }; set('imagen_url', res.url)
   }
+  /**
+   * El vídeo sube TAL CUAL: `subirArchivo` solo genera escalera de variantes para
+   * mapas de bits, y no hay transcodificación en el servidor. Así que lo que se
+   * suba aquí es exactamente lo que descargará el visitante — conviene que salga
+   * de la exportación ya comprimida, no del máster.
+   */
+  const onVideo = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file) return
+    setBusyKey('video'); setError(null)
+    const res = await subirArchivo(file, 'fp-tools')
+    setBusyKey(null)
+    if ('error' in res) { setError(res.error); return }
+    set('video_url', res.url)
+  }
+  const onPoster = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file) return
+    setBusyKey('poster'); setError(null); const res = await uploadImage(file); setBusyKey(null)
+    if ('error' in res) { setError(res.error); return }; set('video_poster_url', res.url)
+  }
+  const rehacerSlug = () => startTransition(async () => {
+    setError(null)
+    const res = await renombrarSlugFpTool(tool.id)
+    if ('error' in res) { setError(res.error); return }
+    router.refresh()
+  })
   const tr = async (from: 'tagline_es' | 'descripcion_es' | 'cta_label_es', to: 'tagline_en' | 'descripcion_en' | 'cta_label_en') => {
     if (!d[from].trim()) return
     setBusyKey(to); const t = await traducir(d[from]); setBusyKey(null)
@@ -83,7 +118,8 @@ function ToolCard({ tool, index, total, onMove, busy }: { tool: WebFpTool; index
     const res = await updateFpTool(tool.id, {
       nombre: d.nombre, tagline_es: d.tagline_es || null, tagline_en: d.tagline_en || null,
       descripcion_es: d.descripcion_es || null, descripcion_en: d.descripcion_en || null,
-      imagen_url: d.imagen_url, cta_label_es: d.cta_label_es || null, cta_label_en: d.cta_label_en || null, cta_url: d.cta_url || null, activo: d.activo,
+      imagen_url: d.imagen_url, video_url: d.video_url, video_poster_url: d.video_poster_url,
+      cta_label_es: d.cta_label_es || null, cta_label_en: d.cta_label_en || null, cta_url: d.cta_url || null, activo: d.activo,
     })
     if ('error' in res) { setError(res.error); return }; setSaved(true); router.refresh()
   })
@@ -139,6 +175,84 @@ function ToolCard({ tool, index, total, onMove, busy }: { tool: WebFpTool; index
         </div>
       </div>
       {error && <p style={{ color: '#b3261e', fontSize: 12, marginTop: 12 }}>{error}</p>}
+
+      {/* ── Subpágina ──────────────────────────────────────────────────────
+          Plegada por defecto. La ficha ya es larga y esto solo se toca cuando hay
+          una pieza nueva que colgar; abierta siempre, la lista de capacidades
+          dejaría de poder leerse de un vistazo. */}
+      <div style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${BORDER}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+          <button onClick={() => setAbierta((v) => !v)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', color: INK, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ display: 'inline-block', transform: abierta ? 'rotate(90deg)' : 'none', transition: 'transform .2s', fontSize: 9, opacity: 0.6 }}>▶</span>
+            Subpágina, vídeo y bloques
+          </button>
+          {tool.slug && (
+            <a href={`${SITE_BASE}/fp-tools/${tool.slug}`} target="_blank" rel="noopener noreferrer"
+              style={{ fontSize: 11, color: `${INK}70`, textDecoration: 'none', borderBottom: `1px solid ${INK}25`, paddingBottom: 1 }}>
+              /fp-tools/{tool.slug} ↗
+            </a>
+          )}
+          {!tool.slug && <span style={{ fontSize: 11, color: '#b3261e' }}>Sin URL — guarda la capacidad para generarla.</span>}
+          <div style={{ flex: 1 }} />
+          {d.video_url
+            ? <span style={{ fontSize: 11, color: '#2e7d32' }}>Vídeo cargado</span>
+            : <span style={{ fontSize: 11, color: `${INK}45` }}>Sin vídeo</span>}
+        </div>
+
+        {abierta && (
+          <div style={{ marginTop: 16 }}>
+            <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div style={{ minWidth: 250 }}>
+                <label style={lbl}>Vídeo explicativo (MP4)</label>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button onClick={() => vidInput.current?.click()} disabled={anyBusy} style={up(anyBusy)}>
+                    {busyKey === 'video' ? 'Subiendo…' : d.video_url ? 'Cambiar vídeo' : 'Subir vídeo'}
+                  </button>
+                  {d.video_url && (
+                    <>
+                      <a href={d.video_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: `${INK}70` }}>Ver ↗</a>
+                      <button onClick={() => set('video_url', null)} style={{ background: 'none', border: 'none', color: `${INK}60`, fontSize: 11, cursor: 'pointer' }}>Quitar</button>
+                    </>
+                  )}
+                  <input ref={vidInput} type="file" accept="video/mp4,video/*" hidden onChange={onVideo} />
+                </div>
+                <p style={{ fontSize: 10.5, color: `${INK}50`, margin: '7px 0 0', lineHeight: 1.5, maxWidth: 300 }}>
+                  Se sirve tal cual: sin recompresión. Exporta ya comprimido (H.264, ~1080p) o el visitante se
+                  descargará el máster entero.
+                </p>
+              </div>
+              <div>
+                <label style={lbl}>Póster del vídeo</label>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <Thumb url={d.video_poster_url} onRemove={d.video_poster_url ? () => set('video_poster_url', null) : undefined} />
+                  <button onClick={() => posInput.current?.click()} disabled={anyBusy} style={up(anyBusy)}>
+                    {busyKey === 'poster' ? 'Subiendo…' : d.video_poster_url ? 'Cambiar' : 'Subir'}
+                  </button>
+                  <input ref={posInput} type="file" accept="image/*" hidden onChange={onPoster} />
+                </div>
+                <p style={{ fontSize: 10.5, color: `${INK}50`, margin: '7px 0 0', lineHeight: 1.5, maxWidth: 230 }}>
+                  Es la primera pantalla. Sin él se usa la imagen de la ficha.
+                </p>
+              </div>
+              {tool.slug && (
+                <div>
+                  <label style={lbl}>URL</label>
+                  <button onClick={rehacerSlug} disabled={anyBusy} style={up(anyBusy)}>Rehacer desde el nombre</button>
+                  <p style={{ fontSize: 10.5, color: `${INK}50`, margin: '7px 0 0', lineHeight: 1.5, maxWidth: 230 }}>
+                    Ojo: rompe cualquier enlace que ya se haya compartido.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginTop: 20, paddingTop: 14, borderTop: `1px solid ${BORDER}` }}>
+              <label style={lbl}>Bloques de la subpágina</label>
+              <FpToolBloquesEditor toolId={tool.id} />
+            </div>
+          </div>
+        )}
+      </div>
+
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 18, paddingTop: 16, borderTop: `1px solid ${BORDER}` }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: `${INK}90`, cursor: 'pointer' }}>
           <input type="checkbox" checked={d.activo} onChange={(e) => set('activo', e.target.checked)} /> Visible en la web
