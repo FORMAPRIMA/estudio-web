@@ -1,4 +1,3 @@
-import { redirect } from 'next/navigation'
 import localFont from 'next/font/local'
 import { createClient } from '@/lib/supabase/server'
 import { SiteProvider } from '@/components/public/site/SiteProvider'
@@ -26,12 +25,17 @@ const helixa = localFont({
   display: 'swap',
 })
 
-export const metadata = { title: 'Forma Prima' }
-
-// Sitio en STAGING: solo visible para el equipo FP logueado. El público sigue
-// viendo el teaser /wip. En el go-live se moverá a las rutas reales y se retira
-// este gate (ver memoria web_publica_rebuild, Fase 6).
-const FP_ROLES = ['fp_team', 'fp_manager', 'fp_partner', 'fp_biz_dev']
+// SIN `metadata` aquí a propósito.
+//
+// Había un `title: 'Forma Prima'` y hacía dos destrozos a la vez. Un título de
+// texto plano en un layout no solo se titula a sí mismo —la plantilla del layout
+// raíz lo convertía en «Forma Prima — Forma Prima»— sino que además SUSTITUYE esa
+// plantilla para todo lo que cuelga debajo: /mapa se quedaba en «Mapa», sin marca.
+// Mientras el sitio estaba cerrado daba igual. Publicado, es lo que se lee en la
+// pestaña, en Google y al compartir un enlace.
+//
+// Sin nada aquí, manda el layout raíz: su `default` para las páginas que no
+// declaran título y su plantilla «%s — Forma Prima» para las que sí.
 
 // Modo Diseño: quien puede EDITAR el sitio desde dentro del Studio. Mismo criterio
 // que el CMS y que cada Server Action. El resto del equipo ve el sitio y nada más.
@@ -39,12 +43,19 @@ const FP_ROLES = ['fp_team', 'fp_manager', 'fp_partner', 'fp_biz_dev']
 // para un visitante (y para un fp_team) el canvas es una web normal.
 const ROLES_DESIGN = ['fp_partner', 'fp_biz_dev']
 
-export default async function PreviewLayout({ children }: { children: React.ReactNode }) {
+export default async function SitioLayout({ children }: { children: React.ReactNode }) {
+  // Sin gate: esto es la web pública. Aquí vivía el candado del staging, que
+  // mandaba a /login a quien no fuera del equipo.
+  //
+  // La sesión se sigue mirando, pero solo para UNA cosa: saber si quien entra
+  // puede editar. Para un visitante anónimo esto son dos consultas que devuelven
+  // nada y un `canDesign` en false, y el código del Modo Diseño no llega a su
+  // navegador.
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login?redirectTo=/preview')
-  const { data: profile } = await supabase.from('profiles').select('rol').eq('id', user.id).single()
-  if (!profile || !FP_ROLES.includes(profile.rol)) redirect('/login?redirectTo=/preview')
+  const { data: profile } = user
+    ? await supabase.from('profiles').select('rol').eq('id', user.id).single()
+    : { data: null }
 
   // El footer reusa los datos de contacto que el equipo ya edita en la página de
   // Contacto: una sola fuente de verdad, sin duplicar el email en dos sitios. En
@@ -70,7 +81,7 @@ export default async function PreviewLayout({ children }: { children: React.Reac
     <div className={`${helixa.variable} fp-site`} style={{ position: 'relative', minHeight: '100dvh', background: '#F4F3F0' }}>
       <SiteProvider>
         <AssetsProvider manifiesto={manifiesto}>
-          <DesignProvider canDesign={ROLES_DESIGN.includes(profile.rol)}>
+          <DesignProvider canDesign={!!profile && ROLES_DESIGN.includes(profile.rol)}>
             <EsqueletoCSS />
             <SiteCursor />
             <SiteNav />

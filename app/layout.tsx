@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
+import { SITE_URL } from '@/lib/web-publica/base'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -9,7 +10,7 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://formaprima.es'),
+  metadataBase: new URL(SITE_URL),
   title: {
     default: 'Forma Prima — Arquitectura & Interiorismo',
     template: '%s — Forma Prima',
@@ -22,7 +23,7 @@ export const metadata: Metadata = {
     type: 'website',
     siteName: 'Forma Prima',
     locale: 'es_ES',
-    url: 'https://formaprima.es',
+    url: SITE_URL,
     title: 'Forma Prima — Arquitectura & Interiorismo',
     description: 'Estudio de arquitectura e interiorismo en Madrid. Proyecto, obra y experiencias inmersivas.',
   },

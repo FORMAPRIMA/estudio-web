@@ -10,6 +10,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
+import { SITE_BASE } from '@/lib/web-publica/base'
 import {
   ESCALA_MAX, ESCALA_MIN,
   type BlockEstilo, type BlockEstiloPatch, type EstiloJson, type Locale, type Viewport,
@@ -29,7 +30,7 @@ async function requireDesign() {
 function revalidar(pagina: string) {
   revalidatePath(PATH_CMS)
   revalidatePath(`${PATH_CMS}/studio`)
-  revalidatePath(pagina === 'home' ? '/preview' : `/preview/${pagina.replace('_', '-')}`)
+  revalidatePath(pagina === 'home' ? '/' : `${SITE_BASE}/${pagina.replace('_', '-')}`)
 }
 
 /** Saneado: solo dejamos entrar valores del sistema de diseño, nunca CSS libre. */

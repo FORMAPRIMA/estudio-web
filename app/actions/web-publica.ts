@@ -160,7 +160,7 @@ export async function createWebProyecto(data: {
       .single()
     if (error) return { error: error.message }
     revalidatePath(PATH)
-    revalidatePath('/wip')
+    revalidatePath('/')
     return { success: true, id: row.id }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
@@ -228,7 +228,7 @@ export async function updateWebProyecto(
     const { error } = await admin.from('web_proyectos').update(patch).eq('id', id)
     if (error) return { error: error.message }
     revalidatePath(PATH)
-    revalidatePath('/wip')
+    revalidatePath('/')
     revalidatePath('/proyectos')
     return { success: true }
   } catch (err) {
@@ -243,7 +243,7 @@ export async function deleteWebProyecto(id: string): Promise<{ success: true } |
     const { error } = await admin.from('web_proyectos').delete().eq('id', id)
     if (error) return { error: error.message }
     revalidatePath(PATH)
-    revalidatePath('/wip')
+    revalidatePath('/')
     return { success: true }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
@@ -259,7 +259,7 @@ export async function reorderWebProyectos(ids: string[]): Promise<{ success: tru
       ids.map((id, i) => admin.from('web_proyectos').update({ orden: i }).eq('id', id))
     )
     revalidatePath(PATH)
-    revalidatePath('/wip')
+    revalidatePath('/')
     return { success: true }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }

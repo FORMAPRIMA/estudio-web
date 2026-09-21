@@ -58,7 +58,7 @@ por el equipo y generar un prompt preciso y accionable para un asistente de IA d
 ### Web pública + Modo Diseño — fp_partner, fp_biz_dev
 - CMS clásico: app/team/marketing/web-publica/page.tsx, components/team/web-publica/*
   (tabs Contenido/Proyectos/Equipo/FP Tools/Real Estate), tabla web_content (pagina,seccion,clave)
-- Sitio en staging: app/preview/* + components/public/site/* (SITE_BASE='/preview', gate FP)
+- Sitio público: app/(sitio)/* + components/public/site/* (SITE_BASE='', en la raíz, sin gate)
 - Modo Diseño (Studio): app/team/marketing/web-publica/studio/page.tsx +
   components/team/web-publica/studio/{StudioShell,Inspector}.tsx — el sitio se carga en un
   <iframe> y el chrome de edición vive fuera; puente postMessage en lib/web-publica-studio.ts

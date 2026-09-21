@@ -1,8 +1,15 @@
+import type { Metadata } from 'next'
 import { getContent } from '@/app/actions/web-content'
 import { getProyectosSite } from '@/app/actions/web-publica'
 import { ProyectosGrid } from '@/components/public/site/proyectos/ProyectosGrid'
 import { ProyectosClient } from '@/components/public/site/proyectos/ProyectosClient'
 import type { MaquetaItem } from '@/components/public/site/proyectos/ProyectosShowroom'
+import { SITE_BASE } from '@/lib/web-publica/base'
+
+export const metadata: Metadata = {
+  title: 'Proyectos',
+  description: 'Obra construida de Forma Prima: reformas integrales, obra nueva e interiorismo en Madrid.',
+}
 
 export const dynamic = 'force-dynamic'
 
@@ -36,7 +43,7 @@ export default async function Page() {
       {/* Enlaces accesibles a cada proyecto (el grid 3D no es rastreable por buscadores). */}
       <nav aria-label="Proyectos" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clipPath: 'inset(50%)', whiteSpace: 'nowrap' }}>
         {maquetas.map((m) => (
-          <a key={m.slug} href={`/preview/proyectos/${m.slug}`}>{m.nombre}</a>
+          <a key={m.slug} href={`${SITE_BASE}/proyectos/${m.slug}`}>{m.nombre}</a>
         ))}
       </nav>
       <ProyectosClient modelos={maquetas} />

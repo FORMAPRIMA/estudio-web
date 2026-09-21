@@ -8,6 +8,7 @@
 // Se amplía por página según vamos construyendo cada una (Home, Estudio, ...).
 
 import type { ContentTipo, Gesto } from '@/lib/web-publica'
+import { SITE_BASE } from '@/lib/web-publica/base'
 
 export interface ContentField {
   clave:      string
@@ -89,7 +90,7 @@ export const CONTENT_SCHEMA: PageSchema[] = [
   {
     pagina: 'estudio',
     label:  'Estudio',
-    preview: '/preview/estudio',
+    preview: `${SITE_BASE}/estudio`,
     sections: [
       {
         seccion: 'hero',
@@ -116,7 +117,7 @@ export const CONTENT_SCHEMA: PageSchema[] = [
   {
     pagina: 'mapa',
     label:  'Mapa',
-    preview: '/preview/mapa',
+    preview: `${SITE_BASE}/mapa`,
     sections: [
       {
         seccion: 'hero',
@@ -133,7 +134,7 @@ export const CONTENT_SCHEMA: PageSchema[] = [
   {
     pagina: 'proyectos',
     label:  'Proyectos',
-    preview: '/preview/proyectos',
+    preview: `${SITE_BASE}/proyectos`,
     sections: [
       {
         seccion: 'hero',
@@ -150,7 +151,7 @@ export const CONTENT_SCHEMA: PageSchema[] = [
   {
     pagina: 'fp_tools',
     label:  'FP Tools',
-    preview: '/preview/fp-tools',
+    preview: `${SITE_BASE}/fp-tools`,
     sections: [
       {
         seccion: 'hero',
@@ -167,7 +168,7 @@ export const CONTENT_SCHEMA: PageSchema[] = [
   {
     pagina: 'real_estate',
     label:  'Real Estate',
-    preview: '/preview/real-estate',
+    preview: `${SITE_BASE}/real-estate`,
     sections: [
       {
         seccion: 'hero',
@@ -193,7 +194,7 @@ export const CONTENT_SCHEMA: PageSchema[] = [
   {
     pagina: 'contacto',
     label:  'Contacto',
-    preview: '/preview/contacto',
+    preview: `${SITE_BASE}/contacto`,
     sections: [
       {
         seccion: 'hero',

@@ -2,15 +2,17 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 
 export async function middleware(request: NextRequest) {
-  // ── Dominio público (formaprima.es): la raíz muestra el teaser WIP ──────────────
-  // internal.formaprima.es y el resto de hosts mantienen el comportamiento normal.
+  // ── La raíz ────────────────────────────────────────────────────────────────
+  // Aquí vivía la reescritura de / al teaser /wip mientras la web estaba cerrada.
+  // Ya no: la raíz ES la Home del sitio.
+  //
+  // Lo que queda es el host interno. internal.formaprima.es sirve la MISMA
+  // aplicación, así que sin esto su raíz enseñaría la web pública al equipo, que
+  // lo que quiere ahí es entrar. Solo GET: un POST a / es un Server Action, y
+  // redirigirlo lo rompe.
   const host = (request.headers.get('host') || '').toLowerCase()
-  const isPublicApex = host === 'formaprima.es' || host === 'www.formaprima.es'
-  // Solo reescribimos la navegación (GET). Las peticiones POST de los Server
-  // Actions (p.ej. el formulario de contacto del teaser) deben llegar al route
-  // handler sin reescribir, o Next.js no resuelve la acción y se cuelga.
-  if (isPublicApex && request.nextUrl.pathname === '/' && request.method === 'GET') {
-    return NextResponse.rewrite(new URL('/wip', request.url))
+  if (host === 'internal.formaprima.es' && request.nextUrl.pathname === '/' && request.method === 'GET') {
+    return NextResponse.redirect(new URL('/login', request.url))
   }
 
   let supabaseResponse = NextResponse.next({

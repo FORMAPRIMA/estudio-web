@@ -155,7 +155,7 @@ export async function updateMapaPunto(id: string, data: {
     const { error } = await admin.from('web_mapa_puntos').update(patch).eq('id', id)
     if (error) return { error: error.message }
     revalidatePath(PATH)
-    revalidatePath('/wip')
+    revalidatePath('/')
     return { success: true }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
