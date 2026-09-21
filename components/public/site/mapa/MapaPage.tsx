@@ -456,8 +456,31 @@ function Lista({ listados, seleccionado, resaltado, locale, sedes, idPrefijo, on
   )
 }
 
-/** Ficha de la lámina: foto grande y ‹ › para recorrer las obras sin volver a la
- *  lista. Es el gesto que convierte el mapa en algo que se hojea con el pulgar. */
+/**
+ * El chevron de hojear, DIBUJADO y no escrito.
+ *
+ * Con los caracteres ‹ › el navegador centra la caja de texto, no la tinta: los
+ * guillemets simples llevan su trazo alto dentro del cuadratín, así que dentro de
+ * un botón redondo quedaban visiblemente descolocados por mucho que se centrara
+ * el texto. Y encima la fuente del sitio no tiene por qué traerlos: cuando el
+ * navegador cae a otra, las métricas cambian y el desvío cambia con ella.
+ *
+ * El trazo va centrado en (12,12) de su propio lienzo —contando el grosor y los
+ * remates redondos—, así que el centro del icono ES el centro del botón, en las
+ * dos fichas y con cualquier fuente.
+ */
+function Chevron({ hacia }: { hacia: 'izq' | 'der' }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"
+      style={{ display: 'block', transform: hacia === 'izq' ? 'rotate(180deg)' : undefined }}>
+      <path d="M9 5 L15 12 L9 19" stroke="currentColor" strokeWidth="1.8"
+        strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+/** Ficha de la lámina: foto grande y chevrones para recorrer las obras sin volver
+ *  a la lista. Es el gesto que convierte el mapa en algo que se hojea con el pulgar. */
 function FichaCompacta({ punto, locale, indice, total, onMover, onCerrar, onAbrirLista }: {
   punto: MapaPunto; locale: 'es' | 'en'; indice: number; total: number
   onMover: (paso: 1 | -1) => void; onCerrar: () => void; onAbrirLista: () => void
@@ -478,9 +501,9 @@ function FichaCompacta({ punto, locale, indice, total, onMover, onCerrar, onAbri
           ? <Link href={href(`/proyectos/${slug}`)} className="fp-mapa-fc-link" data-cursor="">{locale === 'en' ? 'View project' : 'Ver proyecto'} →</Link>
           : <button type="button" className="fp-mapa-fc-link" onClick={onAbrirLista}>{locale === 'en' ? 'All works' : 'Todas las obras'} ↑</button>}
         <div className="fp-mapa-fc-nav">
-          <button type="button" onClick={() => onMover(-1)} aria-label={locale === 'en' ? 'Previous' : 'Anterior'}>‹</button>
+          <button type="button" onClick={() => onMover(-1)} aria-label={locale === 'en' ? 'Previous' : 'Anterior'}><Chevron hacia="izq" /></button>
           <span>{indice} / {total}</span>
-          <button type="button" onClick={() => onMover(1)} aria-label={locale === 'en' ? 'Next' : 'Siguiente'}>›</button>
+          <button type="button" onClick={() => onMover(1)} aria-label={locale === 'en' ? 'Next' : 'Siguiente'}><Chevron hacia="der" /></button>
         </div>
       </div>
       <button type="button" className="fp-mapa-fc-x" onClick={onCerrar} aria-label={locale === 'en' ? 'Close' : 'Cerrar'}>×</button>
@@ -523,9 +546,9 @@ function Ficha({ punto, locale, indice, total, onMover, onCerrar, refCaja }: {
           </Link>
         )}
         <div className="fp-mapa-ficha-nav">
-          <button type="button" data-cursor="" onClick={() => onMover(-1)} aria-label={locale === 'en' ? 'Previous' : 'Anterior'}>‹</button>
+          <button type="button" data-cursor="" onClick={() => onMover(-1)} aria-label={locale === 'en' ? 'Previous' : 'Anterior'}><Chevron hacia="izq" /></button>
           <span>{indice} / {total}</span>
-          <button type="button" data-cursor="" onClick={() => onMover(1)} aria-label={locale === 'en' ? 'Next' : 'Siguiente'}>›</button>
+          <button type="button" data-cursor="" onClick={() => onMover(1)} aria-label={locale === 'en' ? 'Next' : 'Siguiente'}><Chevron hacia="der" /></button>
         </div>
       </div>
     </div>
@@ -742,14 +765,21 @@ html:has(.fp-mapa[data-inmersivo="1"])            { overflow: hidden; overscroll
 /* Con las dos ventanas a la vista, hojear las obras desde la ficha es el gesto
    natural: el índice va marcando por dónde vas. */
 .fp-mapa-ficha-nav {
-  display: flex; align-items: center; gap: 12px; margin-top: 12px;
+  /* Centrado y no pegado al canto izquierdo: es el único mando de la ficha y la
+     ventana es estrecha, así que en el canto se leía como un resto de la columna
+     de texto y no como el control de hojear que es. */
+  display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 12px;
   padding-top: 11px; border-top: 1px solid rgba(20,20,20,.09);
 }
 .fp-mapa-ficha-nav button {
   width: 28px; height: 28px; border-radius: 50%; border: 1px solid rgba(20,20,20,.14);
-  background: none; font-size: 15px; line-height: 1; color: inherit; cursor: pointer;
-  font-family: inherit; transition: background .2s ${site.ease};
+  background: none; color: inherit; cursor: pointer;
+  /* El padding a 0 no sobra: el botón trae el suyo de fábrica y con box-sizing
+     border-box se come el ancho útil antes de que nadie centre nada. */
+  display: inline-flex; align-items: center; justify-content: center; padding: 0;
+  transition: background .2s ${site.ease};
 }
+.fp-mapa-ficha-nav button svg { width: 11px; height: 11px; }
 .fp-mapa-ficha-nav button:hover { background: rgba(20,20,20,.06); }
 .fp-mapa-ficha-nav span { font-size: 10px; opacity: .45; font-variant-numeric: tabular-nums; }
 .fp-mapa-cerrar {
@@ -892,9 +922,10 @@ html:has(.fp-mapa[data-inmersivo="1"])            { overflow: hidden; overscroll
   .fp-mapa-fc-nav { display: flex; align-items: center; gap: 14px; margin-top: auto; padding-top: 8px; }
   .fp-mapa-fc-nav button {
     width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(20,20,20,.10);
-    background: none; font-size: 17px; line-height: 1; color: inherit; cursor: pointer;
-    font-family: inherit;
+    background: none; color: inherit; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; padding: 0;
   }
+  .fp-mapa-fc-nav button svg { width: 13px; height: 13px; }
   .fp-mapa-fc-nav span { font-size: 10.5px; opacity: .45; font-variant-numeric: tabular-nums; }
   .fp-mapa-fc-x {
     position: absolute; top: -4px; right: 12px;

@@ -14,12 +14,14 @@ import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { site } from '../theme'
 import {
-  CAMARA, SIN_MARGENES, KM_SALTO, SEDE_CASA, aGeoJSON, kmEntre, limites, limitesDeSede,
+  CAMARA, SIN_MARGENES, KM_SALTO, SEDE_CASA, aGeoJSON, centroDe, kmEntre, limites, limitesDeSede,
+  obraDeEntrada,
   tieneCoordenadas, type MapaPunto, type Margenes, type SedeCodigo,
 } from '@/lib/web-mapa'
 
 const FUENTE = 'fp-obras'
-/** Zoom al que se aterriza sobre una obra si se venía de más lejos. */
+/** Zoom al que se aterriza sobre una obra si se venía de más lejos. Por encima
+ *  del de entrada: elegir una obra siempre acerca, nunca aleja. */
 const ZOOM_DETALLE = 16.1
 /** Milisegundos por grado de órbita. 250 ≈ una vuelta completa en 90 s: lo bastante
  *  lento para que se lea como la ciudad girando y no como un salvapantallas. */
@@ -137,8 +139,11 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
   /** El encuadre de entrada ya se ha hecho. Es estado y no ref porque la órbita de
    *  entrada tiene que esperarlo: un efecto no despierta con una ref. */
   const [encuadrado, setEncuadrado] = useState(false)
-  /** El velo del salto está echado. */
+  /** El velo del salto está echado. El espejo en ref es para leerlo desde efectos
+   *  que no pueden tenerlo en dependencias sin volver a dispararse al destaparse. */
   const [corte, setCorte] = useState(false)
+  const corteRef = useRef(false)
+  const marcarCorte = (v: boolean) => { corteRef.current = v; setCorte(v) }
   /**
    * El visitante ha tomado el mando. A partir de ahí la órbita de entrada no
    * vuelve: la máquina se aparta en cuanto alguien quiere conducir, y volver a
@@ -146,6 +151,15 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
    */
   const intervenido = useRef(false)
   const relojes = useRef<number[]>([])
+  /**
+   * A dónde vuela la cámara AHORA MISMO, o null si no hay vuelo vivo.
+   *
+   * Existe porque `moveend` no distingue «he llegado» de «me han cortado»: los dos
+   * llegan igual. Con el destino a mano, un `moveend` que no deja la cámara encima
+   * de la obra se reconoce como lo que es —una animación abortada— y ni arranca la
+   * órbita ni cuenta como aterrizaje.
+   */
+  const destino = useRef<{ lat: number; lng: number } | null>(null)
 
   /**
    * El salto largo: fundir a crema, colocar la cámara de golpe y volver.
@@ -159,13 +173,13 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { aplicar(); return }
     relojes.current.forEach(clearTimeout)
     relojes.current = []
-    setCorte(true)
+    marcarCorte(true)
     relojes.current.push(window.setTimeout(() => {
       aplicar()
       let hecho = false
       // El velo NO se retira al saltar, sino cuando el destino está servido. Es el
       // detalle del que depende que esto se vea bien.
-      const destapar = () => { if (!hecho) { hecho = true; setCorte(false) } }
+      const destapar = () => { if (!hecho) { hecho = true; marcarCorte(false) } }
       m.once('idle', destapar)
       relojes.current.push(window.setTimeout(destapar, TOPE_CORTE))
     }, FUNDIDO))
@@ -186,7 +200,7 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
         container: contenedor.current,
         style: CAMARA.estilo,
         center: CAMARA.centro,
-        zoom: CAMARA.zoomRespaldo,
+        zoom: CAMARA.zoomEdificios,
         bearing: CAMARA.rumbo,
         pitch: CAMARA.cabeceo,
         minZoom: CAMARA.zoomMin,
@@ -215,7 +229,11 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
     // Cualquier gesto sobre el mapa retira la órbita de entrada. `originalEvent`
     // es lo que distingue al visitante de nuestras propias animaciones de cámara:
     // sin ese filtro, la órbita se estaría cancelando a sí misma en cada tramo.
-    const alMandar = (e: any) => { if (e?.originalEvent) intervenido.current = true }
+    const alMandar = (e: any) => {
+      if (!e?.originalEvent) return
+      intervenido.current = true
+      destino.current = null   // el vuelo ya no es de nadie: manda quien conduce
+    }
     for (const ev of ['dragstart', 'zoomstart', 'rotatestart', 'pitchstart'] as const) m.on(ev, alMandar)
 
     return () => { m.remove(); mapa.current = null }
@@ -229,10 +247,41 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
   // dispararía este efecto —y con él un reencuadre de cámara— sin que nada haya
   // cambiado de sitio.
   const { top: mTop, right: mRight, bottom: mBottom, left: mLeft } = margenes
+  /** El último hueco visible conocido. Lo leen las llamadas de cámara, que lo pasan
+   *  como `padding` en vez de depender de que ya esté aplicado. */
+  const margenesRef = useRef<Margenes>(margenes)
   useEffect(() => {
+    const p = { top: mTop, right: mRight, bottom: mBottom, left: mLeft }
+    margenesRef.current = p
     const m = mapa.current
     if (!m || !listo) return
-    m.setPadding({ top: mTop, right: mRight, bottom: mBottom, left: mLeft })
+
+    /**
+     * `setPadding` NO es un ajuste inocuo: por dentro es un `jumpTo`, y `jumpTo`
+     * empieza llamando a `stop()`. Aplicarlo con la cámara en vuelo ABORTA el vuelo
+     * y encima emite un `moveend` que la órbita leía como aterrizaje.
+     *
+     * Ahí estaba el fallo de «los primeros clics no viajan»: elegir una obra abre la
+     * ficha, la ficha cambia el hueco visible, y ese margen nuevo llegaba aquí un
+     * render DESPUÉS de lanzarse el vuelo — o más tarde aún, cuando la foto de la
+     * ficha terminaba de cargar y el ResizeObserver volvía a medir. El vuelo moría a
+     * los pocos milisegundos y la cámara se quedaba donde estaba. A partir del tercer
+     * o cuarto clic las fotos ya estaban en caché, la medida no cambiaba, y entonces
+     * sí funcionaba: de ahí que pareciera cosa de los primeros clics.
+     *
+     * Con la cámara en marcha no se toca nada: el propio movimiento ya lleva el
+     * padding nuevo —todas nuestras llamadas lo pasan— y esta reserva lo aplica al
+     * parar por si el margen ha cambiado por algo ajeno (plegar el índice, girar el
+     * teléfono). El `requestAnimationFrame` saca el `setPadding` de dentro del
+     * `moveend`: aplicarlo ahí dispararía otro `moveend` reentrante.
+     */
+    if (!m.isMoving()) { m.setPadding(p); return }
+    const alParar = () => requestAnimationFrame(() => {
+      const mm = mapa.current
+      if (mm && !mm.isMoving()) mm.setPadding(margenesRef.current)
+    })
+    m.once('moveend', alParar)
+    return () => { m.off('moveend', alParar) }
   }, [mTop, mRight, mBottom, mLeft, listo])
 
   // ── Capas ─────────────────────────────────────────────────────────────────
@@ -347,17 +396,40 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
   }, [listo, puntos, onResaltar, onSeleccionar])
 
   // ── Encuadre inicial ──────────────────────────────────────────────────────
+  // NO es un `fitBounds`. Encuadrar todas las obras las metía a todas en pantalla,
+  // sí, pero a zoom ~13,5 — y por debajo de 15 el basemap Standard pinta la ciudad
+  // PLANA. El mapa abría sin volumen y solo se levantaba al acercarse a una obra,
+  // que es justo lo contrario de lo que esta pantalla quiere enseñar.
+  //
+  // Así que se entra al zoom mínimo con edificios extruidos, sobre la obra por la
+  // que abre el mapa. Se ven menos de una vez, y está bien: verlas todas es un
+  // gesto con su propio botón («Ver todas»), y la lista de al lado no se mueve.
+  //
+  // El centro es una OBRA y no el centro geométrico de todas. La órbita de entrada
+  // gira alrededor de este punto, y el centro geométrico no es ninguna obra: la
+  // cámara se pasaba el minuto y medio de vuelta girando en torno a un tejado
+  // cualquiera del barrio en vez de en torno a algo del estudio.
+  //
   // Con CERROJO. Es inicial por definición: tiene que ocurrir una vez y no volver.
   // Sin él, cualquier render que cambie la identidad del array de puntos vuelve a
-  // dispararlo con `duration: 0` y la cámara salta de golpe al encuadre general —
-  // que es exactamente lo que se leía como «se reinicia el zoom». Memoizar la
-  // lista arregla el síntoma de hoy; este cerrojo impide que vuelva mañana.
+  // dispararlo y la cámara salta de golpe — que es exactamente lo que se leía como
+  // «se reinicia el zoom». Memoizar la lista arregla el síntoma de hoy; este
+  // cerrojo impide que vuelva mañana.
   useEffect(() => {
     const m = mapa.current
     if (!m || !listo || encuadrado) return
-    if (encuadrarCaja(m, limites(puntos), { top: mTop, right: mRight, bottom: mBottom, left: mLeft }, 0)) {
-      setEncuadrado(true)
-    }
+    const entrada = obraDeEntrada(puntos)
+    if (!entrada) return
+    // `jumpTo` y no `flyTo`: esto es el estado de partida, no un viaje. El padding
+    // ya está puesto —su efecto está declarado antes que este— así que el centro
+    // cae en el hueco visible y no debajo del índice.
+    m.jumpTo({
+      center: [entrada.lng, entrada.lat],
+      zoom: CAMARA.zoomEdificios,
+      bearing: CAMARA.rumbo,
+      pitch: CAMARA.cabeceo,
+    })
+    setEncuadrado(true)
   }, [listo, puntos, mTop, mRight, mBottom, mLeft, encuadrado])
 
   // ── Volver al plano general de una sede ───────────────────────────────────
@@ -370,13 +442,15 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
     const m = mapa.current
     if (!m || !listo || reencuadre === reencuadrePrevio.current) return
     reencuadrePrevio.current = reencuadre
+    destino.current = null   // esto no es el vuelo a una obra
     m.stop()   // por si venía orbitando
     const mg = { top: mTop, right: mRight, bottom: mBottom, left: mLeft }
     const caja = limitesDeSede(puntos, sedeEncuadre) ?? limites(puntos)
     if (!caja) return
     // Cambiar de sede es cruzar un océano: se funde. Dentro de la misma, se vuela.
     const centro = m.getCenter()
-    const lejos = kmEntre(centro, { lat: (caja[0][1] + caja[1][1]) / 2, lng: (caja[0][0] + caja[1][0]) / 2 }) > KM_SALTO
+    const [lngC, latC] = centroDe(caja)
+    const lejos = kmEntre(centro, { lat: latC, lng: lngC }) > KM_SALTO
     if (lejos) conCorte(m, () => encuadrarCaja(m, caja, mg, 0))
     else encuadrarCaja(m, caja, mg, 1500)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -400,12 +474,25 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
     if (!m || !listo || !m.getSource(FUENTE)) return
     const conCoords = puntos.filter(tieneCoordenadas)
 
-    if (selPrevia.current != null) m.setFeatureState({ source: FUENTE, id: selPrevia.current - 1 }, { sel: false })
-    selPrevia.current = seleccionado
+    const cambio = seleccionado !== selPrevia.current
+    if (cambio) {
+      if (selPrevia.current != null) m.setFeatureState({ source: FUENTE, id: selPrevia.current - 1 }, { sel: false })
+      selPrevia.current = seleccionado
+    }
 
     // Al deseleccionar se para la órbita pero NO se devuelve la cámara: volver al
     // encuadre general es otra intención y tiene su propio botón en la lista.
-    if (seleccionado == null) { m.stop(); return }
+    if (seleccionado == null) { if (cambio) { destino.current = null; m.stop() } return }
+
+    // Los márgenes están en las dependencias a propósito: el hueco visible cambia
+    // AL elegir la obra —entra la ficha— y ese número llega un render después del
+    // vuelo. Volver a lanzarlo con el padding bueno lo recentra sin que se note: a
+    // los pocos milisegundos de despegar, el nuevo vuelo sale prácticamente del
+    // mismo sitio. Lo que no puede pasar es que lo relance un margen que llega
+    // cuando ya se ha aterrizado, y de eso se encarga el candado de abajo.
+    // Ni durante el fundido de un salto largo: ahí el vuelo no está en el aire, está
+    // esperando detrás del velo, y relanzarlo reiniciaría el fundido.
+    if (!cambio && (!destino.current || corteRef.current)) return
 
     const p = conCoords[seleccionado - 1]
     if (!p) return
@@ -419,22 +506,26 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
     //
     // Ni el rumbo ni el cabeceo se tocan: son del visitante. Y el zoom solo sube,
     // nunca baja — seleccionar una obra jamás aleja la cámara.
-    const destino = {
+    // El padding viaja CON el vuelo y no se aplica aparte: `setPadding` es un
+    // `jumpTo` por dentro y cortaría este mismo vuelo un instante después.
+    const meta = {
       center: [p.lng, p.lat] as [number, number],
       zoom: Math.max(m.getZoom(), ZOOM_DETALLE),
+      padding: margenesRef.current,
     }
+    destino.current = { lat: p.lat, lng: p.lng }
 
     // Más allá de KM_SALTO no se vuela, se salta con fundido. La curva de Van Wijk
     // es la manera correcta de recorrer un territorio; cruzar un océano no es
     // recorrer un territorio, y a zoom de ciudad el mapa no llega a dibujarse.
     if (kmEntre(m.getCenter(), p) > KM_SALTO) {
-      conCorte(m, () => m.jumpTo({ ...destino, bearing: CAMARA.rumbo, pitch: CAMARA.cabeceo }))
+      conCorte(m, () => m.jumpTo({ ...meta, bearing: CAMARA.rumbo, pitch: CAMARA.cabeceo }))
       return
     }
 
-    m.flyTo({ ...destino, curve: 1.2, speed: 0.85, essential: true })
+    m.flyTo({ ...meta, curve: 1.2, speed: 0.85, essential: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seleccionado, listo, puntos])
+  }, [seleccionado, listo, puntos, mTop, mRight, mBottom, mLeft])
 
   // ── La órbita ─────────────────────────────────────────────────────────────
   // Se engancha al ATERRIZAJE del vuelo (`moveend`), no al clic: si arrancara a la
@@ -481,6 +572,16 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
       // exactamente pelearse con quien está intentando mirar algo. Un gesto suyo
       // retira la órbita hasta que elija otra obra.
       if (e?.originalEvent) { vivo = false; return }
+      // Y `moveend` tampoco quiere decir «he llegado»: una animación CORTADA emite
+      // el mismo evento. Si hay vuelo vivo y la cámara no ha quedado sobre la obra,
+      // esto es un corte y no un aterrizaje — ponerse a orbitar aquí era rematar el
+      // vuelo que el padding acababa de abortar, y dejar la cámara girando a medio
+      // camino de la obra elegida.
+      const meta = destino.current
+      if (meta) {
+        if (kmEntre(m.getCenter(), meta) > 0.05) return
+        destino.current = null   // llegada buena: el vuelo se cierra aquí
+      }
       girar()
       if (!continua) vivo = false   // táctil: un solo tramo
     }

@@ -83,11 +83,33 @@ export const CAMARA = {
   cabeceo: 63,
   /** Centro de respaldo si aún no hay ningún punto geocodificado. */
   centro: [-3.687037, 40.418969] as [number, number],
-  zoomRespaldo: 13.2,
+  /**
+   * El zoom de ENTRADA, y el número que decide si la ciudad tiene volumen.
+   *
+   * El basemap Standard solo extruye los edificios a partir de zoom 15: por debajo
+   * pinta las manzanas planas. El encuadre de entrada salía de `fitBounds` sobre
+   * las obras y con las de Madrid —de Ferraz a Fuente del Berro— aterrizaba sobre
+   * 13,5: por eso la ciudad salía plana al abrir y solo se levantaba al acercarse.
+   *
+   * Así que la entrada ya no encuadra: se coloca en el centro geométrico de las
+   * obras al zoom MÍNIMO que tiene volumen. Ver todas a la vez sigue estando a un
+   * clic en «Ver todas», que es el gesto que pide precisamente eso.
+   *
+   * Es UN número: si el estilo cambia el umbral, se toca aquí y en ningún sitio más.
+   */
+  zoomEdificios: 15.2,
   /** Tope de acercamiento: más allá el estilo pierde las extrusiones. */
   zoomMax: 17.6,
   zoomMin: 10.5,
 } as const
+
+/** Caja como la devuelven `limites` y `limitesDeSede`: [[oeste, sur], [este, norte]]. */
+export type Caja = [[number, number], [number, number]]
+
+/** El centro geométrico de una caja, en [lng, lat]. */
+export function centroDe(caja: Caja): [number, number] {
+  return [(caja[0][0] + caja[1][0]) / 2, (caja[0][1] + caja[1][1]) / 2]
+}
 
 /**
  * Píxeles del lienzo que tapan las ventanas flotantes por cada lado.
@@ -184,7 +206,7 @@ export function sedesConObra(puntos: MapaPunto[]): SedeCodigo[] {
  * El centro se calcula con la MEDIANA y no con la media, justamente para que un
  * punto en otro continente no arrastre la referencia.
  */
-function cajaDeNucleo(con: (MapaPunto & { lat: number; lng: number })[]): [[number, number], [number, number]] | null {
+function cajaDeNucleo(con: (MapaPunto & { lat: number; lng: number })[]): Caja | null {
   if (!con.length) return null
 
   const mediana = (xs: number[]) => {
@@ -229,6 +251,24 @@ export function limites(puntos: MapaPunto[]) {
     if (caja) return caja
   }
   return null
+}
+
+/**
+ * La obra por la que ABRE el mapa: la cámara entra orbitando a su alrededor.
+ *
+ * Es la primera de la lista —la primera del orden del CMS dentro de la sede de
+ * casa—, que hoy es Claudio Coello 38. Deliberadamente no es una coordenada
+ * escrita aquí a mano: si el estudio cambia qué obra pone primero, el mapa abre
+ * por ella sin que nadie toque código, y si esa obra se resitúa, el centro la
+ * sigue.
+ *
+ * Antes se entraba por el centro geométrico de todas, y ese punto no es ninguna
+ * obra: la cámara giraba alrededor de un tejado cualquiera del barrio.
+ */
+export function obraDeEntrada(puntos: MapaPunto[]): (MapaPunto & { lat: number; lng: number }) | null {
+  // El `filter` va después del orden y no antes por el tipo: `ordenarPorSede`
+  // devuelve MapaPunto[] y perdería el estrechamiento de `tieneCoordenadas`.
+  return ordenarPorSede(puntos).filter(tieneCoordenadas)[0] ?? null
 }
 
 /**
