@@ -128,6 +128,33 @@ export function HomeLanding({ content, backgrounds }: { content: ContentMap; bac
           style={{ position: 'absolute', inset: 0, zIndex: 4, display: 'block' }} />
       )}
 
+      {/* ── El encabezado de la página ────────────────────────────────────
+          La Home es una foto a sangre y nada más: por decisión de diseño el
+          titular está oculto, así que la página no tenía NINGÚN <h1> ni apenas
+          texto. Para un buscador eso es una página muda —Google se compuso el
+          resumen con el pie del teaser viejo en vez de con la descripción— y para
+          un lector de pantalla es una página sin encabezado por el que orientarse.
+
+          Así que el encabezado existe, pero no se ve: la técnica de recorte de
+          siempre, que lo saca de la pantalla sin sacarlo del documento. NO vale
+          `display:none` ni `visibility:hidden`: eso lo esconde también de los
+          lectores de pantalla, que es justo a quien queremos dárselo.
+
+          Solo cuando no hay titular visible. Si Jose enciende el texto de portada
+          desde el CMS, ese <h1> es el bueno y este sobra: dos encabezados de
+          primer nivel compitiendo es peor que ninguno. */}
+      {!titulo && (
+        <h1 style={{
+          position: 'absolute', width: 1, height: 1, padding: 0, margin: -1,
+          overflow: 'hidden', clip: 'rect(0 0 0 0)', clipPath: 'inset(50%)',
+          whiteSpace: 'nowrap', border: 0,
+        }}>
+          {locale === 'en'
+            ? 'Forma Prima — Architecture and interior design studio in Madrid'
+            : 'Forma Prima — Estudio de arquitectura e interiorismo en Madrid'}
+        </h1>
+      )}
+
       {/* Titular centrado */}
       <section style={{ position: 'relative', zIndex: 3, minHeight: '100dvh', display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: `0 ${site.gutter}`,
