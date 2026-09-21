@@ -179,6 +179,21 @@ export function ProyectoDetalle({ proyecto, equipo = [] }: { proyecto: WebProyec
           min-width: 0;
           max-width: calc(var(--lamina-alto, clamp(360px, 84vh, 880px)) * var(--ratio, 999));
         }
+        /* ── Planimetría centrada ──────────────────────────────────────────
+           Un plano casi nunca llena el ancho de su fila: el tope de alto lo
+           estrecha (ver .fig-lamina), y como .fig-fila es un flex sin
+           justify-content, todo el hueco sobrante se iba a la derecha y la hoja
+           quedaba escorada a la izquierda de la pantalla. Con las fotos eso está
+           bien —la rejilla se lee por su eje izquierdo— pero un plano es una
+           lámina suelta, y una lámina suelta va centrada.
+
+           Solo en planimetría, y por eso es una clase aparte y no un cambio en
+           .fig-fila: centrar también las fotos rompería el eje que ordena toda
+           la galería. Incluye la vertical suelta, que a propósito se alinea con la
+           pareja de arriba en las fotos y aquí no tiene con qué alinearse. */
+        .fig-fila--centrada { justify-content: center; }
+        .fig-fila--centrada.fig-fila--suelta .fig-lamina { margin-inline: auto; }
+
         .fig-media { overflow: hidden; line-height: 0; }
         /* El <picture> del componente Img no debe interponer una caja entre el
            contenedor y el bitmap: sin esto la lámina no gobierna el ancho. */
@@ -381,7 +396,12 @@ function MediaSection({ titulo, items, locale, tipo }: { titulo: string; items: 
             {/* La fila de una sola vertical (número impar en la serie) se queda a
                 media columna en vez de estirarse: una suelta a todo lo ancho
                 rompería el ritmo que acaba de establecer la pareja anterior. */}
-            <div className={fila.clase === 'par' ? (fila.laminas.length === 1 ? 'fig-fila fig-fila--suelta' : 'fig-fila') : 'fig-fila fig-fila--ancha'}>
+            <div className={[
+              'fig-fila',
+              fila.clase === 'par' ? (fila.laminas.length === 1 ? 'fig-fila--suelta' : '') : 'fig-fila--ancha',
+              // La planimetría se centra en la página; las fotos no. Ver el CSS.
+              plano ? 'fig-fila--centrada' : '',
+            ].filter(Boolean).join(' ')}>
               {fila.laminas.map(({ m, i, ratio, ratioReal }) => {
                 const caption = (locale === 'en' ? m.caption_en : m.caption_es) || ''
                 const isVid = esVideoUrl(m.url)
