@@ -2,8 +2,9 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, revalidateTag, unstable_cache } from 'next/cache'
 import { USOS, type MapaPunto } from '@/lib/web-mapa'
+import { TAG, VIDA, conEspera } from '@/lib/web-publica/cache'
 
 const PATH = '/team/marketing/web-publica'
 const FP_ROLES = ['fp_partner', 'fp_biz_dev']
@@ -71,16 +72,45 @@ async function fichasPublicadas(admin: ReturnType<typeof createAdminClient>) {
   return m
 }
 
-/** Lectura pública: solo los activos, en orden. */
+/** Lectura pública: solo los activos, en orden. Cacheada. */
+const leerPuntosPublicos = unstable_cache(
+  async (): Promise<MapaPunto[]> => {
+    const admin = createAdminClient()
+    const { data, error } = await conEspera(
+      leerPuntos((sel) => admin.from('web_mapa_puntos').select(sel)
+        .eq('activo', true).order('orden', { ascending: true })),
+      'mapa',
+    )
+    if (error) throw new Error(error.message)
+    const fichas = await conEspera(fichasPublicadas(admin), 'mapa:fichas')
+    return (data ?? []).map((r) => mapRow(r, fichas))
+  },
+  ['web-mapa-puntos'],
+  { tags: [TAG.mapa, TAG.proyectos], revalidate: VIDA.normal },
+)
+
+/**
+ * Invalida lo que este módulo escribe.
+ *
+ * La etiqueta es lo esencial: las lecturas públicas están cacheadas, así que sin
+ * esto un cambio del CMS no se vería hasta que venciera la caché. Las rutas se
+ * siguen revalidando porque las páginas son dinámicas y tienen su propia caché
+ * de ruta.
+ */
+function invalidar(...rutas: string[]) {
+  revalidateTag(TAG.mapa)
+  for (const r of rutas) revalidatePath(r)
+}
+
 export async function getMapaPuntosPublic(): Promise<MapaPunto[]> {
-  const admin = createAdminClient()
-  const { data, error } = await leerPuntos((sel) => admin.from('web_mapa_puntos').select(sel)
-    .eq('activo', true).order('orden', { ascending: true }))
-  // La migración puede no estar aplicada todavía: el sitio no se cae, se queda
-  // sin mapa nuevo y el visor cae al plano PNG de siempre.
-  if (error) { console.error('[web-mapa] getPublic:', error.message); return [] }
-  const fichas = await fichasPublicadas(admin)
-  return (data ?? []).map((r) => mapRow(r, fichas))
+  try {
+    return await leerPuntosPublicos()
+  } catch (e) {
+    // Sin puntos el mapa no se cae: cae al plano PNG de siempre, que para eso
+    // existe el respaldo.
+    console.error('[web-mapa] getPublic:', (e as Error).message)
+    return []
+  }
 }
 
 /** Lectura del CMS: también los desactivados y los que aún no tienen coordenadas. */
@@ -103,7 +133,7 @@ export async function createMapaPunto(): Promise<{ success: true } | { error: st
     const { error } = await admin.from('web_mapa_puntos')
       .insert({ nombre: 'Nueva obra', orden: (ultimo?.orden ?? 0) + 1 })
     if (error) return { error: error.message }
-    revalidatePath(PATH)
+    invalidar(PATH)
     return { success: true }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
@@ -154,8 +184,7 @@ export async function updateMapaPunto(id: string, data: {
     }
     const { error } = await admin.from('web_mapa_puntos').update(patch).eq('id', id)
     if (error) return { error: error.message }
-    revalidatePath(PATH)
-    revalidatePath('/')
+    invalidar(PATH, '/')
     return { success: true }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
@@ -168,7 +197,7 @@ export async function deleteMapaPunto(id: string): Promise<{ success: true } | {
     const admin = createAdminClient()
     const { error } = await admin.from('web_mapa_puntos').delete().eq('id', id)
     if (error) return { error: error.message }
-    revalidatePath(PATH)
+    invalidar(PATH)
     return { success: true }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
@@ -180,7 +209,7 @@ export async function reorderMapaPuntos(ids: string[]): Promise<{ success: true 
     await requireMarketing()
     const admin = createAdminClient()
     await Promise.all(ids.map((id, i) => admin.from('web_mapa_puntos').update({ orden: i }).eq('id', id)))
-    revalidatePath(PATH)
+    invalidar(PATH)
     return { success: true }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
@@ -233,7 +262,7 @@ export async function geocodificarPunto(id: string): Promise<{ success: true; la
     const [lng, lat] = f.center as [number, number]
     const { error } = await admin.from('web_mapa_puntos').update({ lat, lng }).eq('id', id)
     if (error) return { error: error.message }
-    revalidatePath(PATH)
+    invalidar(PATH)
     return { success: true, lat, lng, encontrado: f.place_name ?? consulta }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }

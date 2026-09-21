@@ -9,8 +9,9 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { SITE_BASE } from '@/lib/web-publica/base'
+import { TAG } from '@/lib/web-publica/cache'
 import {
   ESCALA_MAX, ESCALA_MIN,
   type BlockEstilo, type BlockEstiloPatch, type EstiloJson, type Locale, type Viewport,
@@ -28,9 +29,7 @@ async function requireDesign() {
 }
 
 function revalidar(pagina: string) {
-  revalidatePath(PATH_CMS)
-  revalidatePath(`${PATH_CMS}/studio`)
-  revalidatePath(pagina === 'home' ? '/' : `${SITE_BASE}/${pagina.replace('_', '-')}`)
+  invalidar(PATH_CMS, `${PATH_CMS}/studio`, pagina === 'home' ? '/' : `${SITE_BASE}/${pagina.replace('_', '-')}`)
 }
 
 /** Saneado: solo dejamos entrar valores del sistema de diseño, nunca CSS libre. */
@@ -56,6 +55,19 @@ function sanearEstilo(patch: BlockEstiloPatch): BlockEstilo {
  * Merge del estilo de un bloque en un viewport. `null` en un campo lo BORRA
  * (volver al token del sistema es un estado legítimo, no un valor más).
  */
+/**
+ * Invalida lo que este módulo escribe.
+ *
+ * La etiqueta es lo esencial: las lecturas públicas están cacheadas, así que sin
+ * esto un cambio del CMS no se vería hasta que venciera la caché. Las rutas se
+ * siguen revalidando porque las páginas son dinámicas y tienen su propia caché
+ * de ruta.
+ */
+function invalidar(...rutas: string[]) {
+  revalidateTag(TAG.contenido)
+  for (const r of rutas) revalidatePath(r)
+}
+
 export async function saveBlockEstilo(
   pagina: string,
   seccion: string,

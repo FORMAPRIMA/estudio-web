@@ -7,10 +7,12 @@
 // llaman al terminar de subir. `getManifiesto()` es la cara de lectura, y la
 // consume el sitio a través de <AssetsProvider>.
 
+import { revalidateTag, unstable_cache } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { generar } from '@/lib/web-publica/optimizador'
 import { BUCKET, rutaVariante, type Manifiesto, type Variantes } from '@/lib/web-publica/imagenes'
+import { TAG, VIDA, conEspera } from '@/lib/web-publica/cache'
 
 const ROLES_ESCRITURA = ['fp_partner', 'fp_biz_dev']
 
@@ -32,15 +34,40 @@ async function requireMarketing() {
  * Si falla, devuelve {} — sin manifiesto el sitio pinta los originales, que es
  * exactamente el comportamiento de antes. Nunca debe tumbar una página.
  */
-export async function getManifiesto(): Promise<Manifiesto> {
-  try {
+/**
+ * El manifiesto de variantes, cacheado con la vida más larga de todo el sitio.
+ *
+ * Era, con diferencia, la consulta más cara de la web: la tabla `web_assets`
+ * ENTERA —con su jsonb de variantes— en CADA petición de CADA página, porque la
+ * pide el layout del sitio. Y su contenido solo cambia cuando alguien sube un
+ * archivo desde el CMS, cosa que pasa unas pocas veces por semana.
+ */
+const leerManifiesto = unstable_cache(
+  async (): Promise<Manifiesto> => {
     const admin = createAdminClient()
-    const { data, error } = await admin.from('web_assets').select('origen_url, variantes')
-    if (error) { console.error('[web-assets] getManifiesto:', error.message); return {} }
+    const { data, error } = await conEspera(
+      admin.from('web_assets').select('origen_url, variantes'),
+      'manifiesto',
+    )
+    // Un error de Supabase se LANZA, no se traga: así no se guarda un manifiesto
+    // vacío en la caché, que dejaría el sitio sirviendo los originales sin
+    // optimizar durante una hora.
+    if (error) throw new Error(error.message)
     const m: Manifiesto = {}
     for (const fila of data ?? []) m[fila.origen_url as string] = fila.variantes as Variantes
     return m
+  },
+  ['web-assets-manifiesto'],
+  { tags: [TAG.assets], revalidate: VIDA.largo },
+)
+
+export async function getManifiesto(): Promise<Manifiesto> {
+  try {
+    return await leerManifiesto()
   } catch (e) {
+    // Sin manifiesto el sitio sigue en pie: `Img` cae al original. Es peor de
+    // rendimiento, pero se ve. Esto solo ocurre en la primera carga tras un
+    // despliegue si justo entonces Supabase no responde.
     console.error('[web-assets] getManifiesto:', (e as Error).message)
     return {}
   }
@@ -111,6 +138,10 @@ export async function optimizarAsset(
       metodo: opts.adaptativo ? 'lotes' : 'subida',
     }, { onConflict: 'origen_url' })
     if (errFila) return { error: errFila.message }
+
+    // El manifiesto está cacheado una hora; sin esto, la imagen recién subida se
+    // serviría sin optimizar hasta que esa hora venciera.
+    revalidateTag(TAG.assets)
 
     // Ahorro sobre la variante que de verdad se serviría en escritorio (1920),
     // no sobre la suma del ladder: es la cifra que le importa al usuario.

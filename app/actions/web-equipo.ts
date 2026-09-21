@@ -2,8 +2,9 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, revalidateTag, unstable_cache } from 'next/cache'
 import { slugify, type WebEquipo } from '@/lib/web-equipo'
+import { TAG, VIDA, conEspera } from '@/lib/web-publica/cache'
 
 const PATH = '/team/marketing/web-publica'
 
@@ -30,12 +31,34 @@ function mapRow(r: any): WebEquipo {
 
 // ── Lectura ──────────────────────────────────────────────────────────────────
 
+const leerEquipoPublico = unstable_cache(
+  async (): Promise<WebEquipo[]> => {
+    const admin = createAdminClient()
+    const { data, error } = await conEspera(admin.from('web_equipo').select(SELECT)
+      .eq('activo', true).order('orden', { ascending: true }).order('created_at', { ascending: true }), 'equipo')
+    if (error) throw new Error(error.message)
+    return (data ?? []).map(mapRow)
+  },
+  ['web-equipo-public'],
+  { tags: [TAG.equipo], revalidate: VIDA.normal },
+)
+
+/**
+ * Invalida lo que este módulo escribe.
+ *
+ * La etiqueta es lo esencial: las lecturas públicas están cacheadas, así que sin
+ * esto un cambio del CMS no se vería hasta que venciera la caché. Las rutas se
+ * siguen revalidando porque las páginas son dinámicas y tienen su propia caché
+ * de ruta.
+ */
+function invalidar(...rutas: string[]) {
+  revalidateTag(TAG.equipo)
+  for (const r of rutas) revalidatePath(r)
+}
+
 export async function getEquipoPublic(): Promise<WebEquipo[]> {
-  const admin = createAdminClient()
-  const { data, error } = await admin.from('web_equipo').select(SELECT)
-    .eq('activo', true).order('orden', { ascending: true }).order('created_at', { ascending: true })
-  if (error) { console.error('[web-equipo] getPublic:', error.message); return [] }
-  return (data ?? []).map(mapRow)
+  try { return await leerEquipoPublico() }
+  catch (e) { console.error('[web-equipo] getPublic:', (e as Error).message); return [] }
 }
 
 /**
@@ -95,7 +118,7 @@ export async function createWebEquipo(): Promise<{ success: true; id: string } |
     const { data: row, error } = await admin.from('web_equipo')
       .insert({ nombre: 'Nuevo miembro', slug, orden }).select('id').single()
     if (error) return { error: error.message }
-    revalidatePath(PATH); revalidatePath('/estudio')
+    invalidar(PATH, '/estudio')
     return { success: true, id: row.id }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
@@ -114,7 +137,7 @@ export async function updateWebEquipo(id: string, data: Partial<Omit<WebEquipo, 
 
     const { error } = await admin.from('web_equipo').update(patch).eq('id', id)
     if (error) return { error: error.message }
-    revalidatePath(PATH); revalidatePath('/estudio')
+    invalidar(PATH, '/estudio')
     return { success: true }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
@@ -127,7 +150,7 @@ export async function deleteWebEquipo(id: string): Promise<{ success: true } | {
     const admin = createAdminClient()
     const { error } = await admin.from('web_equipo').delete().eq('id', id)
     if (error) return { error: error.message }
-    revalidatePath(PATH); revalidatePath('/estudio')
+    invalidar(PATH, '/estudio')
     return { success: true }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
@@ -139,7 +162,7 @@ export async function reorderWebEquipo(ids: string[]): Promise<{ success: true }
     await requireMarketing()
     const admin = createAdminClient()
     await Promise.all(ids.map((id, i) => admin.from('web_equipo').update({ orden: i }).eq('id', id)))
-    revalidatePath(PATH); revalidatePath('/estudio')
+    invalidar(PATH, '/estudio')
     return { success: true }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }

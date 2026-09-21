@@ -2,8 +2,9 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, revalidateTag, unstable_cache } from 'next/cache'
 import { slugifyPropiedad, type WebPropiedad } from '@/lib/web-propiedades'
+import { TAG, VIDA, conEspera } from '@/lib/web-publica/cache'
 
 const PATH = '/team/marketing/web-publica'
 
@@ -37,12 +38,34 @@ async function uniqueSlug(admin: ReturnType<typeof createAdminClient>, base: str
   return `${slug}-${Date.now()}`
 }
 
+const leerPropiedadesPublicas = unstable_cache(
+  async (): Promise<WebPropiedad[]> => {
+    const admin = createAdminClient()
+    const { data, error } = await conEspera(admin.from('web_propiedades').select(SELECT)
+      .eq('activo', true).order('orden', { ascending: true }).order('created_at', { ascending: true }), 'propiedades')
+    if (error) throw new Error(error.message)
+    return (data ?? []).map(mapRow)
+  },
+  ['web-propiedades-public'],
+  { tags: [TAG.propiedades], revalidate: VIDA.normal },
+)
+
+/**
+ * Invalida lo que este módulo escribe.
+ *
+ * La etiqueta es lo esencial: las lecturas públicas están cacheadas, así que sin
+ * esto un cambio del CMS no se vería hasta que venciera la caché. Las rutas se
+ * siguen revalidando porque las páginas son dinámicas y tienen su propia caché
+ * de ruta.
+ */
+function invalidar(...rutas: string[]) {
+  revalidateTag(TAG.propiedades)
+  for (const r of rutas) revalidatePath(r)
+}
+
 export async function getPropiedadesPublic(): Promise<WebPropiedad[]> {
-  const admin = createAdminClient()
-  const { data, error } = await admin.from('web_propiedades').select(SELECT)
-    .eq('activo', true).order('orden', { ascending: true }).order('created_at', { ascending: true })
-  if (error) { console.error('[web-propiedades] getPublic:', error.message); return [] }
-  return (data ?? []).map(mapRow)
+  try { return await leerPropiedadesPublicas() }
+  catch (e) { console.error('[web-propiedades] getPublic:', (e as Error).message); return [] }
 }
 
 export async function getPropiedadesAdmin(): Promise<WebPropiedad[]> {
@@ -54,11 +77,23 @@ export async function getPropiedadesAdmin(): Promise<WebPropiedad[]> {
   return (data ?? []).map(mapRow)
 }
 
+const leerPropiedad = unstable_cache(
+  async (slug: string): Promise<WebPropiedad | null> => {
+    const admin = createAdminClient()
+    const { data, error } = await conEspera(
+      admin.from('web_propiedades').select(SELECT).eq('slug', slug).eq('activo', true).maybeSingle(), `propiedad:${slug}`)
+    // Un error SÍ se lanza (no se cachea); «no existe» se cachea como null, que
+    // es una respuesta legítima y evita machacar la BD con slugs inventados.
+    if (error) throw new Error(error.message)
+    return data ? mapRow(data) : null
+  },
+  ['web-propiedad-slug'],
+  { tags: [TAG.propiedades], revalidate: VIDA.normal },
+)
+
 export async function getPropiedadBySlug(slug: string): Promise<WebPropiedad | null> {
-  const admin = createAdminClient()
-  const { data, error } = await admin.from('web_propiedades').select(SELECT).eq('slug', slug).eq('activo', true).maybeSingle()
-  if (error || !data) return null
-  return mapRow(data)
+  try { return await leerPropiedad(slug) }
+  catch (e) { console.error('[web-propiedades] getBySlug:', (e as Error).message); return null }
 }
 
 export async function createPropiedad(): Promise<{ success: true; id: string } | { error: string }> {
@@ -70,7 +105,7 @@ export async function createPropiedad(): Promise<{ success: true; id: string } |
     const slug = await uniqueSlug(admin, 'nueva-propiedad')
     const { data: row, error } = await admin.from('web_propiedades').insert({ nombre: 'Nueva propiedad', slug, orden }).select('id').single()
     if (error) return { error: error.message }
-    revalidatePath(PATH); revalidatePath('/real-estate')
+    invalidar(PATH, '/real-estate')
     return { success: true, id: row.id }
   } catch (err) { return { error: err instanceof Error ? err.message : 'Error inesperado.' } }
 }
@@ -85,7 +120,7 @@ export async function updatePropiedad(id: string, data: Partial<Omit<WebPropieda
     if (data.regenerarSlug && data.nombre?.trim()) patch.slug = await uniqueSlug(admin, data.nombre, id)
     const { error } = await admin.from('web_propiedades').update(patch).eq('id', id)
     if (error) return { error: error.message }
-    revalidatePath(PATH); revalidatePath('/real-estate')
+    invalidar(PATH, '/real-estate')
     return { success: true }
   } catch (err) { return { error: err instanceof Error ? err.message : 'Error inesperado.' } }
 }
@@ -96,7 +131,7 @@ export async function deletePropiedad(id: string): Promise<{ success: true } | {
     const admin = createAdminClient()
     const { error } = await admin.from('web_propiedades').delete().eq('id', id)
     if (error) return { error: error.message }
-    revalidatePath(PATH); revalidatePath('/real-estate')
+    invalidar(PATH, '/real-estate')
     return { success: true }
   } catch (err) { return { error: err instanceof Error ? err.message : 'Error inesperado.' } }
 }
@@ -106,7 +141,7 @@ export async function reorderPropiedades(ids: string[]): Promise<{ success: true
     await requireMarketing()
     const admin = createAdminClient()
     await Promise.all(ids.map((id, i) => admin.from('web_propiedades').update({ orden: i }).eq('id', id)))
-    revalidatePath(PATH); revalidatePath('/real-estate')
+    invalidar(PATH, '/real-estate')
     return { success: true }
   } catch (err) { return { error: err instanceof Error ? err.message : 'Error inesperado.' } }
 }

@@ -2,13 +2,17 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, revalidateTag, unstable_cache } from 'next/cache'
+import { TAG, VIDA, conEspera } from '@/lib/web-publica/cache'
 import { slugifyTool, type WebFpTool, type WebFpToolBloque, type WebFpToolDetalle, type BloqueTipo } from '@/lib/web-fp-tools'
 
 const PATH = '/team/marketing/web-publica'
 
 /** Revalida la portada de capacidades y, si se sabe, la subpágina tocada. */
 function refrescar(slug?: string | null) {
+  // La etiqueta es lo que de verdad invalida: las lecturas están cacheadas, y sin
+  // esto un cambio del CMS tardaría hasta cinco minutos en verse.
+  revalidateTag(TAG.fpTools)
   revalidatePath(PATH)
   revalidatePath('/fp-tools')
   if (slug) revalidatePath(`/fp-tools/${slug}`)
@@ -67,39 +71,68 @@ async function slugLibre(admin: ReturnType<typeof createAdminClient>, nombre: st
 
 // ── Lectura pública ─────────────────────────────────────────────────────────
 
+const leerToolsPublicas = unstable_cache(
+  async (): Promise<WebFpTool[]> => {
+    const admin = createAdminClient()
+    const { data, error } = await conEspera(admin.from('web_fp_tools').select(SELECT)
+      .eq('activo', true).order('orden', { ascending: true }).order('created_at', { ascending: true }), 'fp-tools')
+    if (error) throw new Error(error.message)
+    return (data ?? []).map(mapRow)
+  },
+  ['web-fp-tools-public'],
+  { tags: [TAG.fpTools], revalidate: VIDA.normal },
+)
+
 export async function getFpToolsPublic(): Promise<WebFpTool[]> {
-  const admin = createAdminClient()
-  const { data, error } = await admin.from('web_fp_tools').select(SELECT)
-    .eq('activo', true).order('orden', { ascending: true }).order('created_at', { ascending: true })
-  if (error) { console.error('[web-fp-tools] getPublic:', error.message); return [] }
-  return (data ?? []).map(mapRow)
+  try { return await leerToolsPublicas() }
+  catch (e) { console.error('[web-fp-tools] getPublic:', (e as Error).message); return [] }
 }
 
 /**
  * La subpágina de una capacidad. Devuelve null si no existe o está oculta: una
  * tool despublicada tiene que dar 404, no una página a medias.
  */
+const leerTool = unstable_cache(
+  async (slug: string): Promise<WebFpToolDetalle | null> => {
+    const admin = createAdminClient()
+    const { data, error } = await conEspera(admin.from('web_fp_tools').select(SELECT)
+      .eq('slug', slug).eq('activo', true).maybeSingle(), `fp-tool:${slug}`)
+    if (error) throw new Error(error.message)
+    if (!data) return null
+
+    const { data: bloques, error: errB } = await conEspera(
+      admin.from('web_fp_tool_bloques').select(SELECT_BLOQUE)
+        .eq('tool_id', (data as any).id).order('orden', { ascending: true }).order('created_at', { ascending: true }),
+      `fp-tool:${slug}:bloques`)
+    if (errB) throw new Error(errB.message)
+
+    return { ...mapRow(data), bloques: (bloques ?? []).map(mapBloque) }
+  },
+  ['web-fp-tool-slug'],
+  { tags: [TAG.fpTools], revalidate: VIDA.normal },
+)
+
 export async function getFpToolBySlug(slug: string): Promise<WebFpToolDetalle | null> {
-  const admin = createAdminClient()
-  const { data, error } = await admin.from('web_fp_tools').select(SELECT)
-    .eq('slug', slug).eq('activo', true).maybeSingle()
-  if (error) { console.error('[web-fp-tools] getBySlug:', error.message); return null }
-  if (!data) return null
-
-  const { data: bloques, error: errB } = await admin.from('web_fp_tool_bloques').select(SELECT_BLOQUE)
-    .eq('tool_id', (data as any).id).order('orden', { ascending: true }).order('created_at', { ascending: true })
-  if (errB) console.error('[web-fp-tools] bloques:', errB.message)
-
-  return { ...mapRow(data), bloques: (bloques ?? []).map(mapBloque) }
+  try { return await leerTool(slug) }
+  catch (e) { console.error('[web-fp-tools] getBySlug:', (e as Error).message); return null }
 }
 
 /** Las capacidades vecinas, para poder seguir a la siguiente sin volver atrás. */
+const leerIndice = unstable_cache(
+  async (): Promise<{ slug: string; nombre: string }[]> => {
+    const admin = createAdminClient()
+    const { data, error } = await conEspera(admin.from('web_fp_tools').select('slug, nombre')
+      .eq('activo', true).order('orden', { ascending: true }).order('created_at', { ascending: true }), 'fp-tools:indice')
+    if (error) throw new Error(error.message)
+    return (data ?? []).map((r: any) => ({ slug: r.slug ?? '', nombre: r.nombre })).filter((r) => r.slug)
+  },
+  ['web-fp-tools-indice'],
+  { tags: [TAG.fpTools], revalidate: VIDA.normal },
+)
+
 export async function getFpToolsIndice(): Promise<{ slug: string; nombre: string }[]> {
-  const admin = createAdminClient()
-  const { data, error } = await admin.from('web_fp_tools').select('slug, nombre')
-    .eq('activo', true).order('orden', { ascending: true }).order('created_at', { ascending: true })
-  if (error) { console.error('[web-fp-tools] indice:', error.message); return [] }
-  return (data ?? []).map((r: any) => ({ slug: r.slug ?? '', nombre: r.nombre })).filter((r) => r.slug)
+  try { return await leerIndice() }
+  catch (e) { console.error('[web-fp-tools] indice:', (e as Error).message); return [] }
 }
 
 // ── Administración ──────────────────────────────────────────────────────────

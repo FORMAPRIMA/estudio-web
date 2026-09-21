@@ -5,10 +5,11 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sendEmail, wrapEmail } from '@/lib/email'
 import { crearEspacioCore, enviarCorreoBienvenida } from '@/lib/espacio/create'
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, revalidateTag, unstable_cache } from 'next/cache'
 import { slugifyProyecto, type WebProyecto, type ProyectoMedia, type ProyectoCredito } from '@/lib/web-publica'
 import { resumenCualificacion } from '@/lib/contacto'
 import { LEADS_TO } from '@/lib/email/destinatarios'
+import { TAG, VIDA, conEspera } from '@/lib/web-publica/cache'
 
 const PATH = '/team/marketing/web-publica'
 
@@ -73,20 +74,54 @@ async function uniqueProyectoSlug(admin: ReturnType<typeof createAdminClient>, b
 }
 
 /** Lectura pública para la parrilla del sitio real (solo activos, con slug). */
+const leerProyectosSite = unstable_cache(
+  async (): Promise<WebProyecto[]> => {
+    const admin = createAdminClient()
+    const { data, error } = await conEspera(leerProyectos((sel) => admin.from('web_proyectos').select(sel)
+      .eq('activo', true).order('orden', { ascending: true }).order('created_at', { ascending: true })), 'proyectos')
+    if (error) throw new Error(error.message)
+    return (data ?? []).map(mapRow)
+  },
+  ['web-proyectos-site'],
+  { tags: [TAG.proyectos], revalidate: VIDA.normal },
+)
+
+/**
+ * Invalida lo que este módulo escribe.
+ *
+ * La etiqueta es lo esencial: las lecturas públicas están cacheadas, así que sin
+ * esto un cambio del CMS no se vería hasta que venciera la caché. Las rutas se
+ * siguen revalidando porque las páginas son dinámicas y tienen su propia caché
+ * de ruta.
+ */
+function invalidar(...rutas: string[]) {
+  revalidateTag(TAG.proyectos)
+  revalidateTag(TAG.mapa)
+  for (const r of rutas) revalidatePath(r)
+}
+
 export async function getProyectosSite(): Promise<WebProyecto[]> {
-  const admin = createAdminClient()
-  const { data, error } = await leerProyectos((sel) => admin.from('web_proyectos').select(sel)
-    .eq('activo', true).order('orden', { ascending: true }).order('created_at', { ascending: true }))
-  if (error) { console.error('[web-publica] getProyectosSite:', error.message); return [] }
-  return (data ?? []).map(mapRow)
+  try { return await leerProyectosSite() }
+  catch (e) { console.error('[web-publica] getProyectosSite:', (e as Error).message); return [] }
 }
 
 /** Detalle público de un proyecto por slug. */
+const leerProyecto = unstable_cache(
+  async (slug: string): Promise<WebProyecto | null> => {
+    const admin = createAdminClient()
+    const { data, error } = await conEspera(
+      leerProyectos((sel) => admin.from('web_proyectos').select(sel).eq('slug', slug).eq('activo', true).maybeSingle()),
+      `proyecto:${slug}`)
+    if (error) throw new Error(error.message)
+    return data ? mapRow(data) : null
+  },
+  ['web-proyecto-slug'],
+  { tags: [TAG.proyectos], revalidate: VIDA.normal },
+)
+
 export async function getProyectoBySlug(slug: string): Promise<WebProyecto | null> {
-  const admin = createAdminClient()
-  const { data, error } = await leerProyectos((sel) => admin.from('web_proyectos').select(sel).eq('slug', slug).eq('activo', true).maybeSingle())
-  if (error || !data) return null
-  return mapRow(data)
+  try { return await leerProyecto(slug) }
+  catch (e) { console.error('[web-publica] getProyectoBySlug:', (e as Error).message); return null }
 }
 
 // ── Lectura ─────────────────────────────────────────────────────────────────
@@ -159,8 +194,7 @@ export async function createWebProyecto(data: {
       .select('id')
       .single()
     if (error) return { error: error.message }
-    revalidatePath(PATH)
-    revalidatePath('/')
+    invalidar(PATH, '/')
     return { success: true, id: row.id }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
@@ -227,9 +261,7 @@ export async function updateWebProyecto(
 
     const { error } = await admin.from('web_proyectos').update(patch).eq('id', id)
     if (error) return { error: error.message }
-    revalidatePath(PATH)
-    revalidatePath('/')
-    revalidatePath('/proyectos')
+    invalidar(PATH, '/', '/proyectos')
     return { success: true }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
@@ -242,8 +274,7 @@ export async function deleteWebProyecto(id: string): Promise<{ success: true } |
     const admin = createAdminClient()
     const { error } = await admin.from('web_proyectos').delete().eq('id', id)
     if (error) return { error: error.message }
-    revalidatePath(PATH)
-    revalidatePath('/')
+    invalidar(PATH, '/')
     return { success: true }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
@@ -258,8 +289,7 @@ export async function reorderWebProyectos(ids: string[]): Promise<{ success: tru
     await Promise.all(
       ids.map((id, i) => admin.from('web_proyectos').update({ orden: i }).eq('id', id))
     )
-    revalidatePath(PATH)
-    revalidatePath('/')
+    invalidar(PATH, '/')
     return { success: true }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }

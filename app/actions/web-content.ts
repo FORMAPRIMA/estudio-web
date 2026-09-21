@@ -2,8 +2,9 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, revalidateTag, unstable_cache } from 'next/cache'
 import { contentKey, type WebContent, type ContentMap, type ContentTipo } from '@/lib/web-publica'
+import { TAG, VIDA, conEspera } from '@/lib/web-publica/cache'
 
 const PATH = '/team/marketing/web-publica'
 
@@ -65,9 +66,44 @@ function toMap(rows: WebContent[]): ContentMap {
 
 // ── Lectura ──────────────────────────────────────────────────────────────────
 
-/** Lectura pública para el sitio. Devuelve el contenido de una página como mapa. */
+/**
+ * Lectura pública para el sitio, cacheada por página.
+ *
+ * La pide el layout y la pide cada página, así que es la consulta más repetida
+ * del sitio después del manifiesto. El argumento `pagina` entra en la clave de
+ * caché solo: Next la deriva de los argumentos de la llamada.
+ */
+const leerContenido = unstable_cache(
+  async (pagina: string): Promise<ContentMap> => {
+    // `fetchRows` traga sus errores y devuelve [] — bien para el sitio, veneno
+    // para la caché: guardaría una página en blanco. Así que se comprueba aquí.
+    const filas = await conEspera(fetchRows(pagina, 'getContent'), `contenido:${pagina}`)
+    return toMap(filas)
+  },
+  ['web-content'],
+  { tags: [TAG.contenido], revalidate: VIDA.normal },
+)
+
+/**
+ * Invalida lo que este módulo escribe.
+ *
+ * La etiqueta es lo esencial: las lecturas públicas están cacheadas, así que sin
+ * esto un cambio del CMS no se vería hasta que venciera la caché. Las rutas se
+ * siguen revalidando porque las páginas son dinámicas y tienen su propia caché
+ * de ruta.
+ */
+function invalidar(...rutas: string[]) {
+  revalidateTag(TAG.contenido)
+  for (const r of rutas) revalidatePath(r)
+}
+
 export async function getContent(pagina: string): Promise<ContentMap> {
-  return toMap(await fetchRows(pagina, 'getContent'))
+  try {
+    return await leerContenido(pagina)
+  } catch (e) {
+    console.error('[web-content] getContent:', (e as Error).message)
+    return {}
+  }
 }
 
 /** Lectura para el editor (gated). Mismo shape que getContent. */
@@ -115,8 +151,7 @@ export async function upsertContent(
       .upsert(row, { onConflict: 'pagina,seccion,clave' })
     if (error) return { error: error.message }
 
-    revalidatePath(PATH)
-    revalidatePath(pagina === 'home' ? '/' : `/${pagina.replace('_', '-')}`)
+    invalidar(PATH, pagina === 'home' ? '/' : `/${pagina.replace('_', '-')}`)
     return { success: true }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
