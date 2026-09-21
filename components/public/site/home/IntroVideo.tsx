@@ -62,6 +62,24 @@ export function IntroVideo({ content, locale, mobile }: { content: ContentMap; l
 
   // Arranca visible en el primer render (también en el HTML del servidor): si
   // esperásemos al efecto, la primera pintura serían las imágenes widescreen.
+  /**
+   * El <video> NO se emite en el HTML del servidor, y el resto del velo sí.
+   *
+   * En el servidor no hay viewport que medir, así que allí `mobile` vale false y
+   * la fuente que saldría en el HTML sería la horizontal. El navegador empieza a
+   * descargarla antes de que React hidrate, y a partir de ahí no hay vuelta: un
+   * <video> no reevalúa sus <source> una vez ha elegido archivo. En un teléfono
+   * eso dejaba la pieza horizontal en pantalla, recortada por object-fit: cover
+   * —el «mucho zoom»— con el póster vertical detrás.
+   *
+   * El velo (el fondo negro a pantalla completa) SÍ se emite: es lo que impide que
+   * se vea la Home un fotograma antes de que entre la intro, que es lo que este
+   * componente cuidaba desde el principio. Lo único que se retrasa un fotograma es
+   * el vídeo, y debajo ya está el póster.
+   */
+  const [montado, setMontado] = useState(false)
+  useIsoLayoutEffect(() => { setMontado(true) }, [])
+
   const [show, setShow] = useState(enabled)
   const [fading, setFading] = useState(false)
   const [sonando, setSonando] = useState(false)
@@ -96,6 +114,25 @@ export function IntroVideo({ content, locale, mobile }: { content: ContentMap; l
       v.play().catch(() => {})
     })
   }, [enabled, ofreceSonido])
+
+  /**
+   * Red de seguridad: si la fuente cambia con el vídeo ya montado —girar el
+   * teléfono cruza el umbral de 640 px— hay que pedirle al elemento que vuelva a
+   * elegir. Cambiar el src de los <source> no basta; `load()` es lo único que le
+   * hace reconsiderar.
+   */
+  const fuente = webmUrl || videoUrl
+  const fuentePrevia = useRef<string | null>(null)
+  useEffect(() => {
+    const v = videoRef.current
+    if (!v || !fuente) return
+    if (fuentePrevia.current === null) { fuentePrevia.current = fuente; return }
+    if (fuentePrevia.current === fuente) return
+    fuentePrevia.current = fuente
+    const seguia = !v.paused
+    v.load()
+    if (seguia) v.play().catch(() => {})
+  }, [fuente])
 
   useEffect(() => () => cancelAnimationFrame(rampa.current), [])
 
@@ -231,6 +268,7 @@ export function IntroVideo({ content, locale, mobile }: { content: ContentMap; l
           serviría el AV1. El WebM va primero porque pesa un 69% menos con la misma
           calidad medida (VMAF 96,2); quien no lo soporte cae al MP4 original, que se
           conserva intacto — recodificarlo lo empeoraba. */}
+      {montado && (
       <video ref={videoRef} poster={posterUrl || undefined}
         autoPlay muted playsInline preload="auto"
         onPlaying={() => setListo(true)}
@@ -240,6 +278,7 @@ export function IntroVideo({ content, locale, mobile }: { content: ContentMap; l
         {webmUrl && <source src={webmUrl} type="video/webm" />}
         <source src={videoUrl} type="video/mp4" />
       </video>
+      )}
 
       {/* Veladura al pie. La invitación va en NEGRO (decisión de marca: en blanco
           se perdía sobre los fotogramas claros), y el negro sin base desaparecería
@@ -284,6 +323,24 @@ export function IntroVideo({ content, locale, mobile }: { content: ContentMap; l
           {t(`o ${gesto.entrar.toLowerCase()}`, `or ${gesto.entrar.toLowerCase()}`)}
         </span>
 
+        {/* En MÓVIL el control de silencio va aquí dentro, en la misma columna
+            centrada que la invitación. Estaba anclado al margen izquierdo, que en
+            escritorio funciona —hay sitio de sobra y queda lejos del centro— pero
+            en un teléfono de 390 px dejaba una etiqueta suelta pegada al canto con
+            todo lo demás centrado. `pointerEvents` propio porque la columna entera
+            los tiene desactivados: el clic de fondo es el que activa el sonido. */}
+        {sonando && mobile && (
+          <button type="button" className="iv-mute" style={{
+            pointerEvents: 'auto', background: 'none', border: 'none', padding: '6px 10px',
+            cursor: 'pointer', color: site.color.ink, fontFamily: site.font, fontSize: 10,
+            letterSpacing: site.track.ultra, textTransform: 'uppercase',
+          }}
+            onClick={(e) => { e.stopPropagation(); silenciar() }}
+            onDoubleClick={(e) => e.stopPropagation()}>
+            {t('Silenciar', 'Mute')}
+          </button>
+        )}
+
         {/* Absoluto: en flujo empujaba la invitación hacia arriba al aparecer y
             la dejaba caer al irse, cinco segundos después. */}
         {avisoSilencio && (
@@ -293,8 +350,10 @@ export function IntroVideo({ content, locale, mobile }: { content: ContentMap; l
         )}
       </div>
 
-      {/* Control de silencio: la WCAG pide poder parar el audio. Solo cuando suena. */}
-      {sonando && (
+      {/* Control de silencio en ESCRITORIO: la WCAG pide poder parar el audio.
+          Abajo a la izquierda, lejos de la invitación centrada. En móvil no cabe
+          esa separación y el control va dentro de la columna, más arriba. */}
+      {sonando && !mobile && (
         <button type="button" className="iv-mute"
           onClick={(e) => { e.stopPropagation(); silenciar() }}
           onDoubleClick={(e) => e.stopPropagation()}
