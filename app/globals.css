@@ -2403,3 +2403,45 @@ div:hover > .tt-avatar-overlay {
   }
   .vl-mz-aside { margin-top: 0; }
 }
+
+/* ── FP Visual Lab · Isla Creta ───────────────────────────────────── */
+
+/* Brújula y marca de agua sobre el visor: la maqueta es de un cliente real */
+.vl-ic-compass {
+  position: absolute;
+  right: 14px;
+  top: 14px;
+  z-index: 12;
+  text-align: center;
+  font-size: 9px;
+  letter-spacing: .14em;
+  color: #F2F2F0;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, .35);
+  pointer-events: none;
+}
+.vl-ic-compass span { display: block; font-size: 22px; line-height: 1.2; }
+.vl-ic-marca {
+  position: absolute;
+  left: 12px;
+  bottom: 106px;
+  z-index: 12;
+  padding: 6px 9px;
+  border-radius: 3px;
+  background: rgba(22, 59, 53, .6);
+  color: #E2E5D5;
+  font-size: 8.5px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+/* Tabla del inventario de Isla Creta (solo escritorio, ver .vl-inv-table) */
+.vl-ic-row {
+  display: grid;
+  grid-template-columns: 1fr .7fr 1fr 1fr .8fr 1.2fr 1.2fr .5fr;
+  gap: 8px;
+  padding: 0 18px;
+}
+@media (min-width: 1024px) {
+  .vl-ic-compass { right: 276px; top: 18px; }
+  .vl-ic-marca { left: 328px; bottom: 66px; }
+}

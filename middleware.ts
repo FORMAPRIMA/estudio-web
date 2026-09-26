@@ -53,6 +53,18 @@ export async function middleware(request: NextRequest) {
   const isAreaPrivada = pathname.startsWith('/area-privada')
   const isTeam = pathname.startsWith('/team')
 
+  // /protegido/* son archivos estáticos de `public/` que solo el equipo FP
+  // puede descargar (maquetas de clientes reales, p. ej. FP Visual Lab · Isla
+  // Creta). Proteger la página no protege el GLB: se protege aquí, y como lo
+  // pide un fetch y no un navegador, se responde 401 en vez de redirigir.
+  if (pathname.startsWith('/protegido')) {
+    if (!session) return new NextResponse('No autorizado', { status: 401 })
+    const { data: profile } = await supabase.from('profiles').select('rol').eq('id', session.user.id).single()
+    const FP_ROLES = ['fp_team', 'fp_manager', 'fp_partner', 'fp_biz_dev']
+    if (!profile?.rol || !FP_ROLES.includes(profile.rol)) return new NextResponse('No autorizado', { status: 403 })
+    return supabaseResponse
+  }
+
   if (!session && (isAreaPrivada || isTeam)) {
     const loginUrl = new URL('/login', request.url)
     loginUrl.searchParams.set('redirectTo', pathname)
@@ -95,5 +107,6 @@ export const config = {
     '/',
     '/area-privada/:path*',
     '/team/:path*',
+    '/protegido/:path*',
   ],
 }

@@ -222,3 +222,63 @@ export function lecturaMix(): string {
     + `${pct(ACTIVOS[1].gdv / gdv)} en renta, que la estabiliza. El suelo de Valdeserra es la reserva de margen: `
     + 'entra en precio bajo y escala con cada etapa urbanizada.'
 }
+
+/* ── Activos fuera del consolidado en euros ───────────────────────────
+   Isla Creta es un proyecto real en USD con precios de demostración y
+   disponibilidad sin confirmar: se enseña en la cartera, pero no se suma al
+   GDV ni al pipeline en euros (no hay conversión definida y no debe haberla). */
+
+export interface ActivoUSD {
+  id: 'IC'
+  nombre: string
+  ciudad: string
+  clase: string
+  claseCorta: string
+  color: string
+  href: string
+  render: string
+  hint: string
+  n: number
+  noun: string
+  sueloM2: number
+  /** Suma de los precios de demostración, en USD */
+  valorUsd: number
+  fase: string
+  fcolor: string
+  metricas: { k: string; v: string }[]
+  datos: [string, string][]
+  tesis: string
+  aviso: string
+}
+
+export const ISLA_CRETA: ActivoUSD = {
+  id: 'IC',
+  nombre: 'Isla Creta',
+  ciudad: 'Samborondón · Guayas, Ecuador',
+  clase: 'Suelo residencial · isla fluvial',
+  claseCorta: 'Suelo · USD',
+  color: '#5E8A7A',
+  href: '/team/apps/visual-lab/isla-creta',
+  render: '/protegido/visual-lab/isla-creta/firma',
+  hint: 'Isla Creta desde el norte: canal, puente y ribera',
+  n: 173,
+  noun: 'parcelas',
+  sueloM2: 148785,
+  valorUsd: 87.0e6,
+  fase: 'Maqueta · rev. 03',
+  fcolor: C.blue,
+  metricas: [
+    { k: 'Base demo', v: '550 USD/m²' },
+    { k: 'Parcela media', v: '860 m²' },
+    { k: 'Inventario', v: '173 parcelas' },
+  ],
+  datos: [
+    ['Suelo parcelado', '148.785 m²'], ['Parcelas', '171 unifamiliares · 2 solares MF'],
+    ['Manzanas', '9 · etapa 1'], ['Superficie', '452 – 10.207 m²'],
+    ['Plan etapa 1', '255.867 m²'], ['Isla completa', '481.049 m²'],
+    ['Precio base demo', '550 USD/m² · MF 350 USD/m²'], ['Valor ilustrativo', '87,0 M USD'],
+    ['Disponibilidad', 'Por confirmar'], ['Maqueta', 'Rev. 03 · 25/09/2026'],
+  ],
+  tesis: 'Isla fluvial con acceso por puente y un único frente de agua continuo: la etapa 1 ordena 173 parcelas en nueve manzanas alrededor de un eje central con club, canchas y dos torres conceptuales en la cabecera. La etapa 2 conserva su perímetro sin parcelación documentada. Los precios que enseña la maqueta son de demostración, apoyados en referencias anunciadas del cantón, y la disponibilidad está pendiente de confirmar con el promotor.',
+  aviso: 'Precios ilustrativos en USD · no es una oferta ni una tasación · fuera del consolidado en euros',
+}

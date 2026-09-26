@@ -1,0 +1,55 @@
+{
+  "version": "demo-2026-09-25",
+  "currency": "USD",
+  "isPlaceholder": true,
+  "notice": "PRECIOS ILUSTRATIVOS · NO ES UNA OFERTA NI UNA TASACION. Disponibilidad real pendiente de confirmar.",
+  "baseUnifamiliarUsdM2": 550,
+  "baseMultifamiliarUsdM2": 350,
+  "adjustments": {
+    "nearIslandBoundary": {
+      "maxDistanceM": 2,
+      "factor": 1.18
+    },
+    "nearGreenArea": {
+      "maxDistanceM": 12,
+      "factor": 1.08
+    },
+    "areaAbove1200M2": 0.93,
+    "areaAbove900M2": 0.96,
+    "areaBelow600M2": 1.02
+  },
+  "roundingUsd": 500,
+  "method": "Unifamiliar: superficie declarada × 550 × factor de borde × factor de zona verde × factor de tamano; redondeo a 500 USD. Multifamiliar: superficie × 350; sin primas ni ingresos supuestos por edificabilidad. Los coeficientes son decisiones de demostracion, no estimaciones estadisticas del mercado.",
+  "caveats": [
+    "Referencias de precios anunciados, no operaciones cerradas.",
+    "La cercania al borde de la isla no acredita vistas, acceso al agua ni derechos riberenos.",
+    "La base multifamiliar es un supuesto independiente pendiente de edificabilidad y estudio residual.",
+    "No se aplican IVA, impuestos, comisiones ni esquemas de pago procedentes de los ejemplos espanoles."
+  ],
+  "marketReferences": [
+    {
+      "name": "Isla Celeste · Babor",
+      "areaM2": 274.4,
+      "askingPriceUsd": 133084,
+      "askingUsdM2": 485,
+      "accessed": "2026-09-25",
+      "url": "https://polibienes.com/propiedad/terreno-en-venta-samborondon-274-m%C2%B2-isla-celeste-babor/"
+    },
+    {
+      "name": "Parques de Batan",
+      "areaM2": 600,
+      "askingPriceUsd": 366000,
+      "askingUsdM2": 610,
+      "accessed": "2026-09-25",
+      "url": "https://www.remax.com.ec/listings/en-venta-terrenos-en-parques-de-batan"
+    },
+    {
+      "name": "Aires de Batan · esquinero, vista al canal",
+      "areaM2": 594,
+      "askingPriceUsd": 356400,
+      "askingUsdM2": 600,
+      "accessed": "2026-09-25",
+      "url": "https://www.homelegacyrealestate.com/p/6751180-Terreno-en-Venta-en-Samborond%C3%B3n-Aires-de-Bat%C3%A1n"
+    }
+  ]
+}

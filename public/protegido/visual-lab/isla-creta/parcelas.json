@@ -1,0 +1,6066 @@
+{
+  "schemaVersion": 1,
+  "projectId": "isla-creta",
+  "projectName": "Isla Creta",
+  "dataMode": "provisional",
+  "unitCount": 173,
+  "currency": "USD",
+  "priceNotice": "PRECIOS ILUSTRATIVOS · NO ES UNA OFERTA NI UNA TASACION. Disponibilidad real pendiente de confirmar.",
+  "units": [
+    {
+      "unitId": "MZ1-1",
+      "label": "Manzana 1 · Parcela 1",
+      "block": 1,
+      "number": 1,
+      "type": "unifamiliar",
+      "areaM2": 779.578,
+      "areaGeometryM2": 779.578047,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 463000,
+      "effectiveUsdM2": 593.91,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        356.2431,
+        1.92,
+        227.0583
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ1-1"
+    },
+    {
+      "unitId": "MZ1-2",
+      "label": "Manzana 1 · Parcela 2",
+      "block": 1,
+      "number": 2,
+      "type": "unifamiliar",
+      "areaM2": 776.108,
+      "areaGeometryM2": 776.108804,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 461000,
+      "effectiveUsdM2": 593.99,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        369.6508,
+        1.92,
+        207.3857
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ1-2"
+    },
+    {
+      "unitId": "MZ1-3",
+      "label": "Manzana 1 · Parcela 3",
+      "block": 1,
+      "number": 3,
+      "type": "unifamiliar",
+      "areaM2": 1730.139,
+      "areaGeometryM2": 1730.139775,
+      "status": "sin_confirmar",
+      "demoStatus": "reservado",
+      "currency": "USD",
+      "priceUsd": 1128000,
+      "effectiveUsdM2": 651.97,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "cercania_borde_isla",
+          "factor": 1.18,
+          "distanceM": 0.0
+        },
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        },
+        {
+          "key": "tamano",
+          "factor": 0.93
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        391.1027,
+        1.92,
+        175.9104
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ1-3"
+    },
+    {
+      "unitId": "MZ1-4",
+      "label": "Manzana 1 · Parcela 4",
+      "block": 1,
+      "number": 4,
+      "type": "unifamiliar",
+      "areaM2": 1122.061,
+      "areaGeometryM2": 1122.061611,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 755000,
+      "effectiveUsdM2": 672.87,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "cercania_borde_isla",
+          "factor": 1.18,
+          "distanceM": 0.0
+        },
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 0.96
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        369.7693,
+        1.92,
+        153.7981
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ1-4"
+    },
+    {
+      "unitId": "MZ1-5",
+      "label": "Manzana 1 · Parcela 5",
+      "block": 1,
+      "number": 5,
+      "type": "unifamiliar",
+      "areaM2": 1134.454,
+      "areaGeometryM2": 1134.454039,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 763500,
+      "effectiveUsdM2": 673.01,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "cercania_borde_isla",
+          "factor": 1.18,
+          "distanceM": 0.0
+        },
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 0.96
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        347.1155,
+        1.92,
+        138.5397
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ1-5"
+    },
+    {
+      "unitId": "MZ1-6",
+      "label": "Manzana 1 · Parcela 6",
+      "block": 1,
+      "number": 6,
+      "type": "unifamiliar",
+      "areaM2": 1134.454,
+      "areaGeometryM2": 1134.454038,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 763500,
+      "effectiveUsdM2": 673.01,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "cercania_borde_isla",
+          "factor": 1.18,
+          "distanceM": 0.0
+        },
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 0.96
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        324.3373,
+        1.92,
+        123.1975
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ1-6"
+    },
+    {
+      "unitId": "MZ1-7",
+      "label": "Manzana 1 · Parcela 7",
+      "block": 1,
+      "number": 7,
+      "type": "unifamiliar",
+      "areaM2": 1134.454,
+      "areaGeometryM2": 1134.454038,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 763500,
+      "effectiveUsdM2": 673.01,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "cercania_borde_isla",
+          "factor": 1.18,
+          "distanceM": 0.0
+        },
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 0.96
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        301.5591,
+        1.92,
+        107.8554
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ1-7"
+    },
+    {
+      "unitId": "MZ1-8",
+      "label": "Manzana 1 · Parcela 8",
+      "block": 1,
+      "number": 8,
+      "type": "unifamiliar",
+      "areaM2": 1134.454,
+      "areaGeometryM2": 1134.454038,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 763500,
+      "effectiveUsdM2": 673.01,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "cercania_borde_isla",
+          "factor": 1.18,
+          "distanceM": 0.0
+        },
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 0.96
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        278.7808,
+        1.92,
+        92.5132
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ1-8"
+    },
+    {
+      "unitId": "MZ1-9",
+      "label": "Manzana 1 · Parcela 9",
+      "block": 1,
+      "number": 9,
+      "type": "unifamiliar",
+      "areaM2": 1134.982,
+      "areaGeometryM2": 1134.982631,
+      "status": "sin_confirmar",
+      "demoStatus": "vendido",
+      "currency": "USD",
+      "priceUsd": 763500,
+      "effectiveUsdM2": 672.7,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "cercania_borde_isla",
+          "factor": 1.18,
+          "distanceM": 0.0
+        },
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 0.96
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        256.3321,
+        1.92,
+        75.9709
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ1-9"
+    },
+    {
+      "unitId": "MZ1-10",
+      "label": "Manzana 1 · Parcela 10",
+      "block": 1,
+      "number": 10,
+      "type": "unifamiliar",
+      "areaM2": 1134.454,
+      "areaGeometryM2": 1134.454039,
+      "status": "sin_confirmar",
+      "demoStatus": "reservado",
+      "currency": "USD",
+      "priceUsd": 763500,
+      "effectiveUsdM2": 673.01,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "cercania_borde_isla",
+          "factor": 1.18,
+          "distanceM": 0.0
+        },
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 0.96
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        234.9326,
+        1.92,
+        59.4983
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ1-10"
+    },
+    {
+      "unitId": "MZ1-11",
+      "label": "Manzana 1 · Parcela 11",
+      "block": 1,
+      "number": 11,
+      "type": "unifamiliar",
+      "areaM2": 1134.454,
+      "areaGeometryM2": 1134.45404,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 763500,
+      "effectiveUsdM2": 673.01,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "cercania_borde_isla",
+          "factor": 1.18,
+          "distanceM": 0.0
+        },
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 0.96
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        213.5966,
+        1.92,
+        42.2065
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ1-11"
+    },
+    {
+      "unitId": "MZ1-12",
+      "label": "Manzana 1 · Parcela 12",
+      "block": 1,
+      "number": 12,
+      "type": "unifamiliar",
+      "areaM2": 1134.454,
+      "areaGeometryM2": 1134.454041,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 763500,
+      "effectiveUsdM2": 673.01,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "cercania_borde_isla",
+          "factor": 1.18,
+          "distanceM": 0.0
+        },
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 0.96
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        192.2607,
+        1.92,
+        24.9146
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ1-12"
+    },
+    {
+      "unitId": "MZ1-13",
+      "label": "Manzana 1 · Parcela 13",
+      "block": 1,
+      "number": 13,
+      "type": "unifamiliar",
+      "areaM2": 1134.454,
+      "areaGeometryM2": 1134.454042,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 763500,
+      "effectiveUsdM2": 673.01,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "cercania_borde_isla",
+          "factor": 1.18,
+          "distanceM": 0.0
+        },
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.865
+        },
+        {
+          "key": "tamano",
+          "factor": 0.96
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        170.9248,
+        1.92,
+        7.6228
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ1-13"
+    },
+    {
+      "unitId": "MZ1-14",
+      "label": "Manzana 1 · Parcela 14",
+      "block": 1,
+      "number": 14,
+      "type": "unifamiliar",
+      "areaM2": 1134.454,
+      "areaGeometryM2": 1134.454043,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 763500,
+      "effectiveUsdM2": 673.01,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "cercania_borde_isla",
+          "factor": 1.18,
+          "distanceM": 0.0
+        },
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.865
+        },
+        {
+          "key": "tamano",
+          "factor": 0.96
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        149.5888,
+        1.92,
+        -9.6691
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ1-14"
+    },
+    {
+      "unitId": "MZ1-15",
+      "label": "Manzana 1 · Parcela 15",
+      "block": 1,
+      "number": 15,
+      "type": "unifamiliar",
+      "areaM2": 1119.45,
+      "areaGeometryM2": 1119.450227,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 753500,
+      "effectiveUsdM2": 673.1,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "cercania_borde_isla",
+          "factor": 1.18,
+          "distanceM": 0.0
+        },
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 0.96
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        128.394,
+        1.92,
+        -26.8466
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ1-15"
+    },
+    {
+      "unitId": "MZ1-16",
+      "label": "Manzana 1 · Parcela 16",
+      "block": 1,
+      "number": 16,
+      "type": "unifamiliar",
+      "areaM2": 1702.475,
+      "areaGeometryM2": 1702.475132,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 1110000,
+      "effectiveUsdM2": 651.99,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "cercania_borde_isla",
+          "factor": 1.18,
+          "distanceM": 0.0
+        },
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        },
+        {
+          "key": "tamano",
+          "factor": 0.93
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        101.3423,
+        1.92,
+        -38.6756
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ1-16"
+    },
+    {
+      "unitId": "MZ1-17",
+      "label": "Manzana 1 · Parcela 17",
+      "block": 1,
+      "number": 17,
+      "type": "unifamiliar",
+      "areaM2": 558.301,
+      "areaGeometryM2": 558.301,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 338500,
+      "effectiveUsdM2": 606.3,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        77.5891,
+        1.92,
+        -9.2119
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ1-17"
+    },
+    {
+      "unitId": "MZ1-18",
+      "label": "Manzana 1 · Parcela 18",
+      "block": 1,
+      "number": 18,
+      "type": "unifamiliar",
+      "areaM2": 558.676,
+      "areaGeometryM2": 558.676745,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 338500,
+      "effectiveUsdM2": 605.9,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        65.871,
+        1.92,
+        5.3221
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ1-18"
+    },
+    {
+      "unitId": "MZ1-19",
+      "label": "Manzana 1 · Parcela 19",
+      "block": 1,
+      "number": 19,
+      "type": "unifamiliar",
+      "areaM2": 559.052,
+      "areaGeometryM2": 559.052489,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 338500,
+      "effectiveUsdM2": 605.49,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        54.153,
+        1.92,
+        19.8561
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ1-19"
+    },
+    {
+      "unitId": "MZ1-20",
+      "label": "Manzana 1 · Parcela 20",
+      "block": 1,
+      "number": 20,
+      "type": "unifamiliar",
+      "areaM2": 559.428,
+      "areaGeometryM2": 559.428233,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 339000,
+      "effectiveUsdM2": 605.98,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        42.4349,
+        1.92,
+        34.3901
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ1-20"
+    },
+    {
+      "unitId": "MZ1-21",
+      "label": "Manzana 1 · Parcela 21",
+      "block": 1,
+      "number": 21,
+      "type": "unifamiliar",
+      "areaM2": 559.803,
+      "areaGeometryM2": 559.803977,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 339000,
+      "effectiveUsdM2": 605.57,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        30.7169,
+        1.92,
+        48.9241
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ1-21"
+    },
+    {
+      "unitId": "MZ1-22",
+      "label": "Manzana 1 · Parcela 22",
+      "block": 1,
+      "number": 22,
+      "type": "unifamiliar",
+      "areaM2": 560.179,
+      "areaGeometryM2": 560.179721,
+      "status": "sin_confirmar",
+      "demoStatus": "vendido",
+      "currency": "USD",
+      "priceUsd": 339500,
+      "effectiveUsdM2": 606.06,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        18.9988,
+        1.92,
+        63.4582
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ1-22"
+    },
+    {
+      "unitId": "MZ1-23",
+      "label": "Manzana 1 · Parcela 23",
+      "block": 1,
+      "number": 23,
+      "type": "unifamiliar",
+      "areaM2": 568.707,
+      "areaGeometryM2": 568.707074,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 344500,
+      "effectiveUsdM2": 605.76,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        3.3511,
+        1.92,
+        70.0277
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ1-23"
+    },
+    {
+      "unitId": "MZ2-1",
+      "label": "Manzana 2 · Parcela 1",
+      "block": 2,
+      "number": 1,
+      "type": "unifamiliar",
+      "areaM2": 595.525,
+      "areaGeometryM2": 595.528258,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 361000,
+      "effectiveUsdM2": 606.19,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        48.35,
+        1.92,
+        89.422
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ2-1"
+    },
+    {
+      "unitId": "MZ2-2",
+      "label": "Manzana 2 · Parcela 2",
+      "block": 2,
+      "number": 2,
+      "type": "unifamiliar",
+      "areaM2": 624.046,
+      "areaGeometryM2": 624.046279,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 370500,
+      "effectiveUsdM2": 593.71,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        66.0215,
+        1.92,
+        98.0859
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ2-2"
+    },
+    {
+      "unitId": "MZ2-3",
+      "label": "Manzana 2 · Parcela 3",
+      "block": 2,
+      "number": 3,
+      "type": "unifamiliar",
+      "areaM2": 632.854,
+      "areaGeometryM2": 632.854193,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 376000,
+      "effectiveUsdM2": 594.13,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        84.0608,
+        1.92,
+        106.0447
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ2-3"
+    },
+    {
+      "unitId": "MZ2-4",
+      "label": "Manzana 2 · Parcela 4",
+      "block": 2,
+      "number": 4,
+      "type": "unifamiliar",
+      "areaM2": 641.662,
+      "areaGeometryM2": 641.662106,
+      "status": "sin_confirmar",
+      "demoStatus": "reservado",
+      "currency": "USD",
+      "priceUsd": 381000,
+      "effectiveUsdM2": 593.77,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        102.1,
+        1.92,
+        114.0036
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ2-4"
+    },
+    {
+      "unitId": "MZ2-5",
+      "label": "Manzana 2 · Parcela 5",
+      "block": 2,
+      "number": 5,
+      "type": "unifamiliar",
+      "areaM2": 646.348,
+      "areaGeometryM2": 646.348642,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 384000,
+      "effectiveUsdM2": 594.11,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        120.1292,
+        1.92,
+        121.9581
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ2-5"
+    },
+    {
+      "unitId": "MZ2-6",
+      "label": "Manzana 2 · Parcela 6",
+      "block": 2,
+      "number": 6,
+      "type": "unifamiliar",
+      "areaM2": 648.103,
+      "areaGeometryM2": 648.103003,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 385000,
+      "effectiveUsdM2": 594.04,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        138.2288,
+        1.92,
+        129.7548
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ2-6"
+    },
+    {
+      "unitId": "MZ2-7",
+      "label": "Manzana 2 · Parcela 7",
+      "block": 2,
+      "number": 7,
+      "type": "unifamiliar",
+      "areaM2": 649.639,
+      "areaGeometryM2": 649.639155,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 386000,
+      "effectiveUsdM2": 594.18,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        156.3193,
+        1.92,
+        137.5474
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ2-7"
+    },
+    {
+      "unitId": "MZ2-8",
+      "label": "Manzana 2 · Parcela 8",
+      "block": 2,
+      "number": 8,
+      "type": "unifamiliar",
+      "areaM2": 649.289,
+      "areaGeometryM2": 649.289371,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 385500,
+      "effectiveUsdM2": 593.73,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        174.4002,
+        1.92,
+        145.3357
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ2-8"
+    },
+    {
+      "unitId": "MZ2-9",
+      "label": "Manzana 2 · Parcela 9",
+      "block": 2,
+      "number": 9,
+      "type": "unifamiliar",
+      "areaM2": 636.67,
+      "areaGeometryM2": 636.670854,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 378000,
+      "effectiveUsdM2": 593.71,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        192.3812,
+        1.92,
+        152.9651
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ2-9"
+    },
+    {
+      "unitId": "MZ2-10",
+      "label": "Manzana 2 · Parcela 10",
+      "block": 2,
+      "number": 10,
+      "type": "unifamiliar",
+      "areaM2": 741.416,
+      "areaGeometryM2": 741.416444,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 440500,
+      "effectiveUsdM2": 594.13,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        211.3128,
+        1.92,
+        159.1771
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ2-10"
+    },
+    {
+      "unitId": "MZ2-11",
+      "label": "Manzana 2 · Parcela 11",
+      "block": 2,
+      "number": 11,
+      "type": "unifamiliar",
+      "areaM2": 690.246,
+      "areaGeometryM2": 690.24684,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 410000,
+      "effectiveUsdM2": 593.99,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 2.25
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        229.1219,
+        1.92,
+        167.7685
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ2-11"
+    },
+    {
+      "unitId": "MZ2-12",
+      "label": "Manzana 2 · Parcela 12",
+      "block": 2,
+      "number": 12,
+      "type": "unifamiliar",
+      "areaM2": 650.645,
+      "areaGeometryM2": 650.645805,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 386500,
+      "effectiveUsdM2": 594.03,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 2.25
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        246.7909,
+        1.92,
+        176.3005
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ2-12"
+    },
+    {
+      "unitId": "MZ2-13",
+      "label": "Manzana 2 · Parcela 13",
+      "block": 2,
+      "number": 13,
+      "type": "unifamiliar",
+      "areaM2": 611.044,
+      "areaGeometryM2": 611.044769,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 363000,
+      "effectiveUsdM2": 594.07,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 2.25
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        264.4598,
+        1.92,
+        184.8325
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ2-13"
+    },
+    {
+      "unitId": "MZ2-14",
+      "label": "Manzana 2 · Parcela 14",
+      "block": 2,
+      "number": 14,
+      "type": "unifamiliar",
+      "areaM2": 571.916,
+      "areaGeometryM2": 571.91603,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 346500,
+      "effectiveUsdM2": 605.86,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 2.25
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        282.1369,
+        1.92,
+        193.3726
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ2-14"
+    },
+    {
+      "unitId": "MZ2-15",
+      "label": "Manzana 2 · Parcela 15",
+      "block": 2,
+      "number": 15,
+      "type": "unifamiliar",
+      "areaM2": 533.377,
+      "areaGeometryM2": 533.377921,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 323000,
+      "effectiveUsdM2": 605.58,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 2.25
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        299.8382,
+        1.92,
+        201.919
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ2-15"
+    },
+    {
+      "unitId": "MZ2-16",
+      "label": "Manzana 2 · Parcela 16",
+      "block": 2,
+      "number": 16,
+      "type": "unifamiliar",
+      "areaM2": 496.495,
+      "areaGeometryM2": 496.49483,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 301000,
+      "effectiveUsdM2": 606.25,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        317.6971,
+        1.92,
+        210.7728
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ2-16"
+    },
+    {
+      "unitId": "MZ2-17",
+      "label": "Manzana 2 · Parcela 17",
+      "block": 2,
+      "number": 17,
+      "type": "unifamiliar",
+      "areaM2": 562.712,
+      "areaGeometryM2": 562.711719,
+      "status": "sin_confirmar",
+      "demoStatus": "reservado",
+      "currency": "USD",
+      "priceUsd": 341000,
+      "effectiveUsdM2": 605.99,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        331.5309,
+        1.92,
+        188.7
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ2-17"
+    },
+    {
+      "unitId": "MZ2-18",
+      "label": "Manzana 2 · Parcela 18",
+      "block": 2,
+      "number": 18,
+      "type": "unifamiliar",
+      "areaM2": 565.815,
+      "areaGeometryM2": 565.815567,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 343000,
+      "effectiveUsdM2": 606.21,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        314.4275,
+        1.92,
+        177.9598
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ2-18"
+    },
+    {
+      "unitId": "MZ2-19",
+      "label": "Manzana 2 · Parcela 19",
+      "block": 2,
+      "number": 19,
+      "type": "unifamiliar",
+      "areaM2": 600.093,
+      "areaGeometryM2": 600.093993,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 356500,
+      "effectiveUsdM2": 594.07,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        297.7039,
+        1.92,
+        167.7754
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ2-19"
+    },
+    {
+      "unitId": "MZ2-20",
+      "label": "Manzana 2 · Parcela 20",
+      "block": 2,
+      "number": 20,
+      "type": "unifamiliar",
+      "areaM2": 633.974,
+      "areaGeometryM2": 633.974144,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 376500,
+      "effectiveUsdM2": 593.87,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        281.0061,
+        1.92,
+        157.6064
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ2-20"
+    },
+    {
+      "unitId": "MZ2-21",
+      "label": "Manzana 2 · Parcela 21",
+      "block": 2,
+      "number": 21,
+      "type": "unifamiliar",
+      "areaM2": 668.861,
+      "areaGeometryM2": 668.861171,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 397500,
+      "effectiveUsdM2": 594.29,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        264.3222,
+        1.92,
+        147.4469
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ2-21"
+    },
+    {
+      "unitId": "MZ2-22",
+      "label": "Manzana 2 · Parcela 22",
+      "block": 2,
+      "number": 22,
+      "type": "unifamiliar",
+      "areaM2": 703.748,
+      "areaGeometryM2": 703.748198,
+      "status": "sin_confirmar",
+      "demoStatus": "vendido",
+      "currency": "USD",
+      "priceUsd": 418000,
+      "effectiveUsdM2": 593.96,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        247.6384,
+        1.92,
+        137.2874
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ2-22"
+    },
+    {
+      "unitId": "MZ2-23",
+      "label": "Manzana 2 · Parcela 23",
+      "block": 2,
+      "number": 23,
+      "type": "unifamiliar",
+      "areaM2": 749.79,
+      "areaGeometryM2": 749.77751,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 445500,
+      "effectiveUsdM2": 594.17,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        230.8228,
+        1.92,
+        127.0557
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ2-23"
+    },
+    {
+      "unitId": "MZ3-1",
+      "label": "Manzana 3 · Parcela 1",
+      "block": 3,
+      "number": 1,
+      "type": "unifamiliar",
+      "areaM2": 461.467,
+      "areaGeometryM2": 461.456229,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 279500,
+      "effectiveUsdM2": 605.68,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        195.0534,
+        1.92,
+        86.1605
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ3-1"
+    },
+    {
+      "unitId": "MZ3-2",
+      "label": "Manzana 3 · Parcela 2",
+      "block": 3,
+      "number": 2,
+      "type": "unifamiliar",
+      "areaM2": 523.301,
+      "areaGeometryM2": 523.301522,
+      "status": "sin_confirmar",
+      "demoStatus": "reservado",
+      "currency": "USD",
+      "priceUsd": 317000,
+      "effectiveUsdM2": 605.77,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        176.2795,
+        1.92,
+        74.5323
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ3-2"
+    },
+    {
+      "unitId": "MZ3-3",
+      "label": "Manzana 3 · Parcela 3",
+      "block": 3,
+      "number": 3,
+      "type": "unifamiliar",
+      "areaM2": 588.952,
+      "areaGeometryM2": 588.952849,
+      "status": "sin_confirmar",
+      "demoStatus": "reservado",
+      "currency": "USD",
+      "priceUsd": 357000,
+      "effectiveUsdM2": 606.16,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        158.141,
+        1.92,
+        61.7397
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ3-3"
+    },
+    {
+      "unitId": "MZ3-4",
+      "label": "Manzana 3 · Parcela 4",
+      "block": 3,
+      "number": 4,
+      "type": "unifamiliar",
+      "areaM2": 654.604,
+      "areaGeometryM2": 654.604175,
+      "status": "sin_confirmar",
+      "demoStatus": "reservado",
+      "currency": "USD",
+      "priceUsd": 389000,
+      "effectiveUsdM2": 594.25,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        140.0025,
+        1.92,
+        48.9471
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ3-4"
+    },
+    {
+      "unitId": "MZ3-5",
+      "label": "Manzana 3 · Parcela 5",
+      "block": 3,
+      "number": 5,
+      "type": "unifamiliar",
+      "areaM2": 720.255,
+      "areaGeometryM2": 720.255502,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 428000,
+      "effectiveUsdM2": 594.23,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        121.864,
+        1.92,
+        36.1545
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ3-5"
+    },
+    {
+      "unitId": "MZ3-6",
+      "label": "Manzana 3 · Parcela 6",
+      "block": 3,
+      "number": 6,
+      "type": "unifamiliar",
+      "areaM2": 762.113,
+      "areaGeometryM2": 762.113518,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 452500,
+      "effectiveUsdM2": 593.74,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        104.0075,
+        1.92,
+        23.5458
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ3-6"
+    },
+    {
+      "unitId": "MZ3-7",
+      "label": "Manzana 3 · Parcela 7",
+      "block": 3,
+      "number": 7,
+      "type": "unifamiliar",
+      "areaM2": 800.418,
+      "areaGeometryM2": 800.417854,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 475500,
+      "effectiveUsdM2": 594.06,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        81.2692,
+        1.92,
+        51.6904
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ3-7"
+    },
+    {
+      "unitId": "MZ3-8",
+      "label": "Manzana 3 · Parcela 8",
+      "block": 3,
+      "number": 8,
+      "type": "unifamiliar",
+      "areaM2": 756.491,
+      "areaGeometryM2": 756.491902,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 449500,
+      "effectiveUsdM2": 594.19,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        100.814,
+        1.92,
+        62.1275
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ3-8"
+    },
+    {
+      "unitId": "MZ3-9",
+      "label": "Manzana 3 · Parcela 9",
+      "block": 3,
+      "number": 9,
+      "type": "unifamiliar",
+      "areaM2": 682.758,
+      "areaGeometryM2": 682.758702,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 405500,
+      "effectiveUsdM2": 593.91,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        120.9339,
+        1.92,
+        72.4753
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ3-9"
+    },
+    {
+      "unitId": "MZ3-10",
+      "label": "Manzana 3 · Parcela 10",
+      "block": 3,
+      "number": 10,
+      "type": "unifamiliar",
+      "areaM2": 609.025,
+      "areaGeometryM2": 609.025502,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 362000,
+      "effectiveUsdM2": 594.39,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        141.0539,
+        1.92,
+        82.8231
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ3-10"
+    },
+    {
+      "unitId": "MZ3-11",
+      "label": "Manzana 3 · Parcela 11",
+      "block": 3,
+      "number": 11,
+      "type": "unifamiliar",
+      "areaM2": 535.292,
+      "areaGeometryM2": 535.292302,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 324500,
+      "effectiveUsdM2": 606.21,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        161.1738,
+        1.92,
+        93.1708
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ3-11"
+    },
+    {
+      "unitId": "MZ3-12",
+      "label": "Manzana 3 · Parcela 12",
+      "block": 3,
+      "number": 12,
+      "type": "unifamiliar",
+      "areaM2": 466.399,
+      "areaGeometryM2": 466.374223,
+      "status": "sin_confirmar",
+      "demoStatus": "reservado",
+      "currency": "USD",
+      "priceUsd": 282500,
+      "effectiveUsdM2": 605.7,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.941
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        181.4228,
+        1.92,
+        103.5975
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ3-12"
+    },
+    {
+      "unitId": "MZ4-1",
+      "label": "Manzana 4 · Parcela 1",
+      "block": 4,
+      "number": 1,
+      "type": "unifamiliar",
+      "areaM2": 625.789,
+      "areaGeometryM2": 625.788401,
+      "status": "sin_confirmar",
+      "demoStatus": "reservado",
+      "currency": "USD",
+      "priceUsd": 371500,
+      "effectiveUsdM2": 593.65,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -40.6958,
+        1.92,
+        142.1871
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ4-1"
+    },
+    {
+      "unitId": "MZ4-2",
+      "label": "Manzana 4 · Parcela 2",
+      "block": 4,
+      "number": 2,
+      "type": "unifamiliar",
+      "areaM2": 589.338,
+      "areaGeometryM2": 589.338831,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 357000,
+      "effectiveUsdM2": 605.76,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -44.4442,
+        1.92,
+        168.953
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ4-2"
+    },
+    {
+      "unitId": "MZ4-3",
+      "label": "Manzana 4 · Parcela 3",
+      "block": 4,
+      "number": 3,
+      "type": "unifamiliar",
+      "areaM2": 589.338,
+      "areaGeometryM2": 589.338831,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 357000,
+      "effectiveUsdM2": 605.76,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -52.4116,
+        1.92,
+        186.0129
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ4-3"
+    },
+    {
+      "unitId": "MZ4-4",
+      "label": "Manzana 4 · Parcela 4",
+      "block": 4,
+      "number": 4,
+      "type": "unifamiliar",
+      "areaM2": 589.338,
+      "areaGeometryM2": 589.338831,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 357000,
+      "effectiveUsdM2": 605.76,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -60.379,
+        1.92,
+        203.0729
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ4-4"
+    },
+    {
+      "unitId": "MZ4-5",
+      "label": "Manzana 4 · Parcela 5",
+      "block": 4,
+      "number": 5,
+      "type": "unifamiliar",
+      "areaM2": 589.338,
+      "areaGeometryM2": 589.338831,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 357000,
+      "effectiveUsdM2": 605.76,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -68.3464,
+        1.92,
+        220.1328
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ4-5"
+    },
+    {
+      "unitId": "MZ4-6",
+      "label": "Manzana 4 · Parcela 6",
+      "block": 4,
+      "number": 6,
+      "type": "unifamiliar",
+      "areaM2": 589.338,
+      "areaGeometryM2": 589.338831,
+      "status": "sin_confirmar",
+      "demoStatus": "vendido",
+      "currency": "USD",
+      "priceUsd": 357000,
+      "effectiveUsdM2": 605.76,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -76.3138,
+        1.92,
+        237.1927
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ4-6"
+    },
+    {
+      "unitId": "MZ4-7",
+      "label": "Manzana 4 · Parcela 7",
+      "block": 4,
+      "number": 7,
+      "type": "unifamiliar",
+      "areaM2": 589.338,
+      "areaGeometryM2": 589.338831,
+      "status": "sin_confirmar",
+      "demoStatus": "vendido",
+      "currency": "USD",
+      "priceUsd": 357000,
+      "effectiveUsdM2": 605.76,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -84.2812,
+        1.92,
+        254.2527
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ4-7"
+    },
+    {
+      "unitId": "MZ4-8",
+      "label": "Manzana 4 · Parcela 8",
+      "block": 4,
+      "number": 8,
+      "type": "unifamiliar",
+      "areaM2": 2101.885,
+      "areaGeometryM2": 2101.885045,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 1370000,
+      "effectiveUsdM2": 651.8,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "cercania_borde_isla",
+          "factor": 1.18,
+          "distanceM": 0.0
+        },
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        },
+        {
+          "key": "tamano",
+          "factor": 0.93
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -94.863,
+        1.92,
+        292.8077
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ4-8"
+    },
+    {
+      "unitId": "MZ4-9",
+      "label": "Manzana 4 · Parcela 9",
+      "block": 4,
+      "number": 9,
+      "type": "unifamiliar",
+      "areaM2": 1222.891,
+      "areaGeometryM2": 1222.891699,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 797000,
+      "effectiveUsdM2": 651.73,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "cercania_borde_isla",
+          "factor": 1.18,
+          "distanceM": 0.0
+        },
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 0.93
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -55.1885,
+        1.92,
+        304.7868
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ4-9"
+    },
+    {
+      "unitId": "MZ4-10",
+      "label": "Manzana 4 · Parcela 10",
+      "block": 4,
+      "number": 10,
+      "type": "unifamiliar",
+      "areaM2": 1222.898,
+      "areaGeometryM2": 1222.89843,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 797000,
+      "effectiveUsdM2": 651.73,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "cercania_borde_isla",
+          "factor": 1.18,
+          "distanceM": 0.0
+        },
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 0.93
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -22.4967,
+        1.92,
+        312.5047
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ4-10"
+    },
+    {
+      "unitId": "MZ4-11",
+      "label": "Manzana 4 · Parcela 11",
+      "block": 4,
+      "number": 11,
+      "type": "unifamiliar",
+      "areaM2": 1222.898,
+      "areaGeometryM2": 1222.89843,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 797000,
+      "effectiveUsdM2": 651.73,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "cercania_borde_isla",
+          "factor": 1.18,
+          "distanceM": 0.0
+        },
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 0.93
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        10.2794,
+        1.92,
+        320.2929
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ4-11"
+    },
+    {
+      "unitId": "MZ4-12",
+      "label": "Manzana 4 · Parcela 12",
+      "block": 4,
+      "number": 12,
+      "type": "unifamiliar",
+      "areaM2": 1222.898,
+      "areaGeometryM2": 1222.89843,
+      "status": "sin_confirmar",
+      "demoStatus": "vendido",
+      "currency": "USD",
+      "priceUsd": 797000,
+      "effectiveUsdM2": 651.73,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "cercania_borde_isla",
+          "factor": 1.18,
+          "distanceM": 0.0
+        },
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 0.93
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        43.0555,
+        1.92,
+        328.081
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ4-12"
+    },
+    {
+      "unitId": "MZ4-13",
+      "label": "Manzana 4 · Parcela 13",
+      "block": 4,
+      "number": 13,
+      "type": "unifamiliar",
+      "areaM2": 1222.898,
+      "areaGeometryM2": 1222.89843,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 797000,
+      "effectiveUsdM2": 651.73,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "cercania_borde_isla",
+          "factor": 1.18,
+          "distanceM": 0.0
+        },
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 0.93
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        75.8315,
+        1.92,
+        335.8692
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ4-13"
+    },
+    {
+      "unitId": "MZ4-14",
+      "label": "Manzana 4 · Parcela 14",
+      "block": 4,
+      "number": 14,
+      "type": "unifamiliar",
+      "areaM2": 1222.858,
+      "areaGeometryM2": 1222.858732,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 797000,
+      "effectiveUsdM2": 651.75,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "cercania_borde_isla",
+          "factor": 1.18,
+          "distanceM": 0.0
+        },
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 0.93
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        108.6701,
+        1.92,
+        342.5263
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ4-14"
+    },
+    {
+      "unitId": "MZ4-15",
+      "label": "Manzana 4 · Parcela 15",
+      "block": 4,
+      "number": 15,
+      "type": "unifamiliar",
+      "areaM2": 1222.898,
+      "areaGeometryM2": 1222.89843,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 797000,
+      "effectiveUsdM2": 651.73,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "cercania_borde_isla",
+          "factor": 1.18,
+          "distanceM": 0.0
+        },
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 0.93
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        142.0456,
+        1.92,
+        347.891
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ4-15"
+    },
+    {
+      "unitId": "MZ4-16",
+      "label": "Manzana 4 · Parcela 16",
+      "block": 4,
+      "number": 16,
+      "type": "unifamiliar",
+      "areaM2": 1222.898,
+      "areaGeometryM2": 1222.89843,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 797000,
+      "effectiveUsdM2": 651.73,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "cercania_borde_isla",
+          "factor": 1.18,
+          "distanceM": 0.0
+        },
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 0.93
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        175.4252,
+        1.92,
+        352.4441
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ4-16"
+    },
+    {
+      "unitId": "MZ4-17",
+      "label": "Manzana 4 · Parcela 17",
+      "block": 4,
+      "number": 17,
+      "type": "unifamiliar",
+      "areaM2": 1222.898,
+      "areaGeometryM2": 1222.89843,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 797000,
+      "effectiveUsdM2": 651.73,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "cercania_borde_isla",
+          "factor": 1.18,
+          "distanceM": 0.0
+        },
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 0.93
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        208.8048,
+        1.92,
+        356.9972
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ4-17"
+    },
+    {
+      "unitId": "MZ4-18",
+      "label": "Manzana 4 · Parcela 18",
+      "block": 4,
+      "number": 18,
+      "type": "unifamiliar",
+      "areaM2": 1223.094,
+      "areaGeometryM2": 1223.094124,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 797500,
+      "effectiveUsdM2": 652.03,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "cercania_borde_isla",
+          "factor": 1.18,
+          "distanceM": 0.0
+        },
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 0.93
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        242.1224,
+        1.92,
+        360.8177
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ4-18"
+    },
+    {
+      "unitId": "MZ4-19",
+      "label": "Manzana 4 · Parcela 19",
+      "block": 4,
+      "number": 19,
+      "type": "unifamiliar",
+      "areaM2": 1223.808,
+      "areaGeometryM2": 1223.808413,
+      "status": "sin_confirmar",
+      "demoStatus": "vendido",
+      "currency": "USD",
+      "priceUsd": 797500,
+      "effectiveUsdM2": 651.65,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "cercania_borde_isla",
+          "factor": 1.18,
+          "distanceM": 0.0
+        },
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 0.93
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        275.8038,
+        1.92,
+        362.5607
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ4-19"
+    },
+    {
+      "unitId": "MZ4-20",
+      "label": "Manzana 4 · Parcela 20",
+      "block": 4,
+      "number": 20,
+      "type": "unifamiliar",
+      "areaM2": 1223.657,
+      "areaGeometryM2": 1223.657917,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 797500,
+      "effectiveUsdM2": 651.73,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "cercania_borde_isla",
+          "factor": 1.18,
+          "distanceM": 0.0
+        },
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 0.93
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        309.4924,
+        1.92,
+        362.5942
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ4-20"
+    },
+    {
+      "unitId": "MZ4-21",
+      "label": "Manzana 4 · Parcela 21",
+      "block": 4,
+      "number": 21,
+      "type": "unifamiliar",
+      "areaM2": 1511.285,
+      "areaGeometryM2": 1511.285787,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 985000,
+      "effectiveUsdM2": 651.76,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "cercania_borde_isla",
+          "factor": 1.18,
+          "distanceM": 0.0
+        },
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 0.93
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        341.9974,
+        1.92,
+        356.649
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ4-21"
+    },
+    {
+      "unitId": "MZ4-22",
+      "label": "Manzana 4 · Parcela 22",
+      "block": 4,
+      "number": 22,
+      "type": "unifamiliar",
+      "areaM2": 626.15,
+      "areaGeometryM2": 626.150291,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 372000,
+      "effectiveUsdM2": 594.11,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        342.0026,
+        1.92,
+        322.528
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ4-22"
+    },
+    {
+      "unitId": "MZ4-23",
+      "label": "Manzana 4 · Parcela 23",
+      "block": 4,
+      "number": 23,
+      "type": "unifamiliar",
+      "areaM2": 626.029,
+      "areaGeometryM2": 626.029921,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 372000,
+      "effectiveUsdM2": 594.22,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        342.0056,
+        1.92,
+        302.528
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ4-23"
+    },
+    {
+      "unitId": "MZ4-24",
+      "label": "Manzana 4 · Parcela 24",
+      "block": 4,
+      "number": 24,
+      "type": "unifamiliar",
+      "areaM2": 586.724,
+      "areaGeometryM2": 586.72326,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 355500,
+      "effectiveUsdM2": 605.91,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        342.0083,
+        1.92,
+        284.1231
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ4-24"
+    },
+    {
+      "unitId": "MZ5-1",
+      "label": "Manzana 5 · Parcela 1",
+      "block": 5,
+      "number": 1,
+      "type": "unifamiliar",
+      "areaM2": 593.677,
+      "areaGeometryM2": 593.6769,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 359500,
+      "effectiveUsdM2": 605.55,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        301.1952,
+        1.92,
+        286.9198
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ5-1"
+    },
+    {
+      "unitId": "MZ5-2",
+      "label": "Manzana 5 · Parcela 2",
+      "block": 5,
+      "number": 2,
+      "type": "unifamiliar",
+      "areaM2": 584.445,
+      "areaGeometryM2": 584.445364,
+      "status": "sin_confirmar",
+      "demoStatus": "vendido",
+      "currency": "USD",
+      "priceUsd": 354000,
+      "effectiveUsdM2": 605.7,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 2.25
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        282.1875,
+        1.92,
+        284.3941
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ5-2"
+    },
+    {
+      "unitId": "MZ5-3",
+      "label": "Manzana 5 · Parcela 3",
+      "block": 5,
+      "number": 3,
+      "type": "unifamiliar",
+      "areaM2": 591.125,
+      "areaGeometryM2": 591.125627,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 358000,
+      "effectiveUsdM2": 605.62,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 2.25
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        264.0467,
+        1.92,
+        282.2715
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ5-3"
+    },
+    {
+      "unitId": "MZ5-4",
+      "label": "Manzana 5 · Parcela 4",
+      "block": 5,
+      "number": 4,
+      "type": "unifamiliar",
+      "areaM2": 644.321,
+      "areaGeometryM2": 644.321125,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 382500,
+      "effectiveUsdM2": 593.65,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 2.25
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        245.659,
+        1.92,
+        279.3208
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ5-4"
+    },
+    {
+      "unitId": "MZ5-5",
+      "label": "Manzana 5 · Parcela 5",
+      "block": 5,
+      "number": 5,
+      "type": "unifamiliar",
+      "areaM2": 637.365,
+      "areaGeometryM2": 637.365357,
+      "status": "sin_confirmar",
+      "demoStatus": "vendido",
+      "currency": "USD",
+      "priceUsd": 378500,
+      "effectiveUsdM2": 593.85,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 2.25
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        226.5956,
+        1.92,
+        276.1838
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ5-5"
+    },
+    {
+      "unitId": "MZ5-6",
+      "label": "Manzana 5 · Parcela 6",
+      "block": 5,
+      "number": 6,
+      "type": "unifamiliar",
+      "areaM2": 630.529,
+      "areaGeometryM2": 630.529682,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 374500,
+      "effectiveUsdM2": 593.95,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 2.25
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        207.5346,
+        1.92,
+        273.0472
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ5-6"
+    },
+    {
+      "unitId": "MZ5-7",
+      "label": "Manzana 5 · Parcela 7",
+      "block": 5,
+      "number": 7,
+      "type": "unifamiliar",
+      "areaM2": 628.251,
+      "areaGeometryM2": 628.275234,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 373000,
+      "effectiveUsdM2": 593.71,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 2.248
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        188.474,
+        1.92,
+        269.9106
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ5-7"
+    },
+    {
+      "unitId": "MZ5-8",
+      "label": "Manzana 5 · Parcela 8",
+      "block": 5,
+      "number": 8,
+      "type": "unifamiliar",
+      "areaM2": 642.586,
+      "areaGeometryM2": 642.610405,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 381500,
+      "effectiveUsdM2": 593.69,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 2.233
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        169.4557,
+        1.92,
+        266.4641
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ5-8"
+    },
+    {
+      "unitId": "MZ5-9",
+      "label": "Manzana 5 · Parcela 9",
+      "block": 5,
+      "number": 9,
+      "type": "unifamiliar",
+      "areaM2": 686.057,
+      "areaGeometryM2": 686.081519,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 407500,
+      "effectiveUsdM2": 593.97,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.604
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        150.353,
+        1.92,
+        262.5257
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ5-9"
+    },
+    {
+      "unitId": "MZ5-10",
+      "label": "Manzana 5 · Parcela 10",
+      "block": 5,
+      "number": 10,
+      "type": "unifamiliar",
+      "areaM2": 517.162,
+      "areaGeometryM2": 517.140119,
+      "status": "sin_confirmar",
+      "demoStatus": "reservado",
+      "currency": "USD",
+      "priceUsd": 313500,
+      "effectiveUsdM2": 606.19,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        132.2507,
+        1.92,
+        252.156
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ5-10"
+    },
+    {
+      "unitId": "MZ5-11",
+      "label": "Manzana 5 · Parcela 11",
+      "block": 5,
+      "number": 11,
+      "type": "unifamiliar",
+      "areaM2": 539.28,
+      "areaGeometryM2": 539.282285,
+      "status": "sin_confirmar",
+      "demoStatus": "reservado",
+      "currency": "USD",
+      "priceUsd": 326500,
+      "effectiveUsdM2": 605.44,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.899
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        114.543,
+        1.92,
+        246.1643
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ5-11"
+    },
+    {
+      "unitId": "MZ5-12",
+      "label": "Manzana 5 · Parcela 12",
+      "block": 5,
+      "number": 12,
+      "type": "unifamiliar",
+      "areaM2": 538.549,
+      "areaGeometryM2": 538.5457,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 326500,
+      "effectiveUsdM2": 606.26,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.942
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        96.4741,
+        1.92,
+        238.5143
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ5-12"
+    },
+    {
+      "unitId": "MZ5-13",
+      "label": "Manzana 5 · Parcela 13",
+      "block": 5,
+      "number": 13,
+      "type": "unifamiliar",
+      "areaM2": 538.685,
+      "areaGeometryM2": 538.682042,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 326500,
+      "effectiveUsdM2": 606.11,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.887
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        78.8474,
+        1.92,
+        230.1481
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ5-13"
+    },
+    {
+      "unitId": "MZ5-14",
+      "label": "Manzana 5 · Parcela 14",
+      "block": 5,
+      "number": 14,
+      "type": "unifamiliar",
+      "areaM2": 538.921,
+      "areaGeometryM2": 538.918155,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 326500,
+      "effectiveUsdM2": 605.84,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.942
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        61.6281,
+        1.92,
+        220.9572
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ5-14"
+    },
+    {
+      "unitId": "MZ5-15",
+      "label": "Manzana 5 · Parcela 15",
+      "block": 5,
+      "number": 15,
+      "type": "unifamiliar",
+      "areaM2": 553.675,
+      "areaGeometryM2": 553.673212,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 335500,
+      "effectiveUsdM2": 605.95,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        44.6434,
+        1.92,
+        210.8588
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ5-15"
+    },
+    {
+      "unitId": "MZ5-16",
+      "label": "Manzana 5 · Parcela 16",
+      "block": 5,
+      "number": 16,
+      "type": "unifamiliar",
+      "areaM2": 544.437,
+      "areaGeometryM2": 544.437515,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 330000,
+      "effectiveUsdM2": 606.13,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.938
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        28.0487,
+        1.92,
+        200.0497
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ5-16"
+    },
+    {
+      "unitId": "MZ5-17",
+      "label": "Manzana 5 · Parcela 17",
+      "block": 5,
+      "number": 17,
+      "type": "unifamiliar",
+      "areaM2": 519.028,
+      "areaGeometryM2": 519.028172,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 314500,
+      "effectiveUsdM2": 605.94,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.932
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        12.2357,
+        1.92,
+        189.4423
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ5-17"
+    },
+    {
+      "unitId": "MZ5-18",
+      "label": "Manzana 5 · Parcela 18",
+      "block": 5,
+      "number": 18,
+      "type": "unifamiliar",
+      "areaM2": 546.843,
+      "areaGeometryM2": 546.842465,
+      "status": "sin_confirmar",
+      "demoStatus": "reservado",
+      "currency": "USD",
+      "priceUsd": 331500,
+      "effectiveUsdM2": 606.21,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -3.5035,
+        1.92,
+        178.5718
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ5-18"
+    },
+    {
+      "unitId": "MZ5-19",
+      "label": "Manzana 5 · Parcela 19",
+      "block": 5,
+      "number": 19,
+      "type": "unifamiliar",
+      "areaM2": 687.797,
+      "areaGeometryM2": 687.763715,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 408500,
+      "effectiveUsdM2": 593.93,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        145.8595,
+        1.92,
+        295.4688
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ5-19"
+    },
+    {
+      "unitId": "MZ5-20",
+      "label": "Manzana 5 · Parcela 20",
+      "block": 5,
+      "number": 20,
+      "type": "unifamiliar",
+      "areaM2": 665.397,
+      "areaGeometryM2": 665.397563,
+      "status": "sin_confirmar",
+      "demoStatus": "reservado",
+      "currency": "USD",
+      "priceUsd": 395000,
+      "effectiveUsdM2": 593.63,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        164.89,
+        1.92,
+        299.9359
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ5-20"
+    },
+    {
+      "unitId": "MZ5-21",
+      "label": "Manzana 5 · Parcela 21",
+      "block": 5,
+      "number": 21,
+      "type": "unifamiliar",
+      "areaM2": 651.723,
+      "areaGeometryM2": 651.723999,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 387000,
+      "effectiveUsdM2": 593.81,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        183.9746,
+        1.92,
+        302.8964
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ5-21"
+    },
+    {
+      "unitId": "MZ5-22",
+      "label": "Manzana 5 · Parcela 22",
+      "block": 5,
+      "number": 22,
+      "type": "unifamiliar",
+      "areaM2": 638.05,
+      "areaGeometryM2": 638.050434,
+      "status": "sin_confirmar",
+      "demoStatus": "vendido",
+      "currency": "USD",
+      "priceUsd": 379000,
+      "effectiveUsdM2": 594.0,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        203.0592,
+        1.92,
+        305.8569
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ5-22"
+    },
+    {
+      "unitId": "MZ5-23",
+      "label": "Manzana 5 · Parcela 23",
+      "block": 5,
+      "number": 23,
+      "type": "unifamiliar",
+      "areaM2": 624.399,
+      "areaGeometryM2": 624.399414,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 371000,
+      "effectiveUsdM2": 594.17,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        222.1442,
+        1.92,
+        308.8175
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ5-23"
+    },
+    {
+      "unitId": "MZ5-24",
+      "label": "Manzana 5 · Parcela 24",
+      "block": 5,
+      "number": 24,
+      "type": "unifamiliar",
+      "areaM2": 610.858,
+      "areaGeometryM2": 610.85819,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 363000,
+      "effectiveUsdM2": 594.25,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        241.2316,
+        1.92,
+        311.7786
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ5-24"
+    },
+    {
+      "unitId": "MZ5-25",
+      "label": "Manzana 5 · Parcela 25",
+      "block": 5,
+      "number": 25,
+      "type": "unifamiliar",
+      "areaM2": 618.94,
+      "areaGeometryM2": 618.940574,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 367500,
+      "effectiveUsdM2": 593.76,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        260.8201,
+        1.92,
+        313.8628
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ5-25"
+    },
+    {
+      "unitId": "MZ5-26",
+      "label": "Manzana 5 · Parcela 26",
+      "block": 5,
+      "number": 26,
+      "type": "unifamiliar",
+      "areaM2": 595.435,
+      "areaGeometryM2": 595.435258,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 361000,
+      "effectiveUsdM2": 606.28,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        281.1374,
+        1.92,
+        314.8662
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ5-26"
+    },
+    {
+      "unitId": "MZ5-27",
+      "label": "Manzana 5 · Parcela 27",
+      "block": 5,
+      "number": 27,
+      "type": "unifamiliar",
+      "areaM2": 537.67,
+      "areaGeometryM2": 537.669884,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 326000,
+      "effectiveUsdM2": 606.32,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        301.18,
+        1.92,
+        315.4381
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ5-27"
+    },
+    {
+      "unitId": "MZ6-1",
+      "label": "Manzana 6 · Parcela 1",
+      "block": 6,
+      "number": 1,
+      "type": "unifamiliar",
+      "areaM2": 711.96,
+      "areaGeometryM2": 711.960464,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 423000,
+      "effectiveUsdM2": 594.13,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.933
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -24.5912,
+        1.92,
+        222.6265
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ6-1"
+    },
+    {
+      "unitId": "MZ6-2",
+      "label": "Manzana 6 · Parcela 2",
+      "block": 6,
+      "number": 2,
+      "type": "unifamiliar",
+      "areaM2": 662.894,
+      "areaGeometryM2": 662.894991,
+      "status": "sin_confirmar",
+      "demoStatus": "reservado",
+      "currency": "USD",
+      "priceUsd": 394000,
+      "effectiveUsdM2": 594.36,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.933
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -7.3745,
+        1.92,
+        232.1992
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ6-2"
+    },
+    {
+      "unitId": "MZ6-3",
+      "label": "Manzana 6 · Parcela 3",
+      "block": 6,
+      "number": 3,
+      "type": "unifamiliar",
+      "areaM2": 586.977,
+      "areaGeometryM2": 586.978256,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 355500,
+      "effectiveUsdM2": 605.65,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        10.1922,
+        1.92,
+        241.8493
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ6-3"
+    },
+    {
+      "unitId": "MZ6-4",
+      "label": "Manzana 6 · Parcela 4",
+      "block": 6,
+      "number": 4,
+      "type": "unifamiliar",
+      "areaM2": 521.899,
+      "areaGeometryM2": 521.923939,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 316000,
+      "effectiveUsdM2": 605.48,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.932
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        27.9501,
+        1.92,
+        251.0903
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ6-4"
+    },
+    {
+      "unitId": "MZ6-5",
+      "label": "Manzana 6 · Parcela 5",
+      "block": 6,
+      "number": 5,
+      "type": "unifamiliar",
+      "areaM2": 451.553,
+      "areaGeometryM2": 451.570634,
+      "status": "sin_confirmar",
+      "demoStatus": "reservado",
+      "currency": "USD",
+      "priceUsd": 273500,
+      "effectiveUsdM2": 605.69,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.947
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        45.3468,
+        1.92,
+        259.4498
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ6-5"
+    },
+    {
+      "unitId": "MZ6-6",
+      "label": "Manzana 6 · Parcela 6",
+      "block": 6,
+      "number": 6,
+      "type": "unifamiliar",
+      "areaM2": 714.204,
+      "areaGeometryM2": 714.204477,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 424000,
+      "effectiveUsdM2": 593.67,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -40.0756,
+        1.92,
+        255.7819
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ6-6"
+    },
+    {
+      "unitId": "MZ6-7",
+      "label": "Manzana 6 · Parcela 7",
+      "block": 6,
+      "number": 7,
+      "type": "unifamiliar",
+      "areaM2": 669.436,
+      "areaGeometryM2": 669.436111,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 397500,
+      "effectiveUsdM2": 593.78,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -21.4463,
+        1.92,
+        262.3299
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ6-7"
+    },
+    {
+      "unitId": "MZ6-8",
+      "label": "Manzana 6 · Parcela 8",
+      "block": 6,
+      "number": 8,
+      "type": "unifamiliar",
+      "areaM2": 597.414,
+      "areaGeometryM2": 597.414936,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 362000,
+      "effectiveUsdM2": 605.94,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -2.3395,
+        1.92,
+        268.6824
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ6-8"
+    },
+    {
+      "unitId": "MZ6-9",
+      "label": "Manzana 6 · Parcela 9",
+      "block": 6,
+      "number": 9,
+      "type": "unifamiliar",
+      "areaM2": 525.393,
+      "areaGeometryM2": 525.39376,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 318500,
+      "effectiveUsdM2": 606.21,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        16.7674,
+        1.92,
+        275.035
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ6-9"
+    },
+    {
+      "unitId": "MZ6-10",
+      "label": "Manzana 6 · Parcela 10",
+      "block": 6,
+      "number": 10,
+      "type": "unifamiliar",
+      "areaM2": 469.521,
+      "areaGeometryM2": 469.52132,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 284500,
+      "effectiveUsdM2": 605.94,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        36.1837,
+        1.92,
+        281.3706
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ6-10"
+    },
+    {
+      "unitId": "MZ6-11",
+      "label": "Manzana 6 · Parcela 11",
+      "block": 6,
+      "number": 11,
+      "type": "unifamiliar",
+      "areaM2": 777.447,
+      "areaGeometryM2": 777.460581,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 462000,
+      "effectiveUsdM2": 594.25,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.936
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        59.0354,
+        1.92,
+        276.7934
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ6-11"
+    },
+    {
+      "unitId": "MZ6-12",
+      "label": "Manzana 6 · Parcela 12",
+      "block": 6,
+      "number": 12,
+      "type": "unifamiliar",
+      "areaM2": 679.339,
+      "areaGeometryM2": 679.357799,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 403500,
+      "effectiveUsdM2": 593.96,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.913
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        76.6228,
+        1.92,
+        283.0533
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ6-12"
+    },
+    {
+      "unitId": "MZ6-13",
+      "label": "Manzana 6 · Parcela 13",
+      "block": 6,
+      "number": 13,
+      "type": "unifamiliar",
+      "areaM2": 629.204,
+      "areaGeometryM2": 629.171652,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 373500,
+      "effectiveUsdM2": 593.61,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.931
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        93.6531,
+        1.92,
+        289.8925
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ6-13"
+    },
+    {
+      "unitId": "MZ7-1",
+      "label": "Manzana 7 · Parcela 1",
+      "block": 7,
+      "number": 1,
+      "type": "unifamiliar",
+      "areaM2": 586.848,
+      "areaGeometryM2": 586.84857,
+      "status": "sin_confirmar",
+      "demoStatus": "vendido",
+      "currency": "USD",
+      "priceUsd": 355500,
+      "effectiveUsdM2": 605.78,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -259.9708,
+        1.92,
+        39.3749
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ7-1"
+    },
+    {
+      "unitId": "MZ7-2",
+      "label": "Manzana 7 · Parcela 2",
+      "block": 7,
+      "number": 2,
+      "type": "unifamiliar",
+      "areaM2": 615.136,
+      "areaGeometryM2": 615.136896,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 365500,
+      "effectiveUsdM2": 594.18,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -273.678,
+        1.92,
+        47.6315
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ7-2"
+    },
+    {
+      "unitId": "MZ7-3",
+      "label": "Manzana 7 · Parcela 3",
+      "block": 7,
+      "number": 3,
+      "type": "unifamiliar",
+      "areaM2": 615.136,
+      "areaGeometryM2": 615.136897,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 365500,
+      "effectiveUsdM2": 594.18,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -282.4668,
+        1.92,
+        64.1448
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ7-3"
+    },
+    {
+      "unitId": "MZ7-4",
+      "label": "Manzana 7 · Parcela 4",
+      "block": 7,
+      "number": 4,
+      "type": "unifamiliar",
+      "areaM2": 615.136,
+      "areaGeometryM2": 615.136897,
+      "status": "sin_confirmar",
+      "demoStatus": "reservado",
+      "currency": "USD",
+      "priceUsd": 365500,
+      "effectiveUsdM2": 594.18,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -291.2556,
+        1.92,
+        80.658
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ7-4"
+    },
+    {
+      "unitId": "MZ7-5",
+      "label": "Manzana 7 · Parcela 5",
+      "block": 7,
+      "number": 5,
+      "type": "unifamiliar",
+      "areaM2": 615.136,
+      "areaGeometryM2": 615.136896,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 365500,
+      "effectiveUsdM2": 594.18,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -300.0444,
+        1.92,
+        97.1713
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ7-5"
+    },
+    {
+      "unitId": "MZ7-6",
+      "label": "Manzana 7 · Parcela 6",
+      "block": 7,
+      "number": 6,
+      "type": "unifamiliar",
+      "areaM2": 615.136,
+      "areaGeometryM2": 615.136897,
+      "status": "sin_confirmar",
+      "demoStatus": "reservado",
+      "currency": "USD",
+      "priceUsd": 365500,
+      "effectiveUsdM2": 594.18,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -308.8332,
+        1.92,
+        113.6845
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ7-6"
+    },
+    {
+      "unitId": "MZ7-7",
+      "label": "Manzana 7 · Parcela 7",
+      "block": 7,
+      "number": 7,
+      "type": "unifamiliar",
+      "areaM2": 615.136,
+      "areaGeometryM2": 615.136897,
+      "status": "sin_confirmar",
+      "demoStatus": "vendido",
+      "currency": "USD",
+      "priceUsd": 365500,
+      "effectiveUsdM2": 594.18,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -317.622,
+        1.92,
+        130.1978
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ7-7"
+    },
+    {
+      "unitId": "MZ7-8",
+      "label": "Manzana 7 · Parcela 8",
+      "block": 7,
+      "number": 8,
+      "type": "unifamiliar",
+      "areaM2": 615.136,
+      "areaGeometryM2": 615.136896,
+      "status": "sin_confirmar",
+      "demoStatus": "reservado",
+      "currency": "USD",
+      "priceUsd": 365500,
+      "effectiveUsdM2": 594.18,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -326.4108,
+        1.92,
+        146.711
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ7-8"
+    },
+    {
+      "unitId": "MZ7-9",
+      "label": "Manzana 7 · Parcela 9",
+      "block": 7,
+      "number": 9,
+      "type": "unifamiliar",
+      "areaM2": 615.136,
+      "areaGeometryM2": 615.136897,
+      "status": "sin_confirmar",
+      "demoStatus": "reservado",
+      "currency": "USD",
+      "priceUsd": 365500,
+      "effectiveUsdM2": 594.18,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -335.1996,
+        1.92,
+        163.2243
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ7-9"
+    },
+    {
+      "unitId": "MZ7-10",
+      "label": "Manzana 7 · Parcela 10",
+      "block": 7,
+      "number": 10,
+      "type": "unifamiliar",
+      "areaM2": 1633.892,
+      "areaGeometryM2": 1633.89265,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 1065000,
+      "effectiveUsdM2": 651.82,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "cercania_borde_isla",
+          "factor": 1.18,
+          "distanceM": 0.0
+        },
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 0.93
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -350.9136,
+        1.92,
+        192.7493
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ7-10"
+    },
+    {
+      "unitId": "MZ7-11",
+      "label": "Manzana 7 · Parcela 11",
+      "block": 7,
+      "number": 11,
+      "type": "unifamiliar",
+      "areaM2": 1128.06,
+      "areaGeometryM2": 1128.060149,
+      "status": "sin_confirmar",
+      "demoStatus": "vendido",
+      "currency": "USD",
+      "priceUsd": 759000,
+      "effectiveUsdM2": 672.84,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "cercania_borde_isla",
+          "factor": 1.18,
+          "distanceM": 0.0
+        },
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 0.96
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -325.3343,
+        1.92,
+        212.9419
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ7-11"
+    },
+    {
+      "unitId": "MZ7-12",
+      "label": "Manzana 7 · Parcela 12",
+      "block": 7,
+      "number": 12,
+      "type": "unifamiliar",
+      "areaM2": 1061.486,
+      "areaGeometryM2": 1061.486673,
+      "status": "sin_confirmar",
+      "demoStatus": "vendido",
+      "currency": "USD",
+      "priceUsd": 714500,
+      "effectiveUsdM2": 673.11,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "cercania_borde_isla",
+          "factor": 1.18,
+          "distanceM": 0.0
+        },
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 0.96
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -295.6162,
+        1.92,
+        224.4802
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ7-12"
+    },
+    {
+      "unitId": "MZ7-13",
+      "label": "Manzana 7 · Parcela 13",
+      "block": 7,
+      "number": 13,
+      "type": "unifamiliar",
+      "areaM2": 1048.857,
+      "areaGeometryM2": 1048.857044,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 706000,
+      "effectiveUsdM2": 673.11,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "cercania_borde_isla",
+          "factor": 1.18,
+          "distanceM": 0.0
+        },
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 0.96
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -266.8698,
+        1.92,
+        235.3824
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ7-13"
+    },
+    {
+      "unitId": "MZ7-14",
+      "label": "Manzana 7 · Parcela 14",
+      "block": 7,
+      "number": 14,
+      "type": "unifamiliar",
+      "areaM2": 1086.627,
+      "areaGeometryM2": 1086.627592,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 731000,
+      "effectiveUsdM2": 672.72,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "cercania_borde_isla",
+          "factor": 1.18,
+          "distanceM": 0.0
+        },
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 0.96
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -237.421,
+        1.92,
+        246.557
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ7-14"
+    },
+    {
+      "unitId": "MZ7-15",
+      "label": "Manzana 7 · Parcela 15",
+      "block": 7,
+      "number": 15,
+      "type": "unifamiliar",
+      "areaM2": 1029.569,
+      "areaGeometryM2": 1029.569298,
+      "status": "sin_confirmar",
+      "demoStatus": "reservado",
+      "currency": "USD",
+      "priceUsd": 693000,
+      "effectiveUsdM2": 673.1,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "cercania_borde_isla",
+          "factor": 1.18,
+          "distanceM": 0.0
+        },
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 0.96
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -207.645,
+        1.92,
+        258.1138
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ7-15"
+    },
+    {
+      "unitId": "MZ7-16",
+      "label": "Manzana 7 · Parcela 16",
+      "block": 7,
+      "number": 16,
+      "type": "unifamiliar",
+      "areaM2": 1870.975,
+      "areaGeometryM2": 1870.975858,
+      "status": "sin_confirmar",
+      "demoStatus": "reservado",
+      "currency": "USD",
+      "priceUsd": 1219500,
+      "effectiveUsdM2": 651.8,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "cercania_borde_isla",
+          "factor": 1.18,
+          "distanceM": 0.0
+        },
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        },
+        {
+          "key": "tamano",
+          "factor": 0.93
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -168.8501,
+        1.92,
+        267.1164
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ7-16"
+    },
+    {
+      "unitId": "MZ7-17",
+      "label": "Manzana 7 · Parcela 17",
+      "block": 7,
+      "number": 17,
+      "type": "unifamiliar",
+      "areaM2": 599.474,
+      "areaGeometryM2": 599.474495,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 363000,
+      "effectiveUsdM2": 605.53,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -145.9328,
+        1.92,
+        240.7315
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ7-17"
+    },
+    {
+      "unitId": "MZ7-18",
+      "label": "Manzana 7 · Parcela 18",
+      "block": 7,
+      "number": 18,
+      "type": "unifamiliar",
+      "areaM2": 599.474,
+      "areaGeometryM2": 599.47442,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 363000,
+      "effectiveUsdM2": 605.53,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -136.9344,
+        1.92,
+        223.8245
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ7-18"
+    },
+    {
+      "unitId": "MZ7-19",
+      "label": "Manzana 7 · Parcela 19",
+      "block": 7,
+      "number": 19,
+      "type": "unifamiliar",
+      "areaM2": 599.474,
+      "areaGeometryM2": 599.47441,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 363000,
+      "effectiveUsdM2": 605.53,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -127.936,
+        1.92,
+        206.9174
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ7-19"
+    },
+    {
+      "unitId": "MZ7-20",
+      "label": "Manzana 7 · Parcela 20",
+      "block": 7,
+      "number": 20,
+      "type": "unifamiliar",
+      "areaM2": 599.474,
+      "areaGeometryM2": 599.4744,
+      "status": "sin_confirmar",
+      "demoStatus": "vendido",
+      "currency": "USD",
+      "priceUsd": 363000,
+      "effectiveUsdM2": 605.53,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -118.9376,
+        1.92,
+        190.0104
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ7-20"
+    },
+    {
+      "unitId": "MZ7-21",
+      "label": "Manzana 7 · Parcela 21",
+      "block": 7,
+      "number": 21,
+      "type": "unifamiliar",
+      "areaM2": 599.474,
+      "areaGeometryM2": 599.47439,
+      "status": "sin_confirmar",
+      "demoStatus": "reservado",
+      "currency": "USD",
+      "priceUsd": 363000,
+      "effectiveUsdM2": 605.53,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -109.9392,
+        1.92,
+        173.1033
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ7-21"
+    },
+    {
+      "unitId": "MZ7-22",
+      "label": "Manzana 7 · Parcela 22",
+      "block": 7,
+      "number": 22,
+      "type": "unifamiliar",
+      "areaM2": 599.474,
+      "areaGeometryM2": 599.474381,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 363000,
+      "effectiveUsdM2": 605.53,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -100.9408,
+        1.92,
+        156.1962
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ7-22"
+    },
+    {
+      "unitId": "MZ7-23",
+      "label": "Manzana 7 · Parcela 23",
+      "block": 7,
+      "number": 23,
+      "type": "unifamiliar",
+      "areaM2": 599.474,
+      "areaGeometryM2": 599.474328,
+      "status": "sin_confirmar",
+      "demoStatus": "vendido",
+      "currency": "USD",
+      "priceUsd": 363000,
+      "effectiveUsdM2": 605.53,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -91.9424,
+        1.92,
+        139.2892
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ7-23"
+    },
+    {
+      "unitId": "MZ7-24",
+      "label": "Manzana 7 · Parcela 24",
+      "block": 7,
+      "number": 24,
+      "type": "unifamiliar",
+      "areaM2": 651.003,
+      "areaGeometryM2": 650.964973,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 386500,
+      "effectiveUsdM2": 593.7,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -82.8066,
+        1.92,
+        122.1239
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ7-24"
+    },
+    {
+      "unitId": "MZ8-1",
+      "label": "Manzana 8 · Parcela 1",
+      "block": 8,
+      "number": 1,
+      "type": "unifamiliar",
+      "areaM2": 600.78,
+      "areaGeometryM2": 600.780004,
+      "status": "sin_confirmar",
+      "demoStatus": "vendido",
+      "currency": "USD",
+      "priceUsd": 357000,
+      "effectiveUsdM2": 594.23,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -219.6436,
+        1.92,
+        117.0027
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ8-1"
+    },
+    {
+      "unitId": "MZ8-2",
+      "label": "Manzana 8 · Parcela 2",
+      "block": 8,
+      "number": 2,
+      "type": "unifamiliar",
+      "areaM2": 617.872,
+      "areaGeometryM2": 617.83835,
+      "status": "sin_confirmar",
+      "demoStatus": "reservado",
+      "currency": "USD",
+      "priceUsd": 367000,
+      "effectiveUsdM2": 593.97,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -211.0342,
+        1.92,
+        100.0864
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ8-2"
+    },
+    {
+      "unitId": "MZ8-3",
+      "label": "Manzana 8 · Parcela 3",
+      "block": 8,
+      "number": 3,
+      "type": "unifamiliar",
+      "areaM2": 619.75,
+      "areaGeometryM2": 619.749006,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 368000,
+      "effectiveUsdM2": 593.79,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -239.2795,
+        1.92,
+        85.148
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ8-3"
+    },
+    {
+      "unitId": "MZ8-4",
+      "label": "Manzana 8 · Parcela 4",
+      "block": 8,
+      "number": 4,
+      "type": "unifamiliar",
+      "areaM2": 600.78,
+      "areaGeometryM2": 600.780004,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 357000,
+      "effectiveUsdM2": 594.23,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -248.1566,
+        1.92,
+        101.8273
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ8-4"
+    },
+    {
+      "unitId": "MZ8-5",
+      "label": "Manzana 8 · Parcela 5",
+      "block": 8,
+      "number": 5,
+      "type": "unifamiliar",
+      "areaM2": 810.131,
+      "areaGeometryM2": 810.131817,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 481000,
+      "effectiveUsdM2": 593.73,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -251.1497,
+        1.92,
+        120.9665
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ8-5"
+    },
+    {
+      "unitId": "MZ8-6",
+      "label": "Manzana 8 · Parcela 6",
+      "block": 8,
+      "number": 6,
+      "type": "unifamiliar",
+      "areaM2": 810.131,
+      "areaGeometryM2": 810.131817,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 481000,
+      "effectiveUsdM2": 593.73,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -259.6079,
+        1.92,
+        136.8587
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ8-6"
+    },
+    {
+      "unitId": "MZ8-7",
+      "label": "Manzana 8 · Parcela 7",
+      "block": 8,
+      "number": 7,
+      "type": "unifamiliar",
+      "areaM2": 810.131,
+      "areaGeometryM2": 810.131817,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 481000,
+      "effectiveUsdM2": 593.73,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -268.0662,
+        1.92,
+        152.7509
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ8-7"
+    },
+    {
+      "unitId": "MZ8-8",
+      "label": "Manzana 8 · Parcela 8",
+      "block": 8,
+      "number": 8,
+      "type": "unifamiliar",
+      "areaM2": 792.451,
+      "areaGeometryM2": 792.451228,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 470500,
+      "effectiveUsdM2": 593.73,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -291.4707,
+        1.92,
+        171.7525
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ8-8"
+    },
+    {
+      "unitId": "MZ8-9",
+      "label": "Manzana 8 · Parcela 9",
+      "block": 8,
+      "number": 9,
+      "type": "unifamiliar",
+      "areaM2": 736.645,
+      "areaGeometryM2": 736.645832,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 437500,
+      "effectiveUsdM2": 593.91,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.932
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -271.9842,
+        1.92,
+        180.9734
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ8-9"
+    },
+    {
+      "unitId": "MZ8-10",
+      "label": "Manzana 8 · Parcela 10",
+      "block": 8,
+      "number": 10,
+      "type": "unifamiliar",
+      "areaM2": 679.326,
+      "areaGeometryM2": 679.292106,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 403500,
+      "effectiveUsdM2": 593.97,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -252.3651,
+        1.92,
+        189.946
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ8-10"
+    },
+    {
+      "unitId": "MZ8-11",
+      "label": "Manzana 8 · Parcela 11",
+      "block": 8,
+      "number": 11,
+      "type": "unifamiliar",
+      "areaM2": 869.456,
+      "areaGeometryM2": 869.442539,
+      "status": "sin_confirmar",
+      "demoStatus": "vendido",
+      "currency": "USD",
+      "priceUsd": 516500,
+      "effectiveUsdM2": 594.05,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -216.8156,
+        1.92,
+        204.702
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ8-11"
+    },
+    {
+      "unitId": "MZ8-12",
+      "label": "Manzana 8 · Parcela 12",
+      "block": 8,
+      "number": 12,
+      "type": "unifamiliar",
+      "areaM2": 746.243,
+      "areaGeometryM2": 746.242733,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 443500,
+      "effectiveUsdM2": 594.31,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -188.1829,
+        1.92,
+        219.6529
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ8-12"
+    },
+    {
+      "unitId": "MZ8-13",
+      "label": "Manzana 8 · Parcela 13",
+      "block": 8,
+      "number": 13,
+      "type": "unifamiliar",
+      "areaM2": 810.131,
+      "areaGeometryM2": 810.131817,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 481000,
+      "effectiveUsdM2": 593.73,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -183.6745,
+        1.92,
+        197.6665
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ8-13"
+    },
+    {
+      "unitId": "MZ8-14",
+      "label": "Manzana 8 · Parcela 14",
+      "block": 8,
+      "number": 14,
+      "type": "unifamiliar",
+      "areaM2": 810.131,
+      "areaGeometryM2": 810.131817,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 481000,
+      "effectiveUsdM2": 593.73,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -175.2163,
+        1.92,
+        181.7742
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ8-14"
+    },
+    {
+      "unitId": "MZ8-15",
+      "label": "Manzana 8 · Parcela 15",
+      "block": 8,
+      "number": 15,
+      "type": "unifamiliar",
+      "areaM2": 810.131,
+      "areaGeometryM2": 810.131817,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 481000,
+      "effectiveUsdM2": 593.73,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -166.758,
+        1.92,
+        165.882
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ8-15"
+    },
+    {
+      "unitId": "MZ8-16",
+      "label": "Manzana 8 · Parcela 16",
+      "block": 8,
+      "number": 16,
+      "type": "unifamiliar",
+      "areaM2": 600.78,
+      "areaGeometryM2": 600.780006,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 357000,
+      "effectiveUsdM2": 594.23,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -152.5539,
+        1.92,
+        152.7097
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ8-16"
+    },
+    {
+      "unitId": "MZ8-17",
+      "label": "Manzana 8 · Parcela 17",
+      "block": 8,
+      "number": 17,
+      "type": "unifamiliar",
+      "areaM2": 619.75,
+      "areaGeometryM2": 619.749007,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 368000,
+      "effectiveUsdM2": 593.79,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -143.7942,
+        1.92,
+        136.2511
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ8-17"
+    },
+    {
+      "unitId": "MZ8-18",
+      "label": "Manzana 8 · Parcela 18",
+      "block": 8,
+      "number": 18,
+      "type": "unifamiliar",
+      "areaM2": 617.872,
+      "areaGeometryM2": 617.86113,
+      "status": "sin_confirmar",
+      "demoStatus": "reservado",
+      "currency": "USD",
+      "priceUsd": 367000,
+      "effectiveUsdM2": 593.97,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -172.1899,
+        1.92,
+        120.855
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ8-18"
+    },
+    {
+      "unitId": "MZ8-19",
+      "label": "Manzana 8 · Parcela 19",
+      "block": 8,
+      "number": 19,
+      "type": "unifamiliar",
+      "areaM2": 600.78,
+      "areaGeometryM2": 600.780005,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 357000,
+      "effectiveUsdM2": 594.23,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 0.0
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -181.067,
+        1.92,
+        137.5342
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ8-19"
+    },
+    {
+      "unitId": "MZ9-1",
+      "label": "Manzana 9 · Parcela 1",
+      "block": 9,
+      "number": 1,
+      "type": "unifamiliar",
+      "areaM2": 675.692,
+      "areaGeometryM2": 675.67373,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 401500,
+      "effectiveUsdM2": 594.21,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -121.5705,
+        1.92,
+        103.7182
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ9-1"
+    },
+    {
+      "unitId": "MZ9-2",
+      "label": "Manzana 9 · Parcela 2",
+      "block": 9,
+      "number": 2,
+      "type": "unifamiliar",
+      "areaM2": 671.598,
+      "areaGeometryM2": 671.58189,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 399000,
+      "effectiveUsdM2": 594.11,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -142.0773,
+        1.92,
+        92.2656
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ9-2"
+    },
+    {
+      "unitId": "MZ9-3",
+      "label": "Manzana 9 · Parcela 3",
+      "block": 9,
+      "number": 3,
+      "type": "unifamiliar",
+      "areaM2": 663.194,
+      "areaGeometryM2": 663.17788,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 394000,
+      "effectiveUsdM2": 594.09,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -162.6957,
+        1.92,
+        81.3418
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ9-3"
+    },
+    {
+      "unitId": "MZ9-4",
+      "label": "Manzana 9 · Parcela 4",
+      "block": 9,
+      "number": 4,
+      "type": "unifamiliar",
+      "areaM2": 642.073,
+      "areaGeometryM2": 642.057345,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 381500,
+      "effectiveUsdM2": 594.17,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -183.442,
+        1.92,
+        70.6583
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ9-4"
+    },
+    {
+      "unitId": "MZ9-5",
+      "label": "Manzana 9 · Parcela 5",
+      "block": 9,
+      "number": 5,
+      "type": "unifamiliar",
+      "areaM2": 608.202,
+      "areaGeometryM2": 608.18566,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 361500,
+      "effectiveUsdM2": 594.37,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -204.3164,
+        1.92,
+        60.2156
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ9-5"
+    },
+    {
+      "unitId": "MZ9-6",
+      "label": "Manzana 9 · Parcela 6",
+      "block": 9,
+      "number": 6,
+      "type": "unifamiliar",
+      "areaM2": 568.288,
+      "areaGeometryM2": 568.269557,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 344500,
+      "effectiveUsdM2": 606.21,
+      "baseUsdM2": 550,
+      "priceFactors": [
+        {
+          "key": "proximidad_zona_verde",
+          "factor": 1.08,
+          "distanceM": 1.95
+        },
+        {
+          "key": "tamano",
+          "factor": 1.02
+        }
+      ],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        -225.3344,
+        1.92,
+        49.7234
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MZ9-6"
+    },
+    {
+      "unitId": "MF-01",
+      "label": "Solar multifamiliar 1",
+      "block": null,
+      "number": 1,
+      "type": "multifamiliar",
+      "areaM2": 9014.258,
+      "areaGeometryM2": 9013.873011,
+      "status": "sin_confirmar",
+      "demoStatus": "vendido",
+      "currency": "USD",
+      "priceUsd": 3155000,
+      "effectiveUsdM2": 350.0,
+      "baseUsdM2": 350,
+      "priceFactors": [],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        405.3365,
+        1.92,
+        324.7712
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MF-01"
+    },
+    {
+      "unitId": "MF-02",
+      "label": "Solar multifamiliar 2",
+      "block": null,
+      "number": 2,
+      "type": "multifamiliar",
+      "areaM2": 10206.568,
+      "areaGeometryM2": 10206.495876,
+      "status": "sin_confirmar",
+      "demoStatus": "disponible",
+      "currency": "USD",
+      "priceUsd": 3572500,
+      "effectiveUsdM2": 350.02,
+      "baseUsdM2": 350,
+      "priceFactors": [],
+      "priceIsPlaceholder": true,
+      "pricingVersion": "demo-2026-09-25",
+      "centroidGltf": [
+        519.1242,
+        1.92,
+        324.8952
+      ],
+      "sourcePlan": "01_102",
+      "sourceArea": "Cuadro de areas / 01_101",
+      "geometryId": "MF-02"
+    }
+  ]
+}

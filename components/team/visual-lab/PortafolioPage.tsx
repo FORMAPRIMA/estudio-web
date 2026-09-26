@@ -3,13 +3,16 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
-  type Activo, type Escenario, type Periodo,
-  ACTIVOS, ESCENARIOS, PERIODOS, SERIES, HITOS, HOY,
+  type Activo, type ActivoUSD, type Escenario, type Periodo,
+  ACTIVOS, ISLA_CRETA, ESCENARIOS, PERIODOS, SERIES, HITOS, HOY,
   resumen, mesDe, lecturaMix,
 } from '@/lib/visual-lab/cartera'
-import { C, mm, dec, pct, quarter, masMeses } from '@/lib/visual-lab/ui'
+import { C, mm, mUsd, num, dec, pct, quarter, masMeses } from '@/lib/visual-lab/ui'
 
 type Vista = 'cartera' | 'pipeline'
+
+/** Lo que la ficha necesita de un activo, esté en euros o en USD. */
+type FichaDatos = Pick<Activo, 'clase' | 'nombre' | 'ciudad' | 'datos' | 'tesis' | 'href'> & { aviso?: string }
 
 export default function PortafolioPage() {
   const [vista, setVista] = useState<Vista>('cartera')
@@ -18,7 +21,9 @@ export default function PortafolioPage() {
   const [fichaId, setFichaId] = useState<string | null>(null)
 
   const r = useMemo(() => resumen(esc), [esc])
-  const ficha = fichaId ? ACTIVOS.find((a) => a.id === fichaId) ?? null : null
+  const ficha: FichaDatos | null = fichaId === ISLA_CRETA.id
+    ? ISLA_CRETA
+    : fichaId ? ACTIVOS.find((a) => a.id === fichaId) ?? null : null
   const k = ESCENARIOS[esc]
 
   // Ventana de la curva: los últimos N meses de las 24 que guarda cada serie
@@ -45,7 +50,7 @@ export default function PortafolioPage() {
           </p>
           <h1 className="vl-title">Portafolio de desarrollo</h1>
           <p className="vl-subtitle">
-            3 activos · {mm(r.gdv)} GDV · agosto 2026
+            3 activos · {mm(r.gdv)} GDV · agosto 2026 · + Isla Creta en USD
           </p>
         </div>
         <div className="vl-seg" role="tablist">
@@ -78,6 +83,7 @@ export default function PortafolioPage() {
 
             <div className="vl-port-cards">
               {ACTIVOS.map((p) => <TarjetaActivo key={p.id} p={p} onFicha={() => setFichaId(p.id)} />)}
+              <TarjetaUSD p={ISLA_CRETA} onFicha={() => setFichaId(ISLA_CRETA.id)} />
             </div>
 
             {/* Hitos */}
@@ -152,6 +158,31 @@ export default function PortafolioPage() {
                 <div style={{ fontSize: 12.5, textAlign: 'right', color: C.accent }}>{mm(r.valCol)}</div>
                 <div style={{ fontSize: 12.5, textAlign: 'right' }}>{dec(r.ritmo)}</div>
                 <div style={{ fontSize: 12.5, textAlign: 'right' }}>{quarter(masMeses(HOY, r.mesesTot))}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Isla Creta: en USD, con precios de demostración. No entra en el consolidado. */}
+          <div style={{ marginTop: 12, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 4, overflowX: 'auto' }}>
+            <div style={{ minWidth: 780 }}>
+              <div className="vl-pipe-row" style={{ borderBottom: `1px solid ${C.border}` }}>
+                <div className="vl-label" style={{ padding: '12px 0' }}>Fuera del consolidado · USD</div>
+                {['Clase', 'Inventario', 'Colocado', 'Valor demo', 'Suelo', 'Base', 'Estado'].map((t, i) => (
+                  <div key={t} className="vl-label" style={{ padding: '12px 0', textAlign: i < 1 ? 'left' : 'right' }}>{t}</div>
+                ))}
+              </div>
+              <div className="vl-pipe-row" style={{ alignItems: 'center' }}>
+                <div style={{ padding: '13px 0' }}>
+                  <Link href={ISLA_CRETA.href} style={{ fontSize: 14, color: C.ink }}>{ISLA_CRETA.nombre}</Link>
+                  <p style={{ fontSize: 11, color: C.faint, margin: '3px 0 0' }}>{ISLA_CRETA.ciudad}</p>
+                </div>
+                <div style={{ fontSize: 12, color: C.muted }}>{ISLA_CRETA.claseCorta}</div>
+                <div style={{ fontSize: 12.5, textAlign: 'right' }}>{ISLA_CRETA.n} parc</div>
+                <div style={{ fontSize: 12.5, textAlign: 'right', color: C.faint }}>por confirmar</div>
+                <div style={{ fontSize: 12.5, textAlign: 'right' }}>{mUsd(ISLA_CRETA.valorUsd)}</div>
+                <div style={{ fontSize: 12.5, textAlign: 'right' }}>{num(ISLA_CRETA.sueloM2)} m²</div>
+                <div style={{ fontSize: 12.5, textAlign: 'right' }}>550 USD/m²</div>
+                <div style={{ fontSize: 12.5, textAlign: 'right', color: C.faint }}>demo</div>
               </div>
             </div>
           </div>
@@ -293,7 +324,71 @@ function TarjetaActivo({ p, onFicha }: { p: Activo; onFicha: () => void }) {
   )
 }
 
-function FichaActivo({ a, onClose }: { a: Activo; onClose: () => void }) {
+/** Tarjeta de Isla Creta: sin barra de colocación, porque no hay nada confirmado que colocar. */
+function TarjetaUSD({ p, onFicha }: { p: ActivoUSD; onFicha: () => void }) {
+  return (
+    <div className="vl-port-card">
+      <div style={{ position: 'relative', aspectRatio: '16 / 9', background: '#1b4147', borderBottom: `1px solid ${C.border}` }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={`${p.render}-1280.jpg`}
+          srcSet={`${p.render}-1280.jpg 1280w, ${p.render}-2100.jpg 2100w`}
+          sizes="(min-width: 1024px) 33vw, 100vw"
+          alt={p.hint}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          loading="lazy"
+        />
+        <span style={{
+          position: 'absolute', left: 0, top: 14, padding: '5px 12px 6px',
+          background: 'rgba(26,26,26,.82)', color: '#F2F2F0',
+          fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase',
+        }}>
+          {p.clase}
+        </span>
+      </div>
+      <div style={{ padding: '18px 20px 20px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ width: 7, height: 7, background: p.fcolor, flex: '0 0 auto' }} />
+          <span style={{ fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', color: p.fcolor }}>{p.fase}</span>
+        </div>
+        <p style={{ fontSize: 24, lineHeight: 1.12, letterSpacing: '-0.015em', margin: '9px 0 0', fontWeight: 300 }}>{p.nombre}</p>
+        <p style={{ fontSize: 11.5, color: C.muted, margin: '6px 0 0' }}>{p.ciudad}</p>
+
+        <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', borderTop: `1px solid ${C.border}` }}>
+          {p.metricas.map((m) => (
+            <div key={m.k} style={{ padding: '10px 8px 11px 0', borderBottom: `1px solid ${C.borderSoft}` }}>
+              <p className="vl-label" style={{ margin: 0, fontSize: 9.5 }}>{m.k}</p>
+              <p style={{ fontSize: 12.5, margin: '5px 0 0' }}>{m.v}</p>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ marginTop: 16, display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+          <span className="vl-label">Valor ilustrativo</span>
+          <span style={{ fontSize: 12.5 }}>
+            {mUsd(p.valorUsd)} <span style={{ fontSize: 11, color: C.faint }}>· demo</span>
+          </span>
+        </div>
+        <div style={{ height: 2, background: C.border, marginTop: 8 }} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: C.faint, marginTop: 8 }}>
+          <span>Disponibilidad por confirmar</span>
+          <span>{p.n} {p.noun}</span>
+        </div>
+
+        <div style={{ marginTop: 'auto', paddingTop: 18, display: 'flex', gap: 8 }}>
+          <Link href={p.href} className="vl-btn vl-btn-primary" style={{ flex: 1, width: 'auto', textDecoration: 'none' }}>
+            Abrir showroom
+          </Link>
+          <button className="vl-btn vl-btn-ghost" style={{ flex: '0 0 auto', width: 'auto', padding: '13px 18px' }} onClick={onFicha}>
+            Ficha
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function FichaActivo({ a, onClose }: { a: FichaDatos; onClose: () => void }) {
   return (
     <>
       <div className="vl-modal-bg" style={{ position: 'fixed', zIndex: 80 }} onClick={onClose} />
@@ -325,6 +420,9 @@ function FichaActivo({ a, onClose }: { a: Activo; onClose: () => void }) {
         <div style={{ margin: '20px 22px 0', paddingTop: 16, borderTop: `1px solid ${C.border}` }}>
           <p className="vl-label" style={{ margin: 0 }}>Tesis de comercialización</p>
           <p style={{ fontSize: 13, lineHeight: 1.6, color: '#3A3A36', margin: '11px 0 0', textWrap: 'pretty' }}>{a.tesis}</p>
+          {a.aviso && (
+            <p style={{ fontSize: 11, lineHeight: 1.55, color: C.accent, margin: '12px 0 0', padding: '10px 12px', background: '#FBF3EF', borderRadius: 4 }}>{a.aviso}</p>
+          )}
         </div>
 
         <div style={{ margin: '22px 22px 32px', display: 'flex', flexDirection: 'column', gap: 8 }}>

@@ -35,6 +35,9 @@ export const eur = (n: number) =>
 
 export const mm = (n: number, d = 1) => (n / 1e6).toFixed(d).replace('.', ',') + ' M€'
 
+/** Isla Creta va en USD: nunca se mezcla con `mm`, que es en euros. */
+export const mUsd = (n: number, d = 1) => (n / 1e6).toFixed(d).replace('.', ',') + ' M USD'
+
 /**
  * es-ES no agrupa los números de cuatro dígitos por defecto: "7546 €/m²" al
  * lado de "38.560 m²" queda desalineado. `useGrouping: 'always'` los uniforma.
