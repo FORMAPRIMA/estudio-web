@@ -12,7 +12,7 @@
 // Sustituye al <deck-stage> de Claude Design, que es el reproductor del editor:
 // pesa 82 KB, trae miniaturas y notas del orador, y en móvil avanza a toques.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Animador, sinMovimiento } from './animaciones'
 import SlideSiguiente, { type ProyectoEnlace } from './SlideSiguiente'
 import { registrarEventoPropuestaWeb } from '@/app/actions/propuestasWeb'
@@ -248,70 +248,108 @@ function Desktop({ html, final, alFinal }: { html: string; final: React.ReactNod
 // MOBILE
 // ═════════════════════════════════════════════════════════════════════════════
 function Mobile({ html, final, alFinal }: { html: string; final: React.ReactNode; alFinal: () => void }) {
-  const col = useRef<HTMLDivElement>(null)
+  // Scroll "a imanes": cada diapositiva ocupa la pantalla y el scroll se detiene
+  // siempre en una (scroll-snap, una por gesto). Cada una va en su propia página
+  // SIN transformar —el encaje y la detección de cuál está en pantalla se hacen
+  // sobre cajas reales—, y dentro se escala el lienzo 1080×1920 para que quepa
+  // entero. El margen que sobra toma el color de fondo de la propia diapositiva.
+  const scroller = useRef<HTMLDivElement>(null)
   const barra = useRef<HTMLDivElement>(null)
-  const [escala, setEscala] = useState(0)
-  const [alto, setAlto] = useState(0)
+  const partes = useMemo(() => html.match(/<section\b[\s\S]*?<\/section>/g) ?? [], [html])
+  const [medida, setMedida] = useState({ escala: 0, alto: 1920 })
 
   useEffect(() => {
-    const c = col.current
-    if (!c) return
-    const anim = new Animador()
-    const ss = Array.from(c.querySelectorAll('section')) as HTMLElement[]
-
+    const sc = scroller.current
+    if (!sc) return
+    // El lienzo mide 1080 de ancho y se estira en alto hasta la proporción de la
+    // pantalla (un iPhone es más alargado que 9:16), para que cada diapositiva la
+    // llene entera. Nunca baja de 1920: en pantallas más chatas se encaja entera
+    // y sobra un filo a los lados.
     const medir = () => {
-      const e = document.documentElement.clientWidth / 1080
-      setEscala(e)
-      setAlto(c.offsetHeight * e)
+      const w = sc.clientWidth
+      const h = sc.clientHeight
+      const alto = Math.max(1920, Math.round((1080 * h) / w))
+      setMedida({ escala: Math.min(w / 1080, h / alto), alto })
     }
     medir()
-    window.addEventListener('resize', medir)
+    const ro = new ResizeObserver(medir)
+    ro.observe(sc)
 
-    // Cada diapositiva se anima una vez, justo antes de asomar por abajo.
-    const vistas = new WeakSet<Element>()
+    const anim = new Animador()
+    const paginas = Array.from(sc.querySelectorAll<HTMLElement>('.fpm-page'))
+    paginas.forEach((p) => {
+      const s = p.querySelector('section')
+      if (s) p.style.background = getComputedStyle(s).backgroundColor
+    })
+
+    // Una diapositiva se "enciende" (y se anima) al entrar en cuadro, y se apaga
+    // al salir del todo: al volver a ella se anima otra vez, como en escritorio.
     const io = new IntersectionObserver((entradas) => {
       entradas.forEach((en) => {
-        const s = en.target as HTMLElement
-        anim.carrusel(s, en.isIntersecting)
-        if (!en.isIntersecting || vistas.has(s)) return
-        vistas.add(s)
-        anim.animar(s)
-        if (s === ss[ss.length - 1]) alFinal()
+        const p = en.target as HTMLElement
+        const s = p.querySelector('section') as HTMLElement | null
+        if (!s) return
+        if (en.isIntersecting && en.intersectionRatio >= 0.4 && !p.classList.contains('on')) {
+          p.classList.add('on')
+          anim.animar(s)
+          anim.carrusel(s, true)
+          const i = paginas.indexOf(p)
+          if (barra.current) barra.current.style.transform = `scaleX(${(i + 1) / paginas.length})`
+          if (i === paginas.length - 1) alFinal()
+        } else if (!en.isIntersecting && p.classList.contains('on')) {
+          p.classList.remove('on')
+          anim.terminar(s)
+          anim.carrusel(s, false)
+        }
       })
-    }, { rootMargin: '0px 0px 8% 0px', threshold: 0 })
-    ss.forEach((s) => io.observe(s))
+    }, { root: sc, threshold: [0, 0.4, 0.75] })
+    paginas.forEach((p) => io.observe(p))
 
-    const scroll = () => {
-      const max = document.documentElement.scrollHeight - window.innerHeight
-      if (barra.current) barra.current.style.transform = `scaleX(${max > 0 ? Math.min(1, window.scrollY / max) : 0})`
-    }
-    window.addEventListener('scroll', scroll, { passive: true })
-    scroll()
-
-    const parar = animarPista(c, -18)
+    const parar = animarPista(sc, -18)
     const imprimir = () => { anim.terminarTodo(); anim.pararCarruseles() }
     window.addEventListener('beforeprint', imprimir)
     return () => {
       io.disconnect()
-      window.removeEventListener('resize', medir)
-      window.removeEventListener('scroll', scroll)
+      ro.disconnect()
+      paginas.forEach((p) => p.classList.remove('on'))
       window.removeEventListener('beforeprint', imprimir)
       parar?.()
       anim.pararCarruseles()
       anim.terminarTodo()
     }
-  }, [alFinal])
+  }, [alFinal, partes])
+
+  const { escala, alto } = medida
+  const marco = { width: 1080 * escala, height: alto * escala }
+  const lienzo = { height: alto, transform: `scale(${escala})` }
 
   return (
-    <div className="fpm" style={{ height: alto || undefined }}>
+    <div className="fpm" ref={scroller} style={{ visibility: escala ? 'visible' : 'hidden' }}>
       <div className="fpm-barra" ref={barra} />
-      <div ref={col} className="fpm-col" style={{ transform: `scale(${escala})`, visibility: escala ? 'visible' : 'hidden' }}>
-        <div dangerouslySetInnerHTML={{ __html: html }} />
-        {final}
+      {partes.map((h, i) => (
+        <div className="fpm-page" key={i}>
+          <div className="fpm-marco" style={marco}>
+            <div className="fpm-escala" style={lienzo}><HtmlFijo html={h} /></div>
+          </div>
+        </div>
+      ))}
+      <div className="fpm-page">
+        <div className="fpm-marco" style={marco}>
+          <div className="fpm-escala" style={lienzo}><div className="fpm-lienzo">{final}</div></div>
+        </div>
       </div>
     </div>
   )
 }
+
+/**
+ * El HTML de una diapositiva, fuera del alcance de los re-renders. Sin el memo,
+ * cada cambio de escala volvía a volcar el innerHTML y se llevaba por delante
+ * las animaciones recién arrancadas (en el iPhone no se veía ninguna).
+ */
+const HtmlFijo = memo(function HtmlFijo({ html }: { html: string }) {
+  return <div className="fpm-lienzo" dangerouslySetInnerHTML={{ __html: html }} />
+})
 
 // ═════════════════════════════════════════════════════════════════════════════
 // Estilos. Las diapositivas traen sus estilos en línea; esto solo neutraliza el
@@ -346,11 +384,16 @@ html,body{background:#0d0d0d!important;}
 .fpd-n span{opacity:.45;}
 .fpd-sep{width:1px;height:16px;background:rgba(251,251,250,.18);margin:0 6px;}
 
-.fpm{position:relative;width:100%;overflow:hidden;background:#0d0d0d;}
-.fpm-col{position:absolute;top:0;left:0;width:1080px;transform-origin:0 0;}
-.fpm-col section{position:relative!important;width:1080px!important;height:1920px!important;overflow:hidden;}
-.fpm-col section[data-label="Siguiente paso"]{height:2280px!important;}
-.fpm-barra{position:fixed;top:0;left:0;right:0;height:3px;background:#8fa596;transform:scaleX(0);transform-origin:0 50%;z-index:10;}
+.fpm{position:fixed;inset:0;overflow-x:hidden;overflow-y:auto;overscroll-behavior:none;-webkit-overflow-scrolling:touch;scroll-snap-type:y mandatory;background:#0d0d0d;scrollbar-width:none;}
+.fpm::-webkit-scrollbar{display:none;}
+.fpm-page{position:relative;height:100%;display:flex;align-items:center;justify-content:center;overflow:hidden;scroll-snap-align:start;scroll-snap-stop:always;}
+.fpm-marco{position:relative;flex:none;overflow:hidden;}
+.fpm-escala{position:absolute;top:0;left:0;width:1080px;transform-origin:0 0;}
+.fpm-lienzo{width:100%;height:100%;}
+.fpm-lienzo > section{position:relative!important;width:1080px!important;height:100%!important;overflow:hidden;}
+.fpm-page:not(.on) .fpm-lienzo > section{opacity:0;}
+.fpm-barra{position:fixed;top:0;left:0;right:0;height:3px;background:#8fa596;transform:scaleX(0);transform-origin:0 50%;transition:transform .5s cubic-bezier(.16,1,.3,1);z-index:10;}
+@media (prefers-reduced-motion:reduce){.fpm-page:not(.on) .fpm-lienzo > section{opacity:1;}}
 
 @media print{
   @page{size:1920px 1080px;margin:0;}
