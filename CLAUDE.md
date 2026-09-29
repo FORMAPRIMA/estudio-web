@@ -690,6 +690,8 @@ Registro de horas por proyecto y fase. Todos los roles FP.
 /execution-portal/[token]   Portal para partners de FP Execution
 /gestor/[token]             Portal de la gestoría (solo lectura: gastos, facturas, conciliación)
 /repasos/[token]            Repasos de obra en modo presentación (constructora o cliente, solo lectura)
+/propuesta/[slug]           Propuesta de honorarios como presentación web (PIN; desktop con clic/flechas,
+                            móvil con scroll). Diseño de Claude Design importado — ver docs/propuestas-web.md
 ```
 
 ### Área interna `/team`

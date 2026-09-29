@@ -27,6 +27,7 @@ export default function robots(): MetadataRoute.Robots {
         '/area-privada',  // área de cliente
         '/portal',        // portal de obra
         '/espacio',       // espacios de cliente, con token en la URL
+        '/propuesta',     // propuestas de honorarios, con PIN
         '/execution-portal',
         '/gestor',
         // Páginas privadas que viven en este mismo despliegue y no son del sitio.
