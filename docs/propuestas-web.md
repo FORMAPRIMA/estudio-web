@@ -68,3 +68,27 @@ Para retirar una propuesta: `activa: false` en el registro y desplegar.
 | `components/propuesta/animaciones.ts` | Animaciones del diseño, portadas del script del .dc.html |
 | `components/propuesta/SlideSiguiente.tsx` | Diapositiva final: aceptar, dudas, obras, web |
 | `app/actions/propuestasWeb.ts` | PIN, avisos y aceptación |
+
+## Rendimiento y robustez de los dossiers `dc` (auditoría 30 sep 2026)
+
+Todo se aplica al importar (`scripts/propuestas/arreglos-dc.mjs`) o al servir
+(`app/propuesta/[slug]/deck/route.ts`); si el diseño cambia y un arreglo no
+encuentra su fragmento, el importador se para y lo dice.
+
+- **Imágenes**: al tamaño al que se pintan (`medidas.json`, medido recorriendo el
+  dossier en un iPhone emulado; ×1,25) y en WebP. Se cargan por proximidad
+  (diapositiva actual ± 1) y se descargan las lejanas.
+- **Vídeos**: AV1 + HEVC; una sola descarga (las fuentes van inertes hasta la
+  versión interactiva). Portada en vídeo a 720p.
+- **Maquetas 3D**: arrancan con su diapositiva, a resolución de pantalla; las de
+  la ficha son fijas y quedan como imagen.
+- **Runtime**: React y three.js servidos desde `public/propuestas/_rt` (no unpkg).
+- **Sin instrumentación del editor** (omelette) y sin zoom con los dedos.
+- **Pista "Desliza para continuar"** tras 5 s en cada diapositiva.
+
+## Seguridad
+
+- Acciones públicas con límite por IP y en base de datos; campo trampa en el
+  formulario de interés; "Aceptar" solo en propuestas a cliente.
+- PIN: 10 intentos / 15 min por IP.
+- Cada propuesta sin PIN (`pin: null`) es pública pero con `noindex`.

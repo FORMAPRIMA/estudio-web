@@ -77,6 +77,16 @@ export default function PropuestaDossier({ slug, proyecto, descripcion, portada,
     return () => { clearTimeout(t); window.removeEventListener('resize', alCambiar) }
   }, [slug])
 
+  // Sin zoom con los dedos también en la página que contiene el iframe (iOS
+  // ignora user-scalable=no; gesturestart sí se puede cancelar).
+  useEffect(() => {
+    const no = (e: Event) => e.preventDefault()
+    const dos = (e: TouchEvent) => { if (e.touches.length > 1) e.preventDefault() }
+    document.addEventListener('gesturestart', no, { passive: false })
+    document.addEventListener('touchmove', dos, { passive: false })
+    return () => { document.removeEventListener('gesturestart', no); document.removeEventListener('touchmove', dos) }
+  }, [])
+
   // Puente con el dossier.
   useEffect(() => {
     const recibir = (e: MessageEvent) => {
@@ -177,7 +187,7 @@ function Formulario({ slug, idioma, tema, serif, alCerrar, alEnviar }: {
   slug: string; idioma: Idioma; tema: Tema; serif: string; alCerrar: () => void; alEnviar: () => void
 }) {
   const t = T[idioma]
-  const [f, setF] = useState({ nombre: '', email: '', telefono: '', distribucion: '', nivel: '', mensaje: '', privacidad: false })
+  const [f, setF] = useState({ web: '', nombre: '', email: '', telefono: '', distribucion: '', nivel: '', mensaje: '', privacidad: false })
   const [estado, setEstado] = useState<'idle' | 'enviando' | 'hecho'>('idle')
   const [error, setError] = useState<string | null>(null)
   const set = (k: keyof typeof f) => (e: { target: { value: string; checked?: boolean; type?: string } }) =>
@@ -217,6 +227,9 @@ function Formulario({ slug, idioma, tema, serif, alCerrar, alEnviar }: {
           <button type="button" onClick={alCerrar} style={{ ...boton, marginTop: 28 }}>{t.cerrar}</button>
         ) : (
           <form onSubmit={enviar} style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 18 }}>
+            {/* Trampa para bots: invisible para las personas. */}
+            <input type="text" name="web" value={f.web} onChange={set('web')} tabIndex={-1} autoComplete="off" aria-hidden="true"
+              style={{ position: 'absolute', left: -9999, width: 1, height: 1, opacity: 0 }} />
             <label><span style={etiqueta}>{t.nombre}</span><input style={campo} value={f.nombre} onChange={set('nombre')} autoComplete="name" required /></label>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               <label><span style={etiqueta}>{t.email}</span><input style={campo} type="email" value={f.email} onChange={set('email')} autoComplete="email" inputMode="email" /></label>

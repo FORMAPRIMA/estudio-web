@@ -28,7 +28,7 @@ function slideSiguiente(p: PropuestaWeb, obras: ProyectoEnlace[], numero: string
   const boton = 'display:block;width:100%;text-align:center;font-family:inherit;font-size:24px;font-weight:500;letter-spacing:.2em;text-transform:uppercase;padding:38px 40px;cursor:pointer;text-decoration:none;'
   const tarjetas = obras.map((o) => `
       <a href="https://formaprima.es/proyectos/${esc(o.slug)}" target="_blank" rel="noopener" style="color:${INK};text-decoration:none;display:flex;flex-direction:column;gap:14px;">
-        <div style="position:relative;overflow:hidden;aspect-ratio:16/11;background:#e6ddd0;"><img src="${esc(o.imagen)}" alt="${esc(o.nombre)}" loading="lazy" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;"></div>
+        <div style="position:relative;overflow:hidden;aspect-ratio:16/11;background:#e6ddd0;"><img data-fp-src="${esc(o.imagen)}" alt="${esc(o.nombre)}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;"></div>
         <div><div style="font-size:26px;font-weight:400;">${esc(o.nombre)}</div><div style="margin-top:4px;font-size:20px;font-weight:300;opacity:.6;">${esc(o.ubicacion ?? '')}</div></div>
       </a>`).join('')
 
@@ -94,9 +94,65 @@ const PUENTE = `<script>
   document.addEventListener('slidechange', function (e) {
     var d = e.detail || {};
     cargar(d.index || 0);
-    if (d.slide) document.documentElement.setAttribute('data-fp-slide', d.slide.getAttribute('data-label') || '');
+    actual = d.index || 0; total = d.total || 0; etiqueta = d.slide ? d.slide.getAttribute('data-label') || '' : '';
+    if (d.slide) document.documentElement.setAttribute('data-fp-slide', etiqueta);
+    clearTimeout(tPista); clearTimeout(tFuera); if (pista) pista.classList.remove('on');
+    tPista = setTimeout(mostrarPista, 5000);
     send({ t: 'slide', i: d.index, n: d.total, lang: document.documentElement.lang || 'es' });
   }, true);
+  // Vídeos: sus fuentes llegan inertes (data-fp-src) para que la plantilla
+  // estática no las descargue; se activan solo en la versión interactiva.
+  // (Ojo: nada en este script puede contener la etiqueta del runtime escrita
+  // literalmente: el runtime busca su primera aparición en el documento.)
+  function activarVideos() {
+    var vs = document.querySelectorAll('#dc-root video');
+    for (var i = 0; i < vs.length; i++) {
+      var v = vs[i], ss = v.querySelectorAll('source[data-fp-src]'), cambio = false;
+      for (var j = 0; j < ss.length; j++) {
+        var r = ss[j].getAttribute('data-fp-src');
+        if (ss[j].getAttribute('src') !== r) { ss[j].setAttribute('src', r); cambio = true; }
+      }
+      if (cambio) { try { v.load(); } catch (e) {} }
+    }
+  }
+  var pendiente = 0;
+  new MutationObserver(function () {
+    if (pendiente) return;
+    pendiente = requestAnimationFrame(function () { pendiente = 0; activarVideos(); });
+  }).observe(document.documentElement, { childList: true, subtree: true });
+
+  // Sin zoom con los dedos (iOS ignora user-scalable=no): el zoom de una página
+  // así dispara la memoria del iPhone y Safari la recargaba.
+  document.addEventListener('gesturestart', function (e) { e.preventDefault(); }, { passive: false });
+  document.addEventListener('touchmove', function (e) { if (e.touches && e.touches.length > 1) e.preventDefault(); }, { passive: false });
+  var ultimoToque = 0;
+  document.addEventListener('touchend', function (e) {
+    var t = Date.now(); if (t - ultimoToque < 320 && !(e.target.closest && e.target.closest('button,a,input,select,textarea'))) e.preventDefault(); ultimoToque = t;
+  }, { passive: false });
+
+  // "Desliza para continuar": tras 5 s en una diapositiva (y 2,5 s sin tocar),
+  // aparece abajo una vez y se va sola. No en el vídeo, ni en la última, ni con
+  // un detalle abierto.
+  var pista = null, tPista = 0, tFuera = 0, tocado = 0, actual = 0, total = 0, etiqueta = '';
+  ['touchstart', 'pointerdown', 'wheel', 'keydown'].forEach(function (ev) { window.addEventListener(ev, function () { tocado = Date.now(); if (pista) pista.classList.remove('on'); }, { passive: true }); });
+  function textoPista() {
+    var en = (document.documentElement.lang || 'es') === 'en';
+    var tactil = matchMedia('(pointer: coarse)').matches;
+    return tactil ? (en ? 'Swipe to continue' : 'Desliza para continuar') : (en ? 'Scroll or press ↓ to continue' : 'Usa la rueda o ↓ para continuar');
+  }
+  function mostrarPista() {
+    if (etiqueta === 'Vídeo' || actual >= total - 1 || document.querySelector('[data-plan-detail][data-open]')) return;
+    if (Date.now() - tocado < 2500) { tPista = setTimeout(mostrarPista, 2500 - (Date.now() - tocado)); return; }
+    if (!pista) {
+      pista = document.createElement('div'); pista.setAttribute('data-fp-pista', ''); pista.setAttribute('aria-hidden', 'true');
+      pista.innerHTML = '<span class="fp-flecha"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg></span><span class="fp-texto"></span>';
+      document.body.appendChild(pista);
+    }
+    pista.querySelector('.fp-texto').textContent = textoPista();
+    pista.classList.add('on');
+    clearTimeout(tFuera); tFuera = setTimeout(function () { if (pista) pista.classList.remove('on'); }, 3400);
+  }
+
   var intentos = 0, arranque = setInterval(function () {
     if (document.querySelector('deck-stage > section') || ++intentos > 100) { clearInterval(arranque); cargar(activa()); }
   }, 100);
@@ -125,6 +181,17 @@ const PUENTE = `<script>
     height: 30px !important; min-height: 30px !important; padding: 0 12px !important; }
   [data-ctrl] [data-index-btn]::after { content: ''; display: inline-block; width: 1px; height: 9px; background: currentColor; opacity: .55; margin-left: 20px; vertical-align: -1px; }
   html[data-fp-slide="Vídeo"] [data-ctrl] { display: none !important; }
+  html, body { touch-action: pan-x pan-y; }
+  [data-fp-pista] { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 20px); z-index: 2147483001;
+    display: flex; align-items: center; gap: 10px; padding: 11px 18px 11px 14px; border-radius: 999px; pointer-events: none;
+    background: rgba(43,38,34,.74); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); color: #f6f1ea;
+    font: 500 11px/1 'Hanken Grotesk', sans-serif; letter-spacing: .22em; text-transform: uppercase; white-space: nowrap;
+    box-shadow: 0 6px 24px rgba(43,38,34,.18);
+    opacity: 0; transform: translate(-50%, 12px); transition: opacity .7s cubic-bezier(.4,0,.2,1), transform .9s cubic-bezier(.16,1,.3,1); }
+  [data-fp-pista].on { opacity: 1; transform: translate(-50%, 0); }
+  [data-fp-pista] .fp-flecha { display: flex; animation: fp-sube 1.6s ease-in-out infinite; }
+  @keyframes fp-sube { 0%, 100% { transform: translateY(2px); opacity: .6; } 50% { transform: translateY(-3px); opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { [data-fp-pista], [data-fp-pista] .fp-flecha { transition: opacity .3s; animation: none; } }
 </style>`
 
 export async function GET(req: Request, { params }: { params: { slug: string } }) {

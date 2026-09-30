@@ -1181,7 +1181,7 @@
       // Keep the iframe's own hash in sync so an in-iframe location.reload()
       // (reload banner path in viewer-handle.ts) lands on the current slide,
       // not the stale deep-link hash from initial load.
-      try { history.replaceState(null, '', '#' + (curr + 1)); } catch (e) {}
+      try { history.replaceState(null, '', location.pathname + location.search + '#' + (curr + 1)); } catch (e) {}
       this._slides.forEach((s, i) => {
         if (i === curr) s.setAttribute('data-deck-active', '');
         else s.removeAttribute('data-deck-active');
@@ -1322,7 +1322,7 @@
         this._railLock = false;
         if (d.applied === false && this._indexBeforeEmit != null) {
           this._index = this._indexBeforeEmit;
-          try { history.replaceState(null, '', '#' + (this._index + 1)); } catch (e) {}
+          try { history.replaceState(null, '', location.pathname + location.search + '#' + (this._index + 1)); } catch (e) {}
         }
         this._indexBeforeEmit = null;
       }
@@ -1827,7 +1827,7 @@
         if (newIndex != null && newIndex !== this._index) {
           this._indexBeforeEmit = this._index;
           this._index = newIndex;
-          try { history.replaceState(null, '', '#' + (newIndex + 1)); } catch (e) {}
+          try { history.replaceState(null, '', location.pathname + location.search + '#' + (newIndex + 1)); } catch (e) {}
         }
       }
       this.dispatchEvent(new CustomEvent('dc-op', {

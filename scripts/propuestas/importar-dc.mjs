@@ -24,7 +24,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import sharp from 'sharp'
-import { arreglarDossier, arreglarMaqueta, arreglarDeckStage } from './arreglos-dc.mjs'
+import { arreglarDossier, arreglarMaqueta, arreglarDeckStage, arreglarSupport } from './arreglos-dc.mjs'
 
 const args = process.argv.slice(2)
 // --quitar "Etiqueta" (repetible): diapositivas del diseño que no se publican.
@@ -44,21 +44,34 @@ const MAX_RETRATO = 900
 
 const src = (f) => path.join(origen, f)
 
+// medidas.json (opcional, en la carpeta de origen): a qué tamaño se pinta cada
+// imagen, en px del lienzo de diseño (1080 de ancho), medido recorriendo el
+// dossier en un iPhone emulado. Con él cada imagen se sirve a la resolución que
+// de verdad necesita: ×1,25 sobre el diseño cubre la pantalla retina de un
+// iPhone (×1,08) y un monitor grande con el marco vertical (≈×1,2).
+const MEDIDAS = fs.existsSync(path.join(origen, 'medidas.json')) ? JSON.parse(fs.readFileSync(path.join(origen, 'medidas.json'), 'utf8')) : {}
+const FACTOR = 1.25
+
 async function imagen(nombre) {
   const entrada = src(path.join('assets', nombre))
   if (!fs.existsSync(entrada)) throw new Error(`Falta assets/${nombre}`)
   const base = nombre.replace(/\.[^.]+$/, '')
   const img = sharp(entrada, { failOn: 'none' }).rotate()
   const meta = await img.metadata()
-  const opaca = !meta.hasAlpha || (await sharp(entrada).stats()).isOpaque
-  const max = /^team-/.test(base) ? MAX_RETRATO : MAX_FOTO
-  const redim = img.resize({ width: max, height: max, fit: 'inside', withoutEnlargement: true })
-  const salida = opaca ? `${base}.jpg` : `${base}.png`
+  const logo = LOGO_RE.test(base)
+  const medida = MEDIDAS[`${base}.jpg`] || MEDIDAS[`${base}.png`] || MEDIDAS[`${base}.webp`]
+  let ancho
+  if (medida?.w) ancho = Math.min(meta.width, Math.ceil(medida.w * FACTOR))
+  else ancho = Math.min(meta.width, /^team-/.test(base) ? MAX_RETRATO : MAX_FOTO)
+  const redim = img.resize({ width: ancho, withoutEnlargement: true })
+  // Logos: PNG (nítidos y diminutos). Todo lo demás: WebP, con o sin transparencia.
+  const salida = logo ? `${base}.png` : `${base}.webp`
   const destino = path.join(PUB, 'assets', salida)
-  if (opaca) await redim.jpeg({ quality: 80, mozjpeg: true, progressive: true }).toFile(destino)
-  else await redim.png({ compressionLevel: 9, palette: true }).toFile(destino)
+  if (logo) await redim.png({ compressionLevel: 9, palette: true }).toFile(destino)
+  else await redim.webp({ quality: 80, effort: 6, smartSubsample: true }).toFile(destino)
   return salida
 }
+const LOGO_RE = /logo|sophiq|isotipo/i
 
 async function main() {
   let html = fs.readFileSync(src(archivo), 'utf8')
@@ -75,7 +88,8 @@ async function main() {
   const js = fs.readdirSync(origen).filter((f) => f.endsWith('.js'))
   js.forEach((f) => {
     const texto = fs.readFileSync(src(f), 'utf8')
-    fs.writeFileSync(path.join(PUB, f), f === 'cz-maqueta.js' ? arreglarMaqueta(texto) : f === 'deck-stage.js' ? arreglarDeckStage(texto) : texto)
+    const ARREGLOS = { 'cz-maqueta.js': arreglarMaqueta, 'deck-stage.js': arreglarDeckStage, 'support.js': arreglarSupport }
+    fs.writeFileSync(path.join(PUB, f), ARREGLOS[f] ? ARREGLOS[f](texto) : texto)
   })
 
   // Vídeos: <video … src="assets/x.mp4[#t=…]"> → <source> AV1 + HEVC.

@@ -28,6 +28,13 @@ const LOGO = /logo|sophiq|isotipo/i
  *  4. Los controles (Índice · idioma) arriba; el gesto de ocultarse, hacia arriba.
  */
 export function arreglarDossier(html, { quitar = [] } = {}) {
+  // Instrumentación del editor de Claude Design ("omelette"), que el servidor de
+  // vista previa inyecta al descargar: reenvía la consola a la ventana padre,
+  // intercepta fetch y abre un canal eval() para el editor. En una página
+  // pública no pinta nada. Fuera.
+  html = html.replace(/<(script|style) data-omelette-injected[^>]*>[\s\S]*?<\/\1>/g, '')
+  if (html.includes('data-omelette-injected')) throw new Error('Arreglo "sin instrumentación del editor": queda algo de omelette')
+
   // Diapositivas que se quitan (p. ej. un cierre que sobra al añadir la nuestra).
   // Lo que apuntaba a ellas (el índice) pasa a apuntar a "Siguiente paso".
   for (const label of quitar) {
@@ -102,6 +109,19 @@ export function arreglarDossier(html, { quitar = [] } = {}) {
   const flecha = (paso, lado, d) => `<button type="button" data-tour-step="${paso}" onClick="{{ tourStep }}" aria-label="${paso < 0 ? 'Anterior' : 'Siguiente'}" style="position:absolute;${lado}:20px;top:50%;transform:translateY(-50%);z-index:3;width:68px;height:68px;border-radius:999px;border:0;padding:0;background:rgba(246,241,234,.62);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;cursor:pointer;"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#2b2622" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"></path></svg></button>`
   const i = tras.index + tras[0].length
   html = html.slice(0, i) + flecha(-1, 'left', 'M14.5 5.5 8 12l6.5 6.5') + flecha(1, 'right', 'M9.5 5.5 16 12l-6.5 6.5') + html.slice(i)
+
+  // Vídeos: el navegador instancia el <x-dc> estático antes de que arranque el
+  // runtime, y luego React crea los suyos: cada vídeo se descargaba dos veces
+  // (~40 MB al abrir). Las <source> van inertes (data-fp-src) y el puente las
+  // activa solo en los vídeos de la versión interactiva (#dc-root).
+  html = cambia(html, /<source src="/g, '<source data-fp-src="', 'vídeo: fuentes inertes')
+
+  // Sin zoom con los dedos dentro del dossier: en iPhone el zoom de una página
+  // así dispara la memoria (y es lo que "reiniciaba" la página).
+  html = cambia(html,
+    '<meta name="viewport" content="width=device-width, initial-scale=1">',
+    '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">',
+    'viewport sin zoom')
 
   html = cambia(html, /(<video data-video=""[^>]*?)preload="auto"/, '$1preload="metadata"', 'vídeo: carga progresiva')
 
@@ -196,6 +216,9 @@ export function arreglarMaqueta(js) {
   js = js.slice(0, i) + js.slice(i).replace(/this\.addEventListener\(/g, 'add(')
   js = js.replace("const add = (t, fn, o) => add(", "const add = (t, fn, o) => this.addEventListener(")
 
+  // three.js desde nuestro dominio (public/propuestas/_rt), no desde unpkg: si
+  // unpkg cae, la maqueta no carga; y aquí no había comprobación de integridad.
+  js = cambia(js, "const THREE_URL = 'https://unpkg.com/three@0.184.0/build/three.module.js';", "const THREE_URL = '/propuestas/_rt/three.module.min.js';", 'maqueta: three.js propio')
   js = cambia(js, 'preserveDrawingBuffer: true', 'preserveDrawingBuffer: false', 'maqueta: sin preserveDrawingBuffer')
   js = cambia(js, "r.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));", 'r.setPixelRatio(1);', 'maqueta: densidad')
   js = cambia(js, 'key.shadow.mapSize.set(2048, 2048)', 'key.shadow.mapSize.set(1024, 1024)', 'maqueta: sombras')
@@ -231,6 +254,14 @@ export function arreglarDeckStage(js) {
     ':host([data-rail-anim]) .overlay {',
     '.overlay { display: none !important; }\n    :host([data-rail-anim]) .overlay {',
     'deck-stage: sin contador del editor')
+  // La diapositiva actual se apuntaba con history.replaceState(null, '', '#7'),
+  // que se resuelve contra el <base> del dossier: la URL del iframe pasaba a ser
+  // /propuestas/<slug>/#7 (la carpeta de assets). Si Safari recargaba el iframe,
+  // cargaba una dirección que no existe. Ahora conserva ruta y parámetros.
+  const n = (js.match(/history\.replaceState\(null, '', '#' \+ /g) || []).length
+  if (n < 1) throw new Error('Arreglo "deck-stage: URL del hash": no encuentro replaceState')
+  js = js.replace(/history\.replaceState\(null, '', '#' \+ /g, "history.replaceState(null, '', location.pathname + location.search + '#' + ")
+
   // Fundido cruzado: la diapositiva que entra (encima) funde en 1,1 s y la que
   // sale se queda debajo, visible, hasta que la otra la ha tapado. Antes la que
   // salía desaparecía de golpe.
@@ -258,5 +289,16 @@ export function arreglarDeckStage(js) {
       transition: opacity 1.1s cubic-bezier(.45,0,.25,1), visibility 0s;
     }`,
     'deck-stage: fundido cruzado')
+  return js
+}
+
+/**
+ * support.js, el runtime de Claude Design. Cargaba React y ReactDOM de unpkg.com:
+ * si unpkg cae, el dossier no abre. Ahora vienen de public/propuestas/_rt (los
+ * mismos ficheros, byte a byte: la comprobación de integridad SRI se mantiene).
+ */
+export function arreglarSupport(js) {
+  js = cambia(js, '"https://unpkg.com/react@18.3.1/umd/react.production.min.js"', '"/propuestas/_rt/react.production.min.js"', 'runtime: React propio')
+  js = cambia(js, '"https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"', '"/propuestas/_rt/react-dom.production.min.js"', 'runtime: ReactDOM propio')
   return js
 }

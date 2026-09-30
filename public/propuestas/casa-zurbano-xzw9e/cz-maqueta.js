@@ -1,7 +1,7 @@
 // <cz-maqueta plan="1"> — clay model of a Zurbano 6 layout with gentle, bounded rotation.
 (function () {
   if (customElements.get('cz-maqueta')) return;
-  const THREE_URL = 'https://unpkg.com/three@0.184.0/build/three.module.js';
+  const THREE_URL = '/propuestas/_rt/three.module.min.js';
   let libs = null;
   const load = () => libs || (libs = Promise.all([import(THREE_URL), import(new URL('./zurbano6-maquetas.js', document.baseURI).href)]));
   const YAW = 0.55, PITCH_MIN = 0.62, PITCH_MAX = 1.18, PITCH0 = 0.98;

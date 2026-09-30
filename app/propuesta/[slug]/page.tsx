@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { cookies, headers } from 'next/headers'
 import { getPropuestaWeb, cargarDeck } from '@/lib/propuestas/registro'
 import { propuestaCookieName, accesoConcedido } from '@/lib/propuestas/acceso'
@@ -11,6 +11,10 @@ import PropuestaDossier from '@/components/propuesta/PropuestaDossier'
 // Ver lib/propuestas/registro.ts (alta) y scripts/propuestas/importar.mjs (diseño).
 
 export const dynamic = 'force-dynamic'
+
+// Presentaciones a pantalla completa: sin zoom con los dedos (en iPhone el zoom
+// de una página así dispara la memoria y Safari la recarga).
+export const viewport: Viewport = { width: 'device-width', initialScale: 1, maximumScale: 1, userScalable: false, viewportFit: 'cover' }
 
 export function generateMetadata({ params }: { params: { slug: string } }): Metadata {
   const p = getPropuestaWeb(params.slug)
