@@ -27,7 +27,15 @@ const LOGO = /logo|sophiq|isotipo/i
  *  3. El vídeo largo ya no se descarga entero al abrir: se va cargando al verse.
  *  4. Los controles (Índice · idioma) arriba; el gesto de ocultarse, hacia arriba.
  */
-export function arreglarDossier(html) {
+export function arreglarDossier(html, { quitar = [] } = {}) {
+  // Diapositivas que se quitan (p. ej. un cierre que sobra al añadir la nuestra).
+  // Lo que apuntaba a ellas (el índice) pasa a apuntar a "Siguiente paso".
+  for (const label of quitar) {
+    const re = new RegExp(`<section data-label="${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"[\\s\\S]*?<\\/section>\\s*`)
+    html = cambia(html, re, '', `quitar diapositiva "${label}"`)
+    html = html.split(`data-goto="${label}"`).join('data-goto="Siguiente paso"')
+  }
+
   let n = 0
   html = html.replace(/<section\b[\s\S]*?<\/section>/g, (sec) => {
     n++
@@ -41,6 +49,33 @@ export function arreglarDossier(html) {
     'animación: detectar ocultos')
   html = cambia(html, 'if (isLogo(b)) return;', 'if (isLogo(b) || fpOculto(b)) return;', 'animación: bloques ocultos')
   html = cambia(html, 'if (isLogo(img)) return;', 'if (isLogo(img) || fpOculto(img)) return;', 'animación: imágenes ocultas')
+
+  // Nivel por defecto: Select. El Presupuesto arranca en Functional y pasa a
+  // Select a los 1,5 s; si se pasaba antes, Calidades y Cronograma heredaban
+  // Functional. Ahora heredan solo lo que el visitante elige a mano.
+  html = cambia(html,
+    'curLevel() { return this._b2 != null ? this._b2 : this._budP == null ? 1 : Math.round(this._budP); }',
+    'curLevel() { return this._budTouched && this._b2 != null ? this._b2 : 1; }',
+    'nivel por defecto: Select')
+
+  // Transición entre diapositivas más suave (ver también arreglarDeckStage).
+  html = cambia(html,
+    "run(slide, [{ opacity: 0 }, { opacity: 1 }], { duration: 700, easing: 'cubic-bezier(.4,0,.2,1)' });",
+    `run(slide, [{ opacity: 0 }, { opacity: 1 }], { duration: 1100, easing: 'cubic-bezier(.45,0,.25,1)' });
+    // Equipo: telón de abajo arriba en diagonal, y el nombre detrás de cada foto.
+    if (slide.getAttribute('data-label') === 'Equipo · perfiles') {
+      const cab = slide.firstElementChild, h2 = slide.querySelector('h2');
+      if (cab) run(cab, [{ opacity: 0 }, { opacity: 1 }], { duration: 1000, delay: 250 });
+      if (h2) run(h2, [{ opacity: 0, transform: 'translate3d(0,28px,0)' }, { opacity: 1, transform: 'none' }], { duration: 1400, delay: 300 });
+      [...slide.querySelectorAll('img')].filter((im) => !/logo|isotipo|sophiq/.test(im.getAttribute('src') || im.getAttribute('data-fp-src') || '')).forEach((im, i) => {
+        const d = 550 + (Math.floor(i / 3) + (i % 3)) * 170;
+        run(im, [{ opacity: 0, clipPath: 'inset(0 0 100% 0)', transform: 'translate3d(0,36px,0)' }, { opacity: 1, clipPath: 'inset(0 0 0% 0)', transform: 'none' }], { duration: 1500, delay: d, easing: 'cubic-bezier(.22,1,.36,1)' });
+        const pie = im.nextElementSibling;
+        if (pie) run(pie, [{ opacity: 0, transform: 'translate3d(0,14px,0)' }, { opacity: 1, transform: 'none' }], { duration: 1000, delay: d + 550 });
+      });
+      return;
+    }`,
+    'transición de entrada + equipo')
 
   html = cambia(html, /(<video data-video=""[^>]*?)preload="auto"/, '$1preload="metadata"', 'vídeo: carga progresiva')
 
@@ -166,8 +201,36 @@ export function arreglarMaqueta(js) {
  * sobra: los controles del dossier ya son los suyos (Índice · idioma).
  */
 export function arreglarDeckStage(js) {
-  return cambia(js,
+  js = cambia(js,
     ':host([data-rail-anim]) .overlay {',
     '.overlay { display: none !important; }\n    :host([data-rail-anim]) .overlay {',
     'deck-stage: sin contador del editor')
+  // Fundido cruzado: la diapositiva que entra (encima) funde en 1,1 s y la que
+  // sale se queda debajo, visible, hasta que la otra la ha tapado. Antes la que
+  // salía desaparecía de golpe.
+  js = cambia(js,
+    `      opacity: 0;
+      pointer-events: none;
+      visibility: hidden;
+    }
+    ::slotted([data-deck-active]) {
+      opacity: 1;
+      pointer-events: auto;
+      visibility: visible;
+    }`,
+    `      opacity: 0;
+      pointer-events: none;
+      visibility: hidden;
+      z-index: 1;
+      transition: opacity 0s linear 1.1s, visibility 0s linear 1.1s;
+    }
+    ::slotted([data-deck-active]) {
+      opacity: 1;
+      pointer-events: auto;
+      visibility: visible;
+      z-index: 2;
+      transition: opacity 1.1s cubic-bezier(.45,0,.25,1), visibility 0s;
+    }`,
+    'deck-stage: fundido cruzado')
+  return js
 }

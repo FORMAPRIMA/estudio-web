@@ -140,7 +140,7 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
 
   // Numeración: la siguiente al último capítulo romano del dossier (VI → VII).
   const ROMANOS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII']
-  const usados = Array.from(html.matchAll(/serif;font-size:32px;font-weight:500;opacity:\.8;">([IVX]+)</g)).map((m) => ROMANOS.indexOf(m[1]))
+  const usados = Array.from(html.matchAll(/font-size:32px;font-weight:500;opacity:\.8;">([IVX]+)</g)).map((m) => ROMANOS.indexOf(m[1]))
   const numero = ROMANOS[Math.max(-1, ...usados) + 1] ?? ''
 
   const obras = await obrasDestacadas().catch(() => [])

@@ -25,7 +25,8 @@ Y dos audiencias: `cliente` (una persona; el final pide **aceptar**) y `comprado
 2. Vídeos: dejar en `web/<nombre>.av1.mp4` y `web/<nombre>.hevc.mp4` las versiones
    optimizadas de cada `assets/<nombre>.mp4`. Sin ellas, el vídeo se copia tal cual
    (y un AV1 sin HEVC no se ve en la mayoría de iPhone).
-3. `node scripts/propuestas/importar-dc.mjs <slug> <carpeta> "<archivo>.dc.html"`
+3. `node scripts/propuestas/importar-dc.mjs <slug> <carpeta> "<archivo>.dc.html" [--quitar "Etiqueta"]`
+   (Casa Zurbano se importa con `--quitar "Cierre"`: su cierre lo sustituye nuestra diapositiva final.)
 4. Alta en `lib/propuestas/registro.ts` con `tipo: 'dc'`, `pantallaPin` y `tema`.
 
 ## Publicar una propuesta de diapositivas (`deck`)

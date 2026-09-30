@@ -2,7 +2,7 @@
 // Importa un dossier INTERACTIVO de Claude Design (un .dc.html con lógica propia:
 // botones, selectores, vídeo, maquetas 3D…) para publicarlo tal cual en la web.
 //
-//   node scripts/propuestas/importar-dc.mjs <slug> <carpeta-origen> "<archivo>.dc.html"
+//   node scripts/propuestas/importar-dc.mjs <slug> <carpeta-origen> "<archivo>.dc.html" [--quitar "Etiqueta"]
 //
 // A diferencia de importar.mjs (que extrae las diapositivas y las reproduce con
 // nuestro visor), aquí el diseño se sirve con SU PROPIO runtime (support.js +
@@ -26,7 +26,11 @@ import path from 'node:path'
 import sharp from 'sharp'
 import { arreglarDossier, arreglarMaqueta, arreglarDeckStage } from './arreglos-dc.mjs'
 
-const [slug, origen, archivo] = process.argv.slice(2)
+const args = process.argv.slice(2)
+// --quitar "Etiqueta" (repetible): diapositivas del diseño que no se publican.
+const quitar = []
+for (let i = args.indexOf('--quitar'); i !== -1; i = args.indexOf('--quitar')) { quitar.push(args[i + 1]); args.splice(i, 2) }
+const [slug, origen, archivo] = args
 if (!slug || !origen || !archivo || !/^[a-z0-9-]+$/.test(slug)) {
   console.error('Uso: node scripts/propuestas/importar-dc.mjs <slug> <carpeta-origen> "<archivo>.dc.html"')
   process.exit(1)
@@ -104,7 +108,7 @@ async function main() {
   html = html.replace(/assets\/([A-Za-z0-9_.-]+\.(?:png|jpe?g|webp))/gi, (m, f) => `assets/${nombres.get(f) ?? f}`)
 
   // Arreglos para móvil (memoria, animaciones, controles): ver arreglos-dc.mjs.
-  html = arreglarDossier(html)
+  html = arreglarDossier(html, { quitar })
 
   // Limpieza y hueco para la diapositiva final.
   html = html

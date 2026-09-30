@@ -184,11 +184,15 @@
       opacity: 0;
       pointer-events: none;
       visibility: hidden;
+      z-index: 1;
+      transition: opacity 0s linear 1.1s, visibility 0s linear 1.1s;
     }
     ::slotted([data-deck-active]) {
       opacity: 1;
       pointer-events: auto;
       visibility: visible;
+      z-index: 2;
+      transition: opacity 1.1s cubic-bezier(.45,0,.25,1), visibility 0s;
     }
 
     .overlay {
