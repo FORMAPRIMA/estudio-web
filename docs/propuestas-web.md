@@ -3,7 +3,32 @@
 `formaprima.es/propuesta/<slug>` — un enlace por cliente, con PIN, que se abre como
 presentación en escritorio (clic, flechas, rueda) y como scroll vertical en móvil.
 
-## Publicar una propuesta nueva
+## Dos tipos
+
+- **`deck`** (Ciudad Celeste): diapositivas en dos versiones, desktop y mobile. Se
+  extraen y las reproduce nuestro visor. Importador: `importar.mjs`.
+- **`dc`** (Casa Zurbano): un dossier **interactivo** (botones, idiomas, vídeo,
+  maquetas 3D). Se sirve tal cual con su propio runtime de Claude Design dentro de
+  un iframe, solo con PIN (`app/propuesta/[slug]/deck/route.ts`). Importador:
+  `importar-dc.mjs`. Si es un diseño solo móvil, en escritorio se ve centrado como
+  historia vertical.
+
+Y dos audiencias: `cliente` (una persona; el final pide **aceptar**) y `comprador`
+(un dossier que circula entre compradores; el final pide sus datos y crea un
+**lead** en Captación con la distribución y el nivel que elija).
+
+## Publicar un dossier interactivo (`dc`)
+
+1. Bajar a `~/Downloads/PROPUESTAS/<proyecto>/` el `.dc.html`, todos los `.js`
+   de la raíz del proyecto de diseño y `assets/` (el token de descarga se saca
+   abriendo el proyecto en Chrome, ver memoria del asistente).
+2. Vídeos: dejar en `web/<nombre>.av1.mp4` y `web/<nombre>.hevc.mp4` las versiones
+   optimizadas de cada `assets/<nombre>.mp4`. Sin ellas, el vídeo se copia tal cual
+   (y un AV1 sin HEVC no se ve en la mayoría de iPhone).
+3. `node scripts/propuestas/importar-dc.mjs <slug> <carpeta> "<archivo>.dc.html"`
+4. Alta en `lib/propuestas/registro.ts` con `tipo: 'dc'`, `pantallaPin` y `tema`.
+
+## Publicar una propuesta de diapositivas (`deck`)
 
 1. **Diseño.** En Claude Design, dos archivos por propuesta: la versión horizontal
    (deck 1920×1080) y la vertical (1080×1920), con las mismas diapositivas.

@@ -2,12 +2,10 @@ import type { Metadata } from 'next'
 import { cookies, headers } from 'next/headers'
 import { getPropuestaWeb, cargarDeck } from '@/lib/propuestas/registro'
 import { propuestaCookieName, propuestaCookieValue } from '@/lib/propuestas/acceso'
-import { getProyectosSite } from '@/app/actions/web-publica'
-import { getManifiesto } from '@/app/actions/web-assets'
-import { urlVariante } from '@/lib/web-publica/imagenes'
+import { obrasDestacadas } from '@/lib/propuestas/obras'
 import PropuestaGate from '@/components/propuesta/PropuestaGate'
 import PropuestaDeck from '@/components/propuesta/PropuestaDeck'
-import type { ProyectoEnlace } from '@/components/propuesta/SlideSiguiente'
+import PropuestaDossier from '@/components/propuesta/PropuestaDossier'
 
 // Propuesta de honorarios de un cliente: formaprima.es/propuesta/<slug>.
 // Ver lib/propuestas/registro.ts (alta) y scripts/propuestas/importar.mjs (diseño).
@@ -18,8 +16,8 @@ export function generateMetadata({ params }: { params: { slug: string } }): Meta
   const p = getPropuestaWeb(params.slug)
   const robots = { index: false, follow: false, nocache: true, googleBot: { index: false, follow: false } }
   if (!p) return { title: { absolute: 'Forma Prima' }, robots }
-  const title = `Propuesta de honorarios · ${p.proyecto}`
-  const description = `Preparada para ${p.cliente}. ${p.descripcion}`
+  const title = p.audiencia === 'comprador' ? `${p.proyecto} · Dossier` : `Propuesta de honorarios · ${p.proyecto}`
+  const description = p.audiencia === 'comprador' ? p.descripcion : `Preparada para ${p.cliente}. ${p.descripcion}`
   const imagen = `https://formaprima.es${p.og}`
   return {
     title: { absolute: `${title} — Forma Prima` },
@@ -43,25 +41,7 @@ function NoDisponible() {
   )
 }
 
-/** Obras publicadas en la web, con una variante de ~1080 px en vez del original. */
-async function obrasDestacadas(): Promise<ProyectoEnlace[]> {
-  const [proyectos, manifiesto] = await Promise.all([getProyectosSite(), getManifiesto().catch(() => ({}))])
-  return proyectos
-    .filter((p) => p.slug && p.hero_url)
-    .slice(0, 4)
-    .map((p) => {
-      const v = (manifiesto as Record<string, { stem: string; webp: number[] }>)[p.hero_url!]
-      const ancho = v?.webp.find((a) => a >= 1080) ?? v?.webp[v.webp.length - 1]
-      return {
-        slug: p.slug!,
-        nombre: p.nombre,
-        ubicacion: p.ubicacion,
-        imagen: v && ancho ? urlVariante(p.hero_url!, v.stem, ancho, 'webp') : p.hero_url!,
-      }
-    })
-}
-
-const FUENTE = 'https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@200;300;400;500;600&display=swap'
+const FUENTE = 'https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@200;300;400;500;600&family=Cormorant+Garamond:wght@400;500;600&display=swap'
 
 export default async function PropuestaPage({ params }: { params: { slug: string } }) {
   const p = getPropuestaWeb(params.slug)
@@ -80,7 +60,24 @@ export default async function PropuestaPage({ params }: { params: { slug: string
     return (
       <>
         {fuente}
-        <PropuestaGate slug={p.slug} nombreCliente={p.nombreCliente} proyecto={p.proyecto} portada={p.portada} />
+        <PropuestaGate slug={p.slug} nombreCliente={p.nombreCliente} proyecto={p.proyecto} portada={p.portada} textos={p.pantallaPin} tema={p.tema} />
+      </>
+    )
+  }
+
+  if (p.tipo === 'dc') {
+    const tema = p.tema ?? { fondo: '#0d0d0d', tinta: '#fbfbfa', acento: '#8fa596', claro: false }
+    return (
+      <>
+        {fuente}
+        <PropuestaDossier
+          slug={p.slug}
+          proyecto={p.proyecto}
+          descripcion={p.descripcion}
+          portada={p.portada}
+          tema={tema}
+          logo={tema.claro ? '/propuestas/logo-fp-negro.png' : '/propuestas/logo-fp.png'}
+        />
       </>
     )
   }
