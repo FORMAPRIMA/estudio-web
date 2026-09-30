@@ -123,6 +123,60 @@ export function arreglarDossier(html, { quitar = [] } = {}) {
     '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">',
     'viewport sin zoom')
 
+  // Animación de entrada: movía cada bloque con `transform`, pisando el que el
+  // bloque ya tuviera. El título de la Portada va centrado con
+  // translateY(-50%): durante la animación perdía el centrado y al terminar
+  // saltaba hacia arriba. Ahora el movimiento se SUMA al transform propio.
+  html = cambia(html,
+    "run(b, [{ opacity: 0, transform: 'translate3d(0,28px,0)' }, { opacity: 1, transform: 'translate3d(0,0,0)' }], { duration: 1400, delay: d });",
+    "run(b, [{ opacity: 0, transform: ((b.style.transform || '') + ' translate3d(0,28px,0)').trim() }, { opacity: 1, transform: b.style.transform || 'translate3d(0,0,0)' }], { duration: 1400, delay: d });",
+    'animación: títulos con transform propio')
+  html = cambia(html,
+    "run(b, [{ opacity: 0, transform: 'translate3d(0,16px,0)' }, { opacity: 1, transform: 'translate3d(0,0,0)' }], { duration: 1200, delay: d });",
+    "run(b, [{ opacity: 0, transform: ((b.style.transform || '') + ' translate3d(0,16px,0)').trim() }, { opacity: 1, transform: b.style.transform || 'translate3d(0,0,0)' }], { duration: 1200, delay: d });",
+    'animación: bloques con transform propio')
+
+  // Carrusel del Portafolio: movía una sola pista de 12.580 px de diseño
+  // (~13.600 px reales en un iPhone) con los 9 proyectos duplicados. Rasterizar
+  // y desplazar esa capa agotaba la memoria del iPhone a mitad del carrusel.
+  // Ahora cada tarjeta se mueve por separado y, al salir por arriba, vuelve a
+  // entrar por abajo: el mismo bucle sin duplicados, y las que no se ven no se
+  // pintan.
+  html = cambia(html,
+    `    const dup = track.querySelector('[data-dup]');
+    if (!dup) return;
+    const loop = dup.offsetTop;
+    if (!loop) return;
+    this._carA = track.animate([{ transform: 'translate3d(0,0,0)' }, { transform: 'translate3d(0,' + (-loop) + 'px,0)' }], { duration: loop / 45 * 1000, iterations: Infinity, easing: 'linear' });
+  }`,
+    `    const items = [...track.children].filter((n) => !n.hasAttribute('data-dup'));
+    if (!items.length) return;
+    track.querySelectorAll(':scope > [data-dup]').forEach((d) => { d.style.display = 'none'; });
+    const gap = parseFloat(getComputedStyle(track).rowGap) || 0;
+    const pos = items.map((n) => n.offsetTop), alt = items.map((n) => n.offsetHeight);
+    const H = alt.reduce((a, h) => a + h + gap, 0), vista = track.parentElement ? track.parentElement.clientHeight : H;
+    if (!H) return;
+    items.forEach((n) => { n.style.willChange = 'transform'; });
+    let t0 = null;
+    const paso = (t) => {
+      if (t0 === null) t0 = t;
+      const off = ((t - t0) * 0.045) % H;
+      for (let i = 0; i < items.length; i++) {
+        let y = ((pos[i] - off) % H + H) % H;
+        if (y > H - alt[i] - gap) y -= H;
+        items[i].style.transform = 'translate3d(0,' + (y - pos[i]).toFixed(1) + 'px,0)';
+        items[i].style.visibility = y > vista + 40 || y + alt[i] < -40 ? 'hidden' : '';
+      }
+      this._carRaf = requestAnimationFrame(paso);
+    };
+    this._carRaf = requestAnimationFrame(paso);
+  }`,
+    'carrusel por tarjetas')
+  html = cambia(html,
+    "    document.querySelectorAll('[data-carousel]').forEach(t => { t.getAnimations().forEach(a => a.cancel()); t.style.transform = ''; });",
+    "    cancelAnimationFrame(this._carRaf);\n    document.querySelectorAll('[data-carousel]').forEach(t => { t.getAnimations().forEach(a => a.cancel()); t.style.transform = ''; [...t.children].forEach((n) => { n.style.transform = ''; n.style.visibility = ''; n.style.willChange = ''; if (n.hasAttribute('data-dup')) n.style.display = ''; }); });",
+    'carrusel: parar')
+
   html = cambia(html, /(<video data-video=""[^>]*?)preload="auto"/, '$1preload="metadata"', 'vídeo: carga progresiva')
 
   html = cambia(html, "c.style.transform = 'translateX(-50%) translateY(8px)'", "c.style.transform = 'translateX(-50%) translateY(-6px)'", 'controles: ocultarse hacia arriba')

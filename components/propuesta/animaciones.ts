@@ -14,7 +14,7 @@ export function sinMovimiento(): boolean {
 
 export class Animador {
   private vivas = new Map<Element, Remate[]>()
-  private carruseles = new Map<Element, Animation>()
+  private carruseles = new Map<Element, () => void>()
 
   /** Deja todas las animaciones en su estado final (antes de imprimir, al salir). */
   terminarTodo() {
@@ -27,25 +27,52 @@ export class Animador {
     this.vivas.delete(slide)
   }
 
+  /**
+   * Carrusel vertical del portafolio. Antes se desplazaba la pista entera (con
+   * los proyectos duplicados para el bucle): una capa de miles de píxeles que
+   * agotaba la memoria del iPhone. Ahora cada tarjeta se mueve por separado y,
+   * al salir por arriba, vuelve a entrar por abajo; las que no se ven no se pintan.
+   */
   carrusel(slide: Element, activo: boolean) {
     const track = slide.querySelector<HTMLElement>('[data-carousel]')
     if (!track) return
-    this.carruseles.get(slide)?.cancel()
+    this.carruseles.get(slide)?.()
     this.carruseles.delete(slide)
-    track.style.transform = ''
     if (!activo || sinMovimiento()) return
-    const dup = track.querySelector<HTMLElement>('[data-dup]')
-    const loop = dup?.offsetTop
-    if (!loop) return
-    const a = track.animate(
-      [{ transform: 'translate3d(0,0,0)' }, { transform: `translate3d(0,${-loop}px,0)` }],
-      { duration: (loop / 45) * 1000, iterations: Infinity, easing: 'linear' },
-    )
-    this.carruseles.set(slide, a)
+    const items = (Array.from(track.children) as HTMLElement[]).filter((n) => !n.hasAttribute('data-dup'))
+    const dups = (Array.from(track.children) as HTMLElement[]).filter((n) => n.hasAttribute('data-dup'))
+    if (!items.length) return
+    dups.forEach((d) => { d.style.display = 'none' })
+    const gap = parseFloat(getComputedStyle(track).rowGap) || 0
+    const pos = items.map((n) => n.offsetTop)
+    const alt = items.map((n) => n.offsetHeight)
+    const H = alt.reduce((a, h) => a + h + gap, 0)
+    const vista = track.parentElement?.clientHeight ?? H
+    if (!H) return
+    items.forEach((n) => { n.style.willChange = 'transform' })
+    let t0: number | null = null
+    let raf = 0
+    const paso = (t: number) => {
+      if (t0 === null) t0 = t
+      const off = ((t - t0) * 0.045) % H
+      for (let i = 0; i < items.length; i++) {
+        let y = (((pos[i] - off) % H) + H) % H
+        if (y > H - alt[i] - gap) y -= H
+        items[i].style.transform = `translate3d(0,${(y - pos[i]).toFixed(1)}px,0)`
+        items[i].style.visibility = y > vista + 40 || y + alt[i] < -40 ? 'hidden' : ''
+      }
+      raf = requestAnimationFrame(paso)
+    }
+    raf = requestAnimationFrame(paso)
+    this.carruseles.set(slide, () => {
+      cancelAnimationFrame(raf)
+      items.forEach((n) => { n.style.transform = ''; n.style.visibility = ''; n.style.willChange = '' })
+      dups.forEach((d) => { d.style.display = '' })
+    })
   }
 
   pararCarruseles() {
-    this.carruseles.forEach((a) => a.cancel())
+    this.carruseles.forEach((parar) => parar())
     this.carruseles.clear()
   }
 
@@ -91,9 +118,11 @@ export class Animador {
       delayOf.set(b, d)
       if (isLogo(b)) return
       if (/^H\d$/.test(b.tagName)) {
-        run(b, [{ opacity: 0, transform: 'translate3d(0,28px,0)' }, { opacity: 1, transform: 'translate3d(0,0,0)' }], { duration: 1400, delay: d })
+        // El movimiento se suma al transform propio del bloque (p. ej. un centrado
+        // con translateY(-50%)); si lo pisara, el bloque saltaría al terminar.
+        run(b, [{ opacity: 0, transform: `${b.style.transform || ''} translate3d(0,28px,0)`.trim() }, { opacity: 1, transform: b.style.transform || 'translate3d(0,0,0)' }], { duration: 1400, delay: d })
       } else {
-        run(b, [{ opacity: 0, transform: 'translate3d(0,16px,0)' }, { opacity: 1, transform: 'translate3d(0,0,0)' }], { duration: 1200, delay: d })
+        run(b, [{ opacity: 0, transform: `${b.style.transform || ''} translate3d(0,16px,0)`.trim() }, { opacity: 1, transform: b.style.transform || 'translate3d(0,0,0)' }], { duration: 1200, delay: d })
       }
     })
     const delayFor = (el: Element | null) => {
