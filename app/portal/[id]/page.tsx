@@ -7,10 +7,17 @@ import ClientPortalGate from '@/components/portal/ClientPortalGate'
 import ClientPortal from '@/components/portal/ClientPortal'
 import { loadPortalData } from '@/lib/portal/load'
 
-const SECRET = process.env.PORTAL_SECRET ?? 'fp-portal-secret-2024'
+// Sin valor por defecto en producción: con uno escrito en el código, quien lo
+// conociera podía fabricar la cookie del portal de cualquier proyecto.
+function secreto(): string {
+  const s = process.env.PORTAL_SECRET
+  if (s) return s
+  if (process.env.NODE_ENV === 'production') throw new Error('PORTAL_SECRET environment variable is required')
+  return 'fp-portal-secret-2024'
+}
 
 function verifyToken(proyectoId: string, token: string): boolean {
-  const expected = createHmac('sha256', SECRET).update(proyectoId).digest('hex')
+  const expected = createHmac('sha256', secreto()).update(proyectoId).digest('hex')
   return token === expected
 }
 

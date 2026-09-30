@@ -2,7 +2,6 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
-import { randomBytes } from 'crypto'
 
 export async function submitRsvpForm(
   nombreNino: string,
@@ -20,7 +19,12 @@ export async function submitRsvpForm(
   revalidatePath('/cumple-macarena/admin')
 }
 
-export async function deleteFormRsvp(id: string) {
+// Clave del panel: la misma que pide la página /cumple-macarena/admin. Sin
+// comprobarla aquí, cualquiera podía borrar confirmaciones llamando a la acción.
+const claveAdmin = () => process.env.CUMPLE_ADMIN_KEY ?? 'maca2026'
+
+export async function deleteFormRsvp(id: string, clave: string) {
+  if (clave !== claveAdmin()) throw new Error('No autorizado')
   const admin = createAdminClient()
   const { error } = await admin.from('cumple_form_rsvp').delete().eq('id', id)
   if (error) throw new Error('Error al eliminar RSVP')
@@ -58,22 +62,4 @@ export async function submitRsvp(
   revalidatePath('/cumple-macarena/admin')
 }
 
-export async function createInvitado(nombre: string) {
-  if (!nombre.trim()) throw new Error('Nombre requerido')
-  const admin = createAdminClient()
-  const token = randomBytes(6).toString('hex')
-
-  const { error } = await admin
-    .from('cumple_invitados')
-    .insert({ nombre: nombre.trim(), token })
-
-  if (error) throw new Error('Error al crear invitado')
-  revalidatePath('/cumple-macarena/admin')
-}
-
-export async function deleteInvitado(id: string) {
-  const admin = createAdminClient()
-  const { error } = await admin.from('cumple_invitados').delete().eq('id', id)
-  if (error) throw new Error('Error al eliminar invitado')
-  revalidatePath('/cumple-macarena/admin')
-}
+// createInvitado / deleteInvitado: retiradas (sin uso y sin comprobación de acceso).

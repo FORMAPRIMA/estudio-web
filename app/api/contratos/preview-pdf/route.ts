@@ -11,6 +11,12 @@ export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Sin sesión' }, { status: 401 })
+  // Solo captación: con solo la sesión, cualquier cuenta (también la de un
+  // cliente) podía descargar el contrato de otro cliente.
+  const { data: profile } = await supabase.from('profiles').select('rol').eq('id', user.id).single()
+  if (!profile || !['fp_partner', 'fp_manager', 'fp_biz_dev'].includes(profile.rol)) {
+    return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
+  }
 
   const { contratoId, lang } = await req.json()
 

@@ -1,5 +1,6 @@
 'use server'
 
+import { esDelEquipo } from '@/lib/auth/equipo'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
@@ -333,6 +334,7 @@ export async function iniciarFase(pfId: string, proyectoId: string, faseId: stri
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Sin sesión activa.' }
+  if (!(await esDelEquipo(supabase, user.id))) return { error: 'Sin permisos.' }
 
   // Fetch proyecto, fase info, and responsables in parallel
   const [{ data: proyecto }, { data: catalogoFase }, { data: pf }] = await Promise.all([
@@ -511,6 +513,7 @@ export async function getDocUploadToken(
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return { error: 'Sin sesión activa.' }
+    if (!(await esDelEquipo(supabase, user.id))) return { error: 'Sin permisos.' }
 
     // Use admin client to create signed URL — bypasses storage bucket RLS
     const admin = createAdminClient()

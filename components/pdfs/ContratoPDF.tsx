@@ -10,7 +10,8 @@ import { ordinal, interpolarTokens, CLAUSULAS_DEFAULT } from '@/lib/contratos/cl
 import type { ClausulaBloque, ContratoClausula } from '@/lib/contratos/clausulas'
 
 const LOGO_BLANCO   = path.join(process.cwd(), 'public', 'FORMA_PRIMA_BLANCO.png')
-const FIRMA_GABRIELA = path.join(process.cwd(), 'public', 'FIRMA GABRIELA.png')
+// Fuera de public/: servida desde ahí, cualquiera podía descargar la firma.
+const FIRMA_GABRIELA = path.join(process.cwd(), 'assets', 'privado', 'FIRMA GABRIELA.png')
 
 // ── Fixed studio data ─────────────────────────────────────────────────────────
 const STUDIO = {

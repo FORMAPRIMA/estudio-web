@@ -4,7 +4,7 @@ import { createElement } from 'react'
 import { createClient } from '@/lib/supabase/server'
 import { FacturaEmitidaPDF } from '@/components/pdfs/FacturaEmitidaPDF'
 import type { FacturaPDFData } from '@/components/pdfs/FacturaEmitidaPDF'
-import { getEstudioConfig } from '@/app/actions/facturasEmitidas'
+import { leerEstudioConfig as getEstudioConfig } from '@/lib/facturas/estudioConfig'
 
 export async function POST(req: NextRequest) {
   try {

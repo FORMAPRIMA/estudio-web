@@ -132,7 +132,8 @@ function renderHtml(kind: ReminderKind, partnerNombre: string, projectNombre: st
 export async function GET(req: NextRequest) {
   // Auth: Vercel passes Authorization: Bearer <CRON_SECRET>
   const auth = req.headers.get('authorization')
-  if (CRON_SECRET && auth !== `Bearer ${CRON_SECRET}`) {
+  // Sin CRON_SECRET no se abre a nadie (antes, sin la variable, pasaba cualquiera).
+  if (!CRON_SECRET || auth !== `Bearer ${CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

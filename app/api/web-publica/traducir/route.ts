@@ -1,3 +1,4 @@
+import { esDelEquipo } from '@/lib/auth/equipo'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import Anthropic from '@anthropic-ai/sdk'
@@ -19,6 +20,7 @@ export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Sin sesión' }, { status: 401 })
+  if (!(await esDelEquipo(supabase, user.id))) return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
 
   const { texto } = (await req.json()) as { texto?: string }
   if (!texto || !texto.trim()) return NextResponse.json({ error: 'Texto vacío' }, { status: 400 })

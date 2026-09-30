@@ -4,7 +4,7 @@
 // El cliente no tiene cuenta: su llave es el PIN, que deja una cookie firmada.
 // Cada paso relevante (abrirla, llegar al final, aceptarla) avisa al equipo.
 
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { sendEmail, wrapEmail } from '@/lib/email'
@@ -13,6 +13,31 @@ import { getPropuestaWeb, type PropuestaWeb } from '@/lib/propuestas/registro'
 import { propuestaCookieName, propuestaCookieValue, pinCorrecto, accesoConcedido } from '@/lib/propuestas/acceso'
 
 const FP_ROLES = ['fp_team', 'fp_manager', 'fp_partner', 'fp_biz_dev']
+
+// ── Límites contra abuso ─────────────────────────────────────────────────────
+// Estas acciones son públicas (cualquiera puede llamarlas). Dos barreras: una
+// por IP en memoria (por instancia, frena lo obvio) y otra en la base de datos
+// (vale entre instancias), cada una donde tiene sentido.
+const intentos = new Map<string, { n: number; hasta: number }>()
+function porIp(clave: string, max: number, ventanaMs: number): boolean {
+  const ip = headers().get('x-forwarded-for')?.split(',')[0]?.trim() || headers().get('x-real-ip') || 'desconocida'
+  const k = `${clave}:${ip}`, ahora = Date.now(), r = intentos.get(k)
+  if (!r || ahora > r.hasta) { intentos.set(k, { n: 1, hasta: ahora + ventanaMs }); return true }
+  if (r.n >= max) return false
+  r.n++
+  return true
+}
+const haceMin = (min: number) => new Date(Date.now() - min * 60_000).toISOString()
+
+/** ¿Ya hay un aviso con este título en los últimos `min` minutos? */
+async function avisoReciente(titulo: string, min: number): Promise<boolean> {
+  try {
+    const { count } = await createAdminClient().from('avisos').select('id', { count: 'exact', head: true }).eq('titulo', titulo).gte('created_at', haceMin(min))
+    return (count ?? 0) > 0
+  } catch {
+    return false
+  }
+}
 const URL_BASE = 'https://formaprima.es/propuesta'
 
 function autorizada(slug: string): PropuestaWeb | null {
@@ -52,6 +77,11 @@ async function crearAviso(titulo: string, contenido: string, nivel: 'informativo
 }
 
 export async function desbloquearPropuestaWeb(slug: string, pin: string): Promise<{ ok: boolean }> {
+  // 10 intentos cada 15 min por IP: un PIN de 4 cifras ya no se prueba entero.
+  if (!porIp(`pin:${slug}`, 10, 15 * 60_000)) {
+    await new Promise((r) => setTimeout(r, 900))
+    return { ok: false }
+  }
   const p = getPropuestaWeb(slug)
   if (!p || p.pin === null || !pinCorrecto(pin.trim(), p.pin)) {
     // Un PIN de 4 cifras se prueba entero en poco tiempo si se responde al instante.
@@ -81,15 +111,20 @@ export async function registrarEventoPropuestaWeb(slug: string, evento: Evento):
   cookies().set(marca, '1', { httpOnly: true, sameSite: 'lax', path: `/propuesta/${slug}`, maxAge: 60 * 60 * 12 })
 
   const dossier = p.audiencia === 'comprador'
+  const titulo = evento === 'abierta'
+    ? (dossier ? `Alguien ha abierto el dossier de ${p.proyecto}` : `${p.cliente} ha abierto su propuesta`)
+    : (dossier ? `Alguien ha visto el dossier de ${p.proyecto} hasta el final` : `${p.cliente} ha visto la propuesta hasta el final`)
+  // La cookie la puede borrar cualquiera: el mismo aviso, como mucho uno cada 30 min.
+  if (!porIp(`ev:${slug}`, 6, 60 * 60_000) || await avisoReciente(titulo, 30)) return
   if (evento === 'abierta') {
     await crearAviso(
-      dossier ? `Alguien ha abierto el dossier de ${p.proyecto}` : `${p.cliente} ha abierto su propuesta`,
+      titulo,
       `${dossier ? 'Dossier' : 'Propuesta de honorarios'} de ${p.proyecto}. ${URL_BASE}/${p.slug}`,
       'informativo',
     )
   } else {
     await crearAviso(
-      dossier ? `Alguien ha visto el dossier de ${p.proyecto} hasta el final` : `${p.cliente} ha visto la propuesta hasta el final`,
+      titulo,
       dossier ? `Si deja sus datos, entrará como lead en Captación.` : `Propuesta de honorarios de ${p.proyecto}. Buen momento para llamarle.`,
       'informativo',
     )
@@ -102,6 +137,10 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 export async function aceptarPropuestaWeb(slug: string, comentario: string): Promise<{ ok: boolean; error?: string }> {
   const p = autorizada(slug)
   if (!p) return { ok: false, error: 'La sesión ha caducado. Vuelve a abrir el enlace.' }
+  // Aceptar es de las propuestas a un cliente concreto (con PIN); un dossier
+  // público no se "acepta": deja un lead.
+  if (p.audiencia !== 'cliente') return { ok: false, error: 'No disponible.' }
+  if (!porIp(`acepta:${slug}`, 3, 60 * 60_000)) return { ok: false, error: 'Demasiados intentos. Inténtalo más tarde.' }
 
   const prueba = await esEquipo()
   const nota = comentario.trim().slice(0, 2000)
@@ -132,6 +171,8 @@ export async function aceptarPropuestaWeb(slug: string, comentario: string): Pro
 }
 
 export interface InteresInput {
+  /** Trampa para bots: campo invisible que una persona deja vacío. */
+  web?: string
   nombre: string
   email: string
   telefono: string
@@ -159,6 +200,22 @@ export async function registrarInteresPropuestaWeb(slug: string, d: InteresInput
   if (!email && !telefono) return { ok: false, error: en ? 'Leave an email or a phone number.' : 'Déjanos un email o un teléfono.' }
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: en ? 'That email does not look right.' : 'Ese email no parece correcto.' }
   if (!d.privacidad) return { ok: false, error: en ? 'Please accept the privacy policy.' : 'Acepta la política de privacidad.' }
+
+  // Bots: si rellenan el campo trampa, se les da las gracias y no pasa nada.
+  if (d.web && d.web.trim()) return { ok: true }
+  const demasiados = { ok: false, error: en ? 'Too many requests. Please try again later.' : 'Demasiadas solicitudes. Inténtalo de nuevo más tarde.' }
+  if (!porIp(`interes:${slug}`, 3, 60 * 60_000)) return demasiados
+  const origen = `Dossier web · ${p.proyecto}`
+  const adminL = createAdminClient()
+  // Tope global: si en 10 minutos entran más de 8 leads de este dossier, es un ataque.
+  const { count: recientes } = await adminL.from('leads').select('id', { count: 'exact', head: true }).eq('origen', origen).gte('created_at', haceMin(10))
+  if ((recientes ?? 0) >= 8) return demasiados
+  // La misma persona dos veces en 24 h: se le confirma, pero no se duplica el lead ni el correo.
+  const filtro = [email && `email.eq.${email}`, telefono && `telefono.eq.${telefono.replace(/[,()]/g, '')}`].filter(Boolean).join(',')
+  if (filtro) {
+    const { count: repetido } = await adminL.from('leads').select('id', { count: 'exact', head: true }).eq('origen', origen).gte('created_at', haceMin(24 * 60)).or(filtro)
+    if ((repetido ?? 0) > 0) return { ok: true }
+  }
 
   const prueba = await esEquipo()
   const eleccion = [d.distribucion && `distribución ${d.distribucion}`, d.nivel && `nivel ${d.nivel}`].filter(Boolean).join(' · ')

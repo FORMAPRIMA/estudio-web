@@ -19,15 +19,18 @@ export function espacioCookieName(espacioToken: string): string {
 // ── PIN maestro de presentación (equipo, sin necesidad de login) ─────────────
 // Permite al equipo abrir un portal concreto en "modo presentación" desde un
 // dispositivo no autenticado (sala de reuniones, iPad, screen-share). Una vista
-// en este modo NUNCA cuenta como acceso del cliente. Configurable por env para
-// poder rotarlo sin desplegar; por defecto 1330.
-export function getMasterPin(): string {
-  return process.env.ESPACIO_MASTER_PIN || '1330'
+// en este modo NUNCA cuenta como acceso del cliente. Sale de ESPACIO_MASTER_PIN;
+// en producción, sin esa variable, el modo presentación queda desactivado. Antes
+// había un valor por defecto escrito en el código, que abría cualquier Espacio.
+export function getMasterPin(): string | null {
+  const pin = process.env.ESPACIO_MASTER_PIN
+  if (pin) return pin
+  return process.env.NODE_ENV === 'production' ? null : '1330'
 }
 
 export function isMasterPin(pin: string): boolean {
   const master = getMasterPin()
-  if (pin.length !== master.length) return false
+  if (!master || pin.length !== master.length) return false
   return timingSafeEqual(Buffer.from(pin), Buffer.from(master))
 }
 

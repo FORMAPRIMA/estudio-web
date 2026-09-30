@@ -1,5 +1,6 @@
 'use server'
 
+import { esDelEquipo } from '@/lib/auth/equipo'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
@@ -12,6 +13,7 @@ export async function uploadMejoraImages(
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Sin sesión activa.' }
+  if (!(await esDelEquipo(supabase, user.id))) return { error: 'Sin permisos.' }
 
   const admin = createAdminClient()
   const files = formData.getAll('images') as File[]
@@ -45,6 +47,7 @@ export async function addMejora(data: {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Sin sesión activa.' }
+  if (!(await esDelEquipo(supabase, user.id))) return { error: 'Sin permisos.' }
 
   const admin = createAdminClient()
   const { error } = await admin.from('mejoras').insert({

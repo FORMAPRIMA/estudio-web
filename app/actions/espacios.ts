@@ -12,6 +12,7 @@ import { getPlantillaServicios } from '@/app/actions/plantillaPropuestas'
 import { buildPropuestaVM, mapInteriorismoRatios, type PropuestaVM, type PropuestaRowLike } from '@/lib/propuestas/build'
 import type { CronoServicio } from '@/lib/propuestas/cronograma'
 import { buildContratoFromPropuesta } from '@/lib/contratos/buildFromPropuesta'
+import { leerEspacioPorToken, accesoEspacio } from '@/lib/espacio/data'
 
 // Roles que gestionan captación (igual que leads/propuestas).
 const CAPTACION_ROLES = ['fp_partner', 'fp_manager', 'fp_biz_dev']
@@ -98,21 +99,9 @@ export async function createEspacio(
   }
 }
 
-// ── Lectura por token (uso interno del servidor: ruta /espacio/[token]) ───────
-export async function getEspacioByToken(token: string): Promise<EspacioRow | null> {
-  try {
-    const admin = createAdminClient()
-    const { data, error } = await admin
-      .from('espacios')
-      .select('*')
-      .eq('token', token)
-      .single()
-    if (error || !data) return null
-    return data as unknown as EspacioRow
-  } catch {
-    return null
-  }
-}
+// ── Lectura por token ────────────────────────────────────────────────────────
+// Vive en lib/espacio/data.ts (leerEspacioPorToken / accesoEspacio): exportada
+// desde aquí era un endpoint público que devolvía la fila entera, pin_hash incluido.
 
 // ── Tracking de acceso (no bloqueante) ───────────────────────────────────────
 function parseDispositivo(ua: string): string {
@@ -129,6 +118,7 @@ function parseDispositivo(ua: string): string {
 }
 
 export async function registrarAccesoEspacio(token: string, ip: string, ua: string): Promise<void> {
+  if (!(await accesoEspacio(token))) return
   try {
     const admin = createAdminClient()
     const { data: row } = await admin
@@ -161,6 +151,7 @@ export async function registrarEventoEspacio(
   tipo: string,
   meta?: unknown,
 ): Promise<void> {
+  if (!(await accesoEspacio(token))) return
   try {
     const admin = createAdminClient()
     const { data: row } = await admin
@@ -193,6 +184,7 @@ export async function setEtapaEspacio(
   etapa: Etapa,
 ): Promise<{ success: true } | { error: string }> {
   try {
+    await requireCaptacion()
     const admin = createAdminClient()
     const now = new Date().toISOString()
     const patch: Record<string, unknown> = { etapa, updated_at: now }
@@ -295,7 +287,7 @@ export async function getEspacioPropuesta(
   token: string,
 ): Promise<{ vm: PropuestaVM; status: string; propuestaId: string } | null> {
   try {
-    const espacio = await getEspacioByToken(token)
+    const espacio = await accesoEspacio(token)
     if (!espacio?.lead_id) return null
     const propuesta = await fetchPropuestaActiva(espacio.lead_id)
     if (!propuesta) return null
@@ -326,7 +318,7 @@ export async function aceptarPropuestaEspacio(
 ): Promise<{ success: true } | { error: string }> {
   try {
     const admin = createAdminClient()
-    const espacio = await getEspacioByToken(token)
+    const espacio = await accesoEspacio(token)
     if (!espacio?.lead_id) return { error: 'No hay propuesta asociada.' }
     const propuesta = await fetchPropuestaActiva(espacio.lead_id)
     if (!propuesta) return { error: 'No hay propuesta para aceptar.' }
@@ -372,7 +364,7 @@ export async function getEspacioFormalizacion(
   token: string,
 ): Promise<{ completado: boolean; lead: FormalizacionLead } | null> {
   try {
-    const espacio = await getEspacioByToken(token)
+    const espacio = await accesoEspacio(token)
     if (!espacio?.lead_id) return null
     const completado = (espacio.eventos ?? []).some(e => e.tipo === 'datos_completados')
 
@@ -395,7 +387,7 @@ export async function submitFormalizacion(
 ): Promise<{ success: true } | { error: string }> {
   try {
     const admin = createAdminClient()
-    const espacio = await getEspacioByToken(token)
+    const espacio = await accesoEspacio(token)
     if (!espacio?.lead_id) return { error: 'No se encontró el proceso.' }
 
     const clean = (v: string | null | undefined) => (v?.trim() ? v.trim() : null)
@@ -476,7 +468,7 @@ export interface EspacioContrato {
 
 export async function getEspacioContrato(token: string): Promise<EspacioContrato | null> {
   try {
-    const espacio = await getEspacioByToken(token)
+    const espacio = await accesoEspacio(token)
     if (!espacio?.lead_id) return null
     const admin = createAdminClient()
 
@@ -544,7 +536,7 @@ export async function getEspacioProyectos(
   token: string,
 ): Promise<{ clienteId: string; proyectos: EspacioProyecto[] } | null> {
   try {
-    const espacio = await getEspacioByToken(token)
+    const espacio = await accesoEspacio(token)
     if (!espacio?.cliente_id) return null
     const admin = createAdminClient()
 

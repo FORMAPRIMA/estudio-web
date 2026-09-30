@@ -79,9 +79,9 @@ export type EstudioConfig = {
 }
 
 export async function getEstudioConfig(): Promise<EstudioConfig | null> {
-  const admin = createAdminClient()
-  const { data } = await admin.from('estudio_config').select('*').eq('id', 1).single()
-  return data as EstudioConfig | null
+  await requirePartner()   // IBAN, SWIFT y datos fiscales: solo socios
+  const { leerEstudioConfig } = await import('@/lib/facturas/estudioConfig')
+  return leerEstudioConfig()
 }
 
 export async function updateEstudioConfig(data: Partial<EstudioConfig>): Promise<{ success: true } | { error: string }> {
@@ -254,6 +254,7 @@ export interface ClienteDelProyecto {
  * La regla vive en lib/email/destinatarios.ts, que es lo que usan los envíos.
  */
 export async function getPartnerCCEmails(): Promise<PartnerCC[]> {
+  await requirePartner()
   return getPartnersCCDetallado()
 }
 
@@ -261,6 +262,7 @@ export async function getClientesDelProyecto(
   proyectoId: string
 ): Promise<ClienteDelProyecto[]> {
   try {
+    await requirePartner()
     const admin = createAdminClient()
     const { data } = await admin
       .from('proyecto_clientes')
@@ -363,6 +365,7 @@ const ESTADO_TO_FACTURA_STATUS: Record<string, string> = {
 /** Secciones reales de un proyecto (de proyecto_fases → catalogo_fases.seccion). */
 export async function getSeccionesProyecto(proyectoId: string): Promise<string[]> {
   try {
+    await requirePartner()
     const admin = createAdminClient()
     const { data } = await admin
       .from('proyecto_fases')

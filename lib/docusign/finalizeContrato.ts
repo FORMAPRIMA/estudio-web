@@ -6,6 +6,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { downloadCompletedDocument } from '@/lib/docusign/client'
 import { firmarContratoAdmin } from '@/app/actions/contratos'
+import { claveInterna } from '@/lib/claveInterna'
 
 export async function finalizeContratoFirmado(
   contrato: { id: string; status: string | null; docusign_status: string | null },
@@ -52,7 +53,7 @@ export async function finalizeContratoFirmado(
 
   // ── firmarContratoAdmin (crea proyecto, cliente, facturación) ───────────────
   if (contrato.status !== 'firmado') {
-    const result = await firmarContratoAdmin(contrato.id)
+    const result = await firmarContratoAdmin(contrato.id, claveInterna())
     if ('error' in result) {
       console.error('[docusign/finalize] firmarContratoAdmin error:', result.error)
       return { error: result.error }

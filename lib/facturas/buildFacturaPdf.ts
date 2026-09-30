@@ -12,7 +12,7 @@ export async function buildFacturaPdfBuffer(
   const { renderToBuffer } = await import('@react-pdf/renderer')
   const { createElement } = await import('react')
   const { FacturaEmitidaPDF } = await import('@/components/pdfs/FacturaEmitidaPDF')
-  const { getEstudioConfig } = await import('@/app/actions/facturasEmitidas')
+  const { leerEstudioConfig: getEstudioConfig } = await import('@/lib/facturas/estudioConfig')
 
   const [{ data: f, error }, config] = await Promise.all([
     admin.from('facturas_emitidas').select('*').eq('id', facturaId).single(),

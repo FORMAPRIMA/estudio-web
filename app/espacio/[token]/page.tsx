@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { headers, cookies } from 'next/headers'
+import { leerEspacioPorToken as getEspacioByToken } from '@/lib/espacio/data'
 import {
-  getEspacioByToken,
   registrarAccesoEspacio,
   registrarEventoEspacio,
   submitEspacioBienvenida,
@@ -61,7 +61,7 @@ export default async function EspacioPage({
   const etapa = (espacio.etapa ?? 'bienvenida') as Etapa
 
   // ── ¿Vista interna en "modo presentación"? ───────────────────────────────
-  // ÚNICA vía: el PIN maestro de administración (1330), que setea una cookie de
+  // ÚNICA vía: el PIN maestro de administración (ESPACIO_MASTER_PIN), que setea una cookie de
   // presentación atada a este Espacio. NO existe bypass por estar logueado como
   // equipo: a partir de la propuesta el portal exige PIN para todos, de modo que
   // los roles sin acceso a información sensible no pueden colarse. Las visitas en

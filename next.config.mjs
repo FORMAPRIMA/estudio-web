@@ -9,7 +9,7 @@ const nextConfig = {
       bodySizeLimit: '20mb',
     },
     outputFileTracingIncludes: {
-      '**': ['./public/FORMA_PRIMA_BLANCO.png'],
+      '**': ['./public/FORMA_PRIMA_BLANCO.png', './assets/privado/**/*'],
     },
   },
   images: {
@@ -52,7 +52,21 @@ const nextConfig = {
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
           // Disable browser features we don't use
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=()' },
+          // CSP mínima que no rompe nada: nadie ajeno puede enmarcar la app, ni
+          // cambiar la base de las URL relativas, ni incrustar plugins.
+          { key: 'Content-Security-Policy', value: "frame-ancestors 'self'; base-uri 'self'; object-src 'none'" },
         ],
+      },
+      {
+        // Assets de las propuestas: imágenes, vídeos y runtime. Un día de caché y
+        // otra semana sirviendo la copia mientras se revalida.
+        source: '/propuestas/:path*',
+        headers: [{ key: 'Cache-Control', value: 'public, max-age=86400, stale-while-revalidate=604800' }],
+      },
+      {
+        // React y three.js con versión fija: no cambian nunca.
+        source: '/propuestas/_rt/:path*',
+        headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }],
       },
     ]
   },

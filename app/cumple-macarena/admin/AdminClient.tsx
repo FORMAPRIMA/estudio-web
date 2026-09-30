@@ -43,7 +43,7 @@ export default function AdminClient({ rsvps, invitacionUrl, adminKey }: Props) {
 
   function handleDelete(id: string, nombre: string) {
     if (!confirm(`¿Eliminar la respuesta de ${nombre}?`)) return
-    startTransition(() => deleteFormRsvp(id))
+    startTransition(() => deleteFormRsvp(id, adminKey))
   }
 
   function badgeStyle(color: string, bg: string): React.CSSProperties {

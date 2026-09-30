@@ -4,7 +4,7 @@ import { createElement } from 'react'
 import JSZip from 'jszip'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getEstudioConfig } from '@/app/actions/facturasEmitidas'
+import { leerEstudioConfig as getEstudioConfig } from '@/lib/facturas/estudioConfig'
 import { FacturaEmitidaPDF } from '@/components/pdfs/FacturaEmitidaPDF'
 import type { FacturaPDFData } from '@/components/pdfs/FacturaEmitidaPDF'
 

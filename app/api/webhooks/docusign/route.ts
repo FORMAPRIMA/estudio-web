@@ -4,12 +4,15 @@
  * Called by DocuSign when an envelope status changes (completed / declined / voided).
  * On "completed": downloads the signed PDF, uploads to Supabase Storage, calls firmarContratoAdmin.
  *
- * Optional security:
- *   DOCUSIGN_HMAC_KEY — set in DocuSign Connect config to verify webhook signatures
+ * Seguridad (esta URL es pública):
+ *   · El estado NUNCA se toma del cuerpo de la petición: se consulta a DocuSign
+ *     con la API (getEnvelopeStatus). Un evento falsificado no puede dar un
+ *     contrato por firmado ni anular un acta.
+ *   · DOCUSIGN_HMAC_KEY (opcional): si está, la firma HMAC es OBLIGATORIA.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { downloadCompletedDocument } from '@/lib/docusign/client'
+import { downloadCompletedDocument, getEnvelopeStatus } from '@/lib/docusign/client'
 import { finalizeContratoFirmado } from '@/lib/docusign/finalizeContrato'
 import { applyClienteChangesForActa, cancelClienteChangesForActa } from '@/lib/fp-execution/obra-apply'
 import crypto from 'node:crypto'
@@ -21,16 +24,12 @@ export async function POST(req: NextRequest) {
     // ── Optional HMAC signature verification ─────────────────────────────────
     const hmacKey = process.env.DOCUSIGN_HMAC_KEY
     if (hmacKey) {
-      const dsSignature = req.headers.get('x-docusign-signature-1')
-      if (dsSignature) {
-        const expected = crypto
-          .createHmac('sha256', hmacKey)
-          .update(rawBody)
-          .digest('base64')
-        if (expected !== dsSignature) {
-          console.warn('[docusign/webhook] HMAC mismatch — ignoring request')
-          return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
-        }
+      const dsSignature = req.headers.get('x-docusign-signature-1') || ''
+      const expected = crypto.createHmac('sha256', hmacKey).update(rawBody).digest('base64')
+      const a = Buffer.from(dsSignature), b = Buffer.from(expected)
+      if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+        console.warn('[docusign/webhook] HMAC ausente o no válida — ignorando')
+        return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
       }
     }
 
@@ -42,14 +41,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
     }
 
-    const envelopeId     = event?.data?.envelopeId    ?? event?.envelopeId
-    const envelopeStatus = event?.data?.envelopeSummary?.status ?? event?.status
+    const envelopeId = event?.data?.envelopeId ?? event?.envelopeId
+    const statusDeclarado = event?.data?.envelopeSummary?.status ?? event?.status
 
     if (!envelopeId) {
       return NextResponse.json({ ok: true })  // ignore unrecognised shapes
     }
 
-    console.log(`[docusign/webhook] envelopeId=${envelopeId} status=${envelopeStatus}`)
+    if (typeof envelopeId !== 'string' || !/^[0-9a-f-]{36}$/i.test(envelopeId)) {
+      return NextResponse.json({ ok: true })
+    }
 
     const admin = createAdminClient()
 
@@ -64,6 +65,17 @@ export async function POST(req: NextRequest) {
       // Envelope not in our system — acknowledge anyway
       return NextResponse.json({ ok: true })
     }
+
+    // Estado real, preguntado a DocuSign. Si la API no responde, 503: DocuSign
+    // reintenta el evento más tarde.
+    let envelopeStatus: string
+    try {
+      envelopeStatus = await getEnvelopeStatus(envelopeId)
+    } catch (e) {
+      console.error('[docusign/webhook] no se pudo verificar el estado con DocuSign:', e)
+      return NextResponse.json({ error: 'Verification unavailable' }, { status: 503 })
+    }
+    console.log(`[docusign/webhook] envelopeId=${envelopeId} status=${envelopeStatus} (declarado: ${statusDeclarado})`)
 
     // ── Handle obra acta cliente ──────────────────────────────────────────────
     if (obraActa) {

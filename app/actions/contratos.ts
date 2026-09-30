@@ -1,5 +1,6 @@
 'use server'
 
+import { claveInternaValida } from '@/lib/claveInterna'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
@@ -559,11 +560,19 @@ export async function firmarContrato(
   }
 }
 
-/** Admin version — called from DocuSign webhook (no user session required) */
+/**
+ * Versión sin sesión — la llama la finalización de DocuSign (webhook y
+ * firma-confirmar, vía lib/docusign/finalizeContrato). Al estar en un fichero
+ * 'use server' es un endpoint público: sin la clave interna (que solo conoce el
+ * servidor) cualquiera podía dar un contrato por firmado y crear proyecto,
+ * cliente y facturación.
+ */
 export async function firmarContratoAdmin(
-  contratoId: string
+  contratoId: string,
+  claveInterna: string,
 ): Promise<{ proyectoId: string; clienteId: string } | { error: string }> {
   try {
+    if (!claveInternaValida(claveInterna)) return { error: 'No autorizado.' }
     return _firmarContratoInternal(contratoId, 'system')
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
