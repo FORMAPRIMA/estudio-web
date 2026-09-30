@@ -77,6 +77,32 @@ export function arreglarDossier(html, { quitar = [] } = {}) {
     }`,
     'transición de entrada + equipo')
 
+  // Recorrido: flechas sutiles a los lados del render para recorrerlos como un
+  // carrusel (tocar las estancias del plano no es evidente). Cada paso pasa por
+  // tourGo, así que el render funde y se enciende su punto en la maqueta.
+  html = cambia(html,
+    '      pickView: (e) =>',
+    "      tourStep: (e) => this.tourStep(+e.currentTarget.getAttribute('data-tour-step')),\n      pickView: (e) =>",
+    'recorrido: acción de las flechas')
+  html = cambia(html,
+    '  tourGo(r, v, force) {',
+    `  tourStep(d) {
+    const keys = [...document.querySelectorAll('[data-tour-img]')].map((im) => im.getAttribute('data-tour-img'));
+    if (!keys.length) return;
+    const cur = this._tour ? this._tour[0] + '-' + this._tour[1] : keys[0];
+    const i = (Math.max(0, keys.indexOf(cur)) + d + keys.length) % keys.length;
+    const [r, v] = keys[i].split('-').map(Number);
+    this.tourGo(r, v);
+  }
+  tourGo(r, v, force) {`,
+    'recorrido: paso del carrusel')
+  const imgsTour = [...html.matchAll(/<img data-tour-img="[^"]*"[^>]*>/g)]
+  if (!imgsTour.length) throw new Error('Arreglo "recorrido: flechas": no encuentro los renders del recorrido')
+  const tras = imgsTour[imgsTour.length - 1]
+  const flecha = (paso, lado, d) => `<button type="button" data-tour-step="${paso}" onClick="{{ tourStep }}" aria-label="${paso < 0 ? 'Anterior' : 'Siguiente'}" style="position:absolute;${lado}:20px;top:50%;transform:translateY(-50%);z-index:3;width:68px;height:68px;border-radius:999px;border:0;padding:0;background:rgba(246,241,234,.62);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;cursor:pointer;"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#2b2622" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"></path></svg></button>`
+  const i = tras.index + tras[0].length
+  html = html.slice(0, i) + flecha(-1, 'left', 'M14.5 5.5 8 12l6.5 6.5') + flecha(1, 'right', 'M9.5 5.5 16 12l-6.5 6.5') + html.slice(i)
+
   html = cambia(html, /(<video data-video=""[^>]*?)preload="auto"/, '$1preload="metadata"', 'vídeo: carga progresiva')
 
   html = cambia(html, "c.style.transform = 'translateX(-50%) translateY(8px)'", "c.style.transform = 'translateX(-50%) translateY(-6px)'", 'controles: ocultarse hacia arriba')
