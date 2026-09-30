@@ -1,12 +1,12 @@
 import { cookies } from 'next/headers'
 import { getPropuestaWeb, cargarDossier, type PropuestaWeb } from '@/lib/propuestas/registro'
-import { propuestaCookieName, propuestaCookieValue } from '@/lib/propuestas/acceso'
+import { propuestaCookieName, accesoConcedido } from '@/lib/propuestas/acceso'
 import { obrasDestacadas } from '@/lib/propuestas/obras'
 import type { ProyectoEnlace } from '@/components/propuesta/SlideSiguiente'
 
 // El documento de un dossier interactivo ('dc'), tal como salió de Claude Design,
-// con su propio runtime. Lo pinta un iframe de /propuesta/<slug> y solo se sirve
-// con la cookie del PIN: aquí van las cifras.
+// con su propio runtime. Lo pinta un iframe de /propuesta/<slug>. Si la propuesta
+// tiene PIN, solo se sirve con su cookie: aquí van las cifras.
 //
 // Sobre el documento se hacen tres cosas al servirlo:
 //   · <base> apuntando a public/propuestas/<slug>/, donde viven runtime y assets,
@@ -72,9 +72,34 @@ const PUENTE = `<script>
 (function () {
   var P = window.parent !== window ? window.parent : null;
   function send(m) { try { if (P) { m.fp = 1; P.postMessage(m, location.origin); } } catch (e) {} }
+  // Imágenes bajo demanda (ver scripts/propuestas/arreglos-dc.mjs): la diapositiva
+  // actual y sus vecinas, cargadas; de tres en adelante, descargadas.
+  var VACIA = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+  function cargar(i) {
+    var ss = document.querySelectorAll('deck-stage > section');
+    for (var j = 0; j < ss.length; j++) {
+      var d = Math.abs(j - i), ims = ss[j].querySelectorAll('img[data-fp-src]');
+      for (var k = 0; k < ims.length; k++) {
+        var im = ims[k], real = im.getAttribute('data-fp-src');
+        if (d <= 1) { if (im.getAttribute('src') !== real) im.setAttribute('src', real); }
+        else if (d >= 3 && im.getAttribute('src') === real) im.setAttribute('src', VACIA);
+      }
+    }
+  }
+  function activa() {
+    var ss = document.querySelectorAll('deck-stage > section');
+    for (var j = 0; j < ss.length; j++) if (ss[j].hasAttribute('data-deck-active')) return j;
+    return 0;
+  }
   document.addEventListener('slidechange', function (e) {
-    var d = e.detail || {}; send({ t: 'slide', i: d.index, n: d.total, lang: document.documentElement.lang || 'es' });
+    var d = e.detail || {};
+    cargar(d.index || 0);
+    if (d.slide) document.documentElement.setAttribute('data-fp-slide', d.slide.getAttribute('data-label') || '');
+    send({ t: 'slide', i: d.index, n: d.total, lang: document.documentElement.lang || 'es' });
   }, true);
+  var intentos = 0, arranque = setInterval(function () {
+    if (document.querySelector('deck-stage > section') || ++intentos > 100) { clearInterval(arranque); cargar(activa()); }
+  }, 100);
   document.addEventListener('click', function (e) {
     var b = e.target && e.target.closest && e.target.closest('[data-fp-interes]');
     if (!b) return;
@@ -89,11 +114,22 @@ const PUENTE = `<script>
     }
   });
 })();
-</script>`
+</script>
+<style>
+  html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+  /* Controles (Índice · idioma): arriba, sin burbuja, con contraste automático. */
+  [data-ctrl] { top: max(6px, env(safe-area-inset-top)) !important; bottom: auto !important; padding: 0 !important; gap: 0 !important;
+    background: transparent !important; box-shadow: none !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+    mix-blend-mode: difference; align-items: center; }
+  [data-ctrl] button { color: #fff !important; font-size: 10px !important; font-weight: 500 !important; letter-spacing: .26em !important;
+    height: 30px !important; min-height: 30px !important; padding: 0 12px !important; }
+  [data-ctrl] [data-index-btn]::after { content: ''; display: inline-block; width: 1px; height: 9px; background: currentColor; opacity: .55; margin-left: 20px; vertical-align: -1px; }
+  html[data-fp-slide="Vídeo"] [data-ctrl] { display: none !important; }
+</style>`
 
 export async function GET(req: Request, { params }: { params: { slug: string } }) {
   const p = getPropuestaWeb(params.slug)
-  const ok = !!p && p.tipo === 'dc' && cookies().get(propuestaCookieName(p.slug))?.value === propuestaCookieValue(p.slug)
+  const ok = !!p && p.tipo === 'dc' && accesoConcedido(p, cookies().get(propuestaCookieName(p.slug))?.value)
   if (!p || !ok) return new Response('No disponible', { status: 404, headers: { 'Cache-Control': 'no-store' } })
 
   let html = await cargarDossier(p.slug)

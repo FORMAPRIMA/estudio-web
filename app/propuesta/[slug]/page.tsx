@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { cookies, headers } from 'next/headers'
 import { getPropuestaWeb, cargarDeck } from '@/lib/propuestas/registro'
-import { propuestaCookieName, propuestaCookieValue } from '@/lib/propuestas/acceso'
+import { propuestaCookieName, accesoConcedido } from '@/lib/propuestas/acceso'
 import { obrasDestacadas } from '@/lib/propuestas/obras'
 import PropuestaGate from '@/components/propuesta/PropuestaGate'
 import PropuestaDeck from '@/components/propuesta/PropuestaDeck'
@@ -55,7 +55,7 @@ export default async function PropuestaPage({ params }: { params: { slug: string
     </>
   )
 
-  const autorizado = cookies().get(propuestaCookieName(p.slug))?.value === propuestaCookieValue(p.slug)
+  const autorizado = accesoConcedido(p, cookies().get(propuestaCookieName(p.slug))?.value)
   if (!autorizado) {
     return (
       <>

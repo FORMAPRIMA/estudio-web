@@ -28,7 +28,8 @@ export interface PropuestaWeb {
   cliente: string
   /** Nombre del proyecto tal como aparece en la portada. */
   proyecto: string
-  pin: string
+  /** null = sin PIN: cualquiera con el enlace la abre (dossiers que circulan). */
+  pin: string | null
   /** Fondo de la pantalla del PIN. */
   portada: string
   /** Vista previa al compartir el enlace (1200×630, la genera el importador). */
@@ -65,7 +66,7 @@ export const PROPUESTAS: PropuestaWeb[] = [
     nombreCliente: 'Casa Zurbano',
     cliente: 'Comprador · dossier Casa Zurbano',
     proyecto: 'Casa Zurbano',
-    pin: '8888',
+    pin: null,
     portada: '/propuestas/casa-zurbano-xzw9e/assets/cz-cover-end.jpg',
     og: '/propuestas/casa-zurbano-xzw9e/og.jpg',
     descripcion: 'Zurbano 6, 3º izq. · 199 m² · Madrid. Cómo puede ser, cuánto cuesta reformarlo y cuánto tarda.',

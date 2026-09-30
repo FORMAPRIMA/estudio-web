@@ -343,6 +343,7 @@
     /* transition shorthand replaces rather than merges — repeat the base
        .overlay opacity/transform/filter transitions so visibility changes
        during the 200ms toggle window still fade instead of popping. */
+    .overlay { display: none !important; }
     :host([data-rail-anim]) .overlay {
       transition: margin-left 200ms cubic-bezier(.3,.7,.4,1),
                   opacity 260ms ease,

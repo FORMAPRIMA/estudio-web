@@ -24,6 +24,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import sharp from 'sharp'
+import { arreglarDossier, arreglarMaqueta, arreglarDeckStage } from './arreglos-dc.mjs'
 
 const [slug, origen, archivo] = process.argv.slice(2)
 if (!slug || !origen || !archivo || !/^[a-z0-9-]+$/.test(slug)) {
@@ -57,14 +58,21 @@ async function imagen(nombre) {
 
 async function main() {
   let html = fs.readFileSync(src(archivo), 'utf8')
+  // og.jpg (vista previa al compartir) se hace aparte: que sobreviva a la reimportación.
+  const og = path.join(PUB, 'og.jpg')
+  const ogPrevio = fs.existsSync(og) ? fs.readFileSync(og) : null
   fs.rmSync(PUB, { recursive: true, force: true })
   fs.mkdirSync(path.join(PUB, 'assets'), { recursive: true })
   fs.mkdirSync(DIR_DECK, { recursive: true })
+  if (ogPrevio) fs.writeFileSync(og, ogPrevio)
 
   // Runtime: todo .js de la raíz del origen (support, deck-stage, componentes y
   // los módulos que estos importan por URL relativa, p. ej. zurbano6-maquetas.js).
   const js = fs.readdirSync(origen).filter((f) => f.endsWith('.js'))
-  js.forEach((f) => fs.copyFileSync(src(f), path.join(PUB, f)))
+  js.forEach((f) => {
+    const texto = fs.readFileSync(src(f), 'utf8')
+    fs.writeFileSync(path.join(PUB, f), f === 'cz-maqueta.js' ? arreglarMaqueta(texto) : f === 'deck-stage.js' ? arreglarDeckStage(texto) : texto)
+  })
 
   // Vídeos: <video … src="assets/x.mp4[#t=…]"> → <source> AV1 + HEVC.
   const videos = []
@@ -94,6 +102,9 @@ async function main() {
     peso += fs.statSync(path.join(PUB, 'assets', salida)).size
   }
   html = html.replace(/assets\/([A-Za-z0-9_.-]+\.(?:png|jpe?g|webp))/gi, (m, f) => `assets/${nombres.get(f) ?? f}`)
+
+  // Arreglos para móvil (memoria, animaciones, controles): ver arreglos-dc.mjs.
+  html = arreglarDossier(html)
 
   // Limpieza y hueco para la diapositiva final.
   html = html

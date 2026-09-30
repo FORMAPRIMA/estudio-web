@@ -10,7 +10,7 @@ import { createClient } from '@/lib/supabase/server'
 import { sendEmail, wrapEmail } from '@/lib/email'
 import { TEAM_EMAIL, getPartnersCC } from '@/lib/email/destinatarios'
 import { getPropuestaWeb, type PropuestaWeb } from '@/lib/propuestas/registro'
-import { propuestaCookieName, propuestaCookieValue, pinCorrecto } from '@/lib/propuestas/acceso'
+import { propuestaCookieName, propuestaCookieValue, pinCorrecto, accesoConcedido } from '@/lib/propuestas/acceso'
 
 const FP_ROLES = ['fp_team', 'fp_manager', 'fp_partner', 'fp_biz_dev']
 const URL_BASE = 'https://formaprima.es/propuesta'
@@ -18,8 +18,7 @@ const URL_BASE = 'https://formaprima.es/propuesta'
 function autorizada(slug: string): PropuestaWeb | null {
   const p = getPropuestaWeb(slug)
   if (!p) return null
-  const ok = cookies().get(propuestaCookieName(slug))?.value === propuestaCookieValue(slug)
-  return ok ? p : null
+  return accesoConcedido(p, cookies().get(propuestaCookieName(slug))?.value) ? p : null
 }
 
 /** ¿La está mirando alguien del estudio con sesión? Entonces no es el cliente. */
@@ -54,7 +53,7 @@ async function crearAviso(titulo: string, contenido: string, nivel: 'informativo
 
 export async function desbloquearPropuestaWeb(slug: string, pin: string): Promise<{ ok: boolean }> {
   const p = getPropuestaWeb(slug)
-  if (!p || !pinCorrecto(pin.trim(), p.pin)) {
+  if (!p || p.pin === null || !pinCorrecto(pin.trim(), p.pin)) {
     // Un PIN de 4 cifras se prueba entero en poco tiempo si se responde al instante.
     await new Promise((r) => setTimeout(r, 900))
     return { ok: false }

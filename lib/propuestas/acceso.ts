@@ -16,6 +16,11 @@ export function propuestaCookieValue(slug: string): string {
   return createHmac('sha256', EFFECTIVE_SECRET).update(`propuesta-web:${slug}`).digest('hex')
 }
 
+/** Sin PIN (pin: null) la propuesta es pública —pero sigue fuera de Google—. */
+export function accesoConcedido(p: { slug: string; pin: string | null }, cookie: string | undefined): boolean {
+  return p.pin === null || cookie === propuestaCookieValue(p.slug)
+}
+
 export function pinCorrecto(pin: string, esperado: string): boolean {
   const a = Buffer.from(pin)
   const b = Buffer.from(esperado)

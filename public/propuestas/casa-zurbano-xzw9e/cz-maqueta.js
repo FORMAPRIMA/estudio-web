@@ -15,26 +15,66 @@
       this.style.cursor = 'grab';
       if (!this.hasAttribute('tabindex')) this.setAttribute('tabindex', '0');
       this.style.outline = 'none';
-      const stop = (e) => e.stopPropagation();
-      ['touchstart', 'touchmove', 'touchend', 'wheel'].forEach((t) => this.addEventListener(t, stop, { passive: true }));
-      const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) { io.disconnect(); this._boot(); } }, { rootMargin: '200px' });
+      this._vivo = this.hasAttribute('pins');
+      if (this._vivo) {
+        const stop = (e) => e.stopPropagation();
+        ['touchstart', 'touchmove', 'touchend', 'wheel'].forEach((t) => this.addEventListener(t, stop, { passive: true }));
+      } else {
+        this.style.touchAction = 'pan-y'; this.style.cursor = 'pointer';
+        this.addEventListener('click', (e) => {
+          e.stopPropagation();
+          let n = this.parentElement;
+          while (n && !n.querySelector('[data-plan-open]')) n = n.parentElement;
+          const b = n && n.querySelector('[data-plan-open]'); if (b) b.click();
+        });
+      }
+      const activa = () => { const s = this.closest('section'); return !s || s.hasAttribute('data-deck-active'); };
+      const visible = () => { const r = this.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+      this._quiere = () => activa() && visible();
+      this._check = () => {
+        if (this._snap) return;
+        if (this._quiere()) {
+          if (this._r || this._booting || this._bootT) return;
+          this._bootT = setTimeout(() => { this._bootT = 0; if (this._quiere() && !this._r && !this._booting) this._boot(); }, 450);
+        } else {
+          clearTimeout(this._bootT); this._bootT = 0;
+          if (this._r) this._release();
+        }
+      };
+      const io = new IntersectionObserver(() => this._check());
       io.observe(this);
       this._io = io;
+      document.addEventListener('slidechange', this._check);
     }
     disconnectedCallback() {
+      document.removeEventListener('slidechange', this._check);
+      clearTimeout(this._bootT);
       if (this._io) this._io.disconnect();
       if (this._ro) this._ro.disconnect();
       if (this._r) { this._r.dispose(); this._r.forceContextLoss && this._r.forceContextLoss(); }
       cancelAnimationFrame(this._raf);
     }
+    _release() {
+      if (this._abort) this._abort.abort();
+      if (this._ro) { this._ro.disconnect(); this._ro = null; }
+      cancelAnimationFrame(this._raf);
+      if (this._r) { this._r.dispose(); if (this._r.forceContextLoss) this._r.forceContextLoss(); this._r = null; }
+      this.querySelectorAll(':scope > canvas, :scope > [data-fp-pins]').forEach((n) => n.remove());
+      this.highlight = null;
+    }
     async _boot() {
+      this._booting = true;
+      this._abort = new AbortController();
+      const add = (t, fn, o) => this.addEventListener(t, fn, Object.assign({}, o, { signal: this._abort.signal }));
       const [THREE, M] = await load();
+      this._booting = false;
+      if (!this._quiere()) return;
       const plan = +(this.getAttribute('plan') || 1);
       const canvas = document.createElement('canvas');
       canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;';
       this.appendChild(canvas);
-      const r = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
-      r.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+      const r = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: false });
+      r.setPixelRatio(1);
       r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFShadowMap;
       r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.08; r.outputColorSpace = THREE.SRGBColorSpace;
       this._r = r;
@@ -49,7 +89,7 @@
       const rad = box.getBoundingSphere(new THREE.Sphere()).radius;
       scene.add(new THREE.HemisphereLight('#fffaf2', '#b9ab98', 1.15));
       const key = new THREE.DirectionalLight('#fff4e6', 2.1);
-      key.position.set(-rad * 0.6, rad * 2.4, rad * 1.0); key.castShadow = true; key.shadow.mapSize.set(2048, 2048);
+      key.position.set(-rad * 0.6, rad * 2.4, rad * 1.0); key.castShadow = true; key.shadow.mapSize.set(1024, 1024);
       Object.assign(key.shadow.camera, { left: -rad * 1.3, right: rad * 1.3, top: rad * 1.3, bottom: -rad * 1.3, near: 0.1, far: rad * 6 });
       key.shadow.bias = -0.0004; scene.add(key);
       const cam = new THREE.PerspectiveCamera(20, 1, 0.1, 1000);
@@ -68,7 +108,7 @@
       let target = 1;
       const fit = () => {
         const w = this.clientWidth || 1, h = this.clientHeight || 1;
-        r.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix();
+        const rc = this.getBoundingClientRect(), k = Math.min(2, window.devicePixelRatio || 1); r.setSize(Math.max(1, Math.round(rc.width * k)), Math.max(1, Math.round(rc.height * k)), false); cam.aspect = w / h; cam.updateProjectionMatrix();
         tc.fov = cam.fov; tc.aspect = cam.aspect; tc.updateProjectionMatrix();
         target = need(yaw, pitch); dist = target; dirty = true;
       };
@@ -80,7 +120,7 @@
       const pinsOn = this.hasAttribute('pins'), pins = [];
       if (pinsOn) {
         const layer = document.createElement('div');
-        layer.style.cssText = 'position:absolute;inset:0;pointer-events:none;';
+        layer.setAttribute('data-fp-pins', ''); layer.style.cssText = 'position:absolute;inset:0;pointer-events:none;';
         this.appendChild(layer);
         g.updateMatrixWorld(true);
         Object.entries(M.PLANS[plan].rooms).forEach(([n, [name, x, v]]) => {
@@ -102,8 +142,8 @@
       };
       this._ro = new ResizeObserver(fit); this._ro.observe(this); fit();
       let drag = null;
-      this.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY, id: e.pointerId }; try { this.setPointerCapture(e.pointerId); } catch (_) {} this.style.cursor = 'grabbing'; vy = 0; });
-      this.addEventListener('pointermove', (e) => {
+      if (this._vivo) add('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY, id: e.pointerId }; try { this.setPointerCapture(e.pointerId); } catch (_) {} this.style.cursor = 'grabbing'; vy = 0; });
+      add('pointermove', (e) => {
         if (!drag || e.pointerId !== drag.id) return;
         const s = 1 / Math.max(240, this.clientWidth), dx = e.clientX - drag.x, dy = e.clientY - drag.y;
         drag.x = e.clientX; drag.y = e.clientY;
@@ -112,8 +152,8 @@
         target = need(yaw, pitch); dirty = true;
       });
       const end = (e) => { if (drag && e.pointerId === drag.id) { drag = null; this.style.cursor = 'grab'; } };
-      this.addEventListener('pointerup', end); this.addEventListener('pointercancel', end);
-      this.addEventListener('click', (e) => e.stopPropagation());
+      add('pointerup', end); add('pointercancel', end);
+      add('click', (e) => e.stopPropagation());
       const loop = () => {
         this._raf = requestAnimationFrame(loop);
         if (!drag && Math.abs(vy) > 0.0004) { vy *= 0.9; yaw = Math.max(-YAW, Math.min(YAW, yaw + vy)); target = need(yaw, pitch); dirty = true; }
@@ -128,7 +168,14 @@
         const k = reduce ? 1 : Math.min(1, (t - t0) / 1400), e = 1 - Math.pow(1 - k, 3);
         ups.forEach((u) => (u.scale.y = Math.max(0.001, e)));
         if (!drag && !reduce) { yaw = -0.35 * (1 - e); target = need(yaw, pitch); dist = target; }
-        dirty = true; if (k < 1) requestAnimationFrame(intro);
+        dirty = true; if (k < 1) { requestAnimationFrame(intro); return; }
+        if (!this._vivo) requestAnimationFrame(() => {
+          if (!this._r) return;
+          place(); r.render(scene, cam);
+          const im = new Image(); im.alt = ''; im.style.cssText = canvas.style.cssText + 'pointer-events:none;';
+          im.src = r.domElement.toDataURL('image/png');
+          this.appendChild(im); this._snap = true; this._release();
+        });
       };
       requestAnimationFrame(intro);
       loop();
