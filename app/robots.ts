@@ -28,6 +28,7 @@ export default function robots(): MetadataRoute.Robots {
         '/portal',        // portal de obra
         '/espacio',       // espacios de cliente, con token en la URL
         '/propuesta',     // propuestas de honorarios, con PIN
+        '/cc38',          // invitaciones personales al Open House
         '/execution-portal',
         '/gestor',
         // Páginas privadas que viven en este mismo despliegue y no son del sitio.

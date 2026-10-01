@@ -92,3 +92,15 @@ encuentra su fragmento, el importador se para y lo dice.
   formulario de interés; "Aceptar" solo en propuestas a cliente.
 - PIN: 10 intentos / 15 min por IP.
 - Cada propuesta sin PIN (`pin: null`) es pública pero con `noindex`.
+
+# Open House · Claudio Coello 38 (8 oct 2026)
+
+- Invitado: `formaprima.es/cc38/<token>` (`app/cc38/[token]/route.ts`). El diseño
+  de Claude Design con los datos de SU grupo; del resto, solo la ocupación.
+- Panel: `/team/apps/open-house` (sesión del equipo, sin PIN). Postal A5 con QR:
+  `/team/apps/open-house/postal?i=<token>`.
+- Datos: `oh_grupos` + `oh_invitados` (solo service_role). Las reservas pasan por
+  `oh_accion` (plpgsql, con cerrojo): capacidad, exclusivas, cierre el 7 oct.
+- Correo de confirmación con .ics al reservar; recordatorio el 7 oct a las 10:00
+  (cron `open-house-recordatorio`); aviso en /team por cada reserva o cancelación.
+- Importar de nuevo el diseño: `node scripts/open-house/importar.mjs ~/Downloads/PROPUESTAS/open-house-cc38`.
