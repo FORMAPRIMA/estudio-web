@@ -14,7 +14,7 @@
 // en vertical pide girarlo. Su final pide ACEPTAR la propuesta.
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
-import { aceptarPropuestaWeb, registrarEventoPropuestaWeb, registrarInteresPropuestaWeb } from '@/app/actions/propuestasWeb'
+import { aceptarPropuestaWeb, progresoPropuestaWeb, registrarEventoPropuestaWeb, registrarInteresPropuestaWeb } from '@/app/actions/propuestasWeb'
 
 interface Tema { fondo: string; tinta: string; acento: string; claro: boolean }
 
@@ -63,6 +63,17 @@ export default function PropuestaDossier({ slug, proyecto, descripcion, portada,
   const [idioma, setIdioma] = useState<Idioma>('es')
   const [formulario, setFormulario] = useState(false)
   const finalAvisado = useRef(false)
+  const progreso = useRef<{ max: number; n: number; l: string; t?: ReturnType<typeof setTimeout> }>({ max: 0, n: 0, l: '' })
+
+  // Mientras la tiene abierta y a la vista, un latido por minuto: así la visita
+  // sabe cuánto duró aunque se quede leyendo una sola diapositiva.
+  useEffect(() => {
+    const id = setInterval(() => {
+      const pr = progreso.current
+      if (document.visibilityState === 'visible' && pr.n) progresoPropuestaWeb(slug, pr.max, pr.n, pr.l).catch(() => {})
+    }, 60_000)
+    return () => clearInterval(id)
+  }, [slug])
 
   // Encaje: se decide al montar y solo se recarga si se cruza de móvil a escritorio.
   const modo = useRef<boolean | null>(null)
@@ -97,8 +108,18 @@ export default function PropuestaDossier({ slug, proyecto, descripcion, portada,
   useEffect(() => {
     const recibir = (e: MessageEvent) => {
       if (e.origin !== location.origin || !e.data || !e.data.fp) return
-      const m = e.data as { t: string; i?: number; n?: number; lang?: string }
+      const m = e.data as { t: string; i?: number; n?: number; l?: string; lang?: string }
       if (m.lang === 'en' || m.lang === 'es') setIdioma(m.lang)
+      if (m.t === 'slide' && typeof m.i === 'number' && m.n) {
+        // Seguimiento de la visita: la diapositiva más lejana, sin esperar a irse.
+        const pr = progreso.current
+        pr.n = m.n
+        if (m.i > pr.max) {
+          pr.max = m.i; pr.l = m.l ?? ''
+          clearTimeout(pr.t)
+          pr.t = setTimeout(() => { progresoPropuestaWeb(slug, pr.max, pr.n, pr.l).catch(() => {}) }, 1500)
+        }
+      }
       if (m.t === 'slide' && m.n && m.i === m.n - 1 && !finalAvisado.current) {
         finalAvisado.current = true
         registrarEventoPropuestaWeb(slug, 'final').catch(() => {})

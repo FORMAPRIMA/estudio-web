@@ -169,7 +169,7 @@ const PUENTE = `<script>
     if (d.slide) document.documentElement.setAttribute('data-fp-slide', etiqueta);
     clearTimeout(tPista); clearTimeout(tFuera); if (pista) pista.classList.remove('on');
     tPista = setTimeout(mostrarPista, 5000);
-    send({ t: 'slide', i: d.index, n: d.total, lang: document.documentElement.lang || 'es' });
+    send({ t: 'slide', i: d.index, n: d.total, l: etiqueta, lang: document.documentElement.lang || 'es' });
   }, true);
   // Vídeos: sus fuentes llegan inertes (data-fp-src) para que la plantilla
   // estática no las descargue; se activan solo en la versión interactiva.

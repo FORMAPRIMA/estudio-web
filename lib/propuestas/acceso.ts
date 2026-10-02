@@ -16,6 +16,16 @@ export function propuestaCookieValue(slug: string): string {
   return createHmac('sha256', EFFECTIVE_SECRET).update(`propuesta-web:${slug}`).digest('hex')
 }
 
+// Segunda cookie, solo con el PIN del estudio (pinAdmin): quien la lleva no
+// genera avisos ni correos de visita.
+export function propuestaAdminCookieName(slug: string): string {
+  return `${propuestaCookieName(slug)}_a`
+}
+
+export function propuestaAdminCookieValue(slug: string): string {
+  return createHmac('sha256', EFFECTIVE_SECRET).update(`propuesta-web-admin:${slug}`).digest('hex')
+}
+
 /** Sin PIN (pin: null) la propuesta es pública —pero sigue fuera de Google—. */
 export function accesoConcedido(p: { slug: string; pin: string | null }, cookie: string | undefined): boolean {
   return p.pin === null || cookie === propuestaCookieValue(p.slug)

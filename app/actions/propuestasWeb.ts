@@ -10,7 +10,9 @@ import { createClient } from '@/lib/supabase/server'
 import { sendEmail, wrapEmail } from '@/lib/email'
 import { TEAM_EMAIL, getPartnersCC } from '@/lib/email/destinatarios'
 import { getPropuestaWeb, type PropuestaWeb } from '@/lib/propuestas/registro'
-import { propuestaCookieName, propuestaCookieValue, pinCorrecto, accesoConcedido } from '@/lib/propuestas/acceso'
+import { propuestaCookieName, propuestaCookieValue, propuestaAdminCookieName, propuestaAdminCookieValue, pinCorrecto, accesoConcedido } from '@/lib/propuestas/acceso'
+import { leerVisitas, guardarVisitas, dispositivo, lugar, type Visita } from '@/lib/propuestas/visitas'
+import { randomUUID } from 'crypto'
 
 const FP_ROLES = ['fp_team', 'fp_manager', 'fp_partner', 'fp_biz_dev']
 
@@ -83,7 +85,9 @@ export async function desbloquearPropuestaWeb(slug: string, pin: string): Promis
     return { ok: false }
   }
   const p = getPropuestaWeb(slug)
-  if (!p || p.pin === null || !pinCorrecto(pin.trim(), p.pin)) {
+  const limpio = pin.trim()
+  const admin = !!p?.pinAdmin && pinCorrecto(limpio, p.pinAdmin)
+  if (!p || p.pin === null || !(admin || pinCorrecto(limpio, p.pin))) {
     // Un PIN de 4 cifras se prueba entero en poco tiempo si se responde al instante.
     await new Promise((r) => setTimeout(r, 900))
     return { ok: false }
@@ -95,7 +99,20 @@ export async function desbloquearPropuestaWeb(slug: string, pin: string): Promis
     path: `/propuesta/${slug}`,
     maxAge: 60 * 60 * 24 * 90,
   })
+  // PIN del estudio: marca el navegador para no avisar de sus visitas. Con el
+  // PIN del cliente se quita (por si se probó antes en ese mismo navegador).
+  cookies().set(propuestaAdminCookieName(slug), admin ? propuestaAdminCookieValue(slug) : '', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: `/propuesta/${slug}`,
+    maxAge: admin ? 60 * 60 * 24 * 365 : 0,
+  })
   return { ok: true }
+}
+
+function esAdmin(slug: string): boolean {
+  return cookies().get(propuestaAdminCookieName(slug))?.value === propuestaAdminCookieValue(slug)
 }
 
 type Evento = 'abierta' | 'final'
@@ -104,7 +121,15 @@ type Evento = 'abierta' | 'final'
 export async function registrarEventoPropuestaWeb(slug: string, evento: Evento): Promise<void> {
   const p = autorizada(slug)
   if (!p || (evento !== 'abierta' && evento !== 'final')) return
-  if (await esEquipo()) return
+  if (esAdmin(slug) || await esEquipo()) return
+
+  // Correo por visita a quien lo pida en el registro (avisarA), con el historial.
+  try {
+    if (evento === 'abierta') await visitaNueva(p)
+    else await visitaAlFinal(p)
+  } catch (e) {
+    console.error('[propuesta-web] visita', e)
+  }
 
   const marca = `${propuestaCookieName(slug)}_${evento}`
   if (cookies().get(marca)) return
@@ -132,6 +157,110 @@ export async function registrarEventoPropuestaWeb(slug: string, evento: Evento):
 }
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!))
+
+// ── Visitas del cliente ──────────────────────────────────────────────────────
+// Una visita = una sesión: la abre la primera carga y la mantiene viva una
+// cookie de 30 min que se renueva mientras navega. Recargar o girar el móvil no
+// cuenta como visita nueva; volver al día siguiente, sí.
+const VISITA_MIN = 30
+const visitaCookie = (slug: string) => `${propuestaCookieName(slug)}_v`
+function marcarVisita(slug: string, id: string) {
+  cookies().set(visitaCookie(slug), id, { httpOnly: true, sameSite: 'lax', path: `/propuesta/${slug}`, maxAge: VISITA_MIN * 60 })
+}
+const madrid = (iso: string) => new Date(iso).toLocaleString('es-ES', { timeZone: 'Europe/Madrid', weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+const minutos = (v: Visita) => Math.max(1, Math.round((Date.parse(v.ultima) - Date.parse(v.inicio)) / 60_000))
+const hasta = (v: Visita) => (v.final ? 'hasta el final' : v.total ? `hasta la ${v.max} de ${v.total}${v.etiqueta ? ` · ${v.etiqueta}` : ''}` : 'solo la portada')
+
+function correoVisitas(p: PropuestaWeb, visitas: Visita[], actual: Visita, alFinal: boolean): { subject: string; html: string } {
+  const n = visitas.findIndex((v) => v.id === actual.id) + 1
+  const semana = visitas.filter((v) => Date.parse(v.inicio) > Date.now() - 7 * 864e5).length
+  const dias = new Set(visitas.map((v) => v.inicio.slice(0, 10))).size
+  const finales = visitas.filter((v) => v.final).length
+  const interes = semana >= 3 || finales >= 2 ? 'Alto' : semana >= 2 || finales >= 1 ? 'Medio' : 'Primer contacto'
+  const subject = alFinal
+    ? `${p.cliente} ha visto ${p.proyecto} hasta el final · visita ${n}`
+    : `${p.cliente} ${n > 1 ? 'ha vuelto a abrir' : 'ha abierto'} ${p.proyecto} · visita ${n}`
+  const fila = (v: Visita, i: number) => `
+      <tr style="border-top:1px solid #E8E6E0;${v.id === actual.id ? 'background:#F2F2F0;' : ''}">
+        <td style="padding:8px 10px 8px 0;color:#888;">${i + 1}</td>
+        <td style="padding:8px 10px;white-space:nowrap;">${esc(madrid(v.inicio))}</td>
+        <td style="padding:8px 10px;">${esc(v.dispositivo)}${v.lugar ? `<br><span style="color:#888;">${esc(v.lugar)}</span>` : ''}</td>
+        <td style="padding:8px 10px;">${esc(hasta(v))}<br><span style="color:#888;">${minutos(v)} min</span></td>
+      </tr>`
+  const ultimas = visitas.map((v, i) => ({ v, i })).slice(-12).reverse()
+  const html = wrapEmail(`
+    <p style="margin:0 0 6px;font-size:16px;"><strong>${esc(p.cliente)}</strong> ${alFinal ? 'acaba de llegar al final de' : n > 1 ? 'ha vuelto a entrar en' : 'ha entrado en'} la propuesta de <strong>${esc(p.proyecto)}</strong>.</p>
+    <p style="margin:0 0 20px;color:#555;">${esc(madrid(actual.inicio))} · ${esc(actual.dispositivo)}${actual.lugar ? ` · ${esc(actual.lugar)}` : ''}</p>
+    <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;margin:0 0 20px;">
+      <tr>
+        <td style="padding:12px 14px;background:#0d0d0d;color:#fbfbfa;"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#8fa596;">Interés</div><div style="font-size:20px;font-weight:300;margin-top:4px;">${interes}</div></td>
+        <td style="padding:12px 14px;background:#F2F2F0;"><div style="font-size:11px;color:#888;">Visitas</div><div style="font-size:20px;margin-top:4px;">${visitas.length}</div></td>
+        <td style="padding:12px 14px;background:#F2F2F0;"><div style="font-size:11px;color:#888;">Últimos 7 días</div><div style="font-size:20px;margin-top:4px;">${semana}</div></td>
+        <td style="padding:12px 14px;background:#F2F2F0;"><div style="font-size:11px;color:#888;">Días distintos</div><div style="font-size:20px;margin-top:4px;">${dias}</div></td>
+        <td style="padding:12px 14px;background:#F2F2F0;"><div style="font-size:11px;color:#888;">Hasta el final</div><div style="font-size:20px;margin-top:4px;">${finales}</div></td>
+      </tr>
+    </table>
+    <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:13px;">
+      <tr style="color:#888;font-size:11px;text-align:left;"><th style="padding:0 10px 6px 0;font-weight:400;">#</th><th style="padding:0 10px 6px;font-weight:400;">Cuándo</th><th style="padding:0 10px 6px;font-weight:400;">Desde</th><th style="padding:0 10px 6px;font-weight:400;">Qué vio</th></tr>
+      ${ultimas.map(({ v, i }) => fila(v, i)).join('')}
+    </table>
+    <p style="margin:20px 0 0;font-size:12px;color:#888;">«Qué vio» de la visita actual se completa en el siguiente correo. Tus entradas con el PIN del estudio no cuentan.</p>
+    <p style="margin:8px 0 0;"><a href="${URL_BASE}/${p.slug}">${URL_BASE}/${p.slug}</a></p>
+  `)
+  return { subject, html }
+}
+
+async function enviarVisitas(p: PropuestaWeb, visitas: Visita[], actual: Visita, alFinal: boolean) {
+  if (!p.avisarA?.length) return
+  const { subject, html } = correoVisitas(p, visitas, actual, alFinal)
+  const r = await sendEmail({ to: p.avisarA, subject, html })
+  if (r.error) console.error('[propuesta-web] email visita', r.error)
+}
+
+async function visitaNueva(p: PropuestaWeb) {
+  if (!p.avisarA?.length || cookies().get(visitaCookie(p.slug))) return
+  // Quien borre cookies para abrir "visitas" sin fin: como mucho 8 correos por hora.
+  if (!porIp(`visita:${p.slug}`, 8, 60 * 60_000)) return
+  const h = headers()
+  const ahora = new Date().toISOString()
+  const v: Visita = { id: randomUUID(), inicio: ahora, ultima: ahora, dispositivo: dispositivo(h.get('user-agent') || ''), lugar: lugar(h), max: 1, total: 0, etiqueta: '', final: false }
+  const visitas = [...(await leerVisitas(p.slug)), v]
+  marcarVisita(p.slug, v.id)
+  await guardarVisitas(p.slug, visitas)
+  await enviarVisitas(p, visitas, v, false)
+}
+
+async function visitaAlFinal(p: PropuestaWeb) {
+  const id = cookies().get(visitaCookie(p.slug))?.value
+  if (!p.avisarA?.length || !id) return
+  const visitas = await leerVisitas(p.slug)
+  const v = visitas.find((x) => x.id === id)
+  if (!v || v.final) return
+  v.final = true
+  v.ultima = new Date().toISOString()
+  if (v.total) v.max = v.total
+  marcarVisita(p.slug, id)
+  await guardarVisitas(p.slug, visitas)
+  await enviarVisitas(p, visitas, v, true)
+}
+
+/** Hasta dónde ha llegado el cliente en esta visita (y que sigue ahí). Sin correo. */
+export async function progresoPropuestaWeb(slug: string, i: number, n: number, etiqueta: string): Promise<void> {
+  const p = autorizada(slug)
+  if (!p?.avisarA?.length || esAdmin(slug)) return
+  const id = cookies().get(visitaCookie(slug))?.value
+  if (!id || !porIp(`progreso:${slug}`, 240, 60 * 60_000)) return
+  const visitas = await leerVisitas(slug)
+  const v = visitas.find((x) => x.id === id)
+  if (!v) return
+  const num = Math.max(1, Math.min(500, Math.floor(Number(i) || 0) + 1))
+  const tot = Math.max(0, Math.min(500, Math.floor(Number(n) || 0)))
+  if (num > v.max) { v.max = num; v.etiqueta = String(etiqueta || '').slice(0, 80) }
+  if (tot) v.total = tot
+  v.ultima = new Date().toISOString()
+  marcarVisita(slug, id)
+  await guardarVisitas(slug, visitas)
+}
 
 /** El cliente acepta la propuesta desde la última diapositiva. */
 export async function aceptarPropuestaWeb(slug: string, comentario: string): Promise<{ ok: boolean; error?: string }> {

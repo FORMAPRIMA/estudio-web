@@ -30,6 +30,10 @@ export interface PropuestaWeb {
   proyecto: string
   /** null = sin PIN: cualquiera con el enlace la abre (dossiers que circulan). */
   pin: string | null
+  /** PIN del estudio: abre la propuesta sin generar avisos ni correos. */
+  pinAdmin?: string
+  /** Correos a los que avisar en cada visita del cliente (con su historial). */
+  avisarA?: string[]
   /** Fondo de la pantalla del PIN. */
   portada: string
   /** Vista previa al compartir el enlace (1200×630, la genera el importador). */
@@ -93,6 +97,8 @@ export const PROPUESTAS: PropuestaWeb[] = [
     cliente: 'Javier Ponce · PONCE3',
     proyecto: 'Torre del Mangle',
     pin: '3333',
+    pinAdmin: '0000',
+    avisarA: ['jlorag@formaprima.es'],
     portada: '/propuestas/torre-del-mangle-zxu7z/assets/manglar-cover.webp',
     og: '/propuestas/torre-del-mangle-zxu7z/og.jpg',
     descripcion: 'Edificio multifamiliar · 8 niveles · Vía a la Costa, Guayaquil, Ecuador',
