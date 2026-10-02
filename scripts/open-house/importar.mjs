@@ -43,6 +43,9 @@ const sinEditor = (html) => {
   return html
 }
 
+// Fecha límite para confirmar (el evento es el jueves 8).
+const RSVP = 'Te rogamos que confirmes tu asistencia antes del martes 6 de octubre.'
+
 // Lo que sustituye a localStorage: window.__OH lo pone el servidor al servir.
 const METODO_SERVIDOR = `
   servidor(accion, extra, alHecho) {
@@ -139,6 +142,22 @@ function arreglarInvitacion(h) {
     'postal')
   // Sin PIN de prototipo a la vista.
   h = h.replace(/PIN del prototipo: 0838/g, '')
+
+  // Rogamos confirmación antes del martes: en el enlace del invitado y en los
+  // textos de WhatsApp y correo (si el grupo aún no ha reservado).
+  h = cambia(h,
+    '              <span style="font-size:12px;color:#7a746e;">{{ slotsSub }}</span>',
+    '              <span style="font-size:12px;color:#7a746e;">{{ slotsSub }}</span>\n' +
+    '              <span style="font-size:12px;color:#8c6a55;">' + RSVP + '</span>',
+    'aviso de confirmación en el enlace')
+  h = cambia(h,
+    ' Elige tu horario aquí: ${this.link(m.token)}\\n\\nForma Prima`;',
+    ' Elige tu horario aquí: ${this.link(m.token)}` + (g.booking ? "" : "\\n\\n' + RSVP + '") + `\\n\\nForma Prima`;',
+    'aviso de confirmación en WhatsApp')
+  h = cambia(h,
+    "    const post = ['Te esperamos.', 'Un saludo,\\nForma Prima'];",
+    "    const post = (bk ? [] : ['" + RSVP + "']).concat(['Te esperamos.', 'Un saludo,\\nForma Prima']);",
+    'aviso de confirmación en el correo')
   return h
 }
 
@@ -156,6 +175,13 @@ function arreglarPostal(h) {
   h = cambia(h,
     `const token = p.get('i') || 'rl-7k2q';`,
     `const token = p.get('i') || '';`, 'postal: sin invitado de ejemplo')
+  h = cambia(h,
+    `            <a href="{{ link }}" style="font-size:8pt;color:#8c6a55;word-break:break-all;">{{ linkLabel }}</a>
+          </span>`,
+    `            <a href="{{ link }}" style="font-size:8pt;color:#8c6a55;word-break:break-all;">{{ linkLabel }}</a>
+          </span>
+          <span style="font-size:8pt;color:#5f5953;">Rogamos confirmación antes del martes 6 de octubre.</span>`,
+    'postal: aviso de confirmación')
   return h
 }
 
