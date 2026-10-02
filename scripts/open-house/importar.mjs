@@ -202,6 +202,17 @@ function arreglarInvitacion(h) {
     "    const post = ['Te esperamos.', 'Un saludo,\\nForma Prima'];",
     "    const post = (bk ? [] : ['" + RSVP + "']).concat(['Te esperamos.', 'Un saludo,\\nForma Prima']);",
     'aviso de confirmación en el correo')
+
+  // Presentación: no todos los invitados nos conocen (prensa, nuevos contactos),
+  // así que el mensaje empieza diciendo quiénes somos y a qué invitamos.
+  h = cambia(h,
+    "'El jueves 8 de octubre abrimos las puertas de Claudio Coello 38, 2º derecha, la reforma que acabamos de terminar en Madrid, y nos encantaría enseñártela en persona, con el equipo que la ha diseñado.'",
+    "'Desde Forma Prima, estudio de arquitectura e interiorismo en Madrid, queremos invitarte al Open House de Claudio Coello 38, 2º derecha, la reforma de vivienda que acabamos de terminar.', 'El jueves 8 de octubre abrimos sus puertas para enseñarla en persona, con el equipo que la ha diseñado, y nos encantaría que nos acompañaras.'",
+    'presentación en el correo')
+  h = cambia(h,
+    'Hola ${this.first(m.name)}, el jueves 8 de octubre abrimos Claudio Coello 38, 2º derecha, nuestra última reforma, para enseñarla en turnos reducidos y compartidos.',
+    'Hola ${this.first(m.name)}, desde Forma Prima, estudio de arquitectura e interiorismo en Madrid, queremos invitarte al Open House de Claudio Coello 38, 2º derecha, la reforma que acabamos de terminar. El jueves 8 de octubre la enseñamos en persona, en turnos reducidos y compartidos.',
+    'presentación en WhatsApp')
   return h
 }
 
