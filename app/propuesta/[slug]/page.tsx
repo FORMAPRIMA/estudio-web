@@ -45,7 +45,7 @@ function NoDisponible() {
   )
 }
 
-const FUENTE = 'https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@200;300;400;500;600&family=Cormorant+Garamond:wght@400;500;600&display=swap'
+const FUENTE = 'https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@200;300;400;500;600&family=Cormorant+Garamond:wght@400;500;600&family=Newsreader:ital,opsz,wght@1,6..72,400&display=swap'
 
 export default async function PropuestaPage({ params }: { params: { slug: string } }) {
   const p = getPropuestaWeb(params.slug)

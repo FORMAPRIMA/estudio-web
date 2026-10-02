@@ -158,11 +158,45 @@ export default function PropuestaDossier({ slug, proyecto, descripcion, portada,
       {escritorio && horizontal && (
         <div style={{ position: 'fixed', inset: 0 }}>
           {marco}
-          <div className="fpd-girar" aria-hidden="true">
-            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2" /><path d="M20.5 9.5a8.5 8.5 0 0 1-3 7.5M18 17.5l-.6-.6.1 2" /></svg>
-            <span>Gira el móvil para ver la propuesta</span>
+          {/* En un móvil en vertical la presentación no se lee: se tapa hasta que lo giren
+              (Safari no deja bloquear la orientación desde una web). */}
+          <div className="fpd-girar" role="dialog" aria-label="Gira el móvil para ver la propuesta">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={portada} alt="" aria-hidden="true" className="fpd-girar-fondo" />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={logo} alt="Forma Prima" style={{ height: 15, width: 'auto', opacity: 0.85 }} />
+            <div className="fpd-girar-centro">
+              <svg className="fpd-girar-movil" width="64" height="64" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+                <rect x="20" y="6" width="24" height="52" rx="5" stroke="currentColor" strokeWidth="1.2" />
+                <line x1="29" y1="11" x2="35" y2="11" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+              </svg>
+              <div className="fpd-girar-ante">Propuesta de honorarios</div>
+              <div className="fpd-girar-titulo">{proyecto}</div>
+              <div className="fpd-girar-linea" />
+              <p className="fpd-girar-texto">Para explorar esta propuesta,<br />gira tu iPhone en horizontal.</p>
+            </div>
+            <p className="fpd-girar-pie">¿No gira la pantalla? Desactiva el bloqueo de rotación en el Centro de control.</p>
           </div>
-          <style dangerouslySetInnerHTML={{ __html: `.fpd-girar{display:none}@media (orientation:portrait) and (max-width:900px){.fpd-girar{display:flex;position:fixed;left:0;right:0;bottom:calc(50% + 28.125vw + 32px);flex-direction:column;align-items:center;gap:14px;color:${tema.tinta};font:300 13px/1.4 'Hanken Grotesk',sans-serif;letter-spacing:.06em;opacity:.75;pointer-events:none;animation:fpd-g 1.2s .6s both}.fpd-girar svg{animation:fpd-rot 2.4s ease-in-out infinite}}@keyframes fpd-g{from{opacity:0}to{opacity:.75}}@keyframes fpd-rot{0%,35%{transform:rotate(0)}55%,85%{transform:rotate(-90deg)}100%{transform:rotate(0)}}` }} />
+          <style dangerouslySetInnerHTML={{ __html: `
+.fpd-girar{display:none}
+@media (orientation:portrait) and (max-width:600px){
+  .fpd-girar{display:flex;position:fixed;inset:0;z-index:30;flex-direction:column;align-items:center;justify-content:space-between;
+    padding:calc(env(safe-area-inset-top) + 40px) 32px calc(env(safe-area-inset-bottom) + 32px);background:${tema.fondo};color:${tema.tinta};
+    font-family:'Hanken Grotesk',sans-serif;text-align:center;overflow:hidden;animation:fpd-in .8s cubic-bezier(.4,0,.2,1) both}
+  .fpd-girar > *{position:relative}
+  .fpd-girar-fondo{position:absolute!important;inset:-40px;width:calc(100% + 80px);height:calc(100% + 80px);max-width:none;object-fit:cover;
+    filter:blur(30px) saturate(.7);opacity:.28;transform:scale(1.05)}
+  .fpd-girar-centro{display:flex;flex-direction:column;align-items:center}
+  .fpd-girar-movil{color:${tema.acento};margin-bottom:40px;transform-origin:50% 50%;animation:fpd-rot 3.2s cubic-bezier(.65,0,.35,1) .9s infinite}
+  .fpd-girar-ante{font-family:'Newsreader',serif;font-style:italic;font-size:17px;color:${tema.acento}}
+  .fpd-girar-titulo{margin-top:14px;font-size:44px;font-weight:200;letter-spacing:-.03em;line-height:1.02}
+  .fpd-girar-linea{width:48px;height:1px;background:${tema.acento};margin:30px 0 26px}
+  .fpd-girar-texto{margin:0;font-size:16px;font-weight:300;line-height:1.55;opacity:.8}
+  .fpd-girar-pie{margin:0;max-width:280px;font-size:11px;font-weight:300;line-height:1.5;opacity:.42}
+}
+@keyframes fpd-in{from{opacity:0}to{opacity:1}}
+@keyframes fpd-rot{0%,22%{transform:rotate(0)}48%,78%{transform:rotate(-90deg)}100%{transform:rotate(0)}}
+@media (prefers-reduced-motion:reduce){.fpd-girar-movil{animation:none!important}}` }} />
         </div>
       )}
 
