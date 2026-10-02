@@ -148,25 +148,37 @@ function arreglarInvitacion(h) {
   // Invitación personal, turnos compartidos: «máximo 5 personas» sonaba a que
   // el invitado podía traer acompañantes.
   h = cambia(h, 'text-transform:uppercase;color:#7a746e;">Personas máx.</span>',
-    'text-transform:uppercase;color:#7a746e;">Invitados por turno</span>', 'turnos: dato de la visita')
+    'text-transform:uppercase;color:#7a746e;">Plazas por turno</span>', 'turnos: dato de la visita')
   h = cambia(h,
     '</div>\n      <sc-if value="{{ isExclusive }}">',
     '</div>\n      <sc-if value="{{ notaTurnos }}"><p style="margin:0;font-size:14px;line-height:1.6;color:#5f5953;text-wrap:pretty;">{{ notaTurnos }}</p></sc-if>\n      <sc-if value="{{ isExclusive }}">',
     'turnos: nota en la visita')
   h = cambia(h,
     "`Recorridos de 30 minutos · de 17:00 a 21:00 · máximo ${cap} personas`,",
-    "`Recorridos de 30 minutos · de 17:00 a 21:00 · turnos compartidos de hasta ${cap} invitados`,\n" +
-    "      notaTurnos: (others.length ? 'La invitación es nominal y válida únicamente para las personas indicadas.' : 'Tu invitación es personal e intransferible.') + (excl ? '' : ` Las visitas se organizan en turnos compartidos con otros invitados, de un máximo de ${cap} personas, para que el recorrido sea cercano y tranquilo.`),",
+    "`Recorridos de 30 minutos · de 17:00 a 21:00 · turnos compartidos de hasta ${cap} personas`,\n" +
+    "      notaTurnos: (others.length ? 'La invitación es nominal y válida únicamente para las personas indicadas.' : 'Tu invitación es personal e intransferible.') + (excl ? '' : ` Las visitas se organizan en turnos compartidos con otras personas invitadas, de un máximo de ${cap}, para que el recorrido sea cercano y tranquilo.`),",
     'turnos: subtítulo y nota')
   h = cambia(h,
     'para enseñarla en grupos reducidos.` + (others.length ? ` Tu invitación incluye a ${this.join(others)}.` : \'\')',
-    'para enseñarla en turnos reducidos con otros invitados.` + (others.length ? ` La invitación es nominal e incluye a ${this.join(others)}.` : \' La invitación es personal e intransferible.\')',
+    'para enseñarla en turnos reducidos y compartidos.` + (others.length ? ` La invitación es nominal e incluye a ${this.join(others)}.` : \' La invitación es personal e intransferible.\')',
     'turnos: WhatsApp')
   h = cambia(h,
     'else P.push(`Las visitas son recorridos guiados de 30 minutos, en grupos reducidos de máximo ${cap} personas, entre las 17:00 y las 21:00.`);',
-    'else P.push(`Las visitas son recorridos guiados de 30 minutos, entre las 17:00 y las 21:00, en turnos reducidos de un máximo de ${cap} personas que compartirás con otros invitados.`);\n' +
+    'else P.push(`Las visitas son recorridos guiados de 30 minutos, entre las 17:00 y las 21:00, en turnos reducidos de un máximo de ${cap} personas, compartidos con otras personas invitadas.`);\n' +
     "    P.push(n ? 'La invitación es nominal y válida únicamente para las personas indicadas.' : 'La invitación es personal e intransferible.');",
     'turnos: correo')
+
+  // Lenguaje neutro: sin «Estimado/Estimada» (por defecto salía «Estimado»
+  // también a mujeres) ni masculinos genéricos.
+  h = cambia(h, "salutation: `${guest.salute || 'Estimado'} ${guest.name},`", "salutation: `${guest.name},`", 'neutro: saludo en el enlace')
+  h = cambia(h, "const sal = (m.salute || 'Estimado') + ' ' + first + ':';", "const sal = 'Hola, ' + first + ':';", 'neutro: saludo del correo')
+  h = cambia(h, /<button type="button" onClick="\{\{ fm\.toggleSalute \}\}"[^>]*>\{\{ fm\.salute \}\}<\/button>/, '', 'neutro: sin selector de saludo en el panel')
+  h = cambia(h, 'elige el horario para todos.</p>', 'elige el horario para todo el grupo.</p>', 'neutro: compartís visita')
+  h = cambia(h, "elige el horario para ${n === 1 ? 'los dos' : 'todos'}, y el resto quedará confirmado automáticamente", "elige el horario para todo el grupo, y el resto de la invitación quedará confirmada automáticamente", 'neutro: correo conjunto')
+  h = cambia(h,
+    "'Hemos reservado para vosotros una visita privada: el turno que elijáis será exclusivamente vuestro, sin otros invitados.' : 'Hemos reservado para ti una visita privada: el turno que elijas será exclusivamente tuyo, sin otros invitados.'",
+    "'Hemos reservado una visita privada para vuestro grupo: el turno que elijáis será exclusivo, sin nadie más.' : 'Hemos reservado una visita privada para ti: el turno que elijas será exclusivo, sin nadie más.'",
+    'neutro: correo visita privada')
 
   // Solo a quien aún no tiene visita (en el panel no existe la clave: no sale).
   h = cambia(h, 'showDecline: !bk,', 'showDecline: !bk, pedirRsvp: !bk,', 'aviso: clave pedirRsvp')
@@ -214,7 +226,8 @@ function arreglarPostal(h) {
           </span>
           <span style="font-size:8pt;color:#5f5953;">Rogamos confirmación antes del martes 6 de octubre.</span>`,
     'postal: aviso de confirmación')
-  h = cambia(h, "'Visitas en grupos reducidos.'", "'Turnos reducidos con otros invitados. Invitación personal e intransferible.'", 'postal: turnos')
+  h = cambia(h, "salutation: `${guest.salute || 'Estimado'} ${guest.name},`", "salutation: `${guest.name},`", 'postal: saludo neutro')
+  h = cambia(h, "'Visitas en grupos reducidos.'", "'Turnos reducidos y compartidos. Invitación personal e intransferible.'", 'postal: turnos')
   return h
 }
 
