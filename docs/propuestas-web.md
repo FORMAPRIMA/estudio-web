@@ -25,9 +25,21 @@ Y dos audiencias: `cliente` (una persona; el final pide **aceptar**) y `comprado
 2. Vídeos: dejar en `web/<nombre>.av1.mp4` y `web/<nombre>.hevc.mp4` las versiones
    optimizadas de cada `assets/<nombre>.mp4`. Sin ellas, el vídeo se copia tal cual
    (y un AV1 sin HEVC no se ve en la mayoría de iPhone).
-3. `node scripts/propuestas/importar-dc.mjs <slug> <carpeta> "<archivo>.dc.html" [--quitar "Etiqueta"]`
-   (Casa Zurbano se importa con `--quitar "Cierre"`: su cierre lo sustituye nuestra diapositiva final.)
-4. Alta en `lib/propuestas/registro.ts` con `tipo: 'dc'`, `pantallaPin` y `tema`.
+   Si un vídeo H.264 ya pesa poco y recodificarlo no lo aligera, basta con
+   `web/<nombre>.mp4` (remuxado con `+faststart`). Valen también los vídeos que el
+   dossier asigna por código (`'uploads/<nombre>.mp4'`, como en Torre del Mangle).
+3. `node scripts/propuestas/importar-dc.mjs <slug> <carpeta> "<archivo>.dc.html" [--quitar "Etiqueta"] [--perfil zurbano]`
+   (Casa Zurbano se importa con `--quitar "Cierre" --perfil zurbano`: su cierre lo sustituye
+   nuestra diapositiva final, y el perfil aplica sus arreglos propios —presupuesto,
+   recorrido, carrusel, controles—.)
+4. Alta en `lib/propuestas/registro.ts` con `tipo: 'dc'`, `pantallaPin` y `tema`. Si el
+   diseño es una presentación horizontal (1920×1080), `formato: 'horizontal'`: se ve a
+   pantalla completa (en un móvil en vertical pide girarlo) y, con `audiencia: 'cliente'`,
+   el final es **Aceptar propuesta** + obras + formaprima.es, en el estilo oscuro del deck.
+5. `og.jpg` (1200×630): captura de la portada (o `og-con-logos.mjs`).
+
+Publicadas así: Casa Zurbano (vertical, comprador, sin PIN) y Torre del Mangle
+(`torre-del-mangle-zxu7z`, horizontal, Javier Ponce · PONCE3, PIN 3333, 2 oct 2026).
 
 ## Publicar una propuesta de diapositivas (`deck`)
 

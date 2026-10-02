@@ -8,9 +8,13 @@
 //   · escucha su puente (postMessage): diapositiva actual e idioma, y el botón
 //     "Me interesa" de la diapositiva final, que abre aquí el formulario;
 //   · avisa al equipo al abrirlo y al llegar al final.
+//
+// Un dossier 'horizontal' (presentación 1920×1080, p. ej. Torre del Mangle) va
+// siempre a pantalla completa —deck-stage lo encaja con bandas— y en un móvil
+// en vertical pide girarlo. Su final pide ACEPTAR la propuesta.
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
-import { registrarEventoPropuestaWeb, registrarInteresPropuestaWeb } from '@/app/actions/propuestasWeb'
+import { aceptarPropuestaWeb, registrarEventoPropuestaWeb, registrarInteresPropuestaWeb } from '@/app/actions/propuestasWeb'
 
 interface Tema { fondo: string; tinta: string; acento: string; claro: boolean }
 
@@ -21,6 +25,7 @@ interface Props {
   portada: string
   tema: Tema
   logo: string
+  formato?: 'vertical' | 'horizontal'
 }
 
 type Idioma = 'es' | 'en'
@@ -50,7 +55,8 @@ function modoEscritorio() {
   return window.innerWidth >= 900 && window.innerWidth > window.innerHeight
 }
 
-export default function PropuestaDossier({ slug, proyecto, descripcion, portada, tema, logo }: Props) {
+export default function PropuestaDossier({ slug, proyecto, descripcion, portada, tema, logo, formato = 'vertical' }: Props) {
+  const horizontal = formato === 'horizontal'
   const iframe = useRef<HTMLIFrameElement>(null)
   const [escritorio, setEscritorio] = useState<boolean | null>(null)
   const [src, setSrc] = useState('')
@@ -62,12 +68,12 @@ export default function PropuestaDossier({ slug, proyecto, descripcion, portada,
   const modo = useRef<boolean | null>(null)
   useEffect(() => {
     const decidir = () => {
-      const esc = modoEscritorio()
+      const esc = horizontal || modoEscritorio()
       if (modo.current === esc) return
       modo.current = esc
       const alto = esc ? 1920 : Math.max(1920, Math.round((1080 * window.innerHeight) / window.innerWidth))
       setEscritorio(esc)
-      setSrc(`/propuesta/${slug}/deck?alto=${alto}`)
+      setSrc(horizontal ? `/propuesta/${slug}/deck` : `/propuesta/${slug}/deck?alto=${alto}`)
     }
     decidir()
     let t: ReturnType<typeof setTimeout>
@@ -75,7 +81,7 @@ export default function PropuestaDossier({ slug, proyecto, descripcion, portada,
     window.addEventListener('resize', alCambiar)
     registrarEventoPropuestaWeb(slug, 'abierta').catch(() => {})
     return () => { clearTimeout(t); window.removeEventListener('resize', alCambiar) }
-  }, [slug])
+  }, [slug, horizontal])
 
   // Sin zoom con los dedos también en la página que contiene el iframe (iOS
   // ignora user-scalable=no; gesturestart sí se puede cancelar).
@@ -98,6 +104,13 @@ export default function PropuestaDossier({ slug, proyecto, descripcion, portada,
         registrarEventoPropuestaWeb(slug, 'final').catch(() => {})
       }
       if (m.t === 'interes') setFormulario(true)
+      if (m.t === 'aceptar') {
+        const w = e.source as Window | null
+        const responder = (r: object) => w?.postMessage({ fp: 1, ...r }, location.origin)
+        aceptarPropuestaWeb(slug, String((m as { comentario?: string }).comentario ?? ''))
+          .then((r) => responder(r.ok ? { t: 'aceptada' } : { t: 'error', msg: r.error }))
+          .catch(() => responder({ t: 'error' }))
+      }
     }
     window.addEventListener('message', recibir)
     return () => window.removeEventListener('message', recibir)
@@ -119,7 +132,7 @@ export default function PropuestaDossier({ slug, proyecto, descripcion, portada,
     return () => window.removeEventListener('keydown', tecla)
   }, [escritorio, formulario])
 
-  const alCargar = useCallback(() => { if (modoEscritorio()) iframe.current?.contentWindow?.focus() }, [])
+  const alCargar = useCallback(() => { if (horizontal || modoEscritorio()) iframe.current?.contentWindow?.focus() }, [horizontal])
 
   const marcarHecho = useCallback(() => {
     iframe.current?.contentWindow?.postMessage({ fp: 1, t: 'hecho' }, location.origin)
@@ -142,7 +155,18 @@ export default function PropuestaDossier({ slug, proyecto, descripcion, portada,
       <style dangerouslySetInnerHTML={{ __html: `html,body{background:${tema.fondo}!important;overscroll-behavior:none;}` }} />
       {escritorio === false && <div style={{ position: 'fixed', inset: 0 }}>{marco}</div>}
 
-      {escritorio && (
+      {escritorio && horizontal && (
+        <div style={{ position: 'fixed', inset: 0 }}>
+          {marco}
+          <div className="fpd-girar" aria-hidden="true">
+            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2" /><path d="M20.5 9.5a8.5 8.5 0 0 1-3 7.5M18 17.5l-.6-.6.1 2" /></svg>
+            <span>Gira el móvil para ver la propuesta</span>
+          </div>
+          <style dangerouslySetInnerHTML={{ __html: `.fpd-girar{display:none}@media (orientation:portrait) and (max-width:900px){.fpd-girar{display:flex;position:fixed;left:0;right:0;bottom:calc(50% + 28.125vw + 32px);flex-direction:column;align-items:center;gap:14px;color:${tema.tinta};font:300 13px/1.4 'Hanken Grotesk',sans-serif;letter-spacing:.06em;opacity:.75;pointer-events:none;animation:fpd-g 1.2s .6s both}.fpd-girar svg{animation:fpd-rot 2.4s ease-in-out infinite}}@keyframes fpd-g{from{opacity:0}to{opacity:.75}}@keyframes fpd-rot{0%,35%{transform:rotate(0)}55%,85%{transform:rotate(-90deg)}100%{transform:rotate(0)}}` }} />
+        </div>
+      )}
+
+      {escritorio && !horizontal && (
         <>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={portada} alt="" aria-hidden="true" style={{ position: 'absolute', inset: -60, width: 'calc(100% + 120px)', height: 'calc(100% + 120px)', maxWidth: 'none', objectFit: 'cover', filter: 'blur(38px) saturate(.8)', opacity: tema.claro ? 0.55 : 0.4 }} />

@@ -67,6 +67,71 @@ function slideSiguiente(p: PropuestaWeb, obras: ProyectoEnlace[], numero: string
 </section>`
 }
 
+// Diapositiva final de una propuesta de honorarios horizontal (1920×1080) para
+// un cliente: aceptar o preguntar, y la puerta a la web con las obras. El mismo
+// lenguaje que SlideSiguiente (tipo 'deck') y que el diseño de Torre del Mangle:
+// Hanken Grotesk + Newsreader en cursiva, #0d0d0d / #fbfbfa / verde #8fa596.
+// La aceptación la tramita la página (puente: 'aceptar' → 'aceptada' | 'error').
+function slideSiguienteCliente(p: PropuestaWeb, obras: ProyectoEnlace[], numero: string): string {
+  const INK = '#0d0d0d', PAPER = '#fbfbfa', SAGE = '#8fa596', LINE = 'rgba(251,251,250,.18)'
+  const mail = `mailto:contacto@formaprima.es?subject=${encodeURIComponent(`Propuesta de honorarios · ${p.proyecto}`)}`
+  const boton = 'appearance:none;cursor:pointer;font-family:inherit;font-size:14px;font-weight:500;letter-spacing:.2em;text-transform:uppercase;padding:24px 40px;border-radius:0;text-align:center;text-decoration:none;display:inline-block;transition:background .25s,color .25s,border-color .25s;'
+  const primario = `${boton}background:${PAPER};color:${INK};border:1px solid ${PAPER};`
+  const secundario = `${boton}background:transparent;color:${PAPER};border:1px solid rgba(251,251,250,.32);`
+  const tarjetas = obras.map((o) => `
+        <a href="https://formaprima.es/proyectos/${esc(o.slug)}" target="_blank" rel="noopener" data-fp-obra="" style="color:${PAPER};text-decoration:none;display:flex;flex-direction:column;gap:14px;min-width:0;">
+          <div style="position:relative;overflow:hidden;aspect-ratio:16/10;background:#1a1a1a;"><img data-fp-src="${esc(o.imagen)}" alt="${esc(o.nombre)}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;filter:saturate(.75);"></div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;"><span style="font-size:18px;font-weight:400;letter-spacing:-.005em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(o.nombre)}</span><span style="font-size:13px;font-weight:300;opacity:.55;white-space:nowrap;">${esc(o.ubicacion ?? '')}</span></div>
+        </a>`).join('')
+
+  return `
+<section data-label="Siguiente paso" data-fp-final="" style="background:${INK};color:${PAPER};font-family:'Hanken Grotesk',sans-serif;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);">
+  <div style="padding:96px 88px 96px 104px;display:flex;flex-direction:column;justify-content:space-between;min-width:0;">
+    <span style="display:inline-flex;align-items:baseline;gap:12px;color:${SAGE};"><span style="font-size:12px;font-weight:500;letter-spacing:.02em;font-variant-numeric:tabular-nums;">${numero}</span><span style="font-family:'Newsreader',serif;font-style:italic;font-size:19px;font-weight:400;">Siguiente paso</span></span>
+    <div>
+      <h2 style="margin:0;font-size:88px;font-weight:200;letter-spacing:-.035em;line-height:.98;">¿Empezamos,<br>${esc(p.nombreCliente)}?</h2>
+      <div style="width:64px;height:1px;background:${SAGE};margin:40px 0 28px;"></div>
+      <p style="margin:0;max-width:620px;font-size:22px;font-weight:300;line-height:1.5;opacity:.75;">Si la propuesta encaja, acéptala aquí. Te escribimos hoy mismo para enviarte el documento a firma y fijar la fecha de arranque.</p>
+    </div>
+    <div data-fp-paso="inicio" style="display:flex;gap:20px;">
+      <button type="button" data-fp-accion="confirmar" style="${primario}">Aceptar propuesta</button>
+      <a href="${mail}" style="${secundario}">Tengo dudas · escríbenos</a>
+    </div>
+    <div data-fp-paso="confirmar" style="display:none;flex-direction:column;gap:18px;">
+      <div style="font-size:18px;font-weight:300;line-height:1.45;opacity:.85;">Vas a aceptar la propuesta de honorarios de ${esc(p.proyecto)}.</div>
+      <textarea data-fp-comentario="" rows="2" placeholder="¿Quieres comentarnos algo? (opcional)" style="font-family:inherit;font-size:16px;font-weight:300;color:${PAPER};line-height:1.45;background:rgba(251,251,250,.04);border:1px solid rgba(251,251,250,.2);border-radius:0;padding:16px;resize:none;outline:none;"></textarea>
+      <div data-fp-error="" style="display:none;font-size:14px;color:#e0a39a;"></div>
+      <div style="display:flex;gap:16px;">
+        <button type="button" data-fp-accion="aceptar" style="${primario}">Confirmar aceptación</button>
+        <button type="button" data-fp-accion="volver" style="${secundario}">Volver</button>
+      </div>
+    </div>
+    <div data-fp-paso="hecho" style="display:none;border-top:1px solid ${SAGE};padding-top:28px;">
+      <div style="font-size:34px;font-weight:200;letter-spacing:-.02em;line-height:1.1;">Recibido, ${esc(p.nombreCliente)}.</div>
+      <p style="margin:14px 0 0;font-size:18px;font-weight:300;line-height:1.5;opacity:.7;">Te escribimos hoy mismo con el documento para firmar y la fecha de arranque.</p>
+    </div>
+    <div style="font-size:14px;font-weight:300;line-height:1.6;opacity:.5;"><a href="mailto:contacto@formaprima.es" style="color:inherit;text-decoration:none;">contacto@formaprima.es</a> · Príncipe de Vergara 56, Madrid</div>
+  </div>
+  <div style="background:#141414;padding:96px 104px 96px 88px;display:flex;flex-direction:column;justify-content:space-between;gap:40px;min-width:0;">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:11px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:${SAGE};">Mientras tanto, conoce el estudio</span>
+      <img src="assets/logo-h-white.png" alt="Forma Prima" style="height:20px;width:auto;display:block;opacity:.7;">
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:28px;">${tarjetas}</div>
+    <a href="https://formaprima.es" target="_blank" rel="noopener" data-fp-web="" style="display:flex;justify-content:space-between;align-items:baseline;color:${PAPER};text-decoration:none;border-top:1px solid ${LINE};padding-top:22px;">
+      <span style="font-size:30px;font-weight:200;letter-spacing:-.025em;">Visitar formaprima.es</span><span data-fp-flecha="" style="font-size:30px;font-weight:200;color:${SAGE};transition:transform .3s cubic-bezier(.16,1,.3,1);">→</span>
+    </a>
+  </div>
+  <style>
+    [data-fp-final] [data-fp-accion="confirmar"]:hover, [data-fp-final] [data-fp-accion="aceptar"]:hover { background: transparent !important; color: ${PAPER} !important; }
+    [data-fp-final] a[href^="mailto"][style*="uppercase"]:hover, [data-fp-final] [data-fp-accion="volver"]:hover { border-color: ${PAPER} !important; }
+    [data-fp-final] [data-fp-web]:hover [data-fp-flecha] { transform: translateX(8px); }
+    [data-fp-final] [data-fp-obra] img { transition: transform 1.2s cubic-bezier(.16,1,.3,1), filter .6s; }
+    [data-fp-final] [data-fp-obra]:hover img { transform: scale(1.04); filter: saturate(1) !important; }
+  </style>
+</section>`
+}
+
 // Puente con la página que contiene el iframe (mismo origen).
 const PUENTE = `<script>
 (function () {
@@ -83,6 +148,12 @@ const PUENTE = `<script>
         var im = ims[k], real = im.getAttribute('data-fp-src');
         if (d <= 1) { if (im.getAttribute('src') !== real) im.setAttribute('src', real); }
         else if (d >= 3 && im.getAttribute('src') === real) im.setAttribute('src', VACIA);
+      }
+      // Vídeos de fondo que el dossier asigna por código: se precargan al
+      // acercarse (la actual y la siguiente), no todos al abrir.
+      if (j === i || j === i + 1) {
+        var vv = ss[j].querySelectorAll('video[preload="metadata"]');
+        for (var q = 0; q < vv.length; q++) vv[q].setAttribute('preload', 'auto');
       }
     }
   }
@@ -138,7 +209,7 @@ const PUENTE = `<script>
   function textoPista() {
     var en = (document.documentElement.lang || 'es') === 'en';
     var tactil = matchMedia('(pointer: coarse)').matches;
-    return tactil ? (en ? 'Swipe to continue' : 'Desliza para continuar') : (en ? 'Scroll or press ↓ to continue' : 'Usa la rueda o ↓ para continuar');
+    return tactil ? (en ? 'Swipe to continue' : 'Desliza para continuar') : (en ? 'Scroll or use the arrow keys to continue' : 'Usa la rueda o las flechas para continuar');
   }
   function mostrarPista() {
     if (etiqueta === 'Vídeo' || actual >= total - 1 || document.querySelector('[data-plan-detail][data-open]')) return;
@@ -156,6 +227,25 @@ const PUENTE = `<script>
   var intentos = 0, arranque = setInterval(function () {
     if (document.querySelector('deck-stage > section') || ++intentos > 100) { clearInterval(arranque); cargar(activa()); }
   }, 100);
+  // Aceptar la propuesta (cliente): inicio → confirmar → (la página tramita) → hecho.
+  function paso(nombre) {
+    document.querySelectorAll('[data-fp-paso]').forEach(function (n) { n.style.display = n.getAttribute('data-fp-paso') === nombre ? 'flex' : 'none'; });
+  }
+  document.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest && e.target.closest('[data-fp-accion]');
+    if (!b) return;
+    e.preventDefault(); e.stopPropagation();
+    var a = b.getAttribute('data-fp-accion'), err = document.querySelector('[data-fp-error]');
+    if (err) err.style.display = 'none';
+    if (a === 'confirmar') { paso('confirmar'); var ta = document.querySelector('[data-fp-comentario]'); if (ta && !matchMedia('(pointer: coarse)').matches) ta.focus(); }
+    else if (a === 'volver') paso('inicio');
+    else if (a === 'aceptar') {
+      if (b.disabled) return;
+      b.disabled = true; b.style.opacity = '.6'; b.textContent = 'Enviando…';
+      var c = document.querySelector('[data-fp-comentario]');
+      send({ t: 'aceptar', comentario: c ? c.value : '' });
+    }
+  }, true);
   document.addEventListener('click', function (e) {
     var b = e.target && e.target.closest && e.target.closest('[data-fp-interes]');
     if (!b) return;
@@ -164,6 +254,12 @@ const PUENTE = `<script>
   }, true);
   window.addEventListener('message', function (e) {
     if (e.origin !== location.origin || !e.data || !e.data.fp) return;
+    if (e.data.t === 'aceptada') paso('hecho');
+    if (e.data.t === 'error') {
+      var b = document.querySelector('[data-fp-accion="aceptar"]'), err = document.querySelector('[data-fp-error]');
+      if (b) { b.disabled = false; b.style.opacity = ''; b.textContent = 'Confirmar aceptación'; }
+      if (err) { err.textContent = e.data.msg || 'No se ha podido enviar. Inténtalo de nuevo.'; err.style.display = ''; }
+    }
     if (e.data.t === 'hecho') {
       document.querySelectorAll('[data-fp-cta]').forEach(function (n) { n.style.display = 'none'; });
       document.querySelectorAll('[data-fp-hecho]').forEach(function (n) { n.style.display = ''; });
@@ -202,18 +298,29 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
   let html = await cargarDossier(p.slug)
   if (!html) return new Response('No disponible', { status: 404 })
 
-  const pedido = parseInt(new URL(req.url).searchParams.get('alto') || '', 10)
-  const alto = Number.isFinite(pedido) ? Math.max(1920, Math.min(2600, pedido)) : 1920
-
-  // Numeración: la siguiente al último capítulo romano del dossier (VI → VII).
-  const ROMANOS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII']
-  const usados = Array.from(html.matchAll(/font-size:32px;font-weight:500;opacity:\.8;">([IVX]+)</g)).map((m) => ROMANOS.indexOf(m[1]))
-  const numero = ROMANOS[Math.max(-1, ...usados) + 1] ?? ''
-
   const obras = await obrasDestacadas().catch(() => [])
+
+  if (p.formato === 'horizontal') {
+    // Presentación 1920×1080: el lienzo no se estira (deck-stage la encaja con
+    // bandas). Numeración: la siguiente a la de la última diapositiva ("05 Cierre"
+    // → "06"); no la mayor, que dentro de un capítulo hay subnúmeros (01–10).
+    const caps = Array.from(html.matchAll(/font-variant-numeric:tabular-nums;">(\d{2})<\/span><span style="font-family:'Newsreader'/g)).map((m) => parseInt(m[1], 10))
+    const numero = String((caps[caps.length - 1] ?? 0) + 1).padStart(2, '0')
+    html = html.replace('<!--FP:SIGUIENTE-->', slideSiguienteCliente(p, obras, numero))
+  } else {
+    const pedido = parseInt(new URL(req.url).searchParams.get('alto') || '', 10)
+    const alto = Number.isFinite(pedido) ? Math.max(1920, Math.min(2600, pedido)) : 1920
+
+    // Numeración: la siguiente al último capítulo romano del dossier (VI → VII).
+    const ROMANOS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII']
+    const usados = Array.from(html.matchAll(/font-size:32px;font-weight:500;opacity:\.8;">([IVX]+)</g)).map((m) => ROMANOS.indexOf(m[1]))
+    const numero = ROMANOS[Math.max(-1, ...usados) + 1] ?? ''
+
+    html = html
+      .replace('<!--FP:SIGUIENTE-->', slideSiguiente(p, obras, numero))
+      .replace(/(<x-import\b[^>]*\bheight=")1920(")/, `$1${alto}$2`)
+  }
   html = html
-    .replace('<!--FP:SIGUIENTE-->', slideSiguiente(p, obras, numero))
-    .replace(/(<x-import\b[^>]*\bheight=")1920(")/, `$1${alto}$2`)
     .replace(/<head>/i, `<head>\n<base href="/propuestas/${p.slug}/">\n<meta name="robots" content="noindex, nofollow">\n<title>${esc(p.proyecto)} — Forma Prima</title>\n${PUENTE}`)
 
   return new Response(html, {

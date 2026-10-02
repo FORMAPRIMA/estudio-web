@@ -81,6 +81,7 @@ export default async function PropuestaPage({ params }: { params: { slug: string
           portada={p.portada}
           tema={tema}
           logo={tema.claro ? '/propuestas/logo-fp-negro.png' : '/propuestas/logo-fp.png'}
+          formato={p.formato}
         />
       </>
     )

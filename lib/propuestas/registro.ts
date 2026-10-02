@@ -37,6 +37,11 @@ export interface PropuestaWeb {
   descripcion: string
   /** Textos de la pantalla del PIN; por defecto, el saludo al cliente. */
   pantallaPin?: { antetitulo: string; titulo: string; texto: string }
+  /**
+   * Solo 'dc': proporción del lienzo del diseño. 'vertical' (por defecto) =
+   * 1080×1920, historia para móvil; 'horizontal' = 1920×1080, presentación.
+   */
+  formato?: 'vertical' | 'horizontal'
   /** Paleta de la pantalla del PIN y del marco; por defecto, la oscura de Forma Prima. */
   tema?: { fondo: string; tinta: string; acento: string; claro: boolean }
   /** false = la URL responde "no disponible" (propuesta retirada). */
@@ -78,6 +83,21 @@ export const PROPUESTAS: PropuestaWeb[] = [
     tema: { fondo: '#f6f1ea', tinta: '#2b2622', acento: '#8c6a55', claro: true },
     activa: true,
     publicada: '2026-09-30',
+  },
+  {
+    slug: 'torre-del-mangle-zxu7z',
+    tipo: 'dc',
+    formato: 'horizontal',
+    audiencia: 'cliente',
+    nombreCliente: 'Javier',
+    cliente: 'Javier Ponce · PONCE3',
+    proyecto: 'Torre del Mangle',
+    pin: '3333',
+    portada: '/propuestas/torre-del-mangle-zxu7z/assets/manglar-cover.webp',
+    og: '/propuestas/torre-del-mangle-zxu7z/og.jpg',
+    descripcion: 'Edificio multifamiliar · 8 niveles · Vía a la Costa, Guayaquil, Ecuador',
+    activa: true,
+    publicada: '2026-10-02',
   },
 ]
 

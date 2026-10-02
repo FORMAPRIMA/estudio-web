@@ -2,7 +2,7 @@
 // Importa un dossier INTERACTIVO de Claude Design (un .dc.html con lógica propia:
 // botones, selectores, vídeo, maquetas 3D…) para publicarlo tal cual en la web.
 //
-//   node scripts/propuestas/importar-dc.mjs <slug> <carpeta-origen> "<archivo>.dc.html" [--quitar "Etiqueta"]
+//   node scripts/propuestas/importar-dc.mjs <slug> <carpeta-origen> "<archivo>.dc.html" [--quitar "Etiqueta"] [--perfil zurbano]
 //
 // A diferencia de importar.mjs (que extrae las diapositivas y las reproduce con
 // nuestro visor), aquí el diseño se sirve con SU PROPIO runtime (support.js +
@@ -30,6 +30,9 @@ const args = process.argv.slice(2)
 // --quitar "Etiqueta" (repetible): diapositivas del diseño que no se publican.
 const quitar = []
 for (let i = args.indexOf('--quitar'); i !== -1; i = args.indexOf('--quitar')) { quitar.push(args[i + 1]); args.splice(i, 2) }
+// --perfil zurbano: arreglos propios de Casa Zurbano (ver arreglos-dc.mjs).
+let perfil = ''
+if (args.includes('--perfil')) { const i = args.indexOf('--perfil'); perfil = args[i + 1]; args.splice(i, 2) }
 const [slug, origen, archivo] = args
 if (!slug || !origen || !archivo || !/^[a-z0-9-]+$/.test(slug)) {
   console.error('Uso: node scripts/propuestas/importar-dc.mjs <slug> <carpeta-origen> "<archivo>.dc.html"')
@@ -73,6 +76,11 @@ async function imagen(nombre) {
 }
 const LOGO_RE = /logo|sophiq|isotipo/i
 
+function cambiaUna(texto, buscar, poner) {
+  if (!texto.includes(buscar)) throw new Error(`No encuentro ${buscar}`)
+  return texto.replace(buscar, poner)
+}
+
 async function main() {
   let html = fs.readFileSync(src(archivo), 'utf8')
   // og.jpg (vista previa al compartir) se hace aparte: que sobreviva a la reimportación.
@@ -110,6 +118,89 @@ async function main() {
       `<source src="assets/${base}.hevc.mp4${frag}" type='video/mp4; codecs="hvc1.2.4.L120.B0"'>`
   })
 
+  // Vídeos que el propio dossier asigna por código (v.src = 'uploads/x.mp4'),
+  // p. ej. los de fondo con capas sincronizadas de Torre del Mangle: la cadena
+  // pasa a elegir AV1 o HEVC según lo que sepa reproducir el navegador.
+  html = html.replace(/'(?:uploads|assets)\/([^'\/]+)\.mp4'/g, (m, base) => {
+    const av1 = src(`web/${base}.av1.mp4`)
+    const hevc = src(`web/${base}.hevc.mp4`)
+    const uno = src(`web/${base}.mp4`)
+    // Un solo web/<vídeo>.mp4 (H.264 que ya pesa poco): vale para todos.
+    if (fs.existsSync(uno) && !fs.existsSync(av1)) {
+      fs.copyFileSync(uno, path.join(PUB, 'assets', `${base}.mp4`))
+      videos.push(`${base}: H.264 ${(fs.statSync(uno).size / 1e6).toFixed(1)} MB`)
+      return `'assets/${base}.mp4'`
+    }
+    if (!fs.existsSync(av1) || !fs.existsSync(hevc)) throw new Error(`Falta web/${base}.av1.mp4 + .hevc.mp4 (o un web/${base}.mp4)`)
+    fs.copyFileSync(av1, path.join(PUB, 'assets', `${base}.av1.mp4`))
+    fs.copyFileSync(hevc, path.join(PUB, 'assets', `${base}.hevc.mp4`))
+    videos.push(`${base}: AV1 ${(fs.statSync(av1).size / 1e6).toFixed(1)} MB + HEVC ${(fs.statSync(hevc).size / 1e6).toFixed(1)} MB`)
+    return `(window.__fpAV1 ? 'assets/${base}.av1.mp4' : 'assets/${base}.hevc.mp4')`
+  })
+  if (html.includes('window.__fpAV1')) {
+    html = cambiaUna(html, '<script src="./support.js"></script>',
+      `<script>window.__fpAV1 = !!document.createElement('video').canPlayType('video/mp4; codecs="av01.0.08M.10"');</script>\n<script src="./support.js"></script>`)
+  }
+  // Vídeos con fuente por código: el dossier daba `src` a todos al montar (y dos
+  // veces: la plantilla estática y la copia interactiva), ~20 MB al abrir. Ahora
+  // solo a los de la copia interactiva (#dc-root) que estén en la diapositiva
+  // actual o en sus vecinas, y se vuelve a mirar en cada cambio de diapositiva.
+  html = html.replace(/(<video data-video="[^"]+"[^>]*?)preload="auto"/g, '$1preload="metadata"')
+  if (html.includes('applyVideoSrcs() {')) {
+    html = cambiaUna(html,
+      `    document.querySelectorAll('video[data-video]').forEach(v => {
+      v.muted = true;`,
+      `    const raiz = document.getElementById('dc-root');
+    if (!raiz) return;
+    raiz.querySelectorAll('video[data-video]').forEach(v => {
+      const sec = v.closest('section');
+      const cerca = (n) => n && n.hasAttribute && n.hasAttribute('data-deck-active');
+      if (!sec || !(cerca(sec) || cerca(sec.previousElementSibling) || cerca(sec.nextElementSibling))) return;
+      v.muted = true;`)
+    html = cambiaUna(html,
+      `    this.syncVideo(slide);
+    const idx = this.slideIndex(slide);`,
+      `    this.applyVideoSrcs();
+    this.syncVideo(slide);
+    const idx = this.slideIndex(slide);`)
+  }
+
+  // Navegación con rueda, deslizando el dedo y con ↑ ↓, si el dossier no la trae
+  // (Casa Zurbano sí la trae; Torre del Mangle no). deck-stage solo pasa con
+  // ← →, espacio y tocando los lados de la pantalla.
+  if (!/addEventListener\('(wheel|touchstart)'/.test(html)) {
+    html = cambiaUna(html, '</body>', `<script>
+(function () {
+  var deck = function () { return document.querySelector('#dc-root deck-stage') || document.querySelector('deck-stage'); };
+  var libre = 0;
+  function pasar(d) { var k = deck(); if (!k || Date.now() < libre) return; libre = Date.now() + 850; d > 0 ? k.next() : k.prev(); }
+  function propio(t) { return t && t.closest && t.closest('textarea,input,select,[data-fp-scroll]'); }
+  var acum = 0, tAcum = 0;
+  window.addEventListener('wheel', function (e) {
+    if (propio(e.target) || e.ctrlKey) return;
+    var v = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+    if (Date.now() - tAcum > 250) acum = 0;
+    acum += v; tAcum = Date.now();
+    if (Math.abs(acum) > 40) { pasar(acum); acum = 0; }
+  }, { passive: true });
+  window.addEventListener('keydown', function (e) {
+    if (propio(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); var k = deck(); if (k) k.next(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); var k2 = deck(); if (k2) k2.prev(); }
+  });
+  var x0 = 0, y0 = 0, t0 = 0;
+  window.addEventListener('touchstart', function (e) { if (e.touches.length !== 1) return; x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now(); }, { passive: true });
+  window.addEventListener('touchend', function (e) {
+    if (!t0 || propio(e.target)) return;
+    var t = e.changedTouches[0], dx = t.clientX - x0, dy = t.clientY - y0; t0 = 0;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 45) return;
+    pasar(Math.abs(dx) > Math.abs(dy) ? -dx : -dy);
+  }, { passive: true });
+})();
+</script>
+</body>`)
+  }
+
   // Imágenes.
   const usadas = [...new Set([...html.matchAll(/assets\/([A-Za-z0-9_.-]+\.(?:png|jpe?g|webp))/gi)].map((m) => m[1]))]
   const nombres = new Map()
@@ -122,7 +213,7 @@ async function main() {
   html = html.replace(/assets\/([A-Za-z0-9_.-]+\.(?:png|jpe?g|webp))/gi, (m, f) => `assets/${nombres.get(f) ?? f}`)
 
   // Arreglos para móvil (memoria, animaciones, controles): ver arreglos-dc.mjs.
-  html = arreglarDossier(html, { quitar })
+  html = arreglarDossier(html, { quitar, perfil })
 
   // Limpieza y hueco para la diapositiva final.
   html = html

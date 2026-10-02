@@ -27,7 +27,7 @@ const LOGO = /logo|sophiq|isotipo/i
  *  3. El vídeo largo ya no se descarga entero al abrir: se va cargando al verse.
  *  4. Los controles (Índice · idioma) arriba; el gesto de ocultarse, hacia arriba.
  */
-export function arreglarDossier(html, { quitar = [] } = {}) {
+export function arreglarDossier(html, { quitar = [], perfil = '' } = {}) {
   // Instrumentación del editor de Claude Design ("omelette"), que el servidor de
   // vista previa inyecta al descargar: reenvía la consola a la ventana padre,
   // intercepta fetch y abre un canal eval() para el editor. En una página
@@ -57,6 +57,9 @@ export function arreglarDossier(html, { quitar = [] } = {}) {
   html = cambia(html, 'if (isLogo(b)) return;', 'if (isLogo(b) || fpOculto(b)) return;', 'animación: bloques ocultos')
   html = cambia(html, 'if (isLogo(img)) return;', 'if (isLogo(img) || fpOculto(img)) return;', 'animación: imágenes ocultas')
 
+  // Lo que sigue hasta el cierre del bloque es solo de Casa Zurbano (presupuesto,
+  // recorrido, carrusel vertical, vídeo de portada, controles Índice · idioma).
+  if (perfil === 'zurbano') {
   // Nivel por defecto: Select. El Presupuesto arranca en Functional y pasa a
   // Select a los 1,5 s; si se pasaba antes, Calidades y Cronograma heredaban
   // Functional. Ahora heredan solo lo que el visitante elige a mano.
@@ -64,6 +67,8 @@ export function arreglarDossier(html, { quitar = [] } = {}) {
     'curLevel() { return this._b2 != null ? this._b2 : this._budP == null ? 1 : Math.round(this._budP); }',
     'curLevel() { return this._budTouched && this._b2 != null ? this._b2 : 1; }',
     'nivel por defecto: Select')
+
+  }
 
   // Transición entre diapositivas más suave (ver también arreglarDeckStage).
   html = cambia(html,
@@ -84,6 +89,7 @@ export function arreglarDossier(html, { quitar = [] } = {}) {
     }`,
     'transición de entrada + equipo')
 
+  if (perfil === 'zurbano') {
   // Recorrido: flechas sutiles a los lados del render para recorrerlos como un
   // carrusel (tocar las estancias del plano no es evidente). Cada paso pasa por
   // tourGo, así que el render funde y se enciende su punto en la maqueta.
@@ -116,6 +122,8 @@ export function arreglarDossier(html, { quitar = [] } = {}) {
   // activa solo en los vídeos de la versión interactiva (#dc-root).
   html = cambia(html, /<source src="/g, '<source data-fp-src="', 'vídeo: fuentes inertes')
 
+  }
+
   // Sin zoom con los dedos dentro del dossier: en iPhone el zoom de una página
   // así dispara la memoria (y es lo que "reiniciaba" la página).
   html = cambia(html,
@@ -136,6 +144,7 @@ export function arreglarDossier(html, { quitar = [] } = {}) {
     "run(b, [{ opacity: 0, transform: ((b.style.transform || '') + ' translate3d(0,16px,0)').trim() }, { opacity: 1, transform: b.style.transform || 'translate3d(0,0,0)' }], { duration: 1200, delay: d });",
     'animación: bloques con transform propio')
 
+  if (perfil === 'zurbano') {
   // Carrusel del Portafolio: movía una sola pista de 12.580 px de diseño
   // (~13.600 px reales en un iPhone) con los 9 proyectos duplicados. Rasterizar
   // y desplazar esa capa agotaba la memoria del iPhone a mitad del carrusel.
@@ -180,6 +189,7 @@ export function arreglarDossier(html, { quitar = [] } = {}) {
   html = cambia(html, /(<video data-video=""[^>]*?)preload="auto"/, '$1preload="metadata"', 'vídeo: carga progresiva')
 
   html = cambia(html, "c.style.transform = 'translateX(-50%) translateY(8px)'", "c.style.transform = 'translateX(-50%) translateY(-6px)'", 'controles: ocultarse hacia arriba')
+  }
   return html
 }
 
@@ -304,6 +314,12 @@ export function arreglarMaqueta(js) {
  * sobra: los controles del dossier ya son los suyos (Índice · idioma).
  */
 export function arreglarDeckStage(js) {
+  // Sin el carril de miniaturas del editor: en una pantalla ancha (las
+  // presentaciones horizontales) aparecía a la izquierda y desplazaba la diapositiva.
+  js = cambia(js,
+    "if (/[?&]_snthumb=/.test(location.search)) this.setAttribute('no-rail', '');",
+    "this.setAttribute('no-rail', '');",
+    'deck-stage: sin carril de miniaturas')
   js = cambia(js,
     ':host([data-rail-anim]) .overlay {',
     '.overlay { display: none !important; }\n    :host([data-rail-anim]) .overlay {',
