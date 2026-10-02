@@ -145,11 +145,20 @@ function arreglarInvitacion(h) {
 
   // Rogamos confirmación antes del martes: en el enlace del invitado y en los
   // textos de WhatsApp y correo (si el grupo aún no ha reservado).
+  // Solo a quien aún no tiene visita (en el panel no existe la clave: no sale).
+  h = cambia(h, 'showDecline: !bk,', 'showDecline: !bk, pedirRsvp: !bk,', 'aviso: clave pedirRsvp')
+  // Portada: bajo «Reservar visita».
   h = cambia(h,
-    '              <span style="font-size:12px;color:#7a746e;">{{ slotsSub }}</span>',
-    '              <span style="font-size:12px;color:#7a746e;">{{ slotsSub }}</span>\n' +
-    '              <span style="font-size:12px;color:#8c6a55;">' + RSVP + '</span>',
-    'aviso de confirmación en el enlace')
+    /(<button type="button" onClick="\{\{ toBooking \}\}" style="appearance:none;border:0;background:#fff;[^\n]*\{\{ heroCta \}\} <span>↓<\/span><\/button>)/,
+    '<div style="display:flex;flex-direction:column;align-items:flex-start;gap:12px;">$1\n' +
+    '          <sc-if value="{{ pedirRsvp }}"><span style="display:block;border-left:2px solid #c9a68c;padding:3px 0 3px 14px;font-size:15px;line-height:1.35;">Confirma tu asistencia<br><strong style="font-weight:500;">antes del martes 6 de octubre</strong></span></sc-if></div>',
+    'aviso en la portada')
+  // Reserva: recuadro al principio del paso de horarios.
+  h = cambia(h,
+    '<div style="display:flex;flex-direction:column;gap:40px;animation:fpUp .6s ease both;">',
+    '<div style="display:flex;flex-direction:column;gap:40px;animation:fpUp .6s ease both;">\n' +
+    '          <sc-if value="{{ pedirRsvp }}"><div style="background:#8c6a55;color:#fff;padding:24px 26px;display:flex;flex-direction:column;gap:8px;"><span style="font-size:10px;letter-spacing:.18em;text-transform:uppercase;opacity:.8;">Confirmación de asistencia</span><span style="font-size:clamp(17px,1.6vw,20px);font-weight:400;line-height:1.35;text-wrap:pretty;">' + RSVP + '</span><span style="font-size:13px;line-height:1.5;opacity:.85;">Elige tu horario aquí abajo o, si no puedes venir, avísanos.</span></div></sc-if>',
+    'aviso en la reserva')
   h = cambia(h,
     ' Elige tu horario aquí: ${this.link(m.token)}\\n\\nForma Prima`;',
     ' Elige tu horario aquí: ${this.link(m.token)}` + (g.booking ? "" : "\\n\\n' + RSVP + '") + `\\n\\nForma Prima`;',
