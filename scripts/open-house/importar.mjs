@@ -145,6 +145,29 @@ function arreglarInvitacion(h) {
 
   // Rogamos confirmación antes del martes: en el enlace del invitado y en los
   // textos de WhatsApp y correo (si el grupo aún no ha reservado).
+  // Invitación personal, turnos compartidos: «máximo 5 personas» sonaba a que
+  // el invitado podía traer acompañantes.
+  h = cambia(h, 'text-transform:uppercase;color:#7a746e;">Personas máx.</span>',
+    'text-transform:uppercase;color:#7a746e;">Invitados por turno</span>', 'turnos: dato de la visita')
+  h = cambia(h,
+    '</div>\n      <sc-if value="{{ isExclusive }}">',
+    '</div>\n      <sc-if value="{{ notaTurnos }}"><p style="margin:0;font-size:14px;line-height:1.6;color:#5f5953;text-wrap:pretty;">{{ notaTurnos }}</p></sc-if>\n      <sc-if value="{{ isExclusive }}">',
+    'turnos: nota en la visita')
+  h = cambia(h,
+    "`Recorridos de 30 minutos · de 17:00 a 21:00 · máximo ${cap} personas`,",
+    "`Recorridos de 30 minutos · de 17:00 a 21:00 · turnos compartidos de hasta ${cap} invitados`,\n" +
+    "      notaTurnos: (others.length ? 'La invitación es nominal y válida únicamente para las personas indicadas.' : 'Tu invitación es personal e intransferible.') + (excl ? '' : ` Las visitas se organizan en turnos compartidos con otros invitados, de un máximo de ${cap} personas, para que el recorrido sea cercano y tranquilo.`),",
+    'turnos: subtítulo y nota')
+  h = cambia(h,
+    'para enseñarla en grupos reducidos.` + (others.length ? ` Tu invitación incluye a ${this.join(others)}.` : \'\')',
+    'para enseñarla en turnos reducidos con otros invitados.` + (others.length ? ` La invitación es nominal e incluye a ${this.join(others)}.` : \' La invitación es personal e intransferible.\')',
+    'turnos: WhatsApp')
+  h = cambia(h,
+    'else P.push(`Las visitas son recorridos guiados de 30 minutos, en grupos reducidos de máximo ${cap} personas, entre las 17:00 y las 21:00.`);',
+    'else P.push(`Las visitas son recorridos guiados de 30 minutos, entre las 17:00 y las 21:00, en turnos reducidos de un máximo de ${cap} personas que compartirás con otros invitados.`);\n' +
+    "    P.push(n ? 'La invitación es nominal y válida únicamente para las personas indicadas.' : 'La invitación es personal e intransferible.');",
+    'turnos: correo')
+
   // Solo a quien aún no tiene visita (en el panel no existe la clave: no sale).
   h = cambia(h, 'showDecline: !bk,', 'showDecline: !bk, pedirRsvp: !bk,', 'aviso: clave pedirRsvp')
   // Portada: bajo «Reservar visita».
@@ -191,6 +214,7 @@ function arreglarPostal(h) {
           </span>
           <span style="font-size:8pt;color:#5f5953;">Rogamos confirmación antes del martes 6 de octubre.</span>`,
     'postal: aviso de confirmación')
+  h = cambia(h, "'Visitas en grupos reducidos.'", "'Turnos reducidos con otros invitados. Invitación personal e intransferible.'", 'postal: turnos')
   return h
 }
 
