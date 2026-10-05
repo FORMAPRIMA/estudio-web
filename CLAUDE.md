@@ -374,6 +374,14 @@ Gestión de contenido para redes sociales.
   - `lib/marketing.ts` — tipos + `getTransitions(status, rol)` + `POST_STATUSES`
   - `app/actions/marketing-posts.ts` — todas las acciones CRUD
 - **Time Tracker Sections** (`/team/marketing/time-tracker-sections`) — placeholder, en desarrollo
+- **Retribución** (`/team/marketing/retribucion`) — variable de business development por los clientes que trae.
+  **Acceso por persona, no por rol**: `fp_partner` ve todos los planes; un `fp_biz_dev` solo entra si tiene fila
+  en `retribucion_planes` (hoy solo Ana). Lo resuelve `getAccesoRetribucion()` en `lib/retribucion-data.ts`
+  (no es `'use server'` a propósito), que usan página, sidebar e índice de marketing.
+  - Reglas en `lib/retribucion.ts` (mínimo 20k de base o no comisiona, tramos marginales 5/3/1,5 % hasta tope 200k, coeficiente por origen, ×0,5 por
+    descuento no autorizado, liquidación trimestral en la nómina siguiente). La guía `/como-funciona` las lee de ahí.
+  - Mutaciones en `app/actions/retribucion.ts`. Solo socios: marcar descuento y cambiar salario/SS del plan.
+  - Tablas `retribucion_planes` + `retribucion_proyectos` (RLS sin políticas). Migración `retribucion_variable.sql`.
 
 - **Web pública** (`/team/marketing/web-publica`) — CMS del sitio real de formaprima.es
   (`web_content` por `(pagina, seccion, clave)` + colecciones `web_proyectos`/`web_equipo`/
@@ -758,6 +766,8 @@ Registro de horas por proyecto y fase. Todos los roles FP.
 /team/marketing/web-publica           CMS de la web pública (contenido, proyectos, equipo…)
 /team/marketing/web-publica/studio    Modo Diseño: ajustar el sitio sobre la propia página
 /team/marketing/time-tracker-sections Time tracker de secciones (en desarrollo)
+/team/marketing/retribucion           Retribución variable de business development (partners + beneficiarios con plan)
+/team/marketing/retribucion/como-funciona  Guía de cómo se calcula
 ```
 
 ### API Routes

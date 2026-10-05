@@ -2445,3 +2445,16 @@ div:hover > .tt-avatar-overlay {
   .vl-ic-compass { right: 276px; top: 18px; }
   .vl-ic-marca { left: 328px; bottom: 66px; }
 }
+
+/* ── Retribución (/team/marketing/retribucion) ── mobile-first */
+.retrib-form-grid { grid-template-columns: minmax(0, 1fr); }
+.retrib-2col, .retrib-3col { grid-template-columns: minmax(0, 1fr); }
+.retrib-row:hover, .retrib-row:focus-visible { background: #F8F7F4; outline: none; }
+@media (min-width: 640px) {
+  .retrib-2col { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+  .retrib-3col { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (min-width: 960px) {
+  .retrib-form-grid { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); }
+  .retrib-sticky { position: sticky; top: 16px; }
+}

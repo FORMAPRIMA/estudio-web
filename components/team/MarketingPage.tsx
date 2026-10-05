@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 
-export function MarketingPage() {
+export function MarketingPage({ showRetribucion = false }: { showRetribucion?: boolean }) {
   return (
     <div style={{ padding: '40px 48px', maxWidth: 900 }}>
       <p style={{ fontSize: 10, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#1A1A1A99', marginBottom: 8 }}>
@@ -99,6 +99,36 @@ export function MarketingPage() {
             </span>
           </div>
         </Link>
+
+        {showRetribucion && (
+          <Link href="/team/marketing/retribucion" style={{ textDecoration: 'none' }}>
+            <div
+              className="apps-card"
+              style={{ background: '#fff', borderRadius: 4, padding: '28px 24px', cursor: 'pointer' }}
+            >
+              <div style={{
+                width: 40, height: 40, borderRadius: 4,
+                background: '#D85A3015',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 20, marginBottom: 16,
+              }}>
+                💶
+              </div>
+              <p style={{ fontSize: 13, fontWeight: 500, color: '#1A1A1A', marginBottom: 6, letterSpacing: '-0.01em' }}>
+                Retribución
+              </p>
+              <p style={{ fontSize: 11, color: '#1A1A1A70', fontWeight: 300, lineHeight: 1.5, marginBottom: 20 }}>
+                Proyectos captados por business development y su comisión variable.
+              </p>
+              <span style={{
+                fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase',
+                color: '#D85A30', fontWeight: 500,
+              }}>
+                Abrir →
+              </span>
+            </div>
+          </Link>
+        )}
       </div>
     </div>
   )

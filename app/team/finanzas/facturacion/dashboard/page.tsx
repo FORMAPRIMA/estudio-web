@@ -1,6 +1,17 @@
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
+
 export const metadata = { title: 'Dashboard · Facturación' }
 
-export default function Page() {
+export default async function Page() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+
+  const { data: profile } = await supabase
+    .from('profiles').select('rol').eq('id', user.id).single()
+  if (!profile || profile.rol !== 'fp_partner') redirect('/team/dashboard')
+
   return (
     <div style={{ fontFamily: "'Inter', system-ui, sans-serif", padding: '40px 32px', minHeight: '100vh', background: '#F8F7F4' }}>
       <p style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', marginBottom: 6, fontWeight: 600 }}>

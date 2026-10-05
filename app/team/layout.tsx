@@ -5,6 +5,7 @@ import RulerOverlay from '@/components/dev/RulerOverlay'
 
 import type { FpRole } from '@/lib/types'
 import { FP_ROLES } from '@/lib/types'
+import { getAccesoRetribucion } from '@/lib/retribucion-data'
 
 interface NavItem {
   href: string
@@ -166,6 +167,8 @@ const ALL_NAV: (NavItem & { roles: FpRole[] })[] = [
   { href: '/team/marketing/post-manager', label: 'Post Manager', roles: ['fp_partner', 'fp_biz_dev'], isSubItem: true },
   { href: '/team/marketing/horas', label: 'Horas', roles: ['fp_partner', 'fp_biz_dev'], isSubItem: true },
   { href: '/team/marketing/web-publica', label: 'Web pública', roles: ['fp_partner', 'fp_biz_dev'], isSubItem: true },
+  // Retribución: además del rol, el fp_biz_dev necesita tener un plan (ver abajo)
+  { href: '/team/marketing/retribucion', label: 'Retribución', roles: ['fp_partner', 'fp_biz_dev'], isSubItem: true },
   // ── Apps ──────────────────────────────────────────────────────────────────
   {
     href: '/team/apps',
@@ -218,7 +221,11 @@ export default async function TeamLayout({
   if (!profile || !FP_ROLES.includes(profile.rol as FpRole)) redirect('/login')
 
   const rol = profile.rol as FpRole
-  const navItems = ALL_NAV.filter((item) => item.roles.includes(rol)).map(
+  const veRetribucion = rol === 'fp_partner' || (rol === 'fp_biz_dev' && !!(await getAccesoRetribucion()))
+  const navItems = ALL_NAV
+    .filter((item) => item.roles.includes(rol))
+    .filter((item) => item.href !== '/team/marketing/retribucion' || veRetribucion)
+    .map(
     ({ href, label, isSubItem, isSection, isGroup, pinBottom, small }) => ({ href, label, isSubItem, isSection, isGroup, pinBottom, small })
   )
 
