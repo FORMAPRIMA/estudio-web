@@ -1163,6 +1163,43 @@ html:has(.ict-sticky.full){scroll-snap-type:none;}
 .ict-marco img{transform-origin:50% 50%;}
 @keyframes ict-sube{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
 
+/* Móvil: la maqueta manda. Guía, ficha y barra superior condensadas al mínimo
+   legible; lo explicativo se queda en escritorio. */
+@media (max-width:719px){
+  .ict-xbar{padding:10px 12px;align-items:center;}
+  .ict-xinfo{gap:3px;}
+  .ict-sello{font-size:10px;letter-spacing:.18em;}
+  .ict-xinfo .ict-leyenda{font-size:11px;gap:4px 6px;}
+  .ict-xinfo .ict-leyenda i{width:8px;height:8px;}
+  .ict-salir{height:32px;padding:0 12px;font-size:13px;}
+  .ict-marca span{font-size:12px;padding:5px 9px;bottom:40px;}
+  .ict-coach,.ict-libre{left:8px;right:8px;bottom:calc(8px + env(safe-area-inset-bottom));padding:11px 14px 12px;}
+  .ict-coach h3{font-size:18px;margin-top:6px!important;letter-spacing:-.015em;}
+  .ict-coach p{display:none;}
+  .ict-coach .ict-link{margin-top:6px;font-size:13px;}
+  .ict-gesto{display:none;}
+  .ict-coach-ok{width:22px;height:22px;font-size:12px;float:left;margin:2px 8px 0 0;}
+  .ict-coach.fin h3{margin-top:0!important;}
+  .ict-coach-botones{margin-top:10px;gap:8px 14px;}
+  .ict-coach .ict-btn,.ict-ficha .ict-btn,.ict-libre .ict-btn{height:40px;padding:0 16px;font-size:14px;}
+  .ict-pasos-guia{font-size:10px;letter-spacing:.14em;}
+  .ict-pasos-guia i{width:16px;}
+  .ict-ficha{left:8px;right:8px;bottom:calc(8px + env(safe-area-inset-bottom));padding:11px 14px 12px;}
+  .ict-ficha-cab{font-size:10px;letter-spacing:.14em;}
+  .ict-ficha-id{margin-top:2px;font-size:22px;line-height:1.1;}
+  .ict-ficha-sub{display:none;}
+  .ict-ficha dl{grid-template-columns:repeat(4,auto);justify-content:space-between;gap:4px 10px;margin-top:8px;padding-top:8px;}
+  .ict-ficha dt{font-size:10px;}
+  .ict-ficha dd{font-size:14px;white-space:nowrap;}
+  .ict-ficha dd.t{font-size:13px;padding-top:2px;}
+  .ict-ficha dd small{font-size:9px;}
+  .ict-ficha > p{display:none;}
+  .ict-coach-pie{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px;padding-top:10px;}
+  .ict-coach-pie p{display:none;}
+  .ict-coach-pie .ict-pasos-guia{flex-direction:column;align-items:flex-start;gap:5px;}
+  .ict-libre{padding:8px 10px;font-size:13px;}
+  .ict-toast{font-size:13px;padding:10px 14px;}
+}
 @media (min-width:720px){
   .ict-tres{grid-template-columns:repeat(3,1fr);}
   .ict-cuatro{grid-template-columns:repeat(2,1fr);}
