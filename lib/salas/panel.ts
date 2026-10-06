@@ -129,6 +129,7 @@ export interface SesionRow {
   maxSlide: number
   totalSlides: number
   final: boolean
+  ipTrunc: string | null
 }
 
 export interface VistaRow { sesionId: string; slide: number; etiqueta: string | null; ms: number; entradas: number }
@@ -170,7 +171,7 @@ export async function datosSala(salaId: string, opts: { leadId?: string } = {}):
     })),
     sesiones: (ses ?? []).map((s) => ({
       id: s.id, leadId: s.lead_id, inicio: s.inicio, ultima: s.ultima, activoMs: s.activo_ms, dispositivo: s.dispositivo,
-      ciudad: s.ciudad, region: s.region, pais: s.pais, maxSlide: s.max_slide, totalSlides: s.total_slides, final: s.final,
+      ciudad: s.ciudad, region: s.region, pais: s.pais, maxSlide: s.max_slide, totalSlides: s.total_slides, final: s.final, ipTrunc: s.ip_trunc,
     })),
     vistas,
     eventos,

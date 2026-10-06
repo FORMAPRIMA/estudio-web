@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import type { DatosSala } from '@/lib/salas/panel'
-import { NOMBRE_EVENTO, calor, duracion, eventosDe, fecha, hace, kpis, lugarDe, resumenLeads, type ResumenLead } from '@/lib/salas/metricas'
+import { NOMBRE_EVENTO, NOMBRE_TEMPERATURA, calor, duracion, eventosDe, fecha, hace, kpis, lugarDe, resumenLeads, type ResumenLead, type Temperatura } from '@/lib/salas/metricas'
 import Calor from './Calor'
 import { LeadForm, PinListo, enlacePersonal } from './LeadForm'
 import { S, btn, card, eyebrow, input } from './theme'
@@ -37,8 +37,9 @@ export default function SalaPanel({ slug, nombre, proyecto, accesoAnonimo, datos
     const q = busca.trim().toLowerCase()
     return resumenLeads(datos, ahora)
       .filter((r) => !q || [r.lead.nombre, r.lead.empresa, r.lead.canal, r.lead.pin].some((x) => x?.toLowerCase().includes(q)))
-      .sort((a, b) => Number(b.viendoAhora) - Number(a.viendoAhora) || (b.ultima ?? b.lead.createdAt).localeCompare(a.ultima ?? a.lead.createdAt))
+      .sort((a, b) => Number(b.viendoAhora) - Number(a.viendoAhora) || b.temperatura.puntos - a.temperatura.puntos || (b.ultima ?? b.lead.createdAt).localeCompare(a.ultima ?? a.lead.createdAt))
   }, [datos, ahora, busca])
+  const calientes = useMemo(() => resumenLeads(datos, ahora).filter((r) => r.temperatura.nivel === 'caliente' && r.lead.estado === 'activo').length, [datos, ahora])
   const mapa = useMemo(() => calor(datos.sesiones, datos.vistas, etiquetas), [datos, etiquetas])
   const nombres = useMemo(() => new Map(datos.leads.map((l) => [l.id, l.nombre])), [datos])
 
@@ -63,6 +64,7 @@ export default function SalaPanel({ slug, nombre, proyecto, accesoAnonimo, datos
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12, marginBottom: 28 }}>
         <Kpi titulo="Viendo ahora" valor={String(k.viendoAhora)} pie={k.viendoAhora ? 'en este momento' : 'nadie ahora mismo'} vivo={k.viendoAhora > 0} />
         <Kpi titulo="Leads" valor={String(k.leads)} pie={`${k.leadsActivos} ya lo han abierto`} />
+        <Kpi titulo="Calientes" valor={String(calientes)} pie="leads con más señales de interés" />
         <Kpi titulo="Visitas" valor={String(k.sesiones)} pie={`${k.anonimas} anónimas`} />
         <Kpi titulo="Tiempo medio" valor={k.sesiones ? duracion(k.tiempoMedioMs) : '—'} pie="por visita, solo tiempo activo" />
         <Kpi titulo="Llegan al final" valor={k.sesiones ? `${Math.round(k.alFinal * 100)} %` : '—'} pie="de las visitas" />
@@ -88,10 +90,10 @@ export default function SalaPanel({ slug, nombre, proyecto, accesoAnonimo, datos
           <>
             <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por nombre, empresa, canal o PIN" aria-label="Buscar" style={{ ...input, maxWidth: 360, marginBottom: 12, background: S.panel }} />
             <div style={{ ...card, overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 820 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 940 }}>
                 <thead>
                   <tr style={{ color: S.soft, fontSize: 11, textAlign: 'left' }}>
-                    <Th>Lead</Th><Th>Estado</Th><Th>Última visita</Th><Th right>Visitas</Th><Th right>Tiempo</Th><Th>Hasta dónde</Th><Th>Desde</Th>
+                    <Th>Lead</Th><Th>Temperatura</Th><Th>Estado</Th><Th>Última visita</Th><Th right>Visitas</Th><Th right>Tiempo</Th><Th>Hasta dónde</Th><Th>Desde</Th>
                   </tr>
                 </thead>
                 <tbody>
@@ -172,6 +174,21 @@ export function Etiqueta({ children, tono = 'neutro' }: { children: React.ReactN
   return <span style={{ ...t, fontSize: 11, padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap', fontWeight: 500 }}>{children}</span>
 }
 
+/** Temperatura: el nivel escrito y una barra corta de 0 a 100. Los motivos, al pasar por encima. */
+export function Termometro({ t, grande }: { t: Temperatura; grande?: boolean }) {
+  const color = t.nivel === 'caliente' ? S.accent : t.nivel === 'tibio' ? '#D85A3099' : '#1A1A1A33'
+  return (
+    <span title={t.motivos.join(' · ')} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: grande ? 0 : 110 }}>
+      <span style={{ width: grande ? 120 : 44, height: grande ? 8 : 6, background: S.lineSoft, borderRadius: 3, overflow: 'hidden', flexShrink: 0 }}>
+        <span style={{ display: 'block', height: '100%', width: `${Math.max(t.puntos, t.nivel === 'sin_abrir' ? 0 : 4)}%`, background: color, borderRadius: 3 }} />
+      </span>
+      <span style={{ fontSize: grande ? 15 : 12.5, fontWeight: t.nivel === 'caliente' ? 600 : 400, color: t.nivel === 'sin_abrir' ? S.faint : S.ink, whiteSpace: 'nowrap' }}>
+        {NOMBRE_TEMPERATURA[t.nivel]}{grande && t.nivel !== 'sin_abrir' ? ` · ${t.puntos}/100` : ''}
+      </span>
+    </span>
+  )
+}
+
 function Th({ children, right }: { children?: React.ReactNode; right?: boolean }) {
   return <th style={{ padding: '12px 16px', fontWeight: 500, letterSpacing: '0.04em', textAlign: right ? 'right' : 'left', whiteSpace: 'nowrap' }}>{children}</th>
 }
@@ -189,6 +206,7 @@ function FilaLead({ r, slug }: { r: ResumenLead; slug: string }) {
         <div style={{ fontWeight: 500 }}>{r.lead.nombre}</div>
         <div style={{ fontSize: 11.5, color: S.faint }}>{[r.lead.empresa, r.lead.canal].filter(Boolean).join(' · ') || `PIN ${r.lead.pin}`}</div>
       </Td>
+      <Td><Termometro t={r.temperatura} /></Td>
       <Td>
         <span style={{ display: 'inline-flex', gap: 4, flexWrap: 'wrap' }}>
           {r.lead.estado === 'revocado' ? <Etiqueta tono="rojo">revocado</Etiqueta>
@@ -196,6 +214,7 @@ function FilaLead({ r, slug }: { r: ResumenLead; slug: string }) {
             : r.viendoAhora ? <Etiqueta tono="vivo">viendo ahora</Etiqueta>
             : r.visitas === 0 ? <Etiqueta>sin abrir</Etiqueta> : null}
           {r.interes && <Etiqueta tono="acento">interesado</Etiqueta>}
+          {r.reenvio.probable && <span title={r.reenvio.motivo ?? ''}><Etiqueta tono="acento">PIN compartido</Etiqueta></span>}
         </span>
       </Td>
       <Td>{hace(r.ultima)}</Td>

@@ -57,6 +57,64 @@ export interface ResumenLead {
   dispositivos: string[]
   viendoAhora: boolean
   interes: boolean       // pulsó «Me interesa» o dejó sus datos
+  temperatura: Temperatura
+  reenvio: Reenvio
+}
+
+// ── Temperatura del lead ────────────────────────────────────────────────────
+// Puntuación 0–100 con señales que un comercial reconocería: lo reciente de la
+// última visita, cuántas veces y en cuántos días distintos vuelve, cuánto
+// tiempo de verdad pasa dentro, hasta dónde llega y si ha pedido que le llamen.
+
+export type NivelTemperatura = 'sin_abrir' | 'frio' | 'tibio' | 'caliente'
+export interface Temperatura { nivel: NivelTemperatura; puntos: number; motivos: string[] }
+
+export const NOMBRE_TEMPERATURA: Record<NivelTemperatura, string> = {
+  sin_abrir: 'Sin abrir', frio: 'Frío', tibio: 'Tibio', caliente: 'Caliente',
+}
+
+export function temperatura(x: { visitas: number; dias: number; ultima: string | null; activoMs: number; mejor: number; final: boolean; interes: boolean }, ahora = Date.now()): Temperatura {
+  if (!x.visitas) return { nivel: 'sin_abrir', puntos: 0, motivos: ['Aún no ha abierto el dossier con su PIN'] }
+  const motivos: string[] = []
+  let p = 0
+  const dias = x.ultima ? (ahora - Date.parse(x.ultima)) / 864e5 : 99
+  if (dias < 1) { p += 25; motivos.push('Visita en las últimas 24 h') }
+  else if (dias < 3) { p += 18; motivos.push('Visita en los últimos 3 días') }
+  else if (dias < 7) { p += 10; motivos.push('Visita esta semana') }
+  else if (dias < 14) p += 4
+  p += Math.min(x.visitas, 5) * 4
+  if (x.visitas >= 3) motivos.push(`${x.visitas} visitas`)
+  if (x.dias >= 3) { p += 15; motivos.push(`Ha vuelto en ${x.dias} días distintos`) }
+  else if (x.dias === 2) { p += 10; motivos.push('Ha vuelto otro día') }
+  const min = x.activoMs / 60_000
+  p += Math.min(min, 10) * 1.5
+  if (min >= 5) motivos.push(`${Math.round(min)} min de lectura activa`)
+  p += x.mejor * 10
+  if (x.final) { p += 5; motivos.push('Llegó al final') }
+  if (x.interes) { p += 25; motivos.push('Pidió que le contactemos') }
+  const puntos = Math.round(Math.min(100, p))
+  return { nivel: puntos >= 60 ? 'caliente' : puntos >= 30 ? 'tibio' : 'frio', puntos, motivos }
+}
+
+// ── PIN reenviado ───────────────────────────────────────────────────────────
+// El mismo PIN desde sitios o equipos distintos: lo más probable es que lo
+// haya compartido (con su pareja, un socio, un asesor). Es una señal comercial,
+// no un problema: hay más gente mirando el piso.
+
+export interface Reenvio { probable: boolean; motivo: string | null }
+
+export function reenvio(ss: Pick<SesionRow, 'ciudad' | 'pais' | 'dispositivo' | 'ipTrunc' | 'inicio'>[], ahora = Date.now()): Reenvio {
+  const recientes = ss.filter((s) => ahora - Date.parse(s.inicio) < 30 * 864e5)
+  const ciudades = new Set(recientes.map((s) => [s.ciudad, s.pais].filter(Boolean).join(', ')).filter(Boolean))
+  const equipos = new Set(recientes.map((s) => s.dispositivo).filter(Boolean))
+  const redes = new Set(recientes.map((s) => s.ipTrunc).filter(Boolean))
+  if (ciudades.size >= 2 && equipos.size >= 2) {
+    return { probable: true, motivo: `Abierto desde ${ciudades.size} ciudades (${Array.from(ciudades).slice(0, 3).join(' · ')}) y ${equipos.size} dispositivos distintos` }
+  }
+  if (redes.size >= 3 && equipos.size >= 2) {
+    return { probable: true, motivo: `Abierto desde ${redes.size} conexiones y ${equipos.size} dispositivos distintos` }
+  }
+  return { probable: false, motivo: null }
 }
 
 export const lugarDe = (s: Pick<SesionRow, 'ciudad' | 'pais'>) => [s.ciudad, s.pais].filter(Boolean).join(', ')
@@ -67,7 +125,7 @@ export function resumenLeads(d: DatosSala, ahora = Date.now()): ResumenLead[] {
   const conInteres = new Set(d.eventos.filter((e) => e.tipo === 'interes').map((e) => e.sesionId))
   return d.leads.map((lead) => {
     const ss = porLead.get(lead.id) ?? []
-    return {
+    const base = {
       lead,
       visitas: ss.length,
       dias: new Set(ss.map((s) => s.inicio.slice(0, 10))).size,
@@ -80,6 +138,7 @@ export function resumenLeads(d: DatosSala, ahora = Date.now()): ResumenLead[] {
       viendoAhora: ss.some((s) => ahora - Date.parse(s.ultima) < VIVO_MS),
       interes: !!lead.leadCaptacionId || ss.some((s) => conInteres.has(s.id)),
     }
+    return { ...base, temperatura: temperatura(base, ahora), reenvio: reenvio(ss, ahora) }
   })
 }
 
@@ -117,7 +176,7 @@ export const NOMBRE_EVENTO: Record<string, string> = {
 }
 
 export function eventosDe(eventos: EventoRow[], sesionId: string) {
-  return eventos.filter((e) => e.sesionId === sesionId && e.tipo !== 'final')
+  return eventos.filter((e) => e.sesionId === sesionId && e.tipo !== 'final' && !e.tipo.startsWith('aviso_'))
 }
 
 export const duracion = (ms: number) => {

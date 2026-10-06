@@ -164,6 +164,23 @@ web no existen ahí; y `/salas` en cualquier otro host da 404.
 - Probar en local: `http://salas.localhost:3000`. WebKit de Playwright no resuelve
   `*.localhost`: usar un proxy HTTP que conserve el Host (ver memoria del asistente).
 
+## Salas · inteligencia (fase 3, 6 oct 2026)
+
+- **Temperatura** del lead (`temperatura()` en `lib/salas/metricas.ts`, 0–100): lo reciente
+  de la última visita, nº de visitas, días distintos, minutos de lectura activa, hasta dónde
+  llega, final y «Me interesa». Sin abrir · Frío (<30) · Tibio (30–59) · Caliente (≥60).
+  Ordena la tabla de leads; la ficha enseña los motivos.
+- **PIN compartido** (`reenvio()`): en 30 días, ≥2 ciudades y ≥2 dispositivos, o ≥3
+  conexiones (/24) y ≥2 dispositivos. Se presenta como oportunidad, no como alarma.
+- **Avisos por correo** (`lib/salas/avisos.ts`, desde la baliza): abierto, vuelto (≥3 días
+  sin entrar; máx. 1 cada 12 h), final, «Me interesa» y PIN compartido. Van a quien creó el
+  lead con copia a las personas de propiedad con email; cada aviso enviado queda como evento
+  `aviso_<tipo>` y no se repite.
+- **Resumen diario** `app/api/cron/salas-resumen` (07:00 UTC, `vercel.json`): a cada persona
+  del panel con email, solo si hubo actividad en sus salas.
+- Probar correos en local sin enviarlos: `RESEND_BASE_URL=http://127.0.0.1:<puerto>` con un
+  servidor falso que responda `{id}`.
+
 # Open House · Claudio Coello 38 (8 oct 2026)
 
 - Invitado: `formaprima.es/cc38/<token>` (`app/cc38/[token]/route.ts`). El diseño

@@ -8,7 +8,7 @@ import { NOMBRE_EVENTO, calor, duracion, eventosDe, fecha, hace, lugarDe, resume
 import { estadoLeadSala, renovarPinSala } from '@/app/actions/salas'
 import Calor from './Calor'
 import { LeadForm, PinListo } from './LeadForm'
-import { Etiqueta } from './SalaPanel'
+import { Etiqueta, Termometro } from './SalaPanel'
 import { S, btn, card, eyebrow } from './theme'
 
 export default function LeadFicha({ slug, sala, proyecto, datos, etiquetas }: { slug: string; sala: string; proyecto: string; datos: DatosSala; etiquetas: string[] }) {
@@ -47,6 +47,7 @@ export default function LeadFicha({ slug, sala, proyecto, datos, etiquetas }: { 
             {r.viendoAhora && <Etiqueta tono="vivo">viendo ahora</Etiqueta>}
             {r.interes && <Etiqueta tono="acento">interesado</Etiqueta>}
             {r.final && <Etiqueta>llegó al final</Etiqueta>}
+            {r.reenvio.probable && <Etiqueta tono="acento">PIN compartido</Etiqueta>}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -73,6 +74,12 @@ export default function LeadFicha({ slug, sala, proyecto, datos, etiquetas }: { 
       )}
       {error && <p role="alert" style={{ color: S.red, fontSize: 13 }}>{error}</p>}
 
+      {r.reenvio.probable && (
+        <div style={{ ...card, padding: '14px 18px', marginBottom: 20, background: S.accentSoft, borderColor: '#D85A3033', fontSize: 13, lineHeight: 1.5 }}>
+          <b style={{ fontWeight: 600 }}>Probablemente ha compartido su PIN.</b> {r.reenvio.motivo}. Suele ser buena señal: hay más gente mirando el piso con {l.nombre.split(' ')[0]}. Buen momento para preguntarle si quiere organizar una visita con quien le acompañe.
+        </div>
+      )}
+
       <div className="salas-ficha" style={{ display: 'grid', gap: 20 }}>
         <aside style={{ display: 'grid', gap: 16, alignContent: 'start' }}>
           <div style={{ ...card, padding: '16px 18px' }}>
@@ -85,6 +92,15 @@ export default function LeadFicha({ slug, sala, proyecto, datos, etiquetas }: { 
             <Dato k="Caduca" v={l.caducaEn ? fecha(l.caducaEn) : 'No caduca'} />
             {l.leadCaptacionId && <Dato k="Contacto" v="Dejó sus datos al final del dossier" />}
             {l.notas && <p style={{ fontSize: 12.5, color: S.soft, margin: '12px 0 0', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{l.notas}</p>}
+          </div>
+          <div style={{ ...card, padding: '16px 18px' }}>
+            <p style={{ ...eyebrow, marginBottom: 10 }}>Temperatura</p>
+            <Termometro t={r.temperatura} grande />
+            {r.temperatura.motivos.length > 0 && (
+              <ul style={{ margin: '12px 0 0', paddingLeft: 16, fontSize: 12.5, color: S.soft, lineHeight: 1.6 }}>
+                {r.temperatura.motivos.map((m) => <li key={m}>{m}</li>)}
+              </ul>
+            )}
           </div>
           <div style={{ ...card, padding: '16px 18px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
             <Cifra v={String(r.visitas)} l="Visitas" />

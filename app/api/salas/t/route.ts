@@ -6,6 +6,7 @@ import { getPropuestaWeb } from '@/lib/propuestas/registro'
 import { propuestaAdminCookieName, propuestaAdminCookieValue } from '@/lib/propuestas/acceso'
 import { dispositivo } from '@/lib/propuestas/visitas'
 import { accesoDossier, geo, getSala, ipTruncada, leadCookieName, leadDeCookie, leadVigente, sesionCookieName } from '@/lib/salas/servidor'
+import { avisoDe, avisosAlAbrir } from '@/lib/salas/avisos'
 
 // Baliza de medición de las Salas: tiempo por diapositiva e interacciones.
 // La llama PropuestaDossier con fetch keepalive y, al cerrar, con sendBeacon
@@ -113,6 +114,7 @@ export async function POST(req: Request) {
       }).select('id').single()
       if (error || !data) { console.error('[salas] sesion', error?.message); return json({ tok: null }) }
       id = data.id as string
+      if (lead) await avisosAlAbrir({ salaId: sala.id, salaSlug: sala.slug, salaNombre: sala.nombre, leadId: lead, sesionId: id })
     }
     const tok = firmar(id)
     cookies().set(sesionCookieName(p.slug), tok, {
@@ -124,7 +126,7 @@ export async function POST(req: Request) {
   // ── Lote: tiempo por diapositiva, progreso y eventos ────────────────────
   const id = verificar(b.tok)
   if (!id) return vacio()
-  const { data: ses } = await admin.from('sala_sesiones').select('sala_id, max_slide, total_slides, final').eq('id', id).maybeSingle()
+  const { data: ses } = await admin.from('sala_sesiones').select('sala_id, lead_id, max_slide, total_slides, final').eq('id', id).maybeSingle()
   if (!ses || ses.sala_id !== sala.id) return vacio()
 
   const vistas = (Array.isArray(b.vistas) ? b.vistas : []).slice(0, 60)
@@ -146,6 +148,12 @@ export async function POST(req: Request) {
   if (eventos.length) {
     const { error: e2 } = await admin.from('sala_eventos').insert(eventos)
     if (e2) console.error('[salas] eventos', e2.message)
+  }
+  // Avisos al equipo (solo leads identificados; cada uno se envía una vez).
+  if (ses.lead_id) {
+    const ctx = { salaId: sala.id, salaSlug: sala.slug, salaNombre: sala.nombre, leadId: ses.lead_id as string, sesionId: id }
+    if (final && !ses.final) await avisoDe(ctx, 'final')
+    if (eventos.some((e) => e.tipo === 'interes')) await avisoDe(ctx, 'interes')
   }
   // Mantiene viva la sesión mientras siga leyendo.
   cookies().set(sesionCookieName(p.slug), b.tok as string, {
