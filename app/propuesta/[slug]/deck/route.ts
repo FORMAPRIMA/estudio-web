@@ -19,6 +19,8 @@ import { escritorioDe } from '@/lib/propuestas/escritorio'
 
 export const dynamic = 'force-dynamic'
 
+const VERSION_ASSETS = (process.env.VERCEL_GIT_COMMIT_SHA || process.env.VERCEL_DEPLOYMENT_ID || 'local').slice(0, 12)
+
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!))
 const bi = (es: string, en: string) => `<span data-es="">${es}</span><span data-en="" style="display:none;">${en}</span>`
 
@@ -349,6 +351,11 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
   }
   html = html
     .replace(/<head>/i, `<head>\n<base href="/propuestas/${p.slug}/">\n<meta name="robots" content="noindex, nofollow">\n<title>${esc(p.proyecto)} — Forma Prima</title>\n${PUENTE}`)
+    // Los scripts del dossier (deck-stage.js, support.js…) se cachean un día más
+    // siete de margen (next.config.mjs): sin versión, un navegador que ya los
+    // tenía seguía con los viejos tras publicar un arreglo (p. ej. el carril de
+    // miniaturas del editor). Con el commit del despliegue, cada publicación los renueva.
+    .replace(/\b((?:src|from)="(?:\.\/)?[\w-]+\.js)"/g, `$1?v=${VERSION_ASSETS}"`)
 
   return new Response(html, {
     headers: {
