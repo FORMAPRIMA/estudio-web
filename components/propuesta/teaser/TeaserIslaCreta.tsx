@@ -603,7 +603,7 @@ export default function TeaserIslaCreta({ slug, medir = false }: { slug: string;
           </div>
           <p className="ict-pie ict-rev">Imágenes de inspiración · No representan el diseño final de la casa club</p>
           <div className="ict-tres ict-fases ict-rev">
-            <div><span className="ict-num">01</span><h3>Anteproyecto</h3><p>Programa, concepto y volumetría, con una estimación de coste para decidir pronto y con criterio.</p></div>
+            <div><span className="ict-num">01</span><h3>Anteproyecto</h3><p>Programa, concepto y volumetría: la idea completa de la casa club, para decidir pronto y con criterio.</p></div>
             <div><span className="ict-num">02</span><h3>Proyecto de ejecución</h3><p>Planos constructivos, detalles y coordinación de ingenierías: todo lo que la constructora necesita para levantarla.</p></div>
             <div><span className="ict-num">03</span><h3>Supervisión de obra</h3><p>Visitas, control de calidad y respuesta a la obra hasta la entrega.</p></div>
           </div>
