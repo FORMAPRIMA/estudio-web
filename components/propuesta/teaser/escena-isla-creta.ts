@@ -66,7 +66,8 @@ const ORO = new THREE.Color('#e2b45a')
 // (el navegador los guarda un día). v2: suelos separados en altura contra el
 // z-fighting. v3: las 4 casas tipo instanciadas en los 171 lotes. v4: sin árboles
 // dentro de las casas. v5: casas horneadas (textura + oclusión) desde Blender.
-const V = 'v=5'
+// v6: site-movil.glb (casas a 3.500 triángulos) para teléfonos.
+const V = 'v=6'
 
 // Superficies del terreno que en el modelo son coplanares (o casi): el entorno
 // entero está a la cota 1,55 y la pradera cruza la etapa futura. Sin un orden,
@@ -137,12 +138,15 @@ const CLUB = new THREE.Vector3(71, 5, 161)
 
 export async function crearEscena(o: OpcionesEscena): Promise<EscenaTeaser> {
   const { contenedor, base, ligera } = o
-  const perfil = ligera ? { dpr: 1, reflejo: 12, sombra: 1024, agua: 256 } : { dpr: 1.5, reflejo: 5, sombra: 2048, agua: 512 }
+  // Móvil: a 1× una pantalla de 3× se ve pixelada. Se arranca a 2× con suavizado
+  // y la resolución se adapta sola a lo que aguante el teléfono (ver bucle).
+  const perfil = ligera ? { dpr: 2, dprMin: 1.25, reflejo: 10, sombra: 1024, agua: 256 } : { dpr: 1.75, dprMin: 1, reflejo: 5, sombra: 2048, agua: 512 }
+  let dpr = Math.min(devicePixelRatio, perfil.dpr)
   const quieto = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches
 
   // ── Render, cielo y luz (como web08) ──────────────────────────────────────
-  const renderer = new THREE.WebGLRenderer({ antialias: !ligera, alpha: false, powerPreference: 'high-performance' })
-  renderer.setPixelRatio(Math.min(devicePixelRatio, perfil.dpr))
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' })
+  renderer.setPixelRatio(dpr)
   renderer.shadowMap.enabled = true
   renderer.shadowMap.type = THREE.PCFSoftShadowMap
   renderer.toneMapping = THREE.ACESFilmicToneMapping
@@ -469,7 +473,7 @@ vec4 mvPosition=viewMatrix*vec4(instanceMatrix[3].xyz,1.0);mvPosition.xy+=positi
       hecho(json<{ parcelId: string; polygon: [number, number][]; bottomZ: number; topZ: number }[]>('volumes.json')),
       hecho(json<{ trees: Planta[]; shrubs: Planta[] }>('vegetation.json')),
       hecho(new THREE.TextureLoader().loadAsync(`${base}/trees-atlas.webp?${V}`)),
-      loader.loadAsync(`${base}/site.glb?${V}`, (e) => { if (e.total) { prog.glb = e.loaded / e.total; avisar() } }),
+      loader.loadAsync(`${base}/${ligera ? 'site-movil.glb' : 'site.glb'}?${V}`, (e) => { if (e.total) { prog.glb = e.loaded / e.total; avisar() } }),
     ])
     if (destruida) { gltf.scene.traverse((n) => { const x = n as THREE.Mesh; x.geometry?.dispose() }); atlas.dispose(); throw new Error('cancelada') }
     lotes.activos.forEach((l) => activos.set(l.id, l))
@@ -539,6 +543,24 @@ vec4 mvPosition=viewMatrix*vec4(instanceMatrix[3].xyz,1.0);mvPosition.xy+=positi
   document.addEventListener('visibilitychange', onVis)
   const ease = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2)
 
+  // Resolución adaptativa: con la cámara en movimiento se mide el intervalo entre
+  // fotogramas; si pasa de ~36 ms se baja 0,25 la densidad de píxeles, y si va
+  // holgado (< 20 ms) se sube hacia el máximo. Un cambio cada 1,5 s como mucho.
+  const muestras: number[] = []
+  let ultimoAjuste = 0, previo = 0
+  function ajustar(now: number, moviendo: boolean) {
+    if (previo && moviendo) muestras.push(now - previo)
+    previo = now
+    if (muestras.length < 40 || now - ultimoAjuste < 1500) return
+    const orden = [...muestras].sort((a, b) => a - b), med = orden[Math.floor(orden.length / 2)]
+    muestras.length = 0
+    const max = Math.min(devicePixelRatio, perfil.dpr)
+    let nuevo = dpr
+    if (med > 36 && dpr > perfil.dprMin) nuevo = Math.max(perfil.dprMin, dpr - 0.25)
+    else if (med < 20 && dpr < max) nuevo = Math.min(max, dpr + 0.25)
+    if (nuevo !== dpr) { dpr = nuevo; renderer.setPixelRatio(dpr); resize(); ultimoAjuste = now }
+  }
+
   function loop(now: number) {
     raf = requestAnimationFrame(loop)
     if (oculta || pausada) return
@@ -571,6 +593,7 @@ vec4 mvPosition=viewMatrix*vec4(instanceMatrix[3].xyz,1.0);mvPosition.xy+=positi
     // búfer de profundidad no distingue superficies separadas unos centímetros.
     const cerca = THREE.MathUtils.clamp(camera.position.distanceTo(controls.target) * 0.04, 1, 40)
     if (Math.abs(cerca - camera.near) / camera.near > 0.05) { camera.near = cerca; camera.updateProjectionMatrix() }
+    ajustar(now, moviendo)
     renderer.render(scene, camera)
   }
   raf = requestAnimationFrame(loop)
