@@ -17,6 +17,33 @@ Y dos audiencias: `cliente` (una persona; el final pide **aceptar**) y `comprado
 (un dossier que circula entre compradores; el final pide sus datos y crea un
 **lead** en Captación con la distribución y el nivel que elija).
 
+## Teaser con maqueta 3D (`teaser`)
+
+Isla Creta (Grupo RSA, `isla-creta-uk38g`, PIN 4332, admin 0000, 6 oct 2026). No es
+un diseño importado: es una página propia en React (`components/propuesta/teaser/`)
+cuyo único objetivo es conseguir la reunión donde se presenta la propuesta. Enseña la
+maqueta 3D real (visor web08) en **modo muestra**: solo la manzana 1 responde, la
+ficha no lleva precio ni estado (`xx,xxx USD`), y esos datos ni siquiera viajan al
+navegador (`maqueta/lotes.json` solo trae la manzana activa). El final pide una
+franja de reunión (`solicitarReunionPropuestaWeb`: aviso importante + correo a
+`avisarA` con copia al equipo y a los socios) y cuenta como "hasta el final".
+
+- Recursos 3D en `public/propuesta/<slug>/maqueta/` (ojo: `propuesta`, en singular,
+  para que viaje la cookie del PIN, cuyo path es `/propuesta/<slug>`). El middleware
+  los sirve solo con esa cookie (HMAC con Web Crypto) y con `Cache-Control: private`.
+- `site.glb` comprimido con meshopt (`npx @gltf-transform/cli meshopt … --quantize-position 16`):
+  13,8 → 2,9 MB. `vegetation.json` compactado a arrays y sin rutas locales.
+- Imágenes de la página en `public/propuestas/<slug>/`; `portada.webp` y `og.jpg` son
+  capturas de la propia maqueta.
+- Es una **sala cerrada** (`node scripts/salas/sala.mjs isla-creta-uk38g "Isla Creta · Grupo RSA"`,
+  sin `--anonimo`): `pin: null`, sin PIN del estudio; cada persona de RSA entra con su PIN de
+  6 cifras creado en salas.formaprima.es. Mide 10 «diapositivas» (3 pasos de la maqueta + 7
+  secciones), `3d` al abrir la demostración e `interes` al pedir reunión (que además crea el
+  lead en Captación y lo enlaza con `sala_leads.lead_captacion_id`).
+- Arreglo general de Salas (6 oct 2026): en una sala la cookie del PIN va con `path: '/'`;
+  con `/propuesta/<slug>` no llegaba a la baliza `/api/salas/t` y una sala cerrada nunca
+  abría sesión de medición.
+
 ## Publicar un dossier interactivo (`dc`)
 
 1. Bajar a `~/Downloads/PROPUESTAS/<proyecto>/` el `.dc.html`, todos los `.js`

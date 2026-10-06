@@ -7,6 +7,7 @@ import PropuestaGate from '@/components/propuesta/PropuestaGate'
 import PropuestaDeck from '@/components/propuesta/PropuestaDeck'
 import PropuestaDossier from '@/components/propuesta/PropuestaDossier'
 import { escritorioDe } from '@/lib/propuestas/escritorio'
+import TeaserIslaCreta from '@/components/propuesta/teaser/TeaserIslaCreta'
 
 // Propuesta de honorarios de un cliente: formaprima.es/propuesta/<slug>.
 // Ver lib/propuestas/registro.ts (alta) y scripts/propuestas/importar.mjs (diseño).
@@ -21,8 +22,8 @@ export function generateMetadata({ params }: { params: { slug: string } }): Meta
   const p = getPropuestaWeb(params.slug)
   const robots = { index: false, follow: false, nocache: true, googleBot: { index: false, follow: false } }
   if (!p) return { title: { absolute: 'Forma Prima' }, robots }
-  const title = p.audiencia === 'comprador' ? `${p.proyecto} · Dossier` : `Propuesta de honorarios · ${p.proyecto}`
-  const description = p.audiencia === 'comprador' ? p.descripcion : `Preparada para ${p.cliente}. ${p.descripcion}`
+  const title = p.tipo === 'teaser' ? `${p.proyecto} · Vista previa para ${p.nombreCliente}` : p.audiencia === 'comprador' ? `${p.proyecto} · Dossier` : `Propuesta de honorarios · ${p.proyecto}`
+  const description = p.tipo === 'teaser' ? `Forma Prima · ${p.descripcion}` : p.audiencia === 'comprador' ? p.descripcion : `Preparada para ${p.cliente}. ${p.descripcion}`
   const imagen = `https://formaprima.es${p.og}`
   return {
     title: { absolute: `${title} — Forma Prima` },
@@ -65,7 +66,16 @@ export default async function PropuestaPage({ params }: { params: { slug: string
     return (
       <>
         {fuente}
-        <PropuestaGate slug={p.slug} nombreCliente={p.nombreCliente} proyecto={p.proyecto} portada={p.portada} textos={p.pantallaPin} tema={p.tema} digitos={sala && p.pin === null ? 6 : 4} />
+        <PropuestaGate slug={p.slug} nombreCliente={p.nombreCliente} proyecto={p.proyecto} portada={p.portada} textos={p.pantallaPin} tema={p.tema} digitos={sala && p.pin === null ? 6 : 4} formal={p.tipo === 'teaser'} />
+      </>
+    )
+  }
+
+  if (p.tipo === 'teaser') {
+    return (
+      <>
+        {fuente}
+        <TeaserIslaCreta slug={p.slug} medir={!!sala} />
       </>
     )
   }

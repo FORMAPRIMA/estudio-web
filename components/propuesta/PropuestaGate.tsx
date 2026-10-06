@@ -19,6 +19,8 @@ interface Props {
   digitos?: 4 | 6
   /** A dónde ir al acertar; por defecto se recarga la misma página. */
   destino?: string
+  /** Trato de usted (clientes corporativos). */
+  formal?: boolean
 }
 
 const rgba = (hex: string, a: number) => {
@@ -26,7 +28,7 @@ const rgba = (hex: string, a: number) => {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`
 }
 
-export default function PropuestaGate({ slug, nombreCliente, proyecto, portada, textos, tema, digitos = 4, destino }: Props) {
+export default function PropuestaGate({ slug, nombreCliente, proyecto, portada, textos, tema, digitos = 4, destino, formal }: Props) {
   const claro = !!tema?.claro
   const vars = tema ? ({
     '--fpg-fondo': tema.fondo, '--fpg-tinta': tema.tinta, '--fpg-acento': tema.acento,
@@ -95,7 +97,7 @@ export default function PropuestaGate({ slug, nombreCliente, proyecto, portada, 
           </div>
         </div>
         <div className="fpg-pie">
-          ¿No tienes el PIN? Escríbenos a <a href="mailto:contacto@formaprima.es">contacto@formaprima.es</a>
+          {formal ? '¿No tiene el código? Escríbanos a ' : '¿No tienes el PIN? Escríbenos a '}<a href="mailto:contacto@formaprima.es">contacto@formaprima.es</a>
           <span className="fpg-legal"><a href="https://formaprima.es/privacidad" target="_blank" rel="noopener">Política de privacidad</a></span>
         </div>
       </div>

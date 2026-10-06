@@ -82,6 +82,12 @@ const nextConfig = {
         headers: [{ key: 'Cache-Control', value: 'public, max-age=86400, stale-while-revalidate=604800' }],
       },
       {
+        // Maqueta de un teaser: solo con PIN (middleware). Privada: ningún caché
+        // compartido debe guardarla y servírsela a quien no tiene la cookie.
+        source: '/propuesta/:slug/maqueta/:path*',
+        headers: [{ key: 'Cache-Control', value: 'private, max-age=86400' }],
+      },
+      {
         // React y three.js con versión fija: no cambian nunca.
         source: '/propuestas/_rt/:path*',
         headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }],

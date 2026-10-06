@@ -18,6 +18,17 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
+  // Maquetas 3D de los teasers (public/propuesta/<slug>/maqueta/*): solo con la
+  // cookie que deja el PIN de esa propuesta. La cookie va con path
+  // /propuesta/<slug>, así que el navegador la manda también aquí.
+  const maqueta = request.nextUrl.pathname.match(/^\/propuesta\/([a-z0-9-]+)\/maqueta\//)
+  if (maqueta) {
+    const slug = maqueta[1]
+    const nombre = `fp_prop_${slug.replace(/[^a-z0-9]/g, '').slice(-16)}`
+    const ok = await cookiePropuestaValida(slug, request.cookies.get(nombre)?.value)
+    return ok ? NextResponse.next() : new NextResponse('No autorizado', { status: 401 })
+  }
+
   let supabaseResponse = NextResponse.next({
     request,
   })
@@ -105,11 +116,28 @@ export async function middleware(request: NextRequest) {
   return supabaseResponse
 }
 
+// Misma firma que lib/propuestas/acceso.ts (HMAC-SHA256 de PORTAL_SECRET), con
+// Web Crypto: el middleware corre en el edge y no tiene el crypto de Node.
+async function cookiePropuestaValida(slug: string, valor: string | undefined): Promise<boolean> {
+  if (!valor) return false
+  const secreto = process.env.PORTAL_SECRET ?? (process.env.NODE_ENV === 'production' ? '' : 'dev-only-secret-not-for-production')
+  if (!secreto) return false
+  const enc = new TextEncoder()
+  const clave = await crypto.subtle.importKey('raw', enc.encode(secreto), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  const firma = new Uint8Array(await crypto.subtle.sign('HMAC', clave, enc.encode(`propuesta-web:${slug}`)))
+  const esperado = Array.from(firma, (b) => b.toString(16).padStart(2, '0')).join('')
+  if (esperado.length !== valor.length) return false
+  let dif = 0
+  for (let i = 0; i < esperado.length; i++) dif |= esperado.charCodeAt(i) ^ valor.charCodeAt(i)
+  return dif === 0
+}
+
 export const config = {
   matcher: [
     '/',
     '/area-privada/:path*',
     '/team/:path*',
     '/protegido/:path*',
+    '/propuesta/:slug/maqueta/:path*',
   ],
 }

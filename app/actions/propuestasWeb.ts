@@ -96,11 +96,13 @@ export async function desbloquearPropuestaWeb(slug: string, pin: string): Promis
     await new Promise((r) => setTimeout(r, 900))
     return { ok: false }
   }
+  // En una sala la cookie tiene que llegar también a la baliza (/api/salas/t):
+  // con path /propuesta/<slug>, una sala cerrada nunca abría sesión de medición.
   cookies().set(propuestaCookieName(slug), propuestaCookieValue(slug), {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
-    path: `/propuesta/${slug}`,
+    path: sala ? '/' : `/propuesta/${slug}`,
     maxAge: 60 * 60 * 24 * 90,
   })
   // Quién es (sala): con otro PIN en el mismo navegador, deja de ser ese lead.
@@ -410,5 +412,89 @@ export async function registrarInteresPropuestaWeb(slug: string, d: InteresInput
     `),
   })
   if (r.error) console.error('[propuesta-web] email interés', r.error)
+  return { ok: true }
+}
+
+export interface ReunionInput {
+  /** Trampa para bots: campo invisible que una persona deja vacío. */
+  web?: string
+  /** Franja elegida, tal como se la enseñamos ("Martes 13 oct · 09:30 Guayaquil / 16:30 Madrid"). */
+  franja: string
+  nombre: string
+  cargo: string
+  email: string
+  telefono: string
+  privacidad: boolean
+}
+
+/**
+ * Teaser ('teaser'): el final no pide aceptar nada, pide una reunión para
+ * presentar la propuesta completa. Avisa al equipo (importante) y por correo a
+ * quien siga la propuesta, con la franja que han elegido.
+ */
+export async function solicitarReunionPropuestaWeb(slug: string, d: ReunionInput): Promise<{ ok: boolean; error?: string }> {
+  const p = await autorizada(slug)
+  if (!p || p.tipo !== 'teaser') return { ok: false, error: 'La sesión ha caducado. Vuelva a abrir el enlace.' }
+
+  const franja = d.franja.trim().slice(0, 120)
+  const nombre = d.nombre.trim().slice(0, 120)
+  const cargo = d.cargo.trim().slice(0, 120)
+  const email = d.email.trim().toLowerCase().slice(0, 160)
+  const telefono = d.telefono.trim().slice(0, 40)
+  if (!franja) return { ok: false, error: 'Elija un día y una hora.' }
+  if (!nombre) return { ok: false, error: 'Indíquenos su nombre.' }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: 'Ese correo no parece correcto.' }
+  if (!d.privacidad) return { ok: false, error: 'Acepte la política de privacidad.' }
+  if (d.web && d.web.trim()) return { ok: true }
+  if (!porIp(`reunion:${slug}`, 4, 60 * 60_000)) return { ok: false, error: 'Demasiadas solicitudes. Inténtelo más tarde.' }
+
+  const prueba = esAdmin(slug) || await esEquipo()
+  const quien = [nombre, cargo].filter(Boolean).join(' · ')
+  const titulo = `${prueba ? '[Prueba] ' : ''}${p.cliente} pide reunión: ${franja}`
+  if (await avisoReciente(titulo, 10)) return { ok: true }
+
+  // Lead en Captación (como el «Me interesa» de los dossiers) y, si entró con su
+  // PIN personal de Salas, enlazado a su ficha de la sala.
+  const admin = createAdminClient()
+  const salaLead = leadDeCookie(slug, cookies().get(leadCookieName(slug))?.value)
+  const { data: nuevo, error: errLead } = await admin.from('leads').insert({
+    nombre: prueba ? `[Prueba] ${nombre}` : nombre,
+    email,
+    telefono: telefono || null,
+    mensaje: `Pide reunión: ${franja}`,
+    origen: `Teaser web · ${p.proyecto}`,
+    estado_lead: 'nuevo',
+    interes: `${p.proyecto} · propuesta completa${cargo ? ` · ${cargo}` : ''}`,
+    notas: `Desde ${URL_BASE}/${p.slug} (${new Date().toISOString()}). ${p.cliente}. Aceptó la política de privacidad; solo contacto sobre su solicitud.${salaLead ? ' Entró con su PIN personal de Salas.' : ''}`,
+  }).select('id').single()
+  if (errLead) console.error('[propuesta-web] lead reunión', errLead.message)
+  if (salaLead && nuevo?.id) {
+    await admin.from('sala_leads').update({ lead_captacion_id: nuevo.id }).eq('id', salaLead).is('lead_captacion_id', null)
+  }
+
+  await crearAviso(titulo, `${quien}. ${[email, telefono].filter(Boolean).join(' · ')}. Teaser de ${p.proyecto}. Confirmar con enlace de videollamada en menos de 24 h. Ya está en Captación › Leads.`, 'importante')
+
+  const cc = await getPartnersCC().catch(() => [] as string[])
+  const para = p.avisarA?.length ? p.avisarA : [TEAM_EMAIL]
+  const fila = (k: string, v: string) => v ? `<tr><td style="padding:4px 16px 4px 0;color:#777;">${k}</td><td style="padding:4px 0;">${esc(v)}</td></tr>` : ''
+  const r = await sendEmail({
+    to: para,
+    cc: [TEAM_EMAIL, ...cc].filter((e) => !para.includes(e)),
+    replyTo: email,
+    subject: `${prueba ? '[Prueba] ' : ''}Reunión ${p.proyecto} · ${franja}`,
+    html: wrapEmail(`
+      <p style="margin:0 0 16px;font-size:16px;"><strong>${esc(p.cliente)}</strong> pide una reunión para ver la propuesta completa de <strong>${esc(p.proyecto)}</strong>.</p>
+      <p style="margin:0 0 16px;padding:12px 16px;background:#F2F2F0;border-left:2px solid #8fa596;font-size:16px;">${esc(franja)}</p>
+      <table style="font-size:14px;border-collapse:collapse;margin:0 0 16px;">
+        ${fila('Nombre', nombre)}${fila('Cargo', cargo)}${fila('Correo', email)}${fila('Teléfono', telefono)}
+      </table>
+      <p style="margin:0 0 8px;">Les hemos dicho que recibirán la confirmación con el enlace de la videollamada en menos de 24 horas. Responder a este correo les escribe directamente.</p>
+      <p style="margin:0;"><a href="${URL_BASE}/${p.slug}">${URL_BASE}/${p.slug}</a></p>
+    `),
+  })
+  if (r.error) console.error('[propuesta-web] email reunión', r.error)
+
+  // Cuenta como "hasta el final" en el historial de visitas.
+  try { await visitaAlFinal(p) } catch (e) { console.error('[propuesta-web] visita reunión', e) }
   return { ok: true }
 }

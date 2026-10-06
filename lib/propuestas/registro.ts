@@ -6,6 +6,10 @@
 //   · 'dc'   — un dossier interactivo (botones, selectores, vídeo, maquetas 3D)
 //     importado con scripts/propuestas/importar-dc.mjs y servido con su propio
 //     runtime dentro de un iframe (ver app/propuesta/[slug]/deck/route.ts).
+//   · 'teaser' — una página propia en React (components/propuesta/teaser/), no
+//     un diseño importado: lleva una maqueta 3D real y su final pide una reunión,
+//     no aceptar. Sus recursos 3D viven en public/propuesta/<slug>/maqueta/ y el
+//     middleware solo los sirve con la cookie del PIN.
 // Las cifras viven en el propio diseño: cada proyecto tiene las suyas.
 //
 // El slug lleva un sufijo aleatorio para que la URL no se adivine a partir del
@@ -15,7 +19,7 @@
 
 export interface PropuestaWeb {
   slug: string
-  tipo: 'deck' | 'dc'
+  tipo: 'deck' | 'dc' | 'teaser'
   /**
    * A quién va: 'cliente' = una persona concreta (se la saluda por su nombre y
    * el final pide ACEPTAR); 'comprador' = un dossier que puede circular entre
@@ -104,6 +108,30 @@ export const PROPUESTAS: PropuestaWeb[] = [
     descripcion: 'Edificio multifamiliar · 8 niveles · Vía a la Costa, Guayaquil, Ecuador',
     activa: true,
     publicada: '2026-10-02',
+  },
+  {
+    // Teaser para conseguir la reunión: maqueta en modo muestra (solo la manzana
+    // 1), casa club y casas tipo sin cifras. Los honorarios van en la reunión.
+    // Es una SALA (sala_salas, acceso_anonimo = false): sin PIN común ni del
+    // estudio; cada persona de RSA entra con su PIN personal de 6 cifras, creado
+    // en salas.formaprima.es, y los avisos los manda Salas.
+    slug: 'isla-creta-uk38g',
+    tipo: 'teaser',
+    audiencia: 'cliente',
+    nombreCliente: 'Grupo RSA',
+    cliente: 'Grupo inmobiliario RSA',
+    proyecto: 'Isla Creta',
+    pin: null,
+    portada: '/propuestas/isla-creta-uk38g/portada.webp',
+    og: '/propuestas/isla-creta-uk38g/og.jpg?v=2',
+    descripcion: 'Maqueta digital comercial, casa club y casas tipo · Samborondón, Ecuador',
+    pantallaPin: {
+      antetitulo: 'Isla Creta · Grupo RSA',
+      titulo: 'Isla Creta, en 3D.',
+      texto: 'Una vista previa de lo que proponemos para el equipo inmobiliario de Grupo RSA. Introduzca su código personal de 6 cifras, que figura en nuestro correo.',
+    },
+    activa: true,
+    publicada: '2026-10-06',
   },
 ]
 
