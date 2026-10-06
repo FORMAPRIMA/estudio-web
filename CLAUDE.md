@@ -193,7 +193,7 @@ Sistema de control financiero completo.
 | `/facturacion/control` | `FacturacionKanbanPage` → `FacturacionProyectoDetalle` | Facturas por proyecto (kanban). Cada factura se dirige **a clientes o a un proveedor** (excluyente) |
 | `/facturacion/emitidas` | `FacturasEmitidasPage` | Facturas emitidas en PDF |
 | `/facturacion/empresa` | `InfoEmpresaPage` | Datos fiscales del estudio |
-| `/team/gastos` (fuera de finanzas) | `ScannerPage` | Gastos y facturas: escaneo con OCR (IA) + autocrop (jscanify). Partner ve todo; el resto de roles FP solo sube y ve SUS gastos (modo "personal") |
+| `/team/gastos` (fuera de finanzas) | `ScannerPage` | Gastos y facturas: escaneo con OCR (IA). Sin recorte automático (se quitó el 6 jul 2026: deformaba los tickets). Subida directa a Storage con URL firmada (`/api/expense-scans/upload-url` + `lib/gastos/subida.ts`; por Vercel no pasan más de 4,5 MB) y fotos reducidas a 2000 px sin recortar. Partner ve todo; el resto de roles FP solo sube y ve SUS gastos (modo "personal") |
 | `/conciliacion` | `ReconciliationPage` | Conciliación bancaria. Matching automático al guardar cada scan (`lib/finanzas/reconciliation.ts`, tolerancia importe ±0,02) |
 | `/gestor` | `GestorAccesosPage` | Tokens de acceso del portal del gestor (solo lectura, revocables) |
 | `/dashboard` | `FinanzasDashboard` | Dashboard general (aún en construcción) |
@@ -798,7 +798,7 @@ Registro de horas por proyecto y fase. Todos los roles FP.
 /api/portal/verify                  POST — verifica token del portal cliente
 /api/bank-statement                 POST — importa extracto bancario
 /api/bank-statement/export          GET  — exporta extracto
-/api/expense-scans/upload           POST — sube imagen de ticket
+/api/expense-scans/upload-url       POST — URL firmada para subir el ticket directo a Storage
 /api/expense-scans/backfill-hora    POST — backfill
 /api/expense-scans/export           GET  — exporta tickets
 /api/exchange-rates                 GET  — tipos de cambio

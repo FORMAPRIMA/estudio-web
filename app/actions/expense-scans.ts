@@ -66,39 +66,6 @@ function validateFecha(fecha: string | null | undefined): { ok: true; value: str
   return { ok: true, value: fecha }
 }
 
-// ── uploadExpensePhoto ────────────────────────────────────────────────────────
-
-export async function uploadExpensePhoto(
-  formData: FormData
-): Promise<{ url: string; path: string } | { error: string }> {
-  try {
-    const { userId } = await requireFP()
-    const file = formData.get('photo') as File
-    if (!file || file.size === 0) return { error: 'No se recibió ninguna foto.' }
-    if (file.size > 10 * 1024 * 1024) return { error: 'La foto no puede superar 10 MB.' }
-
-    const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg'
-    const ts  = Date.now()
-    const storagePath = `${userId}/${ts}.${ext}`
-    const buffer = Buffer.from(await file.arrayBuffer())
-
-    const admin = createAdminClient()
-    const { data, error } = await admin.storage
-      .from('expense-scans')
-      .upload(storagePath, buffer, { contentType: file.type, upsert: false })
-
-    if (error) return { error: error.message }
-
-    const { data: { publicUrl } } = admin.storage
-      .from('expense-scans')
-      .getPublicUrl(data.path)
-
-    return { url: publicUrl, path: data.path }
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
-  }
-}
-
 // ── saveExpenseScan ───────────────────────────────────────────────────────────
 
 export async function saveExpenseScan(data: {
@@ -321,6 +288,8 @@ export async function getExpenseScans(
 // ── findOrphanScanFiles ───────────────────────────────────────────────────────
 // Archivos subidos al bucket cuyo registro en BD nunca llegó a guardarse
 // (el guardado falló en silencio). Permite recuperarlos y re-analizarlos.
+// No se ofrecen los que son COPIA exacta (mismo eTag) de un archivo que ya tiene
+// gasto: recuperarlos duplicaba el gasto (pasó el 01/10/2026 con 9 tickets).
 
 export interface OrphanScanFile {
   path: string
@@ -341,11 +310,12 @@ export async function findOrphanScanFiles(): Promise<OrphanScanFile[] | { error:
       .list('', { limit: 1000 })
     if (rootErr) return { error: rootErr.message }
 
-    const allFiles: { path: string; created_at: string | null; size: number | null }[] = []
+    const allFiles: { path: string; created_at: string | null; size: number | null; etag: string | null }[] = []
+    const etagOf = (m: unknown) => ((m as { eTag?: string } | null)?.eTag ?? null)
     for (const entry of folders ?? []) {
       if (entry.id) {
         // archivo suelto en la raíz
-        allFiles.push({ path: entry.name, created_at: entry.created_at ?? null, size: (entry.metadata as any)?.size ?? null })
+        allFiles.push({ path: entry.name, created_at: entry.created_at ?? null, size: (entry.metadata as any)?.size ?? null, etag: etagOf(entry.metadata) })
         continue
       }
       const { data: files } = await admin.storage
@@ -357,6 +327,7 @@ export async function findOrphanScanFiles(): Promise<OrphanScanFile[] | { error:
           path: `${entry.name}/${f.name}`,
           created_at: f.created_at ?? null,
           size: (f.metadata as any)?.size ?? null,
+          etag: etagOf(f.metadata),
         })
       }
     }
@@ -374,9 +345,12 @@ export async function findOrphanScanFiles(): Promise<OrphanScanFile[] | { error:
       if (p) registered.add(decodeURIComponent(p.split('?')[0]))
     }
 
+    const registeredEtags = new Set(allFiles.filter(f => registered.has(f.path) && f.etag).map(f => f.etag))
+
     const orphans: OrphanScanFile[] = []
     for (const f of allFiles) {
       if (registered.has(f.path)) continue
+      if (f.etag && registeredEtags.has(f.etag)) continue
       const { data: { publicUrl } } = admin.storage
         .from('expense-scans')
         .getPublicUrl(f.path)
