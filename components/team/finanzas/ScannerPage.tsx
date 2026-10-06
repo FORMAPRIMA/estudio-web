@@ -13,6 +13,7 @@ import {
   type ExpenseScan,
   type OrphanScanFile,
 } from '@/app/actions/expense-scans'
+import { subirArchivoGasto } from '@/lib/gastos/subida'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -914,15 +915,7 @@ function BatchUploadModal({ proyectos, onClose, onSaved, preloaded, title }: {
       // 1. Upload (se salta si el archivo ya está en Storage — recuperación)
       if (!uploadedUrl) {
         updateItem(item.id, { status: 'uploading' })
-        const fd = new FormData()
-        fd.append('photo', item.file!)
-        let upRes: { url: string } | { error: string }
-        try {
-          const upFetch = await fetch('/api/expense-scans/upload', { method: 'POST', body: fd })
-          upRes = await upFetch.json()
-        } catch {
-          upRes = { error: 'Error al subir el archivo.' }
-        }
+        const upRes = await subirArchivoGasto(item.file!)
 
         if ('error' in upRes) {
           updateItem(item.id, { status: 'error', error: upRes.error })
@@ -1405,15 +1398,7 @@ function CaptureModal({ proyectos, onClose, onSaved }: {
 
   const uploadFile = async (file: File): Promise<string | null> => {
     setUploading(true)
-    const fd = new FormData()
-    fd.append('photo', file)
-    let upRes: { url: string } | { error: string }
-    try {
-      const upFetch = await fetch('/api/expense-scans/upload', { method: 'POST', body: fd })
-      upRes = await upFetch.json()
-    } catch {
-      upRes = { error: 'Error al subir la foto.' }
-    }
+    const upRes = await subirArchivoGasto(file)
     setUploading(false)
     if ('error' in upRes) { setError(upRes.error); return null }
     return upRes.url
