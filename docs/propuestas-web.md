@@ -142,6 +142,28 @@ recibe un **PIN de 6 cifras** que lo identifica sin pedirle datos.
   `document.querySelector('deck-stage').goTo(i)` dentro del iframe; bloquear las server
   actions que no sean el PIN.
 
+## Salas · panel (fase 2, 6 oct 2026)
+
+`salas.formaprima.es` — burbuja aparte de internal: en ese host `next.config` reescribe
+todo a `app/salas` (y el middleware de internal se salta), así que /team, /login o la
+web no existen ahí; y `/salas` en cualquier otro host da 404.
+
+- Acceso con **código personal de 8 cifras** (se guarda su HMAC con `PORTAL_SECRET`, no el
+  código). Sesión: cookie firmada 30 días, revalidada contra la BD en cada petición.
+  Roles: `propietario` (todas las salas + Equipo) y `comercial` (sus salas, todos los leads).
+- Páginas: dossiers · sala (KPIs, leads, mapa de calor tiempo/alcance, actividad, CSV) ·
+  ficha de lead (PIN, datos, su mapa de calor, visitas; editar, nuevo PIN, revocar) ·
+  `/equipo` (dar acceso, salas, desactivar, nuevo código; registro de auditoría).
+- Piezas: `lib/salas/panel.ts` (sesión y lecturas; no es `'use server'`) ·
+  `lib/salas/metricas.ts` (puro) · `app/actions/salas.ts` · `components/salas/*` ·
+  `app/salas/**`. Tablas `sala_miembros`, `sala_miembro_salas`, `sala_auditoria`
+  (migración `salas_fase2.sql` ✅ aplicada el 6 oct 2026).
+- Alta de una persona desde terminal (arranque): `node scripts/salas/miembro.mjs "Nombre"
+  --rol propietario --email E --salida <fichero>`. **Ojo**: el `PORTAL_SECRET` de producción
+  es distinto del de `.env.local`; un código creado con el local no vale en producción.
+- Probar en local: `http://salas.localhost:3000`. WebKit de Playwright no resuelve
+  `*.localhost`: usar un proxy HTTP que conserve el Host (ver memoria del asistente).
+
 # Open House · Claudio Coello 38 (8 oct 2026)
 
 - Invitado: `formaprima.es/cc38/<token>` (`app/cc38/[token]/route.ts`). El diseño

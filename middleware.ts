@@ -11,6 +11,9 @@ export async function middleware(request: NextRequest) {
   // lo que quiere ahí es entrar. Solo GET: un POST a / es un Server Action, y
   // redirigirlo lo rompe.
   const host = (request.headers.get('host') || '').toLowerCase()
+  // Salas (salas.*) es una burbuja aparte: nada de la sesión ni las redirecciones
+  // de internal. next.config lo reescribe todo a app/salas.
+  if (host.startsWith('salas.')) return NextResponse.next()
   if (host === 'internal.formaprima.es' && request.nextUrl.pathname === '/' && request.method === 'GET') {
     return NextResponse.redirect(new URL('/login', request.url))
   }

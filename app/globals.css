@@ -2458,3 +2458,13 @@ div:hover > .tt-avatar-overlay {
   .retrib-form-grid { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); }
   .retrib-sticky { position: sticky; top: 16px; }
 }
+
+/* ── Salas (salas.formaprima.es) ── */
+@media (max-width: 640px) { .salas-oculto-movil { display: none; } }
+.salas-fila:hover, .salas-fila:focus-visible { background: #F6F5F1; outline: none; }
+.salas-tarjeta { transition: border-color .2s, box-shadow .2s; }
+.salas-tarjeta:hover { border-color: #1A1A1A40 !important; box-shadow: 0 6px 20px #1A1A1A0d; }
+.salas-2col { grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 560px) { .salas-2col { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.salas-ficha { grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 960px) { .salas-ficha { grid-template-columns: 320px minmax(0, 1fr); } }

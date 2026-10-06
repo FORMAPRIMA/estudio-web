@@ -34,8 +34,26 @@ const nextConfig = {
       },
     ],
   },
+  // Salas (panel de seguimiento de dossiers para inversores) vive en su propio
+  // subdominio y es una burbuja: en salas.* TODO se sirve desde app/salas, así
+  // que /team, /login o la web pública simplemente no existen ahí. Quedan fuera
+  // solo los ficheros de Next, los assets de las propuestas (logos) y los iconos.
+  async rewrites() {
+    const salas = [{ type: 'host', value: 'salas\\..+' }]
+    return {
+      beforeFiles: [
+        { source: '/', has: salas, destination: '/salas' },
+        { source: '/:path((?!_next/|salas/|salas$|propuestas/|favicon\\.ico$|apple-touch-icon\\.png$).*)', has: salas, destination: '/salas/:path' },
+      ],
+    }
+  },
   async headers() {
     return [
+      {
+        source: '/:path*',
+        has: [{ type: 'host', value: 'salas\\..+' }],
+        headers: [{ key: 'X-Robots-Tag', value: 'noindex, nofollow' }],
+      },
       {
         // Apply to all routes
         source: '/(.*)',
