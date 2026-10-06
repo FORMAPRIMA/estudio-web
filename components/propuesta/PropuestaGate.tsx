@@ -15,6 +15,10 @@ interface Props {
   /** Por defecto: "Hola, <cliente>." y la paleta oscura de Forma Prima. */
   textos?: { antetitulo: string; titulo: string; texto: string }
   tema?: { fondo: string; tinta: string; acento: string; claro: boolean }
+  /** 4 = PIN de la propuesta; 6 = PIN personal de un lead (Salas). */
+  digitos?: 4 | 6
+  /** A dónde ir al acertar; por defecto se recarga la misma página. */
+  destino?: string
 }
 
 const rgba = (hex: string, a: number) => {
@@ -22,7 +26,7 @@ const rgba = (hex: string, a: number) => {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`
 }
 
-export default function PropuestaGate({ slug, nombreCliente, proyecto, portada, textos, tema }: Props) {
+export default function PropuestaGate({ slug, nombreCliente, proyecto, portada, textos, tema, digitos = 4, destino }: Props) {
   const claro = !!tema?.claro
   const vars = tema ? ({
     '--fpg-fondo': tema.fondo, '--fpg-tinta': tema.tinta, '--fpg-acento': tema.acento,
@@ -36,10 +40,10 @@ export default function PropuestaGate({ slug, nombreCliente, proyecto, portada, 
   const input = useRef<HTMLInputElement>(null)
 
   const enviar = async (valor: string) => {
-    if (valor.length < 4 || estado === 'comprobando') return
+    if (valor.length < digitos || estado === 'comprobando') return
     setEstado('comprobando')
     const r = await desbloquearPropuestaWeb(slug, valor)
-    if (r.ok) { router.refresh(); return }
+    if (r.ok) { if (destino) router.replace(destino); else router.refresh(); return }
     setEstado('error')
     setPin('')
     input.current?.focus()
@@ -64,8 +68,8 @@ export default function PropuestaGate({ slug, nombreCliente, proyecto, portada, 
             onSubmit={(e) => { e.preventDefault(); enviar(pin) }}
             onClick={() => input.current?.focus()}
           >
-            <div className={`fpg-digitos${estado === 'error' ? ' mal' : ''}`} aria-hidden="true">
-              {[0, 1, 2, 3].map((k) => (
+            <div className={`fpg-digitos${digitos === 6 ? ' seis' : ''}${estado === 'error' ? ' mal' : ''}`} aria-hidden="true">
+              {Array.from({ length: digitos }, (_, k) => k).map((k) => (
                 <span key={k} className={pin.length === k && estado !== 'comprobando' ? 'cursor' : ''}>{pin[k] ? '•' : ''}</span>
               ))}
             </div>
@@ -74,16 +78,16 @@ export default function PropuestaGate({ slug, nombreCliente, proyecto, portada, 
               className="fpg-input"
               value={pin}
               onChange={(e) => {
-                const v = e.target.value.replace(/\D/g, '').slice(0, 4)
+                const v = e.target.value.replace(/\D/g, '').slice(0, digitos)
                 setPin(v)
                 if (estado === 'error') setEstado('idle')
-                if (v.length === 4) enviar(v)
+                if (v.length === digitos) enviar(v)
               }}
               inputMode="numeric"
               autoComplete="one-time-code"
               autoFocus
-              aria-label="PIN de 4 cifras"
-              maxLength={4}
+              aria-label={`PIN de ${digitos} cifras`}
+              maxLength={digitos}
             />
           </form>
           <div className="fpg-estado" role="status">
@@ -92,6 +96,7 @@ export default function PropuestaGate({ slug, nombreCliente, proyecto, portada, 
         </div>
         <div className="fpg-pie">
           ¿No tienes el PIN? Escríbenos a <a href="mailto:contacto@formaprima.es">contacto@formaprima.es</a>
+          <span className="fpg-legal"><a href="https://formaprima.es/privacidad" target="_blank" rel="noopener">Política de privacidad</a></span>
         </div>
       </div>
     </main>
@@ -111,6 +116,7 @@ html,body{background:#0d0d0d!important;}
 .fpg-p{margin:28px 0 0;max-width:520px;font-size:clamp(17px,1.6vw,21px);font-weight:300;line-height:1.5;opacity:.8;}
 .fpg-form{position:relative;margin-top:36px;padding:8px 0 12px;width:max-content;cursor:text;}
 .fpg-digitos{display:flex;gap:14px;}
+.fpg-digitos.seis span{width:50px;}
 .fpg-digitos span{width:58px;height:70px;border-bottom:1px solid currentColor;display:flex;align-items:center;justify-content:center;font-size:34px;font-weight:300;transition:border-color .3s;}
 .fpg-digitos span{border-bottom-color:color-mix(in srgb,currentColor 35%,transparent);}
 .fpg-digitos span.cursor{border-bottom-color:var(--fpg-acento,#8fa596);}
@@ -119,9 +125,14 @@ html,body{background:#0d0d0d!important;}
 .fpg-estado{margin-top:18px;font-size:14px;font-weight:300;opacity:.7;min-height:1.4em;}
 .fpg-pie{font-size:13px;font-weight:300;opacity:.5;}
 .fpg-pie a{color:inherit;text-decoration:underline;text-underline-offset:3px;}
+.fpg-legal{display:block;margin-top:10px;font-size:11px;opacity:.8;}
+.fpg-legal a{text-decoration:none;}
+.fpg-legal a:hover{text-decoration:underline;}
 @media (max-width:640px){
   .fpg-velo{background:var(--fpg-velo-m,linear-gradient(180deg,rgba(13,13,13,.55),rgba(13,13,13,.75) 40%,rgba(13,13,13,.95)));}
   .fpg-digitos span{width:52px;height:64px;}
+  .fpg-digitos.seis{gap:10px;}
+  .fpg-digitos.seis span{width:42px;height:58px;font-size:30px;}
 }
 @keyframes fpg-in{from{transform:scale(1.06);opacity:0}to{transform:scale(1);opacity:1}}
 @keyframes fpg-sube{from{transform:translateY(18px);opacity:0}to{transform:none;opacity:1}}

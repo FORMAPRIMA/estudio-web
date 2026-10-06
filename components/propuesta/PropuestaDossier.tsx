@@ -3,8 +3,10 @@
 // Marco de un dossier interactivo ('dc'). El dossier corre con su propio runtime
 // dentro de un iframe (/propuesta/<slug>/deck, mismo origen); esta página:
 //   · lo encaja: en móvil a pantalla completa, con el lienzo estirado a la
-//     proporción de la pantalla; en escritorio, como una historia vertical
-//     centrada sobre la portada desenfocada, con una columna de contexto;
+//     proporción de la pantalla; en escritorio, si el dossier tiene versión
+//     apaisada (lib/propuestas/escritorio/), también a pantalla completa con un
+//     lienzo de 2304 de ancho; si no, como una historia vertical centrada sobre
+//     la portada desenfocada, con una columna de contexto;
 //   · escucha su puente (postMessage): diapositiva actual e idioma, y el botón
 //     "Me interesa" de la diapositiva final, que abre aquí el formulario;
 //   · avisa al equipo al abrirlo y al llegar al final.
@@ -15,6 +17,7 @@
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { aceptarPropuestaWeb, progresoPropuestaWeb, registrarEventoPropuestaWeb, registrarInteresPropuestaWeb } from '@/app/actions/propuestasWeb'
+import { useMedicionSala } from './medicionSala'
 
 interface Tema { fondo: string; tinta: string; acento: string; claro: boolean }
 
@@ -26,6 +29,10 @@ interface Props {
   tema: Tema
   logo: string
   formato?: 'vertical' | 'horizontal'
+  /** Tiene versión de escritorio apaisada (deck?escritorio=1). */
+  apaisado?: boolean
+  /** Es una sala: mide tiempo por diapositiva e interacciones (ver medicionSala.ts). */
+  medir?: boolean
 }
 
 type Idioma = 'es' | 'en'
@@ -55,7 +62,7 @@ function modoEscritorio() {
   return window.innerWidth >= 900 && window.innerWidth > window.innerHeight
 }
 
-export default function PropuestaDossier({ slug, proyecto, descripcion, portada, tema, logo, formato = 'vertical' }: Props) {
+export default function PropuestaDossier({ slug, proyecto, descripcion, portada, tema, logo, formato = 'vertical', apaisado = false, medir = false }: Props) {
   const horizontal = formato === 'horizontal'
   const iframe = useRef<HTMLIFrameElement>(null)
   const [escritorio, setEscritorio] = useState<boolean | null>(null)
@@ -64,6 +71,8 @@ export default function PropuestaDossier({ slug, proyecto, descripcion, portada,
   const [formulario, setFormulario] = useState(false)
   const finalAvisado = useRef(false)
   const progreso = useRef<{ max: number; n: number; l: string; t?: ReturnType<typeof setTimeout> }>({ max: 0, n: 0, l: '' })
+  const { alSlide, alVida, alEvento } = useMedicionSala(slug, medir)
+  const idiomaVisto = useRef<string>('es')
 
   // Mientras la tiene abierta y a la vista, un latido por minuto: así la visita
   // sabe cuánto duró aunque se quede leyendo una sola diapositiva.
@@ -84,7 +93,9 @@ export default function PropuestaDossier({ slug, proyecto, descripcion, portada,
       modo.current = esc
       const alto = esc ? 1920 : Math.max(1920, Math.round((1080 * window.innerHeight) / window.innerWidth))
       setEscritorio(esc)
-      setSrc(horizontal ? `/propuesta/${slug}/deck` : `/propuesta/${slug}/deck?alto=${alto}`)
+      setSrc(horizontal ? `/propuesta/${slug}/deck`
+        : esc && apaisado ? `/propuesta/${slug}/deck?escritorio=1&alto=${Math.round((2304 * window.innerHeight) / window.innerWidth)}`
+        : `/propuesta/${slug}/deck?alto=${alto}`)
     }
     decidir()
     let t: ReturnType<typeof setTimeout>
@@ -92,7 +103,7 @@ export default function PropuestaDossier({ slug, proyecto, descripcion, portada,
     window.addEventListener('resize', alCambiar)
     registrarEventoPropuestaWeb(slug, 'abierta').catch(() => {})
     return () => { clearTimeout(t); window.removeEventListener('resize', alCambiar) }
-  }, [slug, horizontal])
+  }, [slug, horizontal, apaisado])
 
   // Sin zoom con los dedos también en la página que contiene el iframe (iOS
   // ignora user-scalable=no; gesturestart sí se puede cancelar).
@@ -108,8 +119,14 @@ export default function PropuestaDossier({ slug, proyecto, descripcion, portada,
   useEffect(() => {
     const recibir = (e: MessageEvent) => {
       if (e.origin !== location.origin || !e.data || !e.data.fp) return
-      const m = e.data as { t: string; i?: number; n?: number; l?: string; lang?: string }
-      if (m.lang === 'en' || m.lang === 'es') setIdioma(m.lang)
+      const m = e.data as { t: string; i?: number; n?: number; l?: string; lang?: string; k?: string }
+      if (m.lang === 'en' || m.lang === 'es') {
+        setIdioma(m.lang)
+        if (m.lang !== idiomaVisto.current) { idiomaVisto.current = m.lang; alEvento('idioma', m.lang) }
+      }
+      if (m.t === 'slide' && typeof m.i === 'number') alSlide(m.i, m.n ?? 0, m.l ?? '')
+      if (m.t === 'act') alVida()
+      if (m.t === 'ev' && typeof m.k === 'string') alEvento(m.k, m.l)
       if (m.t === 'slide' && typeof m.i === 'number' && m.n) {
         // Seguimiento de la visita: la diapositiva más lejana, sin esperar a irse.
         const pr = progreso.current
@@ -124,7 +141,7 @@ export default function PropuestaDossier({ slug, proyecto, descripcion, portada,
         finalAvisado.current = true
         registrarEventoPropuestaWeb(slug, 'final').catch(() => {})
       }
-      if (m.t === 'interes') setFormulario(true)
+      if (m.t === 'interes') { setFormulario(true); alEvento('interes') }
       if (m.t === 'aceptar') {
         const w = e.source as Window | null
         const responder = (r: object) => w?.postMessage({ fp: 1, ...r }, location.origin)
@@ -135,7 +152,7 @@ export default function PropuestaDossier({ slug, proyecto, descripcion, portada,
     }
     window.addEventListener('message', recibir)
     return () => window.removeEventListener('message', recibir)
-  }, [slug])
+  }, [slug, alSlide, alVida, alEvento])
 
   // En escritorio, las flechas funcionan aunque el foco esté fuera del iframe.
   useEffect(() => {
@@ -221,7 +238,9 @@ export default function PropuestaDossier({ slug, proyecto, descripcion, portada,
         </div>
       )}
 
-      {escritorio && !horizontal && (
+      {escritorio && !horizontal && apaisado && <div style={{ position: 'fixed', inset: 0 }}>{marco}</div>}
+
+      {escritorio && !horizontal && !apaisado && (
         <>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={portada} alt="" aria-hidden="true" style={{ position: 'absolute', inset: -60, width: 'calc(100% + 120px)', height: 'calc(100% + 120px)', maxWidth: 'none', objectFit: 'cover', filter: 'blur(38px) saturate(.8)', opacity: tema.claro ? 0.55 : 0.4 }} />

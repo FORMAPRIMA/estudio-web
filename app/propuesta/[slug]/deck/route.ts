@@ -1,8 +1,9 @@
 import { cookies } from 'next/headers'
 import { getPropuestaWeb, cargarDossier, type PropuestaWeb } from '@/lib/propuestas/registro'
-import { propuestaCookieName, accesoConcedido } from '@/lib/propuestas/acceso'
+import { accesoDossier } from '@/lib/salas/servidor'
 import { obrasDestacadas } from '@/lib/propuestas/obras'
 import type { ProyectoEnlace } from '@/components/propuesta/SlideSiguiente'
+import { escritorioDe } from '@/lib/propuestas/escritorio'
 
 // El documento de un dossier interactivo ('dc'), tal como salió de Claude Design,
 // con su propio runtime. Lo pinta un iframe de /propuesta/<slug>. Si la propuesta
@@ -224,6 +225,23 @@ const PUENTE = `<script>
     clearTimeout(tFuera); tFuera = setTimeout(function () { if (pista) pista.classList.remove('on'); }, 3400);
   }
 
+  // Medición (Salas): señales de vida para que la página solo cuente el tiempo
+  // real, y las interacciones con nombre. Un vídeo en silencio de fondo no es
+  // "vida"; uno con sonido, o que se arranca tras un toque, sí.
+  var vidaT = 0, d3 = -1;
+  function vida() { var t = Date.now(); if (t - vidaT > 10000) { vidaT = t; send({ t: 'act' }); } }
+  ['touchstart', 'pointerdown', 'wheel', 'keydown'].forEach(function (ev) { window.addEventListener(ev, vida, { passive: true, capture: true }); });
+  document.addEventListener('play', function (e) {
+    if (e.target && e.target.tagName === 'VIDEO' && (Date.now() - tocado < 3000 || !e.target.muted)) send({ t: 'ev', k: 'video', l: etiqueta });
+  }, true);
+  setInterval(function () {
+    var vs = document.querySelectorAll('video');
+    for (var i = 0; i < vs.length; i++) if (!vs[i].paused && !vs[i].ended && !vs[i].muted) { send({ t: 'act' }); return; }
+  }, 10000);
+  window.addEventListener('pointerdown', function (e) {
+    if (e.target && e.target.closest && e.target.closest('canvas') && d3 !== actual) { d3 = actual; send({ t: 'ev', k: '3d', l: etiqueta }); }
+  }, { passive: true, capture: true });
+
   var intentos = 0, arranque = setInterval(function () {
     if (document.querySelector('deck-stage > section') || ++intentos > 100) { clearInterval(arranque); cargar(activa()); }
   }, 100);
@@ -292,7 +310,7 @@ const PUENTE = `<script>
 
 export async function GET(req: Request, { params }: { params: { slug: string } }) {
   const p = getPropuestaWeb(params.slug)
-  const ok = !!p && p.tipo === 'dc' && accesoConcedido(p, cookies().get(propuestaCookieName(p.slug))?.value)
+  const ok = !!p && p.tipo === 'dc' && await accesoDossier(p, cookies())
   if (!p || !ok) return new Response('No disponible', { status: 404, headers: { 'Cache-Control': 'no-store' } })
 
   let html = await cargarDossier(p.slug)
@@ -308,8 +326,16 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
     const numero = String((caps[caps.length - 1] ?? 0) + 1).padStart(2, '0')
     html = html.replace('<!--FP:SIGUIENTE-->', slideSiguienteCliente(p, obras, numero))
   } else {
-    const pedido = parseInt(new URL(req.url).searchParams.get('alto') || '', 10)
-    const alto = Number.isFinite(pedido) ? Math.max(1920, Math.min(2600, pedido)) : 1920
+    const q = new URL(req.url).searchParams
+    const pedido = parseInt(q.get('alto') || '', 10)
+    // Escritorio: el mismo dossier en un lienzo apaisado de 2304 de ancho (en un
+    // portátil de 1440 px, un 62,5 %: la letra del diseño móvil queda a tamaño de
+    // lectura); el alto sigue a la pantalla (16:9 → 1296, 16:10 → 1440) y una capa
+    // de estilos reordena cada diapositiva (lib/propuestas/escritorio/).
+    const apaisado = q.get('escritorio') === '1' && !!escritorioDe(p.slug)
+    const alto = apaisado
+      ? (Number.isFinite(pedido) ? Math.max(1200, Math.min(1600, pedido)) : 1296)
+      : (Number.isFinite(pedido) ? Math.max(1920, Math.min(2600, pedido)) : 1920)
 
     // Numeración: la siguiente al último capítulo romano del dossier (VI → VII).
     const ROMANOS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII']
@@ -319,6 +345,7 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
     html = html
       .replace('<!--FP:SIGUIENTE-->', slideSiguiente(p, obras, numero))
       .replace(/(<x-import\b[^>]*\bheight=")1920(")/, `$1${alto}$2`)
+    if (apaisado) html = escritorioDe(p.slug)!(html.replace(/(<x-import\b[^>]*\bwidth=")1080(")/, '$12304$2'))
   }
   html = html
     .replace(/<head>/i, `<head>\n<base href="/propuestas/${p.slug}/">\n<meta name="robots" content="noindex, nofollow">\n<title>${esc(p.proyecto)} — Forma Prima</title>\n${PUENTE}`)

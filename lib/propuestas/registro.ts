@@ -76,7 +76,7 @@ export const PROPUESTAS: PropuestaWeb[] = [
     cliente: 'Comprador · dossier Casa Zurbano',
     proyecto: 'Casa Zurbano',
     pin: null,
-    portada: '/propuestas/casa-zurbano-xzw9e/assets/cz-cover-end.jpg',
+    portada: '/propuestas/casa-zurbano-xzw9e/assets/cz-cover-end.webp',
     og: '/propuestas/casa-zurbano-xzw9e/og.jpg?v=2',
     descripcion: 'Zurbano 6, 3º izq. · 199 m² · Madrid. Cómo puede ser, cuánto cuesta reformarlo y cuánto tarda.',
     pantallaPin: {

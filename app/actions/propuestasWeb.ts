@@ -10,9 +10,10 @@ import { createClient } from '@/lib/supabase/server'
 import { sendEmail, wrapEmail } from '@/lib/email'
 import { TEAM_EMAIL, getPartnersCC } from '@/lib/email/destinatarios'
 import { getPropuestaWeb, type PropuestaWeb } from '@/lib/propuestas/registro'
-import { propuestaCookieName, propuestaCookieValue, propuestaAdminCookieName, propuestaAdminCookieValue, pinCorrecto, accesoConcedido } from '@/lib/propuestas/acceso'
+import { propuestaCookieName, propuestaCookieValue, propuestaAdminCookieName, propuestaAdminCookieValue, pinCorrecto } from '@/lib/propuestas/acceso'
 import { leerVisitas, guardarVisitas, dispositivo, lugar, type Visita } from '@/lib/propuestas/visitas'
 import { randomUUID } from 'crypto'
+import { accesoDossier, getSala, leadPorPin, leadCookieName, leadCookieValue, leadDeCookie } from '@/lib/salas/servidor'
 
 const FP_ROLES = ['fp_team', 'fp_manager', 'fp_partner', 'fp_biz_dev']
 
@@ -42,10 +43,10 @@ async function avisoReciente(titulo: string, min: number): Promise<boolean> {
 }
 const URL_BASE = 'https://formaprima.es/propuesta'
 
-function autorizada(slug: string): PropuestaWeb | null {
+async function autorizada(slug: string): Promise<PropuestaWeb | null> {
   const p = getPropuestaWeb(slug)
   if (!p) return null
-  return accesoConcedido(p, cookies().get(propuestaCookieName(slug))?.value) ? p : null
+  return (await accesoDossier(p, cookies())) ? p : null
 }
 
 /** ¿La está mirando alguien del estudio con sesión? Entonces no es el cliente. */
@@ -86,8 +87,11 @@ export async function desbloquearPropuestaWeb(slug: string, pin: string): Promis
   }
   const p = getPropuestaWeb(slug)
   const limpio = pin.trim()
-  const admin = !!p?.pinAdmin && pinCorrecto(limpio, p.pinAdmin)
-  if (!p || p.pin === null || !(admin || pinCorrecto(limpio, p.pin))) {
+  // Salas: un PIN de 6 cifras identifica a un lead concreto.
+  const sala = p ? await getSala(slug) : null
+  const lead = sala ? await leadPorPin(sala.id, limpio) : null
+  const admin = !lead && !!p?.pinAdmin && pinCorrecto(limpio, p.pinAdmin)
+  if (!p || !(lead || admin || (p.pin !== null && pinCorrecto(limpio, p.pin)))) {
     // Un PIN de 4 cifras se prueba entero en poco tiempo si se responde al instante.
     await new Promise((r) => setTimeout(r, 900))
     return { ok: false }
@@ -99,6 +103,16 @@ export async function desbloquearPropuestaWeb(slug: string, pin: string): Promis
     path: `/propuesta/${slug}`,
     maxAge: 60 * 60 * 24 * 90,
   })
+  // Quién es (sala): con otro PIN en el mismo navegador, deja de ser ese lead.
+  if (sala) {
+    cookies().set(leadCookieName(slug), lead ? leadCookieValue(slug, lead.id) : '', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: lead ? 60 * 60 * 24 * 365 : 0,
+    })
+  }
   // PIN del estudio: marca el navegador para no avisar de sus visitas. Con el
   // PIN del cliente se quita (por si se probó antes en ese mismo navegador).
   cookies().set(propuestaAdminCookieName(slug), admin ? propuestaAdminCookieValue(slug) : '', {
@@ -119,7 +133,7 @@ type Evento = 'abierta' | 'final'
 
 /** Avisa al equipo de que el cliente abrió la propuesta o llegó al final. Una vez cada 12 h. */
 export async function registrarEventoPropuestaWeb(slug: string, evento: Evento): Promise<void> {
-  const p = autorizada(slug)
+  const p = await autorizada(slug)
   if (!p || (evento !== 'abierta' && evento !== 'final')) return
   if (esAdmin(slug) || await esEquipo()) return
 
@@ -246,7 +260,7 @@ async function visitaAlFinal(p: PropuestaWeb) {
 
 /** Hasta dónde ha llegado el cliente en esta visita (y que sigue ahí). Sin correo. */
 export async function progresoPropuestaWeb(slug: string, i: number, n: number, etiqueta: string): Promise<void> {
-  const p = autorizada(slug)
+  const p = await autorizada(slug)
   if (!p?.avisarA?.length || esAdmin(slug)) return
   const id = cookies().get(visitaCookie(slug))?.value
   if (!id || !porIp(`progreso:${slug}`, 240, 60 * 60_000)) return
@@ -264,7 +278,7 @@ export async function progresoPropuestaWeb(slug: string, i: number, n: number, e
 
 /** El cliente acepta la propuesta desde la última diapositiva. */
 export async function aceptarPropuestaWeb(slug: string, comentario: string): Promise<{ ok: boolean; error?: string }> {
-  const p = autorizada(slug)
+  const p = await autorizada(slug)
   if (!p) return { ok: false, error: 'La sesión ha caducado. Vuelve a abrir el enlace.' }
   // Aceptar es de las propuestas a un cliente concreto (con PIN); un dossier
   // público no se "acepta": deja un lead.
@@ -318,7 +332,7 @@ export interface InteresInput {
  * avisa al equipo.
  */
 export async function registrarInteresPropuestaWeb(slug: string, d: InteresInput): Promise<{ ok: boolean; error?: string }> {
-  const p = autorizada(slug)
+  const p = await autorizada(slug)
   const en = d.idioma === 'en'
   if (!p) return { ok: false, error: en ? 'Your session has expired. Please reopen the link.' : 'La sesión ha caducado. Vuelve a abrir el enlace.' }
 
@@ -352,7 +366,8 @@ export async function registrarInteresPropuestaWeb(slug: string, d: InteresInput
   const mensaje = d.mensaje.trim().slice(0, 2000)
 
   const admin = createAdminClient()
-  const { error } = await admin.from('leads').insert({
+  const salaLead = leadDeCookie(slug, cookies().get(leadCookieName(slug))?.value)
+  const { data: nuevoLead, error } = await admin.from('leads').insert({
     nombre: prueba ? `[Prueba] ${nombre}` : nombre,
     email: email || null,
     telefono: telefono || null,
@@ -360,11 +375,16 @@ export async function registrarInteresPropuestaWeb(slug: string, d: InteresInput
     origen: `Dossier web · ${p.proyecto}`,
     estado_lead: 'nuevo',
     interes,
-    notas: `Desde el dossier ${URL_BASE}/${p.slug} (${new Date().toISOString()}). Idioma: ${en ? 'inglés' : 'español'}. Aceptó la política de privacidad; sin consentimiento de comunicaciones comerciales: solo contacto sobre su solicitud.`,
-  })
+    notas: `Desde el dossier ${URL_BASE}/${p.slug} (${new Date().toISOString()}). Idioma: ${en ? 'inglés' : 'español'}. Aceptó la política de privacidad; sin consentimiento de comunicaciones comerciales: solo contacto sobre su solicitud.${salaLead ? ' Entró con su PIN personal de Salas.' : ''}`,
+  }).select('id').single()
   if (error) {
     console.error('[propuesta-web] lead', error.message)
     return { ok: false, error: en ? 'We could not send it. Please try again.' : 'No se ha podido enviar. Inténtalo de nuevo.' }
+  }
+
+  // Salas: el lead del PIN queda enlazado con su ficha de Captación.
+  if (salaLead && nuevoLead?.id) {
+    await admin.from('sala_leads').update({ lead_captacion_id: nuevoLead.id }).eq('id', salaLead).is('lead_captacion_id', null)
   }
 
   await crearAviso(

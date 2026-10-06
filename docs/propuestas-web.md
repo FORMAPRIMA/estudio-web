@@ -37,6 +37,16 @@ Y dos audiencias: `cliente` (una persona; el final pide **aceptar**) y `comprado
    pantalla completa (en un móvil en vertical pide girarlo) y, con `audiencia: 'cliente'`,
    el final es **Aceptar propuesta** + obras + formaprima.es, en el estilo oscuro del deck.
 5. `og.jpg` (1200×630): captura de la portada (o `og-con-logos.mjs`).
+6. (Opcional) **Versión de escritorio de un dossier vertical.** Sin ella, en un
+   ordenador se ve como historia vertical centrada. Con ella, a pantalla completa:
+   `deck?escritorio=1&alto=<1000–1320>` sirve el mismo documento en un lienzo de 1920
+   de ancho y le aplica `lib/propuestas/escritorio/<dossier>.ts` (alta en `index.ts`):
+   una capa de estilos que reordena cada diapositiva en horizontal y los retoques de
+   código que hagan falta (vídeo horizontal, carrusel de lado…). Va por la posición de
+   cada bloque: **si se reimporta un diseño cambiado, revisar esa capa** (si no
+   encuentra un fragmento, falla en vez de servir algo roto).
+   Casa Zurbano la tiene desde el 2 oct 2026 (vídeo de inicio horizontal
+   `assets/zurbano6-video-h.{av1,hevc}.mp4`, original en `~/Downloads/PROPUESTAS/casa-zurbano/horizontal/`).
 
 Publicadas así: Casa Zurbano (vertical, comprador, sin PIN) y Torre del Mangle
 (`torre-del-mangle-zxu7z`, horizontal, Javier Ponce · PONCE3, PIN 3333, 2 oct 2026).
@@ -104,6 +114,33 @@ encuentra su fragmento, el importador se para y lo dice.
   formulario de interés; "Aceptar" solo en propuestas a cliente.
 - PIN: 10 intentos / 15 min por IP.
 - Cada propuesta sin PIN (`pin: null`) es pública pero con `noindex`.
+
+## Salas · seguimiento de leads (fase 1, 6 oct 2026)
+
+Un dossier es **sala** si tiene fila en `sala_salas` (piloto: Casa Zurbano). Cada lead
+recibe un **PIN de 6 cifras** que lo identifica sin pedirle datos.
+
+- Enlace personal: `formaprima.es/propuesta/<slug>/acceso` (pide el PIN aunque el dossier
+  sea público). El enlace de siempre sigue abierto si `acceso_anonimo = true`: esas visitas
+  se miden como anónimas.
+- Se mide: sesiones (30 min), ciudad/región/país y coordenadas de ciudad (cabeceras de
+  Vercel, sin servicios externos), IP truncada, dispositivo, **tiempo activo por
+  diapositiva** (pestaña visible y señales de vida en el último minuto), hasta dónde llega,
+  final, vídeo, maquetas 3D, idioma y «Me interesa». Si deja sus datos al final, su lead de
+  Captación queda enlazado (`sala_leads.lead_captacion_id`).
+- No se mide al equipo (sesión de /team o PIN del estudio).
+- Revocar o caducar un PIN deja al lead como anónimo (y sin acceso si la sala es cerrada).
+- Piezas: `lib/salas/servidor.ts` (acceso, PIN, cookies, geo; no es `'use server'`) ·
+  `app/api/salas/t/route.ts` (baliza; sesión en token firmado) ·
+  `components/propuesta/medicionSala.ts` (reloj y lotes) · puente del iframe en
+  `deck/route.ts` (señales `act` y `ev`) · `app/propuesta/[slug]/acceso/page.tsx`.
+- Tablas `sala_salas`, `sala_leads`, `sala_sesiones`, `sala_vistas`, `sala_eventos` +
+  función `sala_sumar_vistas` (migración `salas_fase1.sql` ✅ aplicada el 6 oct 2026).
+- Hasta el panel (fase 2): `node scripts/salas/lead.mjs <slug> "Nombre" [--empresa --canal --email --tel --caduca AAAA-MM-DD]`,
+  `--lista`, `--revocar <PIN>`; informe con mapa de calor: `node scripts/salas/informe.mjs <slug> [--lead <PIN>]`.
+- Probar en local: Playwright 1.63 (WebKit en caché) con iPhone 14; navegar con
+  `document.querySelector('deck-stage').goTo(i)` dentro del iframe; bloquear las server
+  actions que no sean el PIN.
 
 # Open House · Claudio Coello 38 (8 oct 2026)
 

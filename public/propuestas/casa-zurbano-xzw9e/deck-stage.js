@@ -623,7 +623,7 @@
       // Presenter-view popup loads deckUrl?_snthumb=...#N for its prev/cur/
       // next thumbnails — the rail has no business rendering inside those
       // (wrong scale, and it offsets the stage so the thumb shows a gutter).
-      if (/[?&]_snthumb=/.test(location.search)) this.setAttribute('no-rail', '');
+      this.setAttribute('no-rail', '');
       this._render();
       this._loadNotes();
       this._syncPrintPageRule();

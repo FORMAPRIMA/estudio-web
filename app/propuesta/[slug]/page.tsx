@@ -1,11 +1,12 @@
 import type { Metadata, Viewport } from 'next'
 import { cookies, headers } from 'next/headers'
 import { getPropuestaWeb, cargarDeck } from '@/lib/propuestas/registro'
-import { propuestaCookieName, accesoConcedido } from '@/lib/propuestas/acceso'
+import { accesoDossier, getSala } from '@/lib/salas/servidor'
 import { obrasDestacadas } from '@/lib/propuestas/obras'
 import PropuestaGate from '@/components/propuesta/PropuestaGate'
 import PropuestaDeck from '@/components/propuesta/PropuestaDeck'
 import PropuestaDossier from '@/components/propuesta/PropuestaDossier'
+import { escritorioDe } from '@/lib/propuestas/escritorio'
 
 // Propuesta de honorarios de un cliente: formaprima.es/propuesta/<slug>.
 // Ver lib/propuestas/registro.ts (alta) y scripts/propuestas/importar.mjs (diseño).
@@ -59,12 +60,12 @@ export default async function PropuestaPage({ params }: { params: { slug: string
     </>
   )
 
-  const autorizado = accesoConcedido(p, cookies().get(propuestaCookieName(p.slug))?.value)
+  const [autorizado, sala] = await Promise.all([accesoDossier(p, cookies()), getSala(p.slug)])
   if (!autorizado) {
     return (
       <>
         {fuente}
-        <PropuestaGate slug={p.slug} nombreCliente={p.nombreCliente} proyecto={p.proyecto} portada={p.portada} textos={p.pantallaPin} tema={p.tema} />
+        <PropuestaGate slug={p.slug} nombreCliente={p.nombreCliente} proyecto={p.proyecto} portada={p.portada} textos={p.pantallaPin} tema={p.tema} digitos={sala && p.pin === null ? 6 : 4} />
       </>
     )
   }
@@ -82,6 +83,8 @@ export default async function PropuestaPage({ params }: { params: { slug: string
           tema={tema}
           logo={tema.claro ? '/propuestas/logo-fp-negro.png' : '/propuestas/logo-fp.png'}
           formato={p.formato}
+          apaisado={!!escritorioDe(p.slug)}
+          medir={!!sala}
         />
       </>
     )
