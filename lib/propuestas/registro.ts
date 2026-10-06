@@ -50,6 +50,8 @@ export interface PropuestaWeb {
    * 1080×1920, historia para móvil; 'horizontal' = 1920×1080, presentación.
    */
   formato?: 'vertical' | 'horizontal'
+  /** Logo del cliente junto al de Forma Prima en la pantalla del PIN (versión para fondo oscuro). */
+  logoSocio?: string
   /** Paleta de la pantalla del PIN y del marco; por defecto, la oscura de Forma Prima. */
   tema?: { fondo: string; tinta: string; acento: string; claro: boolean }
   /** false = la URL responde "no disponible" (propuesta retirada). */
@@ -125,6 +127,7 @@ export const PROPUESTAS: PropuestaWeb[] = [
     portada: '/propuestas/isla-creta-uk38g/portada.webp',
     og: '/propuestas/isla-creta-uk38g/og.jpg?v=2',
     descripcion: 'Maqueta digital comercial, casa club y casas tipo · Samborondón, Ecuador',
+    logoSocio: '/propuestas/isla-creta-uk38g/logo-rsa-claro.png',
     pantallaPin: {
       antetitulo: 'Isla Creta · Grupo RSA',
       titulo: 'Isla Creta, en 3D.',

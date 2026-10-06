@@ -21,6 +21,8 @@ interface Props {
   destino?: string
   /** Trato de usted (clientes corporativos). */
   formal?: boolean
+  /** Logo del cliente junto al nuestro (versión para fondo oscuro). */
+  logoSocio?: string
 }
 
 const rgba = (hex: string, a: number) => {
@@ -28,7 +30,7 @@ const rgba = (hex: string, a: number) => {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`
 }
 
-export default function PropuestaGate({ slug, nombreCliente, proyecto, portada, textos, tema, digitos = 4, destino, formal }: Props) {
+export default function PropuestaGate({ slug, nombreCliente, proyecto, portada, textos, tema, digitos = 4, destino, formal, logoSocio }: Props) {
   const claro = !!tema?.claro
   const vars = tema ? ({
     '--fpg-fondo': tema.fondo, '--fpg-tinta': tema.tinta, '--fpg-acento': tema.acento,
@@ -60,7 +62,11 @@ export default function PropuestaGate({ slug, nombreCliente, proyecto, portada, 
       <div className="fpg-velo" />
       <div className="fpg-caja">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={claro ? '/propuestas/logo-fp-negro.png' : '/propuestas/logo-fp.png'} alt="Forma Prima" className="fpg-logo" />
+        <div className="fpg-logos">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={claro ? '/propuestas/logo-fp-negro.png' : '/propuestas/logo-fp.png'} alt="Forma Prima" className="fpg-logo" />
+          {logoSocio && <><span className="fpg-filete" />{/* eslint-disable-next-line @next/next/no-img-element */}<img src={logoSocio} alt="" className="fpg-logo-socio" /></>}
+        </div>
         <div>
           <div className="fpg-eyebrow">{textos?.antetitulo ?? 'Propuesta de honorarios'}</div>
           <h1 className="fpg-h1">{textos?.titulo ?? `Hola, ${nombreCliente}.`}</h1>
@@ -113,6 +119,10 @@ html,body{background:#0d0d0d!important;}
 .fpg-velo{position:fixed;inset:0;background:var(--fpg-velo,linear-gradient(90deg,rgba(13,13,13,.94),rgba(13,13,13,.65) 50%,rgba(13,13,13,.25)));}
 .fpg-caja{position:relative;min-height:100%;gap:56px;max-width:760px;padding:clamp(32px,6vw,96px) clamp(24px,6vw,104px);display:flex;flex-direction:column;justify-content:space-between;animation:fpg-sube 1.4s cubic-bezier(.16,1,.3,1) .15s both;}
 .fpg-logo{height:24px;width:auto;align-self:flex-start;}
+.fpg-logos{display:flex;align-items:center;gap:18px;align-self:flex-start;}
+.fpg-logos .fpg-logo{align-self:auto;}
+.fpg-filete{width:1px;height:30px;background:currentColor;opacity:.35;}
+.fpg-logo-socio{height:38px;width:auto;}
 .fpg-eyebrow{font-size:12px;font-weight:600;letter-spacing:.32em;text-transform:uppercase;color:var(--fpg-acento,#8fa596);}
 .fpg-h1{margin:28px 0 0;font-family:var(--fpg-titulo,inherit);font-size:clamp(48px,7vw,96px);font-weight:var(--fpg-peso,200);letter-spacing:-.035em;line-height:.98;}
 .fpg-p{margin:28px 0 0;max-width:520px;font-size:clamp(17px,1.6vw,21px);font-weight:300;line-height:1.5;opacity:.8;}

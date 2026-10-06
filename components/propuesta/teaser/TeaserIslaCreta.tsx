@@ -346,9 +346,31 @@ export default function TeaserIslaCreta({ slug, medir = false }: { slug: string;
     <div className="ict">
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
 
+      {/* Pantalla de carga: llega con el HTML (sin esperar a three.js) y se va
+          cuando la isla está lista. */}
+      <div className={`ict-splash${listo || sin3d ? ' fuera' : ''}`} role="status" aria-live="polite" aria-hidden={listo || !!sin3d}>
+        <div className="ict-splash-logos">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/propuestas/logo-fp.png" alt="Forma Prima" className="fp" />
+          <i aria-hidden="true" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={`${A}/logo-rsa-claro.png`} alt="Grupo RSA" className="rsa" />
+        </div>
+        <div className="ict-splash-pie">
+          <span>Isla Creta · Preparando la maqueta 3D</span>
+          <div className="ict-barra"><i style={{ transform: `scaleX(${Math.max(0.03, carga)})` }} /></div>
+          <small>{Math.round(carga * 100)} %</small>
+        </div>
+      </div>
+
       <header className={`ict-top${cabSolida ? ' solida' : ''}`}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/propuestas/logo-fp.png" alt="Forma Prima" className="ict-logo" />
+        <span className="ict-logos">
+          <img src="/propuestas/logo-fp.png" alt="Forma Prima" className="ict-logo" />
+          <i aria-hidden="true" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={`${A}/logo-rsa-claro.png`} alt="Grupo RSA" className="ict-logo-rsa" />
+        </span>
         <div className="ict-cap" aria-live="polite">
           <b>{String(capitulo + 1).padStart(2, '0')}</b><span>/ 0{CAPITULOS.length}</span><em>{CAPITULOS[capitulo].titulo}</em>
         </div>
@@ -380,12 +402,7 @@ export default function TeaserIslaCreta({ slug, medir = false }: { slug: string;
           <div ref={lienzo} className="ict-canvas" />
           {!explorando && <div className="ict-velo" />}
 
-          {!listo && !sin3d && (
-            <div className="ict-carga" role="status">
-              <span>Preparando la isla</span>
-              <div className="ict-barra"><i style={{ transform: `scaleX(${Math.max(0.04, carga)})` }} /></div>
-            </div>
-          )}
+
           {sin3d && <div className="ict-carga"><span>{sin3d}</span></div>}
 
           {explorando && (
@@ -899,6 +916,17 @@ html:has(.ict-sticky.full){scroll-snap-type:none;}
 .ict-top{transition:background .35s,padding .35s;}
 .ict-top.solida{background:rgba(13,13,13,.86);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);padding-top:10px;padding-bottom:10px;}
 .ict-logo{height:18px;width:auto;}
+.ict-logos{display:flex;align-items:center;gap:12px;}
+.ict-logos i{width:1px;height:22px;background:rgba(251,251,250,.4);}
+.ict-logo-rsa{height:28px;width:auto;}
+.ict-splash{position:fixed;inset:0;z-index:100;background:#0d0d0d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:56px;padding:24px;transition:opacity .9s ease .2s,visibility 0s linear 1.1s;}
+.ict-splash.fuera{opacity:0;visibility:hidden;pointer-events:none;}
+.ict-splash-logos{display:flex;align-items:center;gap:clamp(20px,4vw,36px);animation:ict-sube 1.2s cubic-bezier(.16,1,.3,1) both;}
+.ict-splash-logos .fp{height:clamp(22px,3.4vw,32px);width:auto;}
+.ict-splash-logos .rsa{height:clamp(48px,7vw,68px);width:auto;}
+.ict-splash-logos i{width:1px;height:clamp(40px,6vw,56px);background:rgba(251,251,250,.35);}
+.ict-splash-pie{display:flex;flex-direction:column;align-items:center;gap:12px;width:min(300px,70vw);font-size:13px;font-weight:300;color:rgba(251,251,250,.7);animation:ict-sube 1.2s cubic-bezier(.16,1,.3,1) .25s both;}
+.ict-splash-pie small{font-size:12px;opacity:.6;font-variant-numeric:tabular-nums;}
 
 /* Escenario 3D: lienzo fijo mientras pasan tres textos por encima */
 .ict-stage{position:relative;background:#24302b;}

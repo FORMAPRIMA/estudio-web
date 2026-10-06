@@ -66,7 +66,7 @@ export default async function PropuestaPage({ params }: { params: { slug: string
     return (
       <>
         {fuente}
-        <PropuestaGate slug={p.slug} nombreCliente={p.nombreCliente} proyecto={p.proyecto} portada={p.portada} textos={p.pantallaPin} tema={p.tema} digitos={sala && p.pin === null ? 6 : 4} formal={p.tipo === 'teaser'} />
+        <PropuestaGate slug={p.slug} nombreCliente={p.nombreCliente} proyecto={p.proyecto} portada={p.portada} textos={p.pantallaPin} tema={p.tema} digitos={sala && p.pin === null ? 6 : 4} formal={p.tipo === 'teaser'} logoSocio={p.logoSocio} />
       </>
     )
   }
