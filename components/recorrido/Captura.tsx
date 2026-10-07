@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Plano from './Plano'
+import Visor from './Visor'
 import type { PlanoHandle, RcPin } from './Plano'
 import {
   CATEGORIAS, ESTANCIAS, rangoEstancia, recorridoDe,
@@ -51,6 +52,9 @@ export default function Captura({ inicial, plano: planoInicial, usuario }: { ini
   const [ghost, setGhost] = useState<{ x: number; y: number } | null>(null)
   const [editando, setEditando] = useState<Borrador | null>(null)
   const [selId, setSelId] = useState<string | null>(null)
+  // Ficha de consulta (revisar sin editar) y visor de fotos a pantalla completa.
+  const [ficha, setFicha] = useState<string | null>(null)
+  const [visor, setVisor] = useState<{ fotos: string[]; i: number; titulo?: string } | null>(null)
   const [aviso, setAviso] = useState<string | null>(null)
   const [verSolo, setVerSolo] = useState<'todos' | 'mios'>('todos')
   const [reubicando, setReubicando] = useState<Borrador | null>(null)
@@ -202,7 +206,7 @@ export default function Captura({ inicial, plano: planoInicial, usuario }: { ini
             onSelectPin={(id) => {
               if (placing) return
               const d = detalles.find((x) => x.id === id)
-              if (d) { setSelId(id); setEditando(aBorrador(d)) }
+              if (d) { setSelId(id); setFicha(id) }
             }}
             onBackgroundTap={() => setSelId(null)}
           />
@@ -256,8 +260,8 @@ export default function Captura({ inicial, plano: planoInicial, usuario }: { ini
               {recorrido.map((d, i) => (
                 <li key={d.id} className="rc-fila">
                   <span className="rc-fila-num">{i + 1}</span>
-                  <Miniatura d={d} />
-                  <button className="rc-fila-txt" onClick={() => setEditando(aBorrador(d))}>
+                  <Miniatura d={d} onVer={(f) => setVisor(f)} />
+                  <button className="rc-fila-txt" onClick={() => setFicha(d.id)}>
                     <span className="rc-fila-tit">{d.titulo || 'Sin título'}</span>
                     <span className="rc-fila-meta">{[d.estancia, d.categoria].filter(Boolean).join(' · ') || '—'}</span>
                   </button>
@@ -278,8 +282,8 @@ export default function Captura({ inicial, plano: planoInicial, usuario }: { ini
                 <ul className="rc-lista">
                   {ds.map((d) => (
                     <li key={d.id} className="rc-fila">
-                      <Miniatura d={d} />
-                      <button className="rc-fila-txt" onClick={() => setEditando(aBorrador(d))}>
+                      <Miniatura d={d} onVer={(f) => setVisor(f)} />
+                      <button className="rc-fila-txt" onClick={() => setFicha(d.id)}>
                         <span className="rc-fila-tit">{d.titulo || 'Sin título'}</span>
                         <span className="rc-fila-meta">{[d.categoria, d.autor_nombre].filter(Boolean).join(' · ')}</span>
                       </button>
@@ -318,8 +322,31 @@ export default function Captura({ inicial, plano: planoInicial, usuario }: { ini
             setReubicando(b)
           }}
           onAviso={setAviso}
+          onVerFotos={(fotos, i) => setVisor({ fotos, i, titulo: editando.titulo })}
         />
       )}
+
+      {ficha && !editando && (() => {
+        // Orden de consulta: el del recorrido y después el resto por estancia (como Selección).
+        const orden = [...recorrido, ...restoPorEstancia.flatMap(([, ds]) => ds)]
+        const i = orden.findIndex((x) => x.id === ficha)
+        const d = orden[i]
+        if (!d) return null
+        return (
+          <Ficha
+            d={d}
+            numero={numeroDe.get(d.id)}
+            onCerrar={() => { setFicha(null); setSelId(null) }}
+            onEditar={() => setEditando(aBorrador(d))}
+            onVer={(fi) => setVisor({ fotos: d.fotos.map((f) => f.url), i: fi, titulo: d.titulo })}
+            onAnterior={i > 0 ? () => { setFicha(orden[i - 1].id); setSelId(orden[i - 1].id) } : undefined}
+            onSiguiente={i < orden.length - 1 ? () => { setFicha(orden[i + 1].id); setSelId(orden[i + 1].id) } : undefined}
+            posicion={`${i + 1} / ${orden.length}`}
+          />
+        )
+      })()}
+
+      {visor && <Visor fotos={visor.fotos} inicio={visor.i} titulo={visor.titulo} onCerrar={() => setVisor(null)} />}
 
       {aviso && <div className="rc-toast">{aviso}</div>}
     </div>
@@ -327,22 +354,101 @@ export default function Captura({ inicial, plano: planoInicial, usuario }: { ini
 
 }
 
-function Miniatura({ d }: { d: RcDetalle }) {
+function Miniatura({ d, onVer }: { d: RcDetalle; onVer?: (v: { fotos: string[]; i: number; titulo?: string }) => void }) {
   const f = d.fotos[0]
-  return f
-    ? <img className="rc-mini" src={f.url} alt="" loading="lazy" />
-    : <span className="rc-mini rc-mini-vacia">—</span>
+  if (!f) return <span className="rc-mini rc-mini-vacia">—</span>
+  if (!onVer) return <img className="rc-mini" src={f.url} alt="" loading="lazy" />
+  return (
+    <button className="rc-mini-btn" onClick={() => onVer({ fotos: d.fotos.map((x) => x.url), i: 0, titulo: d.titulo })} aria-label="Ver foto">
+      <img className="rc-mini" src={f.url} alt="" loading="lazy" />
+      {d.fotos.length > 1 && <em>{d.fotos.length}</em>}
+    </button>
+  )
+}
+
+// ─── Ficha de consulta ────────────────────────────────────────────────────────
+// Lo que se abre al tocar un pin o una fila: revisar el detalle (foto grande,
+// texto, autor) sin entrar a editar, y pasar al anterior / siguiente.
+
+function Ficha({ d, numero, posicion, onCerrar, onEditar, onVer, onAnterior, onSiguiente }: {
+  d: RcDetalle
+  numero?: number
+  posicion: string
+  onCerrar: () => void
+  onEditar: () => void
+  onVer: (i: number) => void
+  onAnterior?: () => void
+  onSiguiente?: () => void
+}) {
+  const [i, setI] = useState(0)
+  useEffect(() => { setI(0) }, [d.id])
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement)?.closest?.('input,textarea')) return
+      if (document.querySelector('.rc-visor, .rc-hoja')) return  // manda el visor o el editor abierto encima
+      if (e.key === 'Escape') onCerrar()
+      if (e.key === 'ArrowRight' && onSiguiente) onSiguiente()
+      if (e.key === 'ArrowLeft' && onAnterior) onAnterior()
+    }
+    window.addEventListener('keydown', k)
+    return () => window.removeEventListener('keydown', k)
+  }, [onCerrar, onAnterior, onSiguiente])
+  const foto = d.fotos[i]
+  return (
+    <div className="rc-ficha" role="dialog" aria-label={d.titulo}>
+      <div className="rc-ficha-cab">
+        <button className="rc-link" onClick={onCerrar}>Cerrar</button>
+        <span className="rc-eyebrow">{posicion}</span>
+        <button className="rc-btn rc-btn-bronce rc-btn-sm" onClick={onEditar}>Editar</button>
+      </div>
+      <div className="rc-ficha-cuerpo">
+        {foto ? (
+          <button className="rc-ficha-foto" onClick={() => onVer(i)} aria-label="Ver foto a pantalla completa">
+            <img src={foto.url} alt={d.titulo} />
+            <span className="rc-ficha-zoom">⤢ Ver en grande</span>
+          </button>
+        ) : (
+          <div className="rc-ficha-foto rc-ficha-sinfoto">Sin foto</div>
+        )}
+        {d.fotos.length > 1 && (
+          <div className="rc-ficha-tiras">
+            {d.fotos.map((f, j) => (
+              <button key={f.id} className={j === i ? 'is-on' : ''} onClick={() => setI(j)}><img src={f.url} alt="" loading="lazy" /></button>
+            ))}
+          </div>
+        )}
+        <div className="rc-ficha-meta">
+          {numero && <span className="rc-ficha-num">{numero}</span>}
+          <span className="rc-eyebrow">{[d.estancia, d.categoria].filter(Boolean).join(' · ') || 'Sin estancia'}</span>
+        </div>
+        <h2 className="rc-serif rc-ficha-tit">{d.titulo || 'Sin título'}</h2>
+        {d.texto ? <p className="rc-ficha-txt">{d.texto}</p> : <p className="rc-ficha-txt rc-ficha-vacio">Sin texto para los invitados.</p>}
+        {d.notas_guia && (
+          <div className="rc-story-notas">
+            <span className="rc-eyebrow">Solo para el guía</span>
+            <p>{d.notas_guia}</p>
+          </div>
+        )}
+        <p className="rc-ficha-autor">Subido por {d.autor_nombre ?? '—'}</p>
+      </div>
+      <div className="rc-ficha-pie">
+        <button className="rc-btn rc-btn-ghost rc-btn-sm" onClick={onAnterior} disabled={!onAnterior}>‹ Anterior</button>
+        <button className="rc-btn rc-btn-ghost rc-btn-sm" onClick={onSiguiente} disabled={!onSiguiente}>Siguiente ›</button>
+      </div>
+    </div>
+  )
 }
 
 // ─── Ficha de alta / edición ──────────────────────────────────────────────────
 
-function Editor({ inicial, detalles, onCerrar, onGuardado, onMover, onAviso }: {
+function Editor({ inicial, detalles, onCerrar, onGuardado, onMover, onAviso, onVerFotos }: {
   inicial: Borrador
   detalles: RcDetalle[]
   onCerrar: () => void
   onGuardado: (msg: string) => void
   onMover: (b: Borrador) => void
   onAviso: (m: string) => void
+  onVerFotos: (fotos: string[], i: number) => void
 }) {
   const [b, setB] = useState<Borrador>(inicial)
   const [subiendo, setSubiendo] = useState(0)
@@ -452,7 +558,7 @@ function Editor({ inicial, detalles, onCerrar, onGuardado, onMover, onAviso }: {
         <div className="rc-fotos">
           {b.fotos.map((f, i) => (
             <figure key={f.url} className="rc-foto">
-              <img src={f.url} alt="" />
+              <img src={f.url} alt="" onClick={() => onVerFotos(b.fotos.map((x) => x.url), i)} style={{ cursor: 'zoom-in' }} />
               {i === 0 && <span className="rc-foto-portada">Portada</span>}
               <div className="rc-foto-acc">
                 <button onClick={() => moverFoto(i, -1)} disabled={i === 0} aria-label="Antes">‹</button>

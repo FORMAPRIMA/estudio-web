@@ -69,7 +69,7 @@
 .rc-ruta polyline { fill: none; stroke: var(--rc-bronce); stroke-width: 2.5; stroke-dasharray: .1 8; stroke-linecap: round; stroke-linejoin: round; opacity: .95; }
 .rc-plano-claro .rc-ruta polyline { stroke: var(--rc-bronce); }
 
-.rc-pin { position: absolute; transform: translate(-50%, -50%); z-index: 4; display: grid; place-items: center; transition: opacity .3s; }
+.rc-pin { position: absolute; transform: translate(-50%, -50%); z-index: 4; display: grid; place-items: center; transition: opacity .3s; pointer-events: none; }
 .rc-pin-body { display: grid; place-items: center; border-radius: 999px; transition: transform .3s var(--rc-ease), background .3s, box-shadow .3s; }
 .rc-pin-main .rc-pin-body { width: 30px; height: 30px; background: var(--rc-bronce); color: #fff; font-size: 12px; font-weight: 600; box-shadow: 0 0 0 2.5px #fff, 0 6px 16px rgba(0,0,0,.28); }
 .rc-pin-sec { padding: 10px; }
@@ -375,3 +375,41 @@
   .rc-cab .rc-eyebrow { font-size: 9.5px; letter-spacing: .16em; }
   .rc-tabs > * { padding: 0 9px; font-size: 11.5px; }
 }
+
+/* ═══ Ficha de consulta ═════════════════════════════════════════════════════ */
+.rc-ficha { position: fixed; z-index: 45; left: 0; right: 0; bottom: 0; height: min(88dvh, 860px); background: var(--rc-ink); color: var(--rc-cream); border-radius: 22px 22px 0 0; box-shadow: 0 -20px 60px rgba(0,0,0,.45); display: flex; flex-direction: column; animation: rc-sube .35s var(--rc-ease); }
+.rc-ficha-cab { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--rc-linea); }
+.rc-ficha-cuerpo { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 14px 16px 20px; display: flex; flex-direction: column; gap: 10px; }
+.rc-app .rc-ficha-foto { position: relative; display: block; width: 100%; height: min(46dvh, 460px); border-radius: 16px; overflow: hidden; background: #0d0c0b; cursor: zoom-in; flex: none; }
+.rc-ficha-foto img { width: 100%; height: 100%; object-fit: contain; }
+.rc-ficha-sinfoto { display: grid; place-items: center; color: var(--rc-gris); font-size: 13px; cursor: default; }
+.rc-ficha-zoom { position: absolute; right: 10px; bottom: 10px; padding: 6px 12px; border-radius: 999px; background: rgba(22,22,22,.7); font-size: 11.5px; letter-spacing: .04em; color: var(--rc-cream); }
+.rc-ficha-tiras { display: flex; gap: 6px; overflow-x: auto; flex: none; }
+.rc-app .rc-ficha-tiras button { flex: none; width: 54px; height: 54px; border-radius: 10px; overflow: hidden; opacity: .55; border: 2px solid transparent; }
+.rc-app .rc-ficha-tiras button.is-on { opacity: 1; border-color: var(--rc-bronce-l); }
+.rc-ficha-tiras img { width: 100%; height: 100%; object-fit: cover; }
+.rc-ficha-meta { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+.rc-ficha-num { width: 24px; height: 24px; border-radius: 999px; background: var(--rc-bronce); color: #fff; font-size: 11px; font-weight: 600; display: grid; place-items: center; }
+.rc-ficha-tit { margin: 0; font-size: 30px; line-height: 1.05; }
+.rc-ficha-txt { margin: 0; font-size: 15px; line-height: 1.6; font-weight: 300; color: rgba(245,241,236,.9); white-space: pre-line; }
+.rc-ficha-vacio { color: var(--rc-gris); font-style: italic; }
+.rc-ficha-autor { margin: 4px 0 0; font-size: 12px; color: var(--rc-gris); }
+.rc-ficha-pie { flex: none; display: flex; justify-content: space-between; gap: 10px; padding: 10px 16px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--rc-linea); }
+@media (min-width: 1024px) {
+  .rc-ficha { left: auto; top: 0; width: 440px; height: auto; border-radius: 0; box-shadow: -20px 0 60px rgba(0,0,0,.4); animation: rc-lateral .35s var(--rc-ease); }
+  @keyframes rc-lateral { from { transform: translateX(30px); opacity: 0; } to { transform: none; opacity: 1; } }
+}
+
+/* Miniaturas que abren el visor */
+.rc-app .rc-mini-btn { position: relative; flex: none; cursor: zoom-in; border-radius: 10px; }
+.rc-mini-btn em { position: absolute; right: 4px; bottom: 4px; font-style: normal; font-size: 10px; background: rgba(22,22,22,.75); color: #fff; border-radius: 999px; padding: 1px 6px; }
+
+/* ═══ Visor de fotos ════════════════════════════════════════════════════════ */
+.rc-visor { position: fixed; inset: 0; z-index: 90; background: #000; display: grid; place-items: center; touch-action: pan-y pinch-zoom; animation: rc-entra .25s var(--rc-ease); }
+.rc-visor-img { max-width: 100vw; max-height: 100dvh; width: 100%; height: 100%; object-fit: contain; user-select: none; -webkit-user-select: none; }
+.rc-visor-cab { position: absolute; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: calc(10px + env(safe-area-inset-top)) 12px 10px 18px; background: linear-gradient(rgba(0,0,0,.6), transparent); color: #f5f1ec; font-size: 13px; }
+.rc-app .rc-visor-cab button { width: 42px; height: 42px; border-radius: 999px; background: rgba(255,255,255,.14); font-size: 16px; color: #fff; flex: none; }
+.rc-app .rc-visor-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 48px; height: 48px; border-radius: 999px; background: rgba(255,255,255,.14); color: #fff; font-size: 28px; line-height: 1; }
+.rc-visor-nav.is-izq { left: 12px; }
+.rc-visor-nav.is-der { right: 12px; }
+.rc-pin-sec.is-sel .rc-pin-body { background: var(--rc-bronce); transform: scale(1.5); box-shadow: 0 0 0 3px #fff, 0 0 0 5px var(--rc-bronce), 0 4px 14px rgba(0,0,0,.3); }

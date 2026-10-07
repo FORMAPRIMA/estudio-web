@@ -160,14 +160,22 @@ const Plano = forwardRef<PlanoHandle, Props>(function Plano(
   useEffect(() => {
     const el = boxRef.current
     if (!el || estatico) return
+    // Trackpad: dos dedos MUEVEN el plano y pellizcar (ctrlKey) hace zoom
+    // proporcional al gesto. Rueda de ratón clásica (líneas): zoom por pasos.
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
       const r = el.getBoundingClientRect()
-      zoomAt(e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX - r.left, e.clientY - r.top)
+      if (e.ctrlKey) {
+        zoomAt(Math.exp(-e.deltaY * 0.01), e.clientX - r.left, e.clientY - r.top)
+      } else if (e.deltaMode !== 0) {
+        zoomAt(e.deltaY < 0 ? 1.15 : 1 / 1.15, e.clientX - r.left, e.clientY - r.top)
+      } else {
+        setView((v) => clamp({ scale: v.scale, tx: v.tx - e.deltaX, ty: v.ty - e.deltaY }))
+      }
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
-  }, [zoomAt, estatico])
+  }, [zoomAt, clamp, estatico])
 
   const capture = (t: EventTarget | null, id: number) => { try { (t as Element | null)?.setPointerCapture?.(id) } catch { /* soltado */ } }
 
@@ -228,12 +236,33 @@ const Plano = forwardRef<PlanoHandle, Props>(function Plano(
         } else {
           lastTap.current = { x: e.clientX, y: e.clientY, t: Date.now() }
           if (placing && onPlace) { const p = toNorm(e.clientX, e.clientY); if (p) onPlace(p) }
-          else onBackgroundTap?.()
+          else {
+            // Los pins no capturan toques (si lo hicieran, un dedo sobre una
+            // chincheta bloquearía el pellizco): el toque corto busca la más cercana.
+            const id = pinCercano(e.clientX, e.clientY)
+            if (id) onSelectPin?.(id)
+            else onBackgroundTap?.()
+          }
         }
       }
       panStart.current = null
       tapStart.current = null
     }
+  }
+
+  function pinCercano(cx: number, cy: number): string | null {
+    const el = boxRef.current
+    if (!el || !onSelectPin) return null
+    const r = el.getBoundingClientRect()
+    const v = viewRef.current
+    let mejor: string | null = null
+    let dmin = 26
+    for (const p of pins) {
+      if (p.apagado) continue
+      const d = Math.hypot(v.tx + p.x * W * v.scale + r.left - cx, v.ty + p.y * H * v.scale + r.top - cy)
+      if (d < dmin) { dmin = d; mejor = p.id }
+    }
+    return mejor
   }
 
   const scr = (x: number, y: number) => ({ left: view.tx + x * W * view.scale, top: view.ty + y * H * view.scale })
@@ -279,19 +308,15 @@ const Plano = forwardRef<PlanoHandle, Props>(function Plano(
         const vivo = p.id === vivoId
         const principal = p.numero !== undefined
         return (
-          <button
+          <span
             key={p.id}
             className={`rc-pin ${principal ? 'rc-pin-main' : 'rc-pin-sec'}${sel ? ' is-sel' : ''}${vivo ? ' is-vivo' : ''}${p.apagado ? ' is-off' : ''}`}
             style={{ left: s.left, top: s.top, transition: pinTrans }}
-            onPointerDown={(e) => { if (pointers.current.size > 0) onDown(e); else e.stopPropagation() }}
-            onPointerUp={(e) => { if (pointers.current.size > 0) onUp(e); else e.stopPropagation() }}
-            onClick={(e) => { e.stopPropagation(); onSelectPin?.(p.id) }}
-            tabIndex={estatico ? -1 : 0}
-            aria-label={principal ? `Parada ${p.numero}` : 'Detalle'}
+            aria-hidden
           >
             {vivo && <span className="rc-pin-halo" />}
             <span className="rc-pin-body">{principal ? p.numero : ''}</span>
-          </button>
+          </span>
         )
       })}
 
