@@ -122,7 +122,9 @@ export default function Story({
           <div className="rc-story-detalle" key={actual.d.id}>
             <div className="rc-story-media">
               {fotos.length ? (
-                fotos.map((f, i) => (
+                // Solo la foto visible y sus vecinas: cada una lleva una copia
+                // desenfocada detrás y en iPhone la memoria de GPU es justa.
+                fotos.map((f, i) => Math.abs(i - foto) > 1 ? null : (
                   <div key={f.id ?? f.url} className={`rc-story-foto${i === foto ? ' is-on' : ''}`} aria-hidden={i !== foto}>
                     <img className="rc-story-fondo" src={f.url} alt="" />
                     <img className="rc-story-img" src={f.url} alt={actual.d.titulo} />

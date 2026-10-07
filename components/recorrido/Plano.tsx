@@ -237,7 +237,7 @@ const Plano = forwardRef<PlanoHandle, Props>(function Plano(
   }
 
   const scr = (x: number, y: number) => ({ left: view.tx + x * W * view.scale, top: view.ty + y * H * view.scale })
-  const trans = animar ? 'transform .6s cubic-bezier(.2,.7,.2,1)' : 'none'
+  const trans = animar ? 'left .6s cubic-bezier(.2,.7,.2,1), top .6s cubic-bezier(.2,.7,.2,1), width .6s cubic-bezier(.2,.7,.2,1), height .6s cubic-bezier(.2,.7,.2,1)' : 'none'
   const pinTrans = animar ? 'left .6s cubic-bezier(.2,.7,.2,1), top .6s cubic-bezier(.2,.7,.2,1)' : undefined
 
   return (
@@ -259,7 +259,12 @@ const Plano = forwardRef<PlanoHandle, Props>(function Plano(
           if (el.naturalWidth && (nat?.w !== el.naturalWidth || nat?.h !== el.naturalHeight)) setNat({ w: el.naturalWidth, h: el.naturalHeight })
         }}
         className="rc-plano-img"
-        style={{ width: W, height: H, transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.scale})`, transition: trans }}
+        decoding="async"
+        // Tamaño real en cada nivel de zoom, NUNCA transform: scale(). En iPhone
+        // un transform obliga a rasterizar la capa entera a scale × 3 (DPR) y
+        // con un plano de 2.600 px eso son cientos de MB: Safari mata la pestaña
+        // y la recarga. Pintada a su tamaño, WebKit dibuja por teselas solo lo visible.
+        style={{ left: view.tx, top: view.ty, width: W * view.scale, height: H * view.scale, transition: trans }}
       />
 
       {ruta && ruta.length > 1 && !animar && (
