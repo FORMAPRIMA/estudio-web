@@ -76,6 +76,9 @@ const Plano = forwardRef<PlanoHandle, Props>(function Plano(
   // quede un 30 % a la vista. Así cualquier esquina llega al centro de la
   // pantalla y nunca queda atrapada bajo un control.
   const clamp = useCallback((v: View): View => {
+    // Sin medida del contenedor o con un número roto, la vista no se toca: antes
+    // una caja a 0 forzaba escala 1:1 anclada arriba a la izquierda.
+    if (!box.w || !box.h || !Number.isFinite(v.scale) || !Number.isFinite(v.tx) || !Number.isFinite(v.ty)) return viewRef.current
     const min = fitScale()
     const scale = Math.min(Math.max(v.scale, min), min * MAX_ZOOM)
     const rw = W * scale
@@ -98,7 +101,20 @@ const Plano = forwardRef<PlanoHandle, Props>(function Plano(
     return () => ro.disconnect()
   }, [])
 
-  useEffect(() => { if (box.w && box.h) doFit() }, [box.w, box.h, src, W, H]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Encajar SOLO al medir por primera vez, al cambiar de plano o al girar el
+  // móvil. Un cambio de alto (la barra de Safari se recoge al tocar) no debe
+  // reiniciar el zoom: se conserva el mismo punto en el centro.
+  const encajado = useRef<{ w: number; h: number; src: string; W: number; H: number } | null>(null)
+  useEffect(() => {
+    if (!box.w || !box.h) return
+    const prev = encajado.current
+    encajado.current = { w: box.w, h: box.h, src, W, H }
+    if (!prev || prev.src !== src || prev.W !== W || prev.H !== H || Math.abs(prev.w - box.w) > 40) { doFit(); return }
+    if (prev.h !== box.h) {
+      const v = viewRef.current
+      setView(clamp({ scale: v.scale, tx: v.tx + (box.w - prev.w) / 2, ty: v.ty + (box.h - prev.h) / 2 }))
+    }
+  }, [box.w, box.h, src, W, H]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     setNat(null)
@@ -297,6 +313,7 @@ const Plano = forwardRef<PlanoHandle, Props>(function Plano(
       onPointerMove={onMove}
       onPointerUp={onUp}
       onPointerCancel={onUp}
+      onScroll={(e) => { const el = e.currentTarget; if (el.scrollLeft || el.scrollTop) { el.scrollLeft = 0; el.scrollTop = 0 } }}
     >
       <img
         ref={imgRef}
@@ -359,7 +376,9 @@ const Plano = forwardRef<PlanoHandle, Props>(function Plano(
       )}
 
       {!estatico && (
-        <div className="rc-zoom">
+        // Los botones no son parte del plano: sin esto, pulsar + dos veces contaba
+        // además como doble toque sobre el plano (segundo zoom hacia la esquina).
+        <div className="rc-zoom" onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()}>
           <button onClick={() => zoomAt(1.4, box.w / 2, box.h / 2)} aria-label="Acercar">+</button>
           <button onClick={() => zoomAt(1 / 1.4, box.w / 2, box.h / 2)} aria-label="Alejar">−</button>
           <button onClick={doFit} aria-label="Ver todo" className="rc-zoom-fit">⤢</button>
