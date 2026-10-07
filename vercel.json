@@ -35,6 +35,10 @@
     {
       "path": "/api/cron/salas-resumen",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/recorrido-aviso",
+      "schedule": "*/5 14-18 8 10 *"
     }
   ]
 }
