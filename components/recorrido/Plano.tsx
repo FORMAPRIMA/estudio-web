@@ -181,6 +181,9 @@ const Plano = forwardRef<PlanoHandle, Props>(function Plano(
 
   function onDown(e: React.PointerEvent) {
     if (estatico) return
+    // Primer dedo de un gesto nuevo: se olvidan punteros cuyo «soltar» se perdió
+    // (iOS a veces no lo manda) y que convertirían un arrastre en un pellizco.
+    if (e.isPrimary) { pointers.current.clear(); pinchStart.current = null }
     capture(e.target, e.pointerId)
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
     if (pointers.current.size === 1) {
@@ -192,6 +195,7 @@ const Plano = forwardRef<PlanoHandle, Props>(function Plano(
       if (!a || !b || !r) return
       pinchStart.current = { dist: Math.hypot(a.x - b.x, a.y - b.y), mx: (a.x + b.x) / 2 - r.left, my: (a.y + b.y) / 2 - r.top, view: viewRef.current }
       tapStart.current = null
+      panStart.current = null
     }
   }
 
@@ -206,14 +210,22 @@ const Plano = forwardRef<PlanoHandle, Props>(function Plano(
       const min = fitScale()
       const scale = Math.min(Math.max(s.view.scale * (Math.hypot(a.x - b.x, a.y - b.y) / (s.dist || 1)), min), min * MAX_ZOOM)
       const k = scale / s.view.scale
-      setView(clamp({ scale, tx: s.mx - (s.mx - s.view.tx) * k, ty: s.my - (s.my - s.view.ty) * k }))
+      // El punto medio sigue a los dedos: pellizcar y arrastrar a la vez, como en Mapas.
+      const r = boxRef.current?.getBoundingClientRect()
+      const mx = r ? (a.x + b.x) / 2 - r.left : s.mx
+      const my = r ? (a.y + b.y) / 2 - r.top : s.my
+      const v = clamp({ scale, tx: mx - (s.mx - s.view.tx) * k, ty: my - (s.my - s.view.ty) * k })
+      viewRef.current = v
+      setView(v)
       return
     }
     if (pointers.current.size === 1 && panStart.current) {
       const s = panStart.current
       const dx = e.clientX - s.x
       const dy = e.clientY - s.y
-      setView((v) => clamp({ scale: v.scale, tx: s.tx + dx, ty: s.ty + dy }))
+      const v = clamp({ scale: viewRef.current.scale, tx: s.tx + dx, ty: s.ty + dy })
+      viewRef.current = v
+      setView(v)
     }
   }
 
@@ -222,6 +234,14 @@ const Plano = forwardRef<PlanoHandle, Props>(function Plano(
     ghostDrag.current = false
     pointers.current.delete(e.pointerId)
     if (pointers.current.size < 2) pinchStart.current = null
+    if (pointers.current.size === 1) {
+      // Al soltar un dedo tras el pellizco, el que queda sigue arrastrando desde
+      // donde está AHORA el plano. Antes reutilizaba el arrastre previo al zoom
+      // y el plano saltaba a su esquina superior izquierda.
+      const [rest] = Array.from(pointers.current.values())
+      panStart.current = rest ? { x: rest.x, y: rest.y, tx: viewRef.current.tx, ty: viewRef.current.ty } : null
+      tapStart.current = null
+    }
     if (pointers.current.size === 0) {
       const s = tapStart.current
       const isTap = !wasGhost && !!s && Math.hypot(e.clientX - s.x, e.clientY - s.y) <= TAP_SLOP && Date.now() - s.t < TAP_MS
