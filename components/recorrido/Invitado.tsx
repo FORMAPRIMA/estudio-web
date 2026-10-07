@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Plano from './Plano'
 import type { PlanoHandle, RcPin } from './Plano'
 import Story from './Story'
+import VideoIntro from './VideoIntro'
 import type { Diapositiva } from './Story'
 import {
   ANTES_MIN, DESPUES_MIN, horaEvento, nombrePila, rangoEstancia, recorridoDe, slotAHora,
@@ -56,7 +57,7 @@ export default function Invitado({ token, invitado, detalles, plano, ahoraServid
   const numeroDe = useMemo(() => new Map(recorrido.map((d, i) => [d.id, i + 1])), [recorrido])
   const porId = useMemo(() => new Map(detalles.map((d) => [d.id, d])), [detalles])
   const diapositivas: Diapositiva[] = useMemo(
-    () => [{ tipo: 'portada' }, ...recorrido.map((d) => ({ tipo: 'detalle' as const, d })), { tipo: 'fin' }],
+    () => [{ tipo: 'portada' }, { tipo: 'video' }, ...recorrido.map((d) => ({ tipo: 'detalle' as const, d })), { tipo: 'fin' }],
     [recorrido]
   )
 
@@ -82,12 +83,14 @@ export default function Invitado({ token, invitado, detalles, plano, ahoraServid
   useEffect(() => {
     if (!miVisita) { setDirecto(null); return }
     setDirecto((d) => (d && d.at >= miVisita.at ? d : { modo: miVisita.modo, paso: miVisita.paso, detalle_id: miVisita.detalle_id, at: miVisita.at }))
-    const canal = abrirCanal(miVisita.id, (e) => setDirecto((d) => (d && d.at > e.at ? d : e)))
-    // Respaldo del canal: pregunta el estado guardado cada 5 s.
+    // El canal manda (llega en orden y con el reloj del guía). El estado guardado
+    // solo se consulta si el canal lleva más de 12 s callado: el guía late cada 8.
+    let ultimoCanal = 0
+    const canal = abrirCanal(miVisita.id, (e) => { ultimoCanal = Date.now(); setDirecto(e) })
     const t = window.setInterval(async () => {
-      if (document.hidden) return
+      if (document.hidden || Date.now() - ultimoCanal < 12000) return
       const v = await pedirVisita(miVisita.id)
-      if (v) setDirecto((d) => (d && d.at >= v.at ? d : { modo: v.modo, paso: v.paso, detalle_id: v.detalle_id, at: v.at }))
+      if (v) setDirecto((d) => (d && d.modo === v.modo && d.detalle_id === v.detalle_id ? d : { modo: v.modo, paso: v.paso, detalle_id: v.detalle_id, at: v.at }))
     }, 5000)
     return () => { canal.cerrar(); window.clearInterval(t) }
   }, [miVisita?.id]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -113,9 +116,10 @@ export default function Invitado({ token, invitado, detalles, plano, ahoraServid
   const idxDirecto = useMemo(() => {
     if (!directo) return 0
     if (directo.modo === 'fin') return diapositivas.length - 1
+    if (directo.modo === 'video') return 1
     if (directo.modo === 'recorrido' && directo.detalle_id) {
       const i = recorrido.findIndex((d) => d.id === directo.detalle_id)
-      if (i >= 0) return i + 1
+      if (i >= 0) return i + 2
     }
     if (directo.modo === 'pregunta') return Math.min(directo.paso, diapositivas.length - 1)
     return 0
@@ -150,7 +154,7 @@ export default function Invitado({ token, invitado, detalles, plano, ahoraServid
 
   function abrirDetalle(id: string) {
     const n = numeroDe.get(id)
-    if (n) { setSuelto(null); setIdxPropio(n); setFotoPropia(0); setVista('explorar'); return }
+    if (n) { setSuelto(null); setIdxPropio(n + 1); setFotoPropia(0); setVista('explorar'); return }
     const d = porId.get(id)
     if (d) { setSuelto(d); setFotoSuelto(0); setVista('explorar') }
   }
@@ -295,6 +299,7 @@ export default function Invitado({ token, invitado, detalles, plano, ahoraServid
           onIndice={(i) => { setIdxPropio(i); setFotoPropia(0); setVista('explorar') }}
           foto={Math.min(directo?.foto ?? 0, 20)} onFoto={(f) => { setIdxPropio(idxDirecto); setFotoPropia(f); setVista('explorar') }}
           tema="claro" total={recorrido.length} portada={portada} fin={fin}
+          video={<VideoIntro modo="invitado" desde={directo?.desde ?? directo?.at ?? null} />}
           esquina={<span className="rc-chip-vivo"><span className="rc-vivo-dot" />En directo</span>} />
       ) : suelto ? (
         <Story diapositivas={[{ tipo: 'detalle', d: suelto }]} indice={0} onIndice={() => {}}
@@ -303,7 +308,8 @@ export default function Invitado({ token, invitado, detalles, plano, ahoraServid
           esquina={<button className="rc-chip-cerrar" onClick={() => { setSuelto(null); setVista('plano') }}>Plano</button>} />
       ) : (
         <Story diapositivas={diapositivas} indice={idxPropio} onIndice={(i) => { setIdxPropio(i); setFotoPropia(0) }}
-          foto={fotoPropia} onFoto={setFotoPropia} tema="claro" total={recorrido.length} portada={portada} fin={fin} />
+          foto={fotoPropia} onFoto={setFotoPropia} tema="claro" total={recorrido.length} portada={portada} fin={fin}
+          video={<VideoIntro modo="invitado" />} />
       )}
 
       {!verDirecto && miVisita && fase === 'visita' && !despues && (

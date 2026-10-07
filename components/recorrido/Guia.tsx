@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Plano from './Plano'
 import type { PlanoHandle, RcPin } from './Plano'
 import Story from './Story'
+import VideoIntro from './VideoIntro'
 import type { Diapositiva } from './Story'
 import { recorridoDe, slotAHora, nombrePila } from '@/lib/recorrido/domain'
 import type { RcDetalle, RcEstado, RcPlano, RcVisita } from '@/lib/recorrido/domain'
@@ -171,7 +172,7 @@ function EnVisita({ visita, detalles, plano, grupo, presencia, onTerminar }: {
 }) {
   const recorrido = useMemo(() => recorridoDe(detalles), [detalles])
   const diapositivas: Diapositiva[] = useMemo(
-    () => [{ tipo: 'portada' }, ...recorrido.map((d) => ({ tipo: 'detalle' as const, d })), { tipo: 'fin' }],
+    () => [{ tipo: 'portada' }, { tipo: 'video' }, ...recorrido.map((d) => ({ tipo: 'detalle' as const, d })), { tipo: 'fin' }],
     [recorrido]
   )
   const numeroDe = useMemo(() => new Map(recorrido.map((d, i) => [d.id, i + 1])), [recorrido])
@@ -179,14 +180,21 @@ function EnVisita({ visita, detalles, plano, grupo, presencia, onTerminar }: {
   // Estado inicial: donde se quedó la visita (si se recargó la tablet).
   const inicialIdx = (() => {
     if (visita.modo === 'fin') return diapositivas.length - 1
+    if (visita.modo === 'video') return 1
     if (visita.modo === 'recorrido' && visita.detalle_id) {
       const i = recorrido.findIndex((d) => d.id === visita.detalle_id)
-      if (i >= 0) return i + 1
+      if (i >= 0) return i + 2
     }
     return 0
   })()
   const [indice, setIndice] = useState(inicialIdx)
   const [foto, setFoto] = useState(0)
+  // Momento en que arrancó el vídeo de introducción: los móviles se sincronizan con él.
+  const [videoDesde, setVideoDesde] = useState<number | null>(null)
+  useEffect(() => {
+    // Solo la primera vez: al volver atrás se ve el fotograma congelado, no se relanza.
+    if (diapositivas[indice]?.tipo === 'video') setVideoDesde((d) => d ?? Date.now())
+  }, [indice]) // eslint-disable-line react-hooks/exhaustive-deps
   const [suelto, setSuelto] = useState<RcDetalle | null>(visita.modo === 'pregunta' ? detalles.find((d) => d.id === visita.detalle_id) ?? null : null)
   const [fotoSuelto, setFotoSuelto] = useState(0)
   const [verPlano, setVerPlano] = useState(false)
@@ -206,9 +214,10 @@ function EnVisita({ visita, detalles, plano, grupo, presencia, onTerminar }: {
     if (suelto) return { modo: 'pregunta', paso: indice, detalle_id: suelto.id, foto: fotoSuelto, at }
     const dia = diapositivas[indice]
     if (dia?.tipo === 'fin') return { modo: 'fin', paso: indice, detalle_id: null, at }
+    if (dia?.tipo === 'video') return { modo: 'video', paso: indice, detalle_id: null, desde: videoDesde ?? at, at }
     if (dia?.tipo === 'detalle') return { modo: 'recorrido', paso: indice, detalle_id: dia.d.id, foto, at }
     return { modo: 'inicio', paso: 0, detalle_id: null, at }
-  }, [suelto, fotoSuelto, indice, foto, diapositivas])
+  }, [suelto, fotoSuelto, indice, foto, diapositivas, videoDesde])
 
   useEffect(() => {
     canal.current?.enviar(estado)
@@ -223,7 +232,7 @@ function EnVisita({ visita, detalles, plano, grupo, presencia, onTerminar }: {
   function abrirDesdePlano(id: string) {
     const n = numeroDe.get(id)
     setVerPlano(false)
-    if (n) { setSuelto(null); irA(n); return }
+    if (n) { setSuelto(null); irA(n + 1); return }
     const d = detalles.find((x) => x.id === id)
     if (d) { setSuelto(d); setFotoSuelto(0) }
   }
@@ -297,6 +306,7 @@ function EnVisita({ visita, detalles, plano, grupo, presencia, onTerminar }: {
         <Story
           diapositivas={diapositivas} indice={indice} onIndice={irA} foto={foto} onFoto={setFoto}
           tema="oscuro" total={recorrido.length} mostrarNotas portada={portada} fin={fin} esquina={minimapa}
+          video={<VideoIntro modo="guia" desde={videoDesde} onRepetir={() => setVideoDesde(Date.now())} />}
           pie={
             <div className="rc-pie-guia">
               <button className="rc-btn rc-btn-ghost" onClick={() => setVerPlano(true)}>Plano</button>

@@ -39,7 +39,7 @@ export interface RcPlano {
   h: number
 }
 
-export type RcModo = 'inicio' | 'recorrido' | 'pregunta' | 'fin'
+export type RcModo = 'inicio' | 'video' | 'recorrido' | 'pregunta' | 'fin'
 
 export interface RcVisita {
   id: string
@@ -60,6 +60,8 @@ export interface RcEstado {
   detalle_id: string | null
   /** Foto visible dentro del detalle (solo viaja por el canal, no se guarda). */
   foto?: number
+  /** Epoch ms en que arrancó el vídeo de introducción (sincroniza los móviles). */
+  desde?: number
   at: number
 }
 

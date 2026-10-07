@@ -230,7 +230,7 @@ export async function startVisita(slot: string | null): Promise<R<RcVisita>> {
 export async function updateVisita(id: string, e: RcEstado): Promise<R> {
   return intentar(async () => {
     await requireAnyFP()
-    const modo = ['inicio', 'recorrido', 'pregunta', 'fin'].includes(e.modo) ? e.modo : 'recorrido'
+    const modo = ['inicio', 'video', 'recorrido', 'pregunta', 'fin'].includes(e.modo) ? e.modo : 'recorrido'
     const { error } = await createAdminClient().from('rc_visitas').update({
       modo, paso: Math.max(0, Math.floor(Number(e.paso) || 0)), detalle_id: e.detalle_id || null,
       updated_at: new Date().toISOString(),
