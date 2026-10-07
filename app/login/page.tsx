@@ -35,7 +35,9 @@ export default function LoginPage() {
     if (data.user) {
       // Dejar que el middleware gestione el routing según el rol
       // fp_* → /team, cliente → /area-privada
-      window.location.href = '/team'
+      // ?next=/ruta interna para volver a donde se iba (p. ej. /recorrido); nunca a otro dominio.
+      const next = new URLSearchParams(window.location.search).get('next')
+      window.location.href = next && /^\/[^/\\]/.test(next) ? next : '/team'
     }
   }
 
