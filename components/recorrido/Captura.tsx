@@ -207,32 +207,34 @@ export default function Captura({ inicial, plano: planoInicial, usuario }: { ini
             onBackgroundTap={() => setSelId(null)}
           />
 
-          <div className="rc-contador">
-            <span><b>{detalles.length}</b> detalles</span>
-            <span className="rc-dot">·</span>
-            <span><b>{recorrido.length}</b> en el recorrido</span>
-            <button className="rc-filtro" onClick={() => setVerSolo((v) => (v === 'todos' ? 'mios' : 'todos'))}>
-              {verSolo === 'todos' ? 'Todos' : 'Solo míos'}
-            </button>
-          </div>
+        </main>
+      )}
 
+      {tab === 'plano' && (
+        <footer className="rc-barra-inf">
           {placing ? (
-            <div className="rc-colocar">
-              <p>{ghost ? 'Arrastra el punto para afinar' : 'Toca el plano donde está el detalle'}</p>
-              <div className="rc-colocar-acc">
-                <button className="rc-btn rc-btn-ghost" onClick={() => {
+            <>
+              <p className="rc-barra-msg">{ghost ? 'Arrastra el punto para afinar · pellizca para acercar' : 'Toca el plano donde está el detalle'}</p>
+              <div className="rc-barra-acc">
+                <button className="rc-btn rc-btn-ghost rc-btn-sm" onClick={() => {
                   setPlacing(false); setGhost(null)
                   if (reubicando) { setEditando(reubicando); setReubicando(null) }
                 }}>Cancelar</button>
-                <button className="rc-btn rc-btn-bronce" disabled={!ghost} onClick={confirmarPosicion}>Confirmar posición</button>
+                <button className="rc-btn rc-btn-bronce rc-btn-sm" disabled={!ghost} onClick={confirmarPosicion}>Confirmar posición</button>
               </div>
-            </div>
+            </>
           ) : (
-            <button className="rc-fab" onClick={empezarAlta}>
-              <span>+</span> Nuevo detalle
-            </button>
+            <>
+              <div className="rc-contador">
+                <span><b>{detalles.length}</b> detalles · <b>{recorrido.length}</b> en recorrido</span>
+                <button className="rc-filtro" onClick={() => setVerSolo((v) => (v === 'todos' ? 'mios' : 'todos'))}>
+                  {verSolo === 'todos' ? 'Ver solo los míos' : 'Ver todos'}
+                </button>
+              </div>
+              <button className="rc-fab" onClick={empezarAlta}><span>+</span> Nuevo detalle</button>
+            </>
           )}
-        </main>
+        </footer>
       )}
 
       {tab === 'seleccion' && (

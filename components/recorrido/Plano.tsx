@@ -72,17 +72,23 @@ const Plano = forwardRef<PlanoHandle, Props>(function Plano(
 
   const fitScale = useCallback(() => (!box.w || !box.h ? 1 : Math.min(box.w / W, box.h / H) * margen), [box.w, box.h, W, H, margen])
 
+  // Holgura: el plano se puede arrastrar más allá de su borde hasta que solo
+  // quede un 30 % a la vista. Así cualquier esquina llega al centro de la
+  // pantalla y nunca queda atrapada bajo un control.
   const clamp = useCallback((v: View): View => {
     const min = fitScale()
     const scale = Math.min(Math.max(v.scale, min), min * MAX_ZOOM)
     const rw = W * scale
     const rh = H * scale
-    const tx = rw <= box.w ? (box.w - rw) / 2 : Math.min(0, Math.max(box.w - rw, v.tx))
-    const ty = rh <= box.h ? (box.h - rh) / 2 : Math.min(0, Math.max(box.h - rh, v.ty))
+    const tx = Math.min(box.w * 0.7, Math.max(box.w * 0.3 - rw, v.tx))
+    const ty = Math.min(box.h * 0.7, Math.max(box.h * 0.3 - rh, v.ty))
     return { scale, tx, ty }
   }, [box.w, box.h, W, H, fitScale])
 
-  const doFit = useCallback(() => setView(clamp({ scale: fitScale(), tx: 0, ty: 0 })), [fitScale, clamp])
+  const doFit = useCallback(() => {
+    const scale = fitScale()
+    setView(clamp({ scale, tx: (box.w - W * scale) / 2, ty: (box.h - H * scale) / 2 }))
+  }, [fitScale, clamp, box.w, box.h, W, H])
 
   useLayoutEffect(() => {
     const el = boxRef.current
@@ -133,6 +139,23 @@ const Plano = forwardRef<PlanoHandle, Props>(function Plano(
       window.setTimeout(() => setAnimar(false), 650)
     },
   }))
+
+  // Safari (iOS) se queda el pellizco para hacer zoom a TODA la página si no se
+  // le cancela: sin esto el plano no amplía en el iPhone.
+  useEffect(() => {
+    const el = boxRef.current
+    if (!el || estatico) return
+    const cancelar = (e: Event) => e.preventDefault()
+    const dosDedos = (e: TouchEvent) => { if (e.touches.length > 1) e.preventDefault() }
+    el.addEventListener('gesturestart', cancelar as EventListener, { passive: false })
+    el.addEventListener('gesturechange', cancelar as EventListener, { passive: false })
+    el.addEventListener('touchmove', dosDedos, { passive: false })
+    return () => {
+      el.removeEventListener('gesturestart', cancelar as EventListener)
+      el.removeEventListener('gesturechange', cancelar as EventListener)
+      el.removeEventListener('touchmove', dosDedos)
+    }
+  }, [estatico])
 
   useEffect(() => {
     const el = boxRef.current
@@ -255,8 +278,8 @@ const Plano = forwardRef<PlanoHandle, Props>(function Plano(
             key={p.id}
             className={`rc-pin ${principal ? 'rc-pin-main' : 'rc-pin-sec'}${sel ? ' is-sel' : ''}${vivo ? ' is-vivo' : ''}${p.apagado ? ' is-off' : ''}`}
             style={{ left: s.left, top: s.top, transition: pinTrans }}
-            onPointerDown={(e) => { e.stopPropagation() }}
-            onPointerUp={(e) => { e.stopPropagation() }}
+            onPointerDown={(e) => { if (pointers.current.size > 0) onDown(e); else e.stopPropagation() }}
+            onPointerUp={(e) => { if (pointers.current.size > 0) onUp(e); else e.stopPropagation() }}
             onClick={(e) => { e.stopPropagation(); onSelectPin?.(p.id) }}
             tabIndex={estatico ? -1 : 0}
             aria-label={principal ? `Parada ${p.numero}` : 'Detalle'}
