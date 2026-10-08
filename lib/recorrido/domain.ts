@@ -39,7 +39,7 @@ export interface RcPlano {
   h: number
 }
 
-export type RcModo = 'inicio' | 'video' | 'recorrido' | 'pregunta' | 'fin'
+export type RcModo = 'inicio' | 'equipo' | 'video' | 'recorrido' | 'pregunta' | 'fin'
 
 export interface RcVisita {
   id: string

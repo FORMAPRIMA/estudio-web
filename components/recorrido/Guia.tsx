@@ -5,6 +5,7 @@ import Plano from './Plano'
 import type { PlanoHandle, RcPin } from './Plano'
 import Story from './Story'
 import VideoIntro from './VideoIntro'
+import SlideEquipo from './Equipo'
 import type { Diapositiva } from './Story'
 import { recorridoDe, slotAHora, nombrePila } from '@/lib/recorrido/domain'
 import type { RcDetalle, RcEstado, RcPlano, RcVisita } from '@/lib/recorrido/domain'
@@ -172,7 +173,7 @@ function EnVisita({ visita, detalles, plano, grupo, presencia, onTerminar }: {
 }) {
   const recorrido = useMemo(() => recorridoDe(detalles), [detalles])
   const diapositivas: Diapositiva[] = useMemo(
-    () => [{ tipo: 'portada' }, { tipo: 'video' }, ...recorrido.map((d) => ({ tipo: 'detalle' as const, d })), { tipo: 'fin' }],
+    () => [{ tipo: 'portada' }, { tipo: 'equipo' }, { tipo: 'video' }, ...recorrido.map((d) => ({ tipo: 'detalle' as const, d })), { tipo: 'fin' }],
     [recorrido]
   )
   const numeroDe = useMemo(() => new Map(recorrido.map((d, i) => [d.id, i + 1])), [recorrido])
@@ -180,10 +181,11 @@ function EnVisita({ visita, detalles, plano, grupo, presencia, onTerminar }: {
   // Estado inicial: donde se quedó la visita (si se recargó la tablet).
   const inicialIdx = (() => {
     if (visita.modo === 'fin') return diapositivas.length - 1
-    if (visita.modo === 'video') return 1
+    if (visita.modo === 'equipo') return 1
+    if (visita.modo === 'video') return 2
     if (visita.modo === 'recorrido' && visita.detalle_id) {
       const i = recorrido.findIndex((d) => d.id === visita.detalle_id)
-      if (i >= 0) return i + 2
+      if (i >= 0) return i + 3
     }
     return 0
   })()
@@ -214,6 +216,7 @@ function EnVisita({ visita, detalles, plano, grupo, presencia, onTerminar }: {
     if (suelto) return { modo: 'pregunta', paso: indice, detalle_id: suelto.id, foto: fotoSuelto, at }
     const dia = diapositivas[indice]
     if (dia?.tipo === 'fin') return { modo: 'fin', paso: indice, detalle_id: null, at }
+    if (dia?.tipo === 'equipo') return { modo: 'equipo', paso: indice, detalle_id: null, at }
     if (dia?.tipo === 'video') return { modo: 'video', paso: indice, detalle_id: null, desde: videoDesde ?? at, at }
     if (dia?.tipo === 'detalle') return { modo: 'recorrido', paso: indice, detalle_id: dia.d.id, foto, at }
     return { modo: 'inicio', paso: 0, detalle_id: null, at }
@@ -232,7 +235,7 @@ function EnVisita({ visita, detalles, plano, grupo, presencia, onTerminar }: {
   function abrirDesdePlano(id: string) {
     const n = numeroDe.get(id)
     setVerPlano(false)
-    if (n) { setSuelto(null); irA(n + 1); return }
+    if (n) { setSuelto(null); irA(n + 2); return }
     const d = detalles.find((x) => x.id === id)
     if (d) { setSuelto(d); setFotoSuelto(0) }
   }
@@ -306,7 +309,7 @@ function EnVisita({ visita, detalles, plano, grupo, presencia, onTerminar }: {
         <Story
           diapositivas={diapositivas} indice={indice} onIndice={irA} foto={foto} onFoto={setFoto}
           tema="oscuro" total={recorrido.length} mostrarNotas portada={portada} fin={fin} esquina={minimapa}
-          video={<VideoIntro modo="guia" desde={videoDesde} onRepetir={() => setVideoDesde(Date.now())} />}
+          equipo={<SlideEquipo />} video={<VideoIntro modo="guia" desde={videoDesde} onRepetir={() => setVideoDesde(Date.now())} />}
           pie={
             <div className="rc-pie-guia">
               <button className="rc-btn rc-btn-ghost" onClick={() => setVerPlano(true)}>Plano</button>

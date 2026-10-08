@@ -5,6 +5,7 @@ import Plano from './Plano'
 import type { PlanoHandle, RcPin } from './Plano'
 import Story from './Story'
 import VideoIntro from './VideoIntro'
+import SlideEquipo from './Equipo'
 import type { Diapositiva } from './Story'
 import {
   ANTES_MIN, DESPUES_MIN, horaEvento, nombrePila, rangoEstancia, recorridoDe, slotAHora,
@@ -57,7 +58,7 @@ export default function Invitado({ token, invitado, detalles, plano, ahoraServid
   const numeroDe = useMemo(() => new Map(recorrido.map((d, i) => [d.id, i + 1])), [recorrido])
   const porId = useMemo(() => new Map(detalles.map((d) => [d.id, d])), [detalles])
   const diapositivas: Diapositiva[] = useMemo(
-    () => [{ tipo: 'portada' }, { tipo: 'video' }, ...recorrido.map((d) => ({ tipo: 'detalle' as const, d })), { tipo: 'fin' }],
+    () => [{ tipo: 'portada' }, { tipo: 'equipo' }, { tipo: 'video' }, ...recorrido.map((d) => ({ tipo: 'detalle' as const, d })), { tipo: 'fin' }],
     [recorrido]
   )
 
@@ -116,10 +117,11 @@ export default function Invitado({ token, invitado, detalles, plano, ahoraServid
   const idxDirecto = useMemo(() => {
     if (!directo) return 0
     if (directo.modo === 'fin') return diapositivas.length - 1
-    if (directo.modo === 'video') return 1
+    if (directo.modo === 'equipo') return 1
+    if (directo.modo === 'video') return 2
     if (directo.modo === 'recorrido' && directo.detalle_id) {
       const i = recorrido.findIndex((d) => d.id === directo.detalle_id)
-      if (i >= 0) return i + 2
+      if (i >= 0) return i + 3
     }
     if (directo.modo === 'pregunta') return Math.min(directo.paso, diapositivas.length - 1)
     return 0
@@ -154,7 +156,7 @@ export default function Invitado({ token, invitado, detalles, plano, ahoraServid
 
   function abrirDetalle(id: string) {
     const n = numeroDe.get(id)
-    if (n) { setSuelto(null); setIdxPropio(n + 1); setFotoPropia(0); setVista('explorar'); return }
+    if (n) { setSuelto(null); setIdxPropio(n + 2); setFotoPropia(0); setVista('explorar'); return }
     const d = porId.get(id)
     if (d) { setSuelto(d); setFotoSuelto(0); setVista('explorar') }
   }
@@ -299,7 +301,7 @@ export default function Invitado({ token, invitado, detalles, plano, ahoraServid
           onIndice={(i) => { setIdxPropio(i); setFotoPropia(0); setVista('explorar') }}
           foto={Math.min(directo?.foto ?? 0, 20)} onFoto={(f) => { setIdxPropio(idxDirecto); setFotoPropia(f); setVista('explorar') }}
           tema="claro" total={recorrido.length} portada={portada} fin={fin}
-          video={<VideoIntro modo="invitado" desde={directo?.desde ?? directo?.at ?? null} />}
+          equipo={<SlideEquipo />} video={<VideoIntro modo="invitado" desde={directo?.desde ?? directo?.at ?? null} />}
           esquina={<span className="rc-chip-vivo"><span className="rc-vivo-dot" />En directo</span>} />
       ) : suelto ? (
         <Story diapositivas={[{ tipo: 'detalle', d: suelto }]} indice={0} onIndice={() => {}}
@@ -309,7 +311,7 @@ export default function Invitado({ token, invitado, detalles, plano, ahoraServid
       ) : (
         <Story diapositivas={diapositivas} indice={idxPropio} onIndice={(i) => { setIdxPropio(i); setFotoPropia(0) }}
           foto={fotoPropia} onFoto={setFotoPropia} tema="claro" total={recorrido.length} portada={portada} fin={fin}
-          video={<VideoIntro modo="invitado" />} />
+          equipo={<SlideEquipo />} video={<VideoIntro modo="invitado" />} />
       )}
 
       {!verDirecto && miVisita && fase === 'visita' && !despues && (

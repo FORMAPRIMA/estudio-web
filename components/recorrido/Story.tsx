@@ -14,6 +14,7 @@ import type { RcDetallePublico } from '@/lib/recorrido/domain'
 
 export type Diapositiva =
   | { tipo: 'portada' }
+  | { tipo: 'equipo' }
   | { tipo: 'video' }
   | { tipo: 'detalle'; d: RcDetallePublico & { notas_guia?: string | null } }
   | { tipo: 'fin' }
@@ -33,6 +34,7 @@ interface Props {
   mostrarNotas?: boolean
   portada?: ReactNode
   video?: ReactNode
+  equipo?: ReactNode
   fin?: ReactNode
   /** Esquina superior derecha (minimapa). */
   esquina?: ReactNode
@@ -43,7 +45,7 @@ interface Props {
 const SWIPE = 50
 
 export default function Story({
-  diapositivas, indice, onIndice, foto, onFoto, tema, total, suelto, mostrarNotas, portada, video, fin, esquina, pie,
+  diapositivas, indice, onIndice, foto, onFoto, tema, total, suelto, mostrarNotas, portada, video, equipo, fin, esquina, pie,
 }: Props) {
   const actual = diapositivas[Math.min(indice, diapositivas.length - 1)]
   const fotos = actual?.tipo === 'detalle' ? actual.d.fotos : []
@@ -116,6 +118,7 @@ export default function Story({
 
       <div className="rc-story-escena" onPointerDown={onDown} onPointerUp={onUp}>
         {actual?.tipo === 'portada' && <div className="rc-story-especial" key="portada">{portada}</div>}
+        {actual?.tipo === 'equipo' && <div className="rc-story-especial" key="equipo">{equipo}</div>}
         {actual?.tipo === 'video' && <div className="rc-story-especial" key="video">{video}</div>}
         {actual?.tipo === 'fin' && <div className="rc-story-especial" key="fin">{fin}</div>}
         {actual?.tipo === 'detalle' && (
