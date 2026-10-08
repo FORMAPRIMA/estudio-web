@@ -555,29 +555,37 @@ function Editor({ inicial, detalles, onCerrar, onGuardado, onMover, onAviso, onV
       </div>
 
       <div className="rc-hoja-cuerpo">
-        <div className="rc-fotos">
-          {b.fotos.map((f, i) => (
-            <figure key={f.url} className="rc-foto">
-              <img src={f.url} alt="" onClick={() => onVerFotos(b.fotos.map((x) => x.url), i)} style={{ cursor: 'zoom-in' }} />
-              {i === 0 && <span className="rc-foto-portada">Portada</span>}
-              <div className="rc-foto-acc">
-                <button onClick={() => moverFoto(i, -1)} disabled={i === 0} aria-label="Antes">‹</button>
-                <button onClick={() => set('fotos', b.fotos.filter((_, j) => j !== i))} aria-label="Quitar">✕</button>
-                <button onClick={() => moverFoto(i, 1)} disabled={i === b.fotos.length - 1} aria-label="Después">›</button>
-              </div>
-            </figure>
-          ))}
-          {Array.from({ length: subiendo }).map((_, i) => <div key={`s${i}`} className="rc-foto rc-foto-cargando"><span /></div>)}
-          <label className="rc-foto rc-foto-add">
-            <span className="rc-foto-add-ico">◎</span>
-            <span>Cámara</span>
-            <input type="file" accept="image/*" capture="environment" hidden onChange={(e) => { anadirFotos(e.target.files); e.target.value = '' }} />
-          </label>
-          <label className="rc-foto rc-foto-add">
-            <span className="rc-foto-add-ico">▦</span>
-            <span>Galería</span>
-            <input type="file" accept="image/*" multiple hidden onChange={(e) => { anadirFotos(e.target.files); e.target.value = '' }} />
-          </label>
+        <div className="rc-campo">
+          <span>Fotos{b.fotos.length ? ` · ${b.fotos.length}` : ''}</span>
+          {(b.fotos.length > 0 || subiendo > 0) && (
+            <div className="rc-fotos">
+              {b.fotos.map((f, i) => (
+                <figure key={f.url} className="rc-foto">
+                  <img src={f.url} alt="" onClick={() => onVerFotos(b.fotos.map((x) => x.url), i)} style={{ cursor: 'zoom-in' }} />
+                  {i === 0 && <span className="rc-foto-portada">Portada</span>}
+                  <button className="rc-foto-quitar" onClick={() => set('fotos', b.fotos.filter((_, j) => j !== i))} aria-label="Eliminar foto">✕</button>
+                  {b.fotos.length > 1 && (
+                    <div className="rc-foto-acc">
+                      <button onClick={() => moverFoto(i, -1)} disabled={i === 0} aria-label="Mover antes">‹</button>
+                      <button onClick={() => moverFoto(i, 1)} disabled={i === b.fotos.length - 1} aria-label="Mover después">›</button>
+                    </div>
+                  )}
+                </figure>
+              ))}
+              {Array.from({ length: subiendo }).map((_, i) => <div key={`s${i}`} className="rc-foto rc-foto-cargando"><span /></div>)}
+            </div>
+          )}
+          <div className="rc-foto-botones">
+            <label className="rc-foto-add">
+              <span className="rc-foto-add-ico">◎</span> Hacer foto
+              <input type="file" accept="image/*" capture="environment" hidden onChange={(e) => { anadirFotos(e.target.files); e.target.value = '' }} />
+            </label>
+            <label className="rc-foto-add">
+              <span className="rc-foto-add-ico">▦</span> Subir desde galería
+              <input type="file" accept="image/*" multiple hidden onChange={(e) => { anadirFotos(e.target.files); e.target.value = '' }} />
+            </label>
+          </div>
+          {b.id && <small>Los cambios en las fotos se aplican al pulsar Guardar.</small>}
         </div>
 
         <label className="rc-campo">

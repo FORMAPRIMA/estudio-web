@@ -413,3 +413,13 @@
 .rc-visor-nav.is-izq { left: 12px; }
 .rc-visor-nav.is-der { right: 12px; }
 .rc-pin-sec.is-sel .rc-pin-body { background: var(--rc-bronce); transform: scale(1.5); box-shadow: 0 0 0 3px #fff, 0 0 0 5px var(--rc-bronce), 0 4px 14px rgba(0,0,0,.3); }
+
+/* El cuerpo de la hoja es una columna flex con scroll: sin esto, la tira de
+   fotos (overflow-x) se encogía a 0 px de alto y desaparecían fotos y botones. */
+.rc-hoja-cuerpo > *, .rc-ficha-cuerpo > * { flex-shrink: 0; }
+.rc-fotos { margin: 0 -16px; }
+.rc-app .rc-foto-quitar { position: absolute; top: 6px; right: 6px; width: 32px; height: 32px; border-radius: 999px; background: rgba(22,22,22,.78); color: #fff; font-size: 14px; display: grid; place-items: center; z-index: 2; }
+.rc-foto-acc { justify-content: space-between; }
+.rc-foto-botones { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.rc-foto-botones .rc-foto-add { flex-direction: row; height: 52px; border-radius: 14px; font-size: 13px; letter-spacing: .02em; gap: 8px; }
+.rc-foto-botones .rc-foto-add-ico { font-size: 18px; }
