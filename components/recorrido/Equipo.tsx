@@ -5,13 +5,13 @@
 const BASE = '/open-house/cc38/equipo'
 
 export const EQUIPO = [
-  { nombre: 'José', apellido: 'Lora', foto: 'jose-lora' },
-  { nombre: 'Ana Cristina', foto: 'ana-cristina' },
-  { nombre: 'Daniel', foto: 'daniel' },
+  { nombre: 'José', foto: 'jose-lora' },
   { nombre: 'Gabriela', foto: 'gabriela' },
   { nombre: 'José Antonio', foto: 'jose-antonio' },
-  { nombre: 'Ariana', foto: 'ariana' },
   { nombre: 'Aitana', foto: 'aitana' },
+  { nombre: 'Ariana', foto: 'ariana' },
+  { nombre: 'Ana Cristina', foto: 'ana-cristina' },
+  { nombre: 'Daniel', foto: 'daniel' },
 ]
 
 export default function SlideEquipo() {
