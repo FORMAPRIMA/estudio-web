@@ -168,6 +168,27 @@ export const PROPUESTAS: PropuestaWeb[] = [
     activa: true,
     publicada: '2026-10-13',
   },
+  {
+    // Sala cerrada, como NE 56th Street: PIN personal de 6 cifras por persona.
+    slug: 'palmetto-sw77-xkp5c',
+    tipo: 'dc',
+    formato: 'horizontal',
+    audiencia: 'cliente',
+    nombreCliente: '', // sin nombre: el final dice solo "¿Empezamos?"
+    cliente: '14321 SW 77th Ave · Palmetto Bay',
+    proyecto: '14321 SW 77th Ave',
+    pin: null,
+    portada: '/propuestas/palmetto-sw77-xkp5c/assets/sw77-aerea.webp',
+    og: '/propuestas/palmetto-sw77-xkp5c/og.jpg',
+    descripcion: 'Remodelación integral de vivienda unifamiliar · 2.192 sq ft · Palmetto Bay, FL',
+    pantallaPin: {
+      antetitulo: 'Propuesta de honorarios',
+      titulo: '14321 SW 77th Ave',
+      texto: 'Una casa en Palmetto Bay. Introduce tu código personal de 6 cifras para ver la propuesta.',
+    },
+    activa: true,
+    publicada: '2026-10-13',
+  },
 ]
 
 export function getPropuestaWeb(slug: string): PropuestaWeb | null {
