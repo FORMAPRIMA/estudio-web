@@ -10,13 +10,10 @@ import { FacturaEmitidaPDF } from '@/components/pdfs/FacturaEmitidaPDF'
 import type { FacturaPDFData } from '@/components/pdfs/FacturaEmitidaPDF'
 import { calcTotals } from '@/lib/facturasUtils'
 import { sendEmail, wrapEmail, type ExtraEmail } from '@/lib/email'
-import { esFacturaNoCliente } from '@/lib/finanzas/costs'
-import { resolveProveedorDestino } from '@/lib/finanzas/proveedorDestino'
+import { resolverReceptorFactura } from '@/lib/finanzas/proveedorDestino'
 import { assertSinClientesEnDestinatarios, ClienteEnDestinatariosError } from '@/lib/finanzas/guardCliente'
-import { getPartnersCC, repartirDestinatarios } from '@/lib/email/destinatarios'
+import { getPartnersCC, destinatariosFactura, emailsInvalidos } from '@/lib/email/destinatarios'
 import { buildFacturaEmailBody } from '@/lib/email/facturaBody'
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export async function POST(req: NextRequest) {
   try {
@@ -45,39 +42,34 @@ export async function POST(req: NextRequest) {
     // sección pública ("Compra de mobiliario", donde los suplidos sí van al cliente)
     // y aun así jamás puede salir hacia el cliente.
     const adminGuard = createAdminClient()
-    let seccionEnvio: string | null = input.seccion ?? null
-    let proveedorOrigen: string | null = input.proveedor_id ?? null
-    if (input.factura_origen_id && (!seccionEnvio || !proveedorOrigen)) {
-      const { data: fRow } = await adminGuard
-        .from('facturas').select('seccion, proveedor_id').eq('id', input.factura_origen_id).maybeSingle()
-      seccionEnvio    = seccionEnvio    ?? ((fRow?.seccion as string | undefined) ?? null)
-      proveedorOrigen = proveedorOrigen ?? ((fRow?.proveedor_id as string | undefined) ?? null)
-    }
-    const esPrivada = esFacturaNoCliente({
-      seccion:      seccionEnvio,
-      proveedorId:  proveedorOrigen,
-      receptorTipo: input.receptor_tipo,
+    const { esPrivada, proveedor: proveedorDestino } = await resolverReceptorFactura(adminGuard, {
+      seccion:         input.seccion ?? null,
+      proveedorId:     input.proveedor_id ?? null,
+      receptorTipo:    input.receptor_tipo ?? null,
+      facturaOrigenId: input.factura_origen_id ?? null,
+      proyectoId:      input.proyecto_id ?? null,
     })
+    const proveedorOrigen = proveedorDestino?.id ?? input.proveedor_id ?? null
 
-    // ── Resolver destinatario ─────────────────────────────────────────────────
-    // Facturas a proveedor → SIEMPRE al proveedor (constructora, proveedor de
-    // mobiliario), NUNCA al cliente. El email se resuelve en servidor desde la BD
-    // de proveedores: nunca se acepta del cliente del navegador.
-    let proveedorDestino: Awaited<ReturnType<typeof resolveProveedorDestino>> = null
-    if (esPrivada) {
-      proveedorDestino = await resolveProveedorDestino(adminGuard, {
-        facturaOrigenId: input.factura_origen_id ?? null,
-        proyectoId:      input.proyecto_id ?? null,
-        seccion:         seccionEnvio,
-        proveedorId:     proveedorOrigen,
-      })
-      if (!proveedorDestino?.email) {
-        return NextResponse.json({
-          error: 'El proveedor de esta factura no tiene email registrado. Añádelo en Proveedores para poder enviársela.',
-        }, { status: 422 })
-      }
-    } else if (!emailCliente?.trim() || !EMAIL_RE.test(emailCliente.trim())) {
-      return NextResponse.json({ error: 'Email del cliente inválido o requerido.' }, { status: 400 })
+    // A proveedor: el formulario precarga el email de su ficha y deja editarlo; si
+    // llega vacío se usa el de la ficha. guardCliente impide más abajo que acabe
+    // en un cliente del proyecto.
+    if (esPrivada && !proveedorDestino) {
+      return NextResponse.json({
+        error: 'Esta factura va a un proveedor pero no hay ninguno asignado. Asígnalo en el control de facturación.',
+      }, { status: 422 })
+    }
+    const emailPrincipal = emailCliente?.trim() || (esPrivada ? proveedorDestino!.email ?? '' : '')
+    if (!emailPrincipal) {
+      return NextResponse.json({
+        error: esPrivada
+          ? 'El proveedor no tiene email registrado. Escríbelo en el formulario o añádelo en Proveedores.'
+          : 'Email del cliente requerido.',
+      }, { status: 400 })
+    }
+    const invalidos = emailsInvalidos([emailPrincipal, ...(extraEmails ?? []).map(e => e.email)])
+    if (invalidos.length) {
+      return NextResponse.json({ error: `Email no válido: ${invalidos.join(', ')}` }, { status: 400 })
     }
 
     // Copia interna a los socios (ver lib/email/destinatarios.ts)
@@ -148,30 +140,15 @@ export async function POST(req: NextRequest) {
     const pdfBuffer = await renderToBuffer(createElement(FacturaEmitidaPDF, { data: pdfData }) as any)
 
     // ── 5. Distribuir emails ────────────────────────────────────────────────
-    const valid    = (extraEmails ?? []).filter(e => e.email.trim())
-    const toExtra  = valid.filter(e => e.tipo === 'to') .map(e => e.email.trim())
-    const ccExtra  = valid.filter(e => e.tipo === 'cc') .map(e => e.email.trim())
-    const bccExtra = valid.filter(e => e.tipo === 'bcc').map(e => e.email.trim())
-
-    // Additional project clients → their primary email goes TO, secondary email goes CC
-    const adicionales = clientesAdicionales ?? []
-    const toAdicional = adicionales.map(c => c.email).filter((e): e is string => !!e?.trim()).map(e => e.trim())
-    const ccAdicional = adicionales.map(c => c.email_cc).filter((e): e is string => !!e?.trim()).map(e => e.trim())
-
-    // Para márgenes internos: SOLO al proveedor (nunca cliente ni clientes adicionales).
-    const { to: toList, cc, bcc } = repartirDestinatarios(
-      esPrivada
-        ? {
-            to:  [proveedorDestino!.email],
-            cc:  [...PARTNERS_CC, proveedorDestino!.emailCc],
-            bcc: [],
-          }
-        : {
-            to:  [emailCliente, ...toExtra, ...toAdicional],
-            cc:  [...PARTNERS_CC, ...ccExtra, ...ccAdicional],
-            bcc: bccExtra,
-          }
-    )
+    // Socios siempre en copia; a proveedor nunca van los otros clientes del proyecto.
+    const adicionales = esPrivada ? [] : (clientesAdicionales ?? [])
+    const { to: toList, cc, bcc } = destinatariosFactura({
+      principal:           emailPrincipal,
+      esParaProveedor:     esPrivada,
+      partners:            PARTNERS_CC,
+      extras:              extraEmails,
+      clientesAdicionales: adicionales,
+    })
 
     // ── 6. Greeting ──────────────────────────────────────────────────────────
     let saludoNombre: string
@@ -250,7 +227,7 @@ export async function POST(req: NextRequest) {
 
     if (emailResult.error) {
       return NextResponse.json({
-        error: `Factura creada (${numero_completo}) pero el email falló: ${emailResult.error}`,
+        error: `Factura creada (${numero_completo}) pero el email falló: ${emailResult.error}. No la emitas otra vez: reenvíala desde Editar → Guardar y reenviar.`,
       }, { status: 500 })
     }
 

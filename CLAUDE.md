@@ -956,6 +956,16 @@ Todo sale por `sendEmail()` (`lib/email/index.ts`), con remitente fijo `contacto
   y aparece duplicado en la cabecera que ve el cliente.
 - **`replyTo` en camelCase**. El SDK de Resend lo mapea él mismo a `reply_to`; pasar la clave en
   snake_case la descarta en silencio y TypeScript no lo detecta dentro de un spread condicional.
+- **Facturas**: el destinatario (cliente o proveedor) lo decide `resolverReceptorFactura()`
+  (`lib/finanzas/proveedorDestino.ts`), que usan las tres rutas y el formulario. Los
+  destinatarios salen de `destinatariosFactura()`: **socios siempre en copia** (también a
+  proveedor y en el recordatorio) y los otros clientes del proyecto nunca en una factura a
+  proveedor. El email del proveedor se precarga de su ficha y es editable; `guardCliente` lo
+  verifica igual. Una factura de contrato solo se emite una vez (`lib/facturas/emitidaVigente.ts`).
+- **Lo que se revisa es lo que se envía.** Las reglas puras de reparto están en `lib/email/reparto.ts`
+  (sin imports de servidor) para que el formulario de factura calcule "Así sale el correo" con la
+  misma función que el servidor. El recordatorio expone `GET /recordatorio` con la lista exacta que
+  enviará el `POST` (misma función `prepararRecordatorio`, guardCliente incluido).
 - **Cuerpo de factura**: `lib/email/facturaBody.ts`, compartido por `emit` y `reenviar`. El
   recordatorio de pago NO lo usa: es otro correo (sin conceptos ni totales).
 - `scripts/test-factura-email.ts` comprueba las reglas que no pueden fallar en silencio

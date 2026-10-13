@@ -9,6 +9,7 @@ import {
   createFacturaEmitida,
   getClientesDelProyecto,
   getPartnerCCEmails,
+  getDestinoEnvioFactura,
   asignarProyectoSeccion,
   getSeccionesProyecto,
   type FacturaItem,
@@ -19,6 +20,7 @@ import {
 import type { ExtraEmail } from '@/lib/email'
 import { calcTotals } from '@/lib/facturasUtils'
 import { esFacturaNoCliente } from '@/lib/finanzas/costs'
+import { destinatariosFactura, emailsInvalidos } from '@/lib/email/reparto'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -361,13 +363,20 @@ function CreateModal({
   // CRÍTICO: una factura dirigida a un proveedor jamás se envía al cliente.
   // No basta con mirar la sección: un rappel de mobiliario está en una sección
   // pública ("Compra de mobiliario") y tampoco puede salir hacia el cliente.
+  //
+  // En edición se pregunta además al servidor: si en el control de facturación se
+  // cambió el destinatario a un proveedor DESPUÉS de emitir, la emitida aún no lo
+  // refleja y solo la factura de origen lo sabe. Así la pantalla enseña el mismo
+  // destinatario al que el servidor va a enviar.
+  const [destinoEdit, setDestinoEdit] = useState<Awaited<ReturnType<typeof getDestinoEnvioFactura>> | null>(null)
+  const destinoListo = !editData || destinoEdit !== null
   const seccionEfectiva = editData?.seccion ?? prefill?.seccion ?? null
-  const proveedorEfectivo = editData?.proveedor_id ?? prefill?.proveedorId ?? null
+  const proveedorEfectivo = editData?.proveedor_id ?? prefill?.proveedorId ?? destinoEdit?.proveedor?.id ?? null
   const bloqueadaParaCliente = esFacturaNoCliente({
     seccion:      seccionEfectiva,
     proveedorId:  proveedorEfectivo,
     receptorTipo: editData?.receptor_tipo ?? null,
-  })
+  }) || !!destinoEdit?.esProveedor
 
   // For edit mode: look up the client record and original invoice number
   const editClienteLookup = editData?.cliente_id
@@ -457,12 +466,16 @@ function CreateModal({
       : ''
   )
 
+  // Email principal del envío: el del cliente, o el del proveedor si la factura va a
+  // un proveedor (precargado de su ficha y editable).
   const [emailCliente,     setEmailCliente]     = useState(() => {
     if (editData) return editClienteLookup?.email ?? ''
+    if (prefill?.proveedorId) return prefill.proveedorEmail ?? ''
     return prefill?.clienteEmail ?? ''
   })
   const [emailClienteCC,   setEmailClienteCC]   = useState(() => {
     if (editData) return editClienteLookup?.email_cc ?? ''
+    if (prefill?.proveedorId) return prefill.proveedorEmailCC ?? ''
     return prefill?.clienteEmailCC ?? ''
   })
   const [extraEmails,      setExtraEmails]      = useState<ExtraEmail[]>([])
@@ -480,6 +493,16 @@ function CreateModal({
       getClientesDelProyecto(editData.proyecto_id).then(setProyectoClientes)
     }
     getPartnerCCEmails().then(setPartnersCC)
+    if (editData) {
+      getDestinoEnvioFactura(editData.id).then(d => {
+        setDestinoEdit(d)
+        // A proveedor: nunca se deja precargado el email de un cliente.
+        if (d.esProveedor) {
+          setEmailCliente(d.proveedor?.email ?? '')
+          setEmailClienteCC(d.proveedor?.emailCc ?? '')
+        }
+      })
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -519,6 +542,38 @@ function CreateModal({
     // del nuevo proyecto debe estar pre-seleccionado para recibir la factura.
     setClientesIncluidos(new Set())
   }, [])
+
+  // ── Envío: lo que se manda al servidor y lo que se enseña en la revisión ──
+  // Un solo sitio construye la petición de envío, y la lista "Así sale el correo"
+  // se calcula de esa misma petición con la misma función que usa el servidor
+  // (`destinatariosFactura`). Lo que se ve en pantalla es lo que recibe Resend.
+  const payloadEnvio = () => ({
+    emailCliente: emailCliente.trim(),
+    extraEmails: [
+      ...(emailClienteCC.trim() ? [{ email: emailClienteCC.trim(), tipo: 'cc' as const }] : []),
+      ...extraEmails.filter(e => e.email.trim()).map(e => ({ ...e, email: e.email.trim() })),
+    ],
+    includeCTA: !bloqueadaParaCliente && includeCTA,
+    // A proveedor nunca van otros clientes del proyecto.
+    clientesAdicionales: bloqueadaParaCliente ? [] : proyectoClientes
+      .filter(c => c.id !== clienteId && clientesIncluidos.has(c.id))
+      .map(c => ({ nombre: c.nombre, apellidos: c.apellidos, email: c.email, email_cc: c.email_cc })),
+  })
+  const envio = payloadEnvio()
+  const envioFinal = destinatariosFactura({
+    principal:           envio.emailCliente,
+    esParaProveedor:     bloqueadaParaCliente,
+    partners:            partnersCC.map(p => p.email),
+    extras:              envio.extraEmails,
+    clientesAdicionales: envio.clientesAdicionales,
+  })
+  const envioInvalidos = emailsInvalidos([...envioFinal.to, ...envioFinal.cc, ...envioFinal.bcc])
+  const validarEnvio = (): string | null => {
+    if (!envio.emailCliente) return bloqueadaParaCliente ? 'Introduce el email del proveedor para el envío.' : 'Introduce el email del cliente para el envío.'
+    if (envioInvalidos.length) return `Revisa estos correos: ${envioInvalidos.join(', ')}`
+    if (partnersCC.length === 0) return 'Aún no se han cargado los socios que van en copia. Espera un momento.'
+    return null
+  }
 
   // ── Helpers for build input ───────────────────────────────────────────────
 
@@ -592,8 +647,8 @@ function CreateModal({
   const handleSaveAndResend = async () => {
     const err = validateEdit()
     if (err) { setError(err); return }
-    // En márgenes internos el destinatario (proveedor) lo resuelve el servidor.
-    if (!bloqueadaParaCliente && !emailCliente.trim()) { setError('Introduce el email del cliente para el envío.'); return }
+    const errEnvio = validarEnvio()
+    if (errEnvio) { setError(errEnvio); return }
     if (!resendAsunto.trim()) { setError('El asunto del correo es obligatorio.'); return }
     setLoading(true); setError(null)
 
@@ -606,17 +661,9 @@ function CreateModal({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        emailCliente,
-        extraEmails: [
-          ...(emailClienteCC.trim() ? [{ email: emailClienteCC.trim(), tipo: 'cc' as const }] : []),
-          ...extraEmails,
-        ],
+        ...payloadEnvio(),
         asunto:      resendAsunto,
         cuerpoIntro: resendCuerpo,
-        includeCTA,
-        clientesAdicionales: proyectoClientes
-          .filter(c => c.id !== clienteId && clientesIncluidos.has(c.id))
-          .map(c => ({ nombre: c.nombre, apellidos: c.apellidos, email: c.email, email_cc: c.email_cc })),
       }),
     })
     const result = await res.json()
@@ -633,8 +680,8 @@ function CreateModal({
     const clienteNombre = clienteEmpresa.trim() || clienteContacto.trim()
     if (!clienteNombre) { setError(bloqueadaParaCliente ? 'El nombre del proveedor / razón social es obligatorio.' : 'El nombre del cliente o razón social es obligatorio.'); return }
     if (items.every(i => i.subtotal === 0)) { setError('Añade al menos una línea con importe.'); return }
-    // Márgenes internos: el envío va al proveedor; el servidor resuelve su email.
-    if (!bloqueadaParaCliente && !emailCliente.trim()) { setError('Introduce el email del cliente para el envío.'); return }
+    const errEnvio = validarEnvio()
+    if (errEnvio) { setError(errEnvio); return }
 
     setLoading(true); setError(null)
     const input = buildCreateInput()
@@ -643,19 +690,8 @@ function CreateModal({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        input, emailCliente, includeCTA,
-        clientesAdicionales: proyectoClientes
-          .filter(c => c.id !== clienteId && clientesIncluidos.has(c.id))
-          .map(c => ({
-            nombre:    c.nombre,
-            apellidos: c.apellidos,
-            email:     c.email,
-            email_cc:  c.email_cc,
-          })),
-        extraEmails: [
-          ...(emailClienteCC.trim() ? [{ email: emailClienteCC.trim(), tipo: 'cc' as const }] : []),
-          ...extraEmails,
-        ],
+        input,
+        ...payloadEnvio(),
       }),
     })
     const result = await res.json()
@@ -775,7 +811,7 @@ function CreateModal({
             <div style={{ marginBottom: 22, padding: '12px 16px', background: '#FEF2F2', border: '1px solid #F4D6D2', borderRadius: 6, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
               <span style={{ fontSize: 16, lineHeight: 1 }}>🔒</span>
               <p style={{ margin: 0, fontSize: 11.5, color: '#B42318', lineHeight: 1.5 }}>
-                <strong>Margen interno{seccionEfectiva ? ` · ${seccionEfectiva}` : ''}.</strong> Esta factura se emite y se envía <strong>al proveedor</strong> (constructora / proveedor de muebles), nunca al cliente. Los datos de facturación son los del proveedor y el correo irá a su email registrado.
+                <strong>Margen interno{seccionEfectiva ? ` · ${seccionEfectiva}` : ''}.</strong> Esta factura se emite y se envía <strong>al proveedor</strong> (constructora / proveedor de muebles), nunca al cliente. Los datos de facturación son los del proveedor y el correo va a su email, precargado de su ficha más abajo.
               </p>
             </div>
           )}
@@ -986,19 +1022,24 @@ function CreateModal({
 
           {/* ── Envío al cliente ────────────────────────────────────── */}
           <div style={section({ borderBottom: 'none', marginBottom: 0 })}>
-            <p style={sectionTitle()}>Envío al cliente</p>
+            <p style={sectionTitle()}>{bloqueadaParaCliente ? 'Envío al proveedor' : 'Envío al cliente'}</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
               {/* Email principal */}
               <div>
-                <span style={label()}>Email principal del cliente <span style={{ color: '#DC2626' }}>*</span></span>
+                <span style={label()}>{bloqueadaParaCliente ? 'Email del proveedor' : 'Email principal del cliente'} <span style={{ color: '#DC2626' }}>*</span></span>
                 <input
                   type="email"
                   value={emailCliente}
                   onChange={e => setEmailCliente(e.target.value)}
-                  placeholder="cliente@empresa.com"
+                  placeholder={bloqueadaParaCliente ? (destinoListo ? 'proveedor@empresa.com' : 'Cargando email del proveedor…') : 'cliente@empresa.com'}
                   style={inp()}
                 />
+                {bloqueadaParaCliente && destinoListo && !emailCliente.trim() && (
+                  <span style={{ display: 'block', fontSize: 10, color: '#B42318', marginTop: 4 }}>
+                    El proveedor no tiene email en su ficha. Escríbelo aquí o añádelo en Proveedores.
+                  </span>
+                )}
               </div>
 
               {/* Email secundario (CC) del cliente seleccionado */}
@@ -1007,11 +1048,13 @@ function CreateModal({
                   <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: '#AAA', flexShrink: 0 }}>CC</span>
                   <span style={{ fontSize: 11, color: '#555', flex: 1 }}>{emailClienteCC}</span>
                   <span style={{ fontSize: 9, color: '#AAA' }}>Correo secundario de la ficha · se incluirá en copia</span>
+                  <button type="button" onClick={() => setEmailClienteCC('')} title="Quitar de copia"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#AAA', padding: 0, lineHeight: 1 }}>×</button>
                 </div>
               )}
 
-              {/* Otros clientes del proyecto — opt-in explícito por cliente */}
-              {proyectoClientes.filter(c => c.id !== clienteId).length > 0 && (
+              {/* Otros clientes del proyecto — opt-in explícito por cliente. Nunca en facturas a proveedor. */}
+              {!bloqueadaParaCliente && proyectoClientes.filter(c => c.id !== clienteId).length > 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: '#D85A30', display: 'block', marginBottom: 2 }}>
                     Otros clientes del proyecto · marca solo los que deben recibir esta factura
@@ -1120,25 +1163,39 @@ function CreateModal({
                 + Añadir correo
               </button>
 
-              {/* Partners siempre en copia — cargados dinámicamente desde profiles (rol fp_partner) */}
-              <div style={{ background: '#F8F7F4', border: '1px solid #F0EEE8', padding: '10px 12px' }}>
-                <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: '#AAA', display: 'block', marginBottom: 5 }}>
-                  Siempre en copia · Partners de Forma Prima
+              {/* Revisión final: la lista exacta que se entrega a Resend */}
+              <div style={{ background: '#F8F7F4', border: `1px solid ${envioInvalidos.length ? '#F4D6D2' : '#E8E6E0'}`, padding: '12px 14px' }}>
+                <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: '#1A1A1A', display: 'block', marginBottom: 8 }}>
+                  Así sale el correo
                 </span>
-                {partnersCC.length === 0 ? (
-                  <span style={{ fontSize: 11, color: '#AAA', fontStyle: 'italic' }}>Cargando…</span>
-                ) : (
-                  <span style={{ fontSize: 11, color: '#555', lineHeight: 1.6 }}>
-                    {partnersCC.map((p, i) => (
-                      <React.Fragment key={p.email}>
-                        <span title={p.nombre}>{p.email}</span>
-                        {i < partnersCC.length - 1 && <span style={{ color: '#CCC', margin: '0 8px' }}>·</span>}
-                      </React.Fragment>
-                    ))}
-                  </span>
+                {([['Para', envioFinal.to], ['CC', envioFinal.cc], ['CCO', envioFinal.bcc]] as const).map(([etiqueta, lista]) => (
+                  (lista.length > 0 || etiqueta === 'Para') && (
+                    <div key={etiqueta} style={{ display: 'flex', gap: 10, alignItems: 'baseline', marginBottom: 4 }}>
+                      <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' as const, color: '#AAA', width: 30, flexShrink: 0 }}>{etiqueta}</span>
+                      <span style={{ fontSize: 11, color: '#555', lineHeight: 1.6, wordBreak: 'break-all' as const }}>
+                        {lista.length === 0
+                          ? <span style={{ color: '#B42318' }}>falta el destinatario</span>
+                          : lista.map((e, i) => {
+                              const socio = partnersCC.find(p => p.email.toLowerCase() === e.toLowerCase())
+                              const malo = envioInvalidos.includes(e)
+                              return (
+                                <React.Fragment key={e}>
+                                  <span title={socio ? `Socio · ${socio.nombre}` : undefined} style={{ color: malo ? '#B42318' : undefined, textDecoration: malo ? 'underline wavy' : undefined }}>{e}</span>
+                                  {socio && <span style={{ fontSize: 9, color: '#AAA' }}> (socio)</span>}
+                                  {i < lista.length - 1 && <span style={{ color: '#CCC', margin: '0 6px' }}>·</span>}
+                                </React.Fragment>
+                              )
+                            })}
+                      </span>
+                    </div>
+                  )
+                ))}
+                {partnersCC.length === 0 && (
+                  <span style={{ display: 'block', fontSize: 10, color: '#AAA', fontStyle: 'italic', marginTop: 4 }}>Cargando socios…</span>
                 )}
                 <span style={{ display: 'block', fontSize: 10, color: '#AAA', marginTop: 6, lineHeight: 1.4 }}>
-                  Solo socios (fp_partner). Los managers NO reciben copia de las facturas.
+                  Exactamente estas direcciones, sin repetidos. Los socios (fp_partner) van siempre en copia; los managers no.
+                  {bloqueadaParaCliente && ' Si alguna fuese de un cliente del proyecto, el envío se bloquea.'}
                 </span>
               </div>
 
@@ -1180,7 +1237,8 @@ function CreateModal({
 
         {/* Footer */}
         <div style={{ padding: '16px 28px', borderTop: '1px solid #E8E6E0', background: '#fff', flexShrink: 0 }}>
-          {/* CTA checkbox */}
+          {/* CTA checkbox — el área de cliente no es del proveedor */}
+          {!bloqueadaParaCliente && (
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, cursor: 'pointer' }}>
             <input
               type="checkbox"
@@ -1192,6 +1250,7 @@ function CreateModal({
               Activar invitación al área de cliente en el correo
             </span>
           </label>
+          )}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12 }}>
           {error && <span style={{ fontSize: 11, color: '#DC2626', flex: 1 }}>Error: {error}</span>}
 
@@ -1224,7 +1283,7 @@ function CreateModal({
               )}
               <button type="button"
                 onClick={showResendForm ? handleSaveAndResend : () => { setShowResendForm(true); setTimeout(() => document.getElementById('resend-form-anchor')?.scrollIntoView({ behavior: 'smooth' }), 50) }}
-                disabled={loading}
+                disabled={loading || !destinoListo}
                 title={bloqueadaParaCliente ? 'Margen interno — se envía al proveedor, nunca al cliente' : undefined}
                 style={{ height: 36, padding: '0 22px', background: loading ? '#888' : '#D85A30', color: '#fff', border: 'none', cursor: loading ? 'not-allowed' : 'pointer', fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', opacity: loading ? 0.7 : 1 }}
                 onMouseEnter={e => { if (!loading) (e.currentTarget as HTMLElement).style.background = '#B84D28' }}
@@ -1519,6 +1578,9 @@ export interface PrefillData {
   monto:            number
   /** Proveedor destinatario. Si viene, la factura NO va al cliente. */
   proveedorId?:     string
+  /** Email y CC de la ficha del proveedor, para precargar el envío. */
+  proveedorEmail?:   string
+  proveedorEmailCC?: string
   clienteId:        string
   clienteContacto:  string
   clienteEmpresa:   string

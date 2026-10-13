@@ -146,11 +146,13 @@ export default async function Page({
         if (provId) {
           const { data: prov } = await admin
             .from('proveedores')
-            .select('id, nombre, razon_social, nif_cif, direccion_fiscal, direccion, contacto_nombre, condiciones_pago')
+            .select('id, nombre, razon_social, nif_cif, direccion_fiscal, direccion, contacto_nombre, condiciones_pago, email, email_cc')
             .eq('id', provId)
             .maybeSingle()
           if (prov) {
             prefill.proveedorId      = prov.id as string
+            prefill.proveedorEmail   = (prov.email as string | null) ?? ''
+            prefill.proveedorEmailCC = (prov.email_cc as string | null) ?? ''
             prefill.clienteEmpresa   = (prov.razon_social as string | null) ?? prov.nombre
             prefill.clienteContacto  = (prov.contacto_nombre as string | null) ?? ''
             prefill.clienteNif       = (prov.nif_cif as string | null) ?? ''

@@ -7,13 +7,11 @@ import { leerEstudioConfig as getEstudioConfig } from '@/lib/facturas/estudioCon
 import { FacturaEmitidaPDF } from '@/components/pdfs/FacturaEmitidaPDF'
 import type { FacturaPDFData } from '@/components/pdfs/FacturaEmitidaPDF'
 import { sendEmail, wrapEmail, type ExtraEmail } from '@/lib/email'
-import { esFacturaNoCliente } from '@/lib/finanzas/costs'
-import { resolveProveedorDestino } from '@/lib/finanzas/proveedorDestino'
+import { resolverReceptorFactura } from '@/lib/finanzas/proveedorDestino'
 import { assertSinClientesEnDestinatarios, ClienteEnDestinatariosError } from '@/lib/finanzas/guardCliente'
-import { getPartnersCC, repartirDestinatarios } from '@/lib/email/destinatarios'
+import { getPartnersCC, destinatariosFactura, emailsInvalidos } from '@/lib/email/destinatarios'
 import { buildFacturaEmailBody } from '@/lib/email/facturaBody'
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+import { updateFacturaEmitidaEstado } from '@/app/actions/facturasEmitidas'
 
 export async function POST(
   req: NextRequest,
@@ -42,11 +40,6 @@ export async function POST(
         clientesAdicionales?: { nombre: string; apellidos: string | null; email: string | null; email_cc: string | null }[]
       }
 
-    // El email del cliente solo se exige en facturas normales (no en márgenes a proveedor,
-    // donde el destinatario se resuelve en servidor). Si se aporta, debe ser válido.
-    if (emailCliente?.trim() && !EMAIL_RE.test(emailCliente.trim())) {
-      return NextResponse.json({ error: 'Email del cliente inválido.' }, { status: 400 })
-    }
     if (!asunto?.trim()) {
       return NextResponse.json({ error: 'El asunto del correo es obligatorio.' }, { status: 400 })
     }
@@ -62,37 +55,32 @@ export async function POST(
       return NextResponse.json({ error: 'Factura no encontrada' }, { status: 404 })
     }
 
-    // ── Facturas a proveedor: el reenvío va SIEMPRE al proveedor, nunca al cliente ─
+    // ── Destinatario: cliente o proveedor ─────────────────────────────────────
     // Lo decide el destinatario, no solo la sección (un rappel de mobiliario está
     // en una sección pública y tampoco puede salir hacia el cliente).
-    let seccionF: string | null = (f.seccion as string | null) ?? null
-    let proveedorF: string | null = (f.proveedor_id as string | null) ?? null
-    if (f.factura_origen_id && (!seccionF || !proveedorF)) {
-      const { data: fRow } = await admin
-        .from('facturas').select('seccion, proveedor_id').eq('id', f.factura_origen_id).maybeSingle()
-      seccionF   = seccionF   ?? ((fRow?.seccion as string | undefined) ?? null)
-      proveedorF = proveedorF ?? ((fRow?.proveedor_id as string | undefined) ?? null)
-    }
-    const esPrivada = esFacturaNoCliente({
-      seccion:      seccionF,
-      proveedorId:  proveedorF,
-      receptorTipo: f.receptor_tipo as string | null,
+    const { esPrivada, proveedor: proveedorDestino } = await resolverReceptorFactura(admin, {
+      seccion:         (f.seccion as string | null) ?? null,
+      proveedorId:     (f.proveedor_id as string | null) ?? null,
+      receptorTipo:    (f.receptor_tipo as string | null) ?? null,
+      facturaOrigenId: f.factura_origen_id ?? null,
+      proyectoId:      f.proyecto_id ?? null,
     })
-    let proveedorDestino: Awaited<ReturnType<typeof resolveProveedorDestino>> = null
-    if (esPrivada) {
-      proveedorDestino = await resolveProveedorDestino(admin, {
-        facturaOrigenId: f.factura_origen_id ?? null,
-        proyectoId:      f.proyecto_id ?? null,
-        seccion:         seccionF,
-        proveedorId:     proveedorF,
-      })
-      if (!proveedorDestino?.email) {
-        return NextResponse.json({
-          error: 'El proveedor de esta factura no tiene email registrado. Añádelo en Proveedores para poder enviársela.',
-        }, { status: 422 })
-      }
-    } else if (!emailCliente?.trim()) {
-      return NextResponse.json({ error: 'Email del cliente requerido.' }, { status: 400 })
+    if (esPrivada && !proveedorDestino) {
+      return NextResponse.json({
+        error: 'Esta factura va a un proveedor pero no hay ninguno asignado. Asígnalo en el control de facturación.',
+      }, { status: 422 })
+    }
+    const emailPrincipal = emailCliente?.trim() || (esPrivada ? proveedorDestino!.email ?? '' : '')
+    if (!emailPrincipal) {
+      return NextResponse.json({
+        error: esPrivada
+          ? 'El proveedor no tiene email registrado. Escríbelo en el formulario o añádelo en Proveedores.'
+          : 'Email del cliente requerido.',
+      }, { status: 400 })
+    }
+    const invalidos = emailsInvalidos([emailPrincipal, ...(extraEmails ?? []).map(e => e.email)])
+    if (invalidos.length) {
+      return NextResponse.json({ error: `Email no válido: ${invalidos.join(', ')}` }, { status: 400 })
     }
 
     // Fetch original invoice number if rectificativa
@@ -149,29 +137,15 @@ export async function POST(
     const pdfBuffer = await renderToBuffer(createElement(FacturaEmitidaPDF, { data: pdfData }) as any)
 
     // ── Distribute recipients ─────────────────────────────────────────────────
-    const valid    = (extraEmails ?? []).filter(e => e.email.trim())
-    const toExtra  = valid.filter(e => e.tipo === 'to') .map(e => e.email.trim())
-    const ccExtra  = valid.filter(e => e.tipo === 'cc') .map(e => e.email.trim())
-    const bccExtra = valid.filter(e => e.tipo === 'bcc').map(e => e.email.trim())
-
-    const adicionales  = clientesAdicionales ?? []
-    const toAdicional  = adicionales.map(c => c.email).filter((e): e is string => !!e?.trim()).map(e => e.trim())
-    const ccAdicional  = adicionales.map(c => c.email_cc).filter((e): e is string => !!e?.trim()).map(e => e.trim())
-
-    // Facturas a proveedor: SOLO al proveedor (nunca cliente ni clientes adicionales).
-    const { to: toList, cc, bcc } = repartirDestinatarios(
-      esPrivada
-        ? {
-            to:  [proveedorDestino!.email],
-            cc:  [...PARTNERS_CC, proveedorDestino!.emailCc],
-            bcc: [],
-          }
-        : {
-            to:  [emailCliente, ...toExtra, ...toAdicional],
-            cc:  [...PARTNERS_CC, ...ccExtra, ...ccAdicional],
-            bcc: bccExtra,
-          }
-    )
+    // Socios siempre en copia; a proveedor nunca van los otros clientes del proyecto.
+    const adicionales = esPrivada ? [] : (clientesAdicionales ?? [])
+    const { to: toList, cc, bcc } = destinatariosFactura({
+      principal:           emailPrincipal,
+      esParaProveedor:     esPrivada,
+      partners:            PARTNERS_CC,
+      extras:              extraEmails,
+      clientesAdicionales: adicionales,
+    })
 
     // ── Greeting ──────────────────────────────────────────────────────────────
     const mainNombre = esPrivada
@@ -229,6 +203,9 @@ export async function POST(
     if (emailResult.error) {
       return NextResponse.json({ error: `El correo falló: ${emailResult.error}` }, { status: 500 })
     }
+
+    // Si el envío original falló, este reenvío es el primero que llega: sale del borrador.
+    if (f.estado === 'borrador') await updateFacturaEmitidaEstado(f.id, 'enviada')
 
     return NextResponse.json({ ok: true })
 

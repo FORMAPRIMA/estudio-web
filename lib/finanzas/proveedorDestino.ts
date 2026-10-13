@@ -1,4 +1,4 @@
-import { SECCION_CONSTRUCTORA } from './costs'
+import { SECCION_CONSTRUCTORA, esFacturaNoCliente } from './costs'
 
 type AdminClient = { from: (table: string) => any } // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -56,4 +56,53 @@ export async function resolveProveedorDestino(
     email:   (prov.email as string | null) ?? null,
     emailCc: (prov.email_cc as string | null) ?? null,
   }
+}
+
+export interface ReceptorFactura {
+  /** La factura tiene prohibido el canal cliente (ver `esFacturaNoCliente`). */
+  esPrivada: boolean
+  /** Sección efectiva, heredada de la factura de origen si la emitida no la trae. */
+  seccion:   string | null
+  /** Proveedor destinatario. Solo si `esPrivada`; puede ser null si no hay ninguno asignado. */
+  proveedor: ProveedorDestino | null
+}
+
+/**
+ * Decide a quién va una factura emitida: cliente o proveedor, y qué proveedor.
+ *
+ * Es la misma deducción que necesitan emitir, reenviar, recordatorio y el
+ * formulario (para enseñar el email antes de enviar). Antes cada uno la repetía;
+ * así la pantalla y el servidor no pueden discrepar sobre el destinatario.
+ */
+export async function resolverReceptorFactura(
+  admin: AdminClient,
+  f: {
+    seccion:         string | null
+    proveedorId:     string | null
+    receptorTipo:    string | null
+    facturaOrigenId: string | null
+    proyectoId:      string | null
+  },
+): Promise<ReceptorFactura> {
+  let seccion    = f.seccion
+  let proveedorId = f.proveedorId
+  // La factura de contrato de origen manda: si allí se cambió el destinatario a un
+  // proveedor después de emitir, la emitida aún no lo refleja.
+  if (f.facturaOrigenId && (!seccion || !proveedorId)) {
+    const { data: fRow } = await admin
+      .from('facturas').select('seccion, proveedor_id').eq('id', f.facturaOrigenId).maybeSingle()
+    seccion     = seccion     ?? ((fRow?.seccion as string | undefined) ?? null)
+    proveedorId = proveedorId ?? ((fRow?.proveedor_id as string | undefined) ?? null)
+  }
+
+  const esPrivada = esFacturaNoCliente({ seccion, proveedorId, receptorTipo: f.receptorTipo })
+  if (!esPrivada) return { esPrivada, seccion, proveedor: null }
+
+  const proveedor = await resolveProveedorDestino(admin, {
+    facturaOrigenId: f.facturaOrigenId,
+    proyectoId:      f.proyectoId,
+    seccion,
+    proveedorId,
+  })
+  return { esPrivada, seccion, proveedor }
 }

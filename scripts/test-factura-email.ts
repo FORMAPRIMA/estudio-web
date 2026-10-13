@@ -9,7 +9,7 @@
  * desaparecen cuando toca. No envía nada ni toca la base de datos.
  */
 import { buildFacturaEmailBody } from '../lib/email/facturaBody'
-import { repartirDestinatarios } from '../lib/email/destinatarios'
+import { repartirDestinatarios, destinatariosFactura, emailsInvalidos } from '../lib/email/destinatarios'
 
 const items = [{ descripcion: 'Honorarios', cantidad: 1, precio_unitario: 1000, subtotal: 1000 }]
 const base = {
@@ -73,6 +73,33 @@ check('conserva el resto del CC', r1.cc.includes('socio@x.com'))
 
 const r2 = repartirDestinatarios({ to: ['a@x.com', null, '', undefined], cc: [] })
 check('descarta vacíos y nulos', r2.to.length === 1 && r2.cc.length === 0)
+
+console.log('\nDestinatarios de una factura')
+const socios = ['socio1@fp.es', 'socio2@fp.es']
+const adicionales = [{ email: 'luis@cliente.com', email_cc: 'luis2@cliente.com' }]
+
+const fCliente = destinatariosFactura({
+  principal: 'ana@cliente.com', esParaProveedor: false, partners: socios,
+  extras: [{ email: 'gestor@x.com', tipo: 'bcc' }], clientesAdicionales: adicionales,
+})
+check('cliente: socios en copia',             socios.every(e => fCliente.cc.includes(e)))
+check('cliente: otros clientes marcados entran', fCliente.to.includes('luis@cliente.com') && fCliente.cc.includes('luis2@cliente.com'))
+check('cliente: respeta CCO añadido a mano',  fCliente.bcc.includes('gestor@x.com'))
+
+const fProv = destinatariosFactura({
+  principal: 'admin@constructora.com', esParaProveedor: true, partners: socios,
+  extras: [{ email: 'obra@constructora.com', tipo: 'cc' }], clientesAdicionales: adicionales,
+})
+check('proveedor: va al email indicado',      fProv.to.length === 1 && fProv.to[0] === 'admin@constructora.com')
+check('proveedor: socios en copia',           socios.every(e => fProv.cc.includes(e)))
+check('proveedor: respeta CC añadido a mano', fProv.cc.includes('obra@constructora.com'))
+check('proveedor: NUNCA otros clientes',      ![...fProv.to, ...fProv.cc, ...fProv.bcc].some(e => e.includes('cliente.com')),
+      'aunque lleguen en la petición')
+
+const fSocioDestino = destinatariosFactura({ principal: 'socio1@fp.es', esParaProveedor: false, partners: socios })
+check('socio destinatario no se duplica en CC', !fSocioDestino.cc.includes('socio1@fp.es'))
+
+check('emails mal escritos se detectan', emailsInvalidos(['ok@x.com', 'mal@', ' ', null]).join() === 'mal@')
 
 console.log(`\n${fallos === 0 ? '✅ Todo correcto' : `❌ ${fallos} fallo(s)`}\n`)
 process.exit(fallos === 0 ? 0 : 1)

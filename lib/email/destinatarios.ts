@@ -11,6 +11,11 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 
+// Las reglas puras de reparto viven en `reparto.ts` para que el navegador pueda
+// usarlas (la revisión final enseña exactamente lo que se enviará). Se reexportan
+// aquí para que los endpoints sigan importando de un solo sitio.
+export { repartirDestinatarios, destinatariosFactura, emailsInvalidos, EMAIL_RE } from './reparto'
+
 // ── Buzones fijos ─────────────────────────────────────────────────────────────
 
 /** Leads de la web: los atiende Ana (biz dev); contacto@ queda como buzón del estudio. */
@@ -54,46 +59,4 @@ export async function getPartnersCCDetallado(): Promise<PartnerCC[]> {
 /** Emails de los socios, para poner en copia lo que sale del estudio. */
 export async function getPartnersCC(): Promise<string[]> {
   return (await getPartnersCCDetallado()).map(p => p.email)
-}
-
-// ── Reglas de reparto ─────────────────────────────────────────────────────────
-
-const norm = (e: string) => e.trim().toLowerCase()
-
-/**
- * Limpia las tres listas de un envío antes de entregarlas a Resend:
- *  - quita vacíos y espacios sobrantes,
- *  - elimina repetidos dentro de cada lista,
- *  - y aplica prioridad TO > CC > BCC: quien ya está en una lista desaparece de
- *    las de menor prioridad.
- *
- * El motivo no es cosmético. Sin esto un cliente que también es contacto de copia
- * recibe el mismo correo dos veces, y un socio que además es el destinatario
- * aparece duplicado en la cabecera del mensaje que ve el cliente.
- */
-export function repartirDestinatarios(opts: {
-  to:   (string | null | undefined)[]
-  cc?:  (string | null | undefined)[]
-  bcc?: (string | null | undefined)[]
-}): { to: string[]; cc: string[]; bcc: string[] } {
-  const vistos = new Set<string>()
-
-  const limpiar = (lista: (string | null | undefined)[] = []): string[] => {
-    const salida: string[] = []
-    for (const bruto of lista) {
-      const email = bruto?.trim()
-      if (!email) continue
-      const clave = norm(email)
-      if (vistos.has(clave)) continue
-      vistos.add(clave)
-      salida.push(email)
-    }
-    return salida
-  }
-
-  // El orden de las llamadas ES la prioridad: `to` reserva primero.
-  const to  = limpiar(opts.to)
-  const cc  = limpiar(opts.cc)
-  const bcc = limpiar(opts.bcc)
-  return { to, cc, bcc }
 }

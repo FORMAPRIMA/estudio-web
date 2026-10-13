@@ -255,8 +255,8 @@ function AvisoCard({ aviso, onArchivar, isNew, animDelay }: {
 
 // ── Follow-up reminder modal ──────────────────────────────────────────────────
 
-function buildEmailPreview(factura: FacturaPendiente): { subject: string; lines: string[]; datosPago?: { formaPago: string; iban: string } } {
-  const recipientName = factura.cliente_contacto || factura.cliente_nombre || 'Cliente'
+function buildEmailPreview(factura: FacturaPendiente, nombre?: string | null): { subject: string; lines: string[]; datosPago?: { formaPago: string; iban: string } } {
+  const recipientName = nombre || factura.cliente_contacto || factura.cliente_nombre || 'Cliente'
   const projectLabel  = factura.proyecto_nombre ? ` para el proyecto ${factura.proyecto_nombre}` : ''
 
   const subject = `Recordatorio · Factura ${factura.numero_completo}${factura.proyecto_nombre ? ` · ${factura.proyecto_nombre}` : ''}`
@@ -287,6 +287,19 @@ function RecordatorioModal({
 }) {
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState<string | null>(null)
+  // Destinatarios tal cual los entregará el servidor a Resend (GET del mismo endpoint).
+  const [envio, setEnvio] = useState<{ nombre: string; to: string[]; cc: string[]; bcc: string[] } | null>(null)
+  const [envioError, setEnvioError] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch(`/api/facturas-emitidas/${factura.id}/recordatorio`)
+      .then(async res => {
+        const json = await res.json()
+        if (!res.ok) setEnvioError(json.error ?? 'No se pudo calcular a quién se envía.')
+        else setEnvio(json)
+      })
+      .catch(() => setEnvioError('Error de red.'))
+  }, [factura.id])
 
   const handleSend = async () => {
     if (loading) return
@@ -303,8 +316,7 @@ function RecordatorioModal({
     }
   }
 
-  const recipientName = factura.cliente_contacto || factura.cliente_nombre
-  const preview = buildEmailPreview(factura)
+  const preview = buildEmailPreview(factura, envio?.nombre)
 
   return (
     <div
@@ -344,17 +356,25 @@ function RecordatorioModal({
             </p>
           </div>
 
-          {/* Recipient */}
+          {/* Recipient: la lista exacta que se entrega a Resend */}
           <div>
-            <p className="text-[9px] tracking-widest uppercase text-ink/40 mb-1.5">Destinatario</p>
-            <p className="text-[13px] text-ink font-light">{recipientName}</p>
-            {factura.cliente_email ? (
-              <p className="text-[11px] text-ink/45 mt-0.5">{factura.cliente_email}</p>
+            <p className="text-[9px] tracking-widest uppercase text-ink/40 mb-1.5">Así sale el correo</p>
+            {envioError ? (
+              <p className="text-[11px] text-red-500">{envioError}</p>
+            ) : !envio ? (
+              <p className="text-[11px] text-ink/35 italic">Calculando destinatarios…</p>
             ) : (
-              <p className="text-[11px] text-red-500 mt-0.5">Sin email registrado</p>
-            )}
-            {factura.cliente_email_cc && (
-              <p className="text-[10px] text-ink/35 mt-0.5">CC: {factura.cliente_email_cc}</p>
+              <>
+                <p className="text-[13px] text-ink font-light mb-1">{envio.nombre}</p>
+                {([['Para', envio.to], ['CC', envio.cc], ['CCO', envio.bcc]] as const).map(([etiqueta, lista]) =>
+                  lista.length > 0 && (
+                    <p key={etiqueta} className="text-[11px] text-ink/55 mt-0.5 break-all">
+                      <span className="text-[9px] tracking-widest uppercase text-ink/35 inline-block w-9">{etiqueta}</span>
+                      {lista.join(' · ')}
+                    </p>
+                  )
+                )}
+              </>
             )}
           </div>
 
@@ -406,7 +426,7 @@ function RecordatorioModal({
           <button
             type="button"
             onClick={handleSend}
-            disabled={loading || !factura.cliente_email}
+            disabled={loading || !envio}
             className="text-[9px] tracking-widest uppercase font-medium text-white bg-ink px-5 py-2.5 hover:bg-ink/80 transition-colors disabled:opacity-30"
           >
             {loading ? 'Enviando…' : 'Enviar recordatorio'}

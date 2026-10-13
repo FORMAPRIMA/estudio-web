@@ -2,84 +2,125 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sendEmail, wrapEmail } from '@/lib/email'
-import { esFacturaNoCliente } from '@/lib/finanzas/costs'
-import { resolveProveedorDestino } from '@/lib/finanzas/proveedorDestino'
+import { resolverReceptorFactura } from '@/lib/finanzas/proveedorDestino'
+import { getPartnersCC, repartirDestinatarios } from '@/lib/email/destinatarios'
 import { assertSinClientesEnDestinatarios, ClienteEnDestinatariosError } from '@/lib/finanzas/guardCliente'
+
+type Preparado =
+  | { ok: false; res: NextResponse }
+  | {
+      ok: true
+      factura: Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
+      recipientName: string
+      esPrivada: boolean
+      to: string[]; cc: string[]; bcc: string[]
+    }
+
+/**
+ * Todo lo que decide a quién va el recordatorio, en un solo sitio. Lo usan el GET
+ * (el modal enseña la lista antes de enviar) y el POST (envía exactamente esa
+ * lista), así que lo que se revisa es lo que llega a Resend.
+ */
+async function prepararRecordatorio(id: string): Promise<Preparado> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { ok: false, res: NextResponse.json({ error: 'Sin sesión' }, { status: 401 }) }
+
+  const { data: profile } = await supabase
+    .from('profiles').select('rol').eq('id', user.id).single()
+  if (!profile || profile.rol !== 'fp_partner') {
+    return { ok: false, res: NextResponse.json({ error: 'Sin permisos' }, { status: 403 }) }
+  }
+
+  const admin = createAdminClient()
+
+  const { data: factura, error: facturaErr } = await admin
+    .from('facturas_emitidas')
+    .select(`
+      id, numero_completo, fecha_emision, cliente_nombre, cliente_contacto,
+      cliente_id, receptor_tipo, proveedor_id,
+      proyecto_id, proyecto_nombre, seccion, factura_origen_id, total, base_imponible, tipo_iva, cuota_iva,
+      condiciones_pago, iban, forma_pago,
+      clientes(id, email, email_cc)
+    `)
+    .eq('id', id)
+    .single()
+
+  if (facturaErr || !factura) {
+    return { ok: false, res: NextResponse.json({ error: 'Factura no encontrada.' }, { status: 404 }) }
+  }
+
+  // ── Guard CRÍTICO: una factura a proveedor JAMÁS recuerda el pago al cliente ─
+  // Lo decide el destinatario, no solo la sección: un rappel de mobiliario vive
+  // en una sección pública y aun así nunca puede salir hacia el cliente.
+  const { esPrivada, proveedor: proveedorDestino } = await resolverReceptorFactura(admin, {
+    seccion:         (factura.seccion as string | null) ?? null,
+    proveedorId:     (factura.proveedor_id as string | null) ?? null,
+    receptorTipo:    (factura.receptor_tipo as string | null) ?? null,
+    facturaOrigenId: factura.factura_origen_id ?? null,
+    proyectoId:      factura.proyecto_id ?? null,
+  })
+  if (esPrivada && !proveedorDestino?.email) {
+    return { ok: false, res: NextResponse.json({ error: 'El proveedor de esta factura no tiene email registrado.' }, { status: 422 }) }
+  }
+
+  const cliente = (factura.clientes as unknown as { email: string | null; email_cc: string | null } | null)
+  const toEmail = esPrivada ? proveedorDestino!.email : (cliente?.email ?? null)
+  if (!toEmail) {
+    return { ok: false, res: NextResponse.json({ error: 'El cliente no tiene email registrado.' }, { status: 400 }) }
+  }
+  const ccEmail = esPrivada ? proveedorDestino!.emailCc : (cliente?.email_cc ?? null)
+
+  // Socios siempre en copia, como en el resto de correos de factura.
+  const { to, cc, bcc } = repartirDestinatarios({
+    to: [toEmail],
+    cc: [ccEmail, ...(await getPartnersCC())],
+  })
+
+  // Red de seguridad (ver lib/finanzas/guardCliente.ts). Corre también en la vista
+  // previa: si el envío se va a bloquear, el modal lo dice antes de pulsar.
+  if (esPrivada) {
+    try {
+      await assertSinClientesEnDestinatarios(admin, { proyectoId: factura.proyecto_id ?? null, to, cc, bcc })
+    } catch (guardErr) {
+      if (guardErr instanceof ClienteEnDestinatariosError) {
+        return { ok: false, res: NextResponse.json({ error: guardErr.message }, { status: 409 }) }
+      }
+      throw guardErr
+    }
+  }
+
+  const recipientName = esPrivada
+    ? proveedorDestino!.nombre
+    : (factura.cliente_contacto || factura.cliente_nombre || 'Cliente')
+
+  return { ok: true, factura, recipientName, esPrivada, to, cc, bcc }
+}
+
+/** Vista previa: a quién iría el recordatorio, sin enviar nada. */
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const p = await prepararRecordatorio(params.id)
+    if (!p.ok) return p.res
+    return NextResponse.json({ nombre: p.recipientName, esProveedor: p.esPrivada, to: p.to, cc: p.cc, bcc: p.bcc })
+  } catch (err) {
+    console.error('[facturas-emitidas/recordatorio GET]', err)
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Error inesperado' }, { status: 500 })
+  }
+}
 
 export async function POST(
   _req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Sin sesión' }, { status: 401 })
+    const p = await prepararRecordatorio(params.id)
+    if (!p.ok) return p.res
+    const { factura, recipientName, to, cc, bcc } = p
 
-    const { data: profile } = await supabase
-      .from('profiles').select('rol').eq('id', user.id).single()
-    if (!profile || profile.rol !== 'fp_partner') {
-      return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
-    }
-
-    const admin = createAdminClient()
-
-    // Fetch factura + client email
-    const { data: factura, error: facturaErr } = await admin
-      .from('facturas_emitidas')
-      .select(`
-        id, numero_completo, fecha_emision, cliente_nombre, cliente_contacto,
-        cliente_id, receptor_tipo, proveedor_id,
-        proyecto_id, proyecto_nombre, seccion, factura_origen_id, total, base_imponible, tipo_iva, cuota_iva,
-        condiciones_pago, iban, forma_pago,
-        clientes(id, email, email_cc)
-      `)
-      .eq('id', params.id)
-      .single()
-
-    if (facturaErr || !factura) {
-      return NextResponse.json({ error: 'Factura no encontrada.' }, { status: 404 })
-    }
-
-    // ── Guard CRÍTICO: una factura a proveedor JAMÁS recuerda el pago al cliente ─
-    // Lo decide el destinatario, no solo la sección: un rappel de mobiliario vive
-    // en una sección pública y aun así nunca puede salir hacia el cliente.
-    let seccionF: string | null = (factura.seccion as string | null) ?? null
-    let proveedorF: string | null = (factura.proveedor_id as string | null) ?? null
-    if (factura.factura_origen_id && (!seccionF || !proveedorF)) {
-      const { data: fRow } = await admin
-        .from('facturas').select('seccion, proveedor_id').eq('id', factura.factura_origen_id).maybeSingle()
-      seccionF   = seccionF   ?? ((fRow?.seccion as string | undefined) ?? null)
-      proveedorF = proveedorF ?? ((fRow?.proveedor_id as string | undefined) ?? null)
-    }
-    const esPrivada = esFacturaNoCliente({
-      seccion:      seccionF,
-      proveedorId:  proveedorF,
-      receptorTipo: factura.receptor_tipo as string | null,
-    })
-    let proveedorDestino: Awaited<ReturnType<typeof resolveProveedorDestino>> = null
-    if (esPrivada) {
-      proveedorDestino = await resolveProveedorDestino(admin, {
-        facturaOrigenId: factura.factura_origen_id ?? null,
-        proyectoId:      factura.proyecto_id ?? null,
-        seccion:         seccionF,
-        proveedorId:     proveedorF,
-      })
-      if (!proveedorDestino?.email) {
-        return NextResponse.json({ error: 'El proveedor de esta factura no tiene email registrado.' }, { status: 422 })
-      }
-    }
-
-    const cliente = (factura.clientes as unknown as { email: string | null; email_cc: string | null } | null)
-    const toEmail = esPrivada ? proveedorDestino!.email : (cliente?.email ?? null)
-
-    if (!toEmail) {
-      return NextResponse.json({ error: 'El cliente no tiene email registrado.' }, { status: 400 })
-    }
-
-    const ccEmail = esPrivada ? (proveedorDestino!.emailCc ?? undefined) : (cliente?.email_cc ?? undefined)
-    const recipientName = esPrivada
-      ? proveedorDestino!.nombre
-      : (factura.cliente_contacto || factura.cliente_nombre || 'Cliente')
     const projectLabel  = factura.proyecto_nombre
       ? ` para el proyecto <strong>${factura.proyecto_nombre}</strong>`
       : ''
@@ -139,24 +180,10 @@ export async function POST(
 
     const subject = `Recordatorio · Factura ${factura.numero_completo}${factura.proyecto_nombre ? ` · ${factura.proyecto_nombre}` : ''}`
 
-    // Red de seguridad antes de enviar (ver lib/finanzas/guardCliente.ts).
-    if (esPrivada) {
-      try {
-        await assertSinClientesEnDestinatarios(admin, {
-          proyectoId: factura.proyecto_id ?? null,
-          to: [toEmail], cc: ccEmail ? [ccEmail] : [],
-        })
-      } catch (guardErr) {
-        if (guardErr instanceof ClienteEnDestinatariosError) {
-          return NextResponse.json({ error: guardErr.message }, { status: 409 })
-        }
-        throw guardErr
-      }
-    }
-
     const result = await sendEmail({
-      to:      toEmail,
-      cc:      ccEmail,
+      to,
+      cc,
+      ...(bcc.length && { bcc }),
       subject,
       html:    wrapEmail(emailBody),
     })

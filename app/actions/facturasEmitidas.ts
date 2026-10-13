@@ -6,6 +6,8 @@ import { revalidatePath } from 'next/cache'
 import { calcTotals, formatNumeroCompleto } from '@/lib/facturasUtils'
 import { SECCION_ORDER, esFacturaNoCliente } from '@/lib/finanzas/costs'
 import { getPartnersCCDetallado, type PartnerCC } from '@/lib/email/destinatarios'
+import { buscarEmitidaVigente, mensajeYaEmitida } from '@/lib/facturas/emitidaVigente'
+import { resolverReceptorFactura, type ProveedorDestino } from '@/lib/finanzas/proveedorDestino'
 export { calcTotals, formatNumeroCompleto }
 export type { PartnerCC }
 
@@ -106,6 +108,9 @@ export async function createFacturaEmitida(
     const userId = await requirePartner()
     const admin  = createAdminClient()
     const año    = new Date(input.fecha_emision).getFullYear()
+
+    const yaEmitida = await buscarEmitidaVigente(admin, input.factura_origen_id)
+    if (yaEmitida) return { error: mensajeYaEmitida(yaEmitida.numero_completo) }
 
     // Next correlative number for this serie + año
     const [{ data: maxRow }, { data: cfg }] = await Promise.all([
@@ -256,6 +261,31 @@ export interface ClienteDelProyecto {
 export async function getPartnerCCEmails(): Promise<PartnerCC[]> {
   await requirePartner()
   return getPartnersCCDetallado()
+}
+
+/**
+ * A quién va el correo de una factura ya emitida, para que el formulario de edición
+ * enseñe el mismo destinatario que usará el servidor al reenviar.
+ */
+export async function getDestinoEnvioFactura(
+  id: string,
+): Promise<{ esProveedor: boolean; proveedor: ProveedorDestino | null }> {
+  await requirePartner()
+  const admin = createAdminClient()
+  const { data: f } = await admin
+    .from('facturas_emitidas')
+    .select('seccion, proveedor_id, receptor_tipo, factura_origen_id, proyecto_id')
+    .eq('id', id)
+    .maybeSingle()
+  if (!f) return { esProveedor: false, proveedor: null }
+  const r = await resolverReceptorFactura(admin, {
+    seccion:         f.seccion ?? null,
+    proveedorId:     f.proveedor_id ?? null,
+    receptorTipo:    f.receptor_tipo ?? null,
+    facturaOrigenId: f.factura_origen_id ?? null,
+    proyectoId:      f.proyecto_id ?? null,
+  })
+  return { esProveedor: r.esPrivada, proveedor: r.proveedor }
 }
 
 export async function getClientesDelProyecto(

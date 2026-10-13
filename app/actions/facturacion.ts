@@ -1,6 +1,7 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { buscarEmitidaVigente, mensajeYaEmitida } from '@/lib/facturas/emitidaVigente'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { calcTotals, formatNumeroCompleto } from '@/lib/facturasUtils'
@@ -245,6 +246,9 @@ export async function emitirFacturaDesdeContrato(
     if (!profile || profile.rol !== 'fp_partner') throw new Error('Sin permisos.')
 
     const admin = createAdminClient()
+
+    const yaEmitida = await buscarEmitidaVigente(admin, facturaId)
+    if (yaEmitida) return { error: mensajeYaEmitida(yaEmitida.numero_completo) }
 
     // 1. Load the contract factura with project info
     const { data: f, error: fErr } = await admin
