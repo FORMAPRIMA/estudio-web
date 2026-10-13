@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sendEmail, wrapEmail } from '@/lib/email'
 import { resolverReceptorFactura } from '@/lib/finanzas/proveedorDestino'
-import { getPartnersCC, repartirDestinatarios } from '@/lib/email/destinatarios'
+import { getPartnersCC, repartirDestinatarios, SIN_SOCIOS_ERROR } from '@/lib/email/destinatarios'
 import { assertSinClientesEnDestinatarios, ClienteEnDestinatariosError } from '@/lib/finanzas/guardCliente'
 
 type Preparado =
@@ -72,9 +72,13 @@ async function prepararRecordatorio(id: string): Promise<Preparado> {
   const ccEmail = esPrivada ? proveedorDestino!.emailCc : (cliente?.email_cc ?? null)
 
   // Socios siempre en copia, como en el resto de correos de factura.
+  const partners = await getPartnersCC()
+  if (partners.length === 0) {
+    return { ok: false, res: NextResponse.json({ error: SIN_SOCIOS_ERROR }, { status: 503 }) }
+  }
   const { to, cc, bcc } = repartirDestinatarios({
     to: [toEmail],
-    cc: [ccEmail, ...(await getPartnersCC())],
+    cc: [ccEmail, ...partners],
   })
 
   // Red de seguridad (ver lib/finanzas/guardCliente.ts). Corre también en la vista

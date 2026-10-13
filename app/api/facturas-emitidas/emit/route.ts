@@ -12,7 +12,7 @@ import { calcTotals } from '@/lib/facturasUtils'
 import { sendEmail, wrapEmail, type ExtraEmail } from '@/lib/email'
 import { resolverReceptorFactura } from '@/lib/finanzas/proveedorDestino'
 import { assertSinClientesEnDestinatarios, ClienteEnDestinatariosError } from '@/lib/finanzas/guardCliente'
-import { getPartnersCC, destinatariosFactura, emailsInvalidos } from '@/lib/email/destinatarios'
+import { getPartnersCC, destinatariosFactura, emailsInvalidos, SIN_SOCIOS_ERROR } from '@/lib/email/destinatarios'
 import { buildFacturaEmailBody } from '@/lib/email/facturaBody'
 
 export async function POST(req: NextRequest) {
@@ -74,6 +74,9 @@ export async function POST(req: NextRequest) {
 
     // Copia interna a los socios (ver lib/email/destinatarios.ts)
     const PARTNERS_CC = await getPartnersCC()
+    if (PARTNERS_CC.length === 0) {
+      return NextResponse.json({ error: SIN_SOCIOS_ERROR }, { status: 503 })
+    }
 
     // ── 1. Crear factura ────────────────────────────────────────────────────
     // El receptor se persiste ya resuelto en servidor, para que reenvíos y
