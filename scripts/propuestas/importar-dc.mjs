@@ -2,7 +2,7 @@
 // Importa un dossier INTERACTIVO de Claude Design (un .dc.html con lógica propia:
 // botones, selectores, vídeo, maquetas 3D…) para publicarlo tal cual en la web.
 //
-//   node scripts/propuestas/importar-dc.mjs <slug> <carpeta-origen> "<archivo>.dc.html" [--quitar "Etiqueta"] [--perfil zurbano]
+//   node scripts/propuestas/importar-dc.mjs <slug> <carpeta-origen> "<archivo>.dc.html" [--quitar "Etiqueta"] [--perfil zurbano] [--animar]
 //
 // A diferencia de importar.mjs (que extrae las diapositivas y las reproduce con
 // nuestro visor), aquí el diseño se sirve con SU PROPIO runtime (support.js +
@@ -33,6 +33,10 @@ for (let i = args.indexOf('--quitar'); i !== -1; i = args.indexOf('--quitar')) {
 // --perfil zurbano: arreglos propios de Casa Zurbano (ver arreglos-dc.mjs).
 let perfil = ''
 if (args.includes('--perfil')) { const i = args.indexOf('--perfil'); perfil = args[i + 1]; args.splice(i, 2) }
+// --animar: el diseño no trae script propio; se le añade la animación de entrada
+// de Torre del Mangle (animacion-dc.js: bloques, telón en imágenes, cifras que suben).
+const animar = args.includes('--animar')
+if (animar) args.splice(args.indexOf('--animar'), 1)
 const [slug, origen, archivo] = args
 if (!slug || !origen || !archivo || !/^[a-z0-9-]+$/.test(slug)) {
   console.error('Uso: node scripts/propuestas/importar-dc.mjs <slug> <carpeta-origen> "<archivo>.dc.html"')
@@ -83,6 +87,11 @@ function cambiaUna(texto, buscar, poner) {
 
 async function main() {
   let html = fs.readFileSync(src(archivo), 'utf8')
+  if (animar) {
+    if (html.includes('data-dc-script')) throw new Error('--animar: el diseño ya trae su propio script')
+    const js = fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), 'animacion-dc.js'), 'utf8')
+    html = cambiaUna(html, '</x-dc>', '</x-dc>\n<script type="text/x-dc" data-dc-script data-props="{}">\n' + js + '</script>')
+  }
   // og.jpg (vista previa al compartir) se hace aparte: que sobreviva a la reimportación.
   const og = path.join(PUB, 'og.jpg')
   const ogPrevio = fs.existsSync(og) ? fs.readFileSync(og) : null

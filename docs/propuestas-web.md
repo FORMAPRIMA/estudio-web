@@ -77,6 +77,9 @@ franja de reunión (`solicitarReunionPropuestaWeb`: aviso importante + correo a
 
 Publicadas así: Casa Zurbano (vertical, comprador, sin PIN) y Torre del Mangle
 (`torre-del-mangle-zxu7z`, horizontal, Javier Ponce · PONCE3, PIN 3333, 2 oct 2026).
+223–231 NE 56th Street, Miami (`ne56-miami-5jjoy`, horizontal, 13 oct 2026) es un deck
+**sin script de animación**: los arreglos de animación de `arreglos-dc.mjs` solo se aplican
+si el diseño trae `const isLogo`. Es sala cerrada, como Isla Creta (PIN personal por persona).
 
 ## Publicar una propuesta de diapositivas (`deck`)
 

@@ -95,6 +95,7 @@ export default async function PropuestaPage({ params }: { params: { slug: string
           formato={p.formato}
           apaisado={!!escritorioDe(p.slug)}
           medir={!!sala}
+          versionAnterior={p.versionAnterior}
         />
       </>
     )

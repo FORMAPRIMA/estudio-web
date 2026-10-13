@@ -43,6 +43,11 @@ export function arreglarDossier(html, { quitar = [], perfil = '' } = {}) {
     html = html.split(`data-goto="${label}"`).join('data-goto="Siguiente paso"')
   }
 
+  // Los arreglos de la animación de entrada solo aplican si el diseño la trae
+  // (Zurbano, Torre del Mangle). Un deck estático (NE 56th St) no tiene ese script.
+  const animado = html.includes("const isLogo = (el) =>")
+  const cambiaAnim = animado ? cambia : (texto) => texto
+
   let n = 0
   html = html.replace(/<section\b[\s\S]*?<\/section>/g, (sec) => {
     n++
@@ -50,12 +55,12 @@ export function arreglarDossier(html, { quitar = [], perfil = '' } = {}) {
     return sec.replace(/<img\b([^>]*?)\ssrc="([^"]+)"/g, (m, a, s) => (LOGO.test(s) ? m : `<img${a} data-fp-src="${s}"`))
   })
 
-  html = cambia(html,
+  html = cambiaAnim(html,
     "const isLogo = (el) => el.tagName === 'IMG' && /logo|isotipo/.test(el.getAttribute('src') || '');",
     "const isLogo = (el) => el.tagName === 'IMG' && /logo|isotipo/.test(el.getAttribute('src') || '');\n    const fpOculto = (el) => parseFloat(getComputedStyle(el).opacity) < 0.02;",
     'animación: detectar ocultos')
-  html = cambia(html, 'if (isLogo(b)) return;', 'if (isLogo(b) || fpOculto(b)) return;', 'animación: bloques ocultos')
-  html = cambia(html, 'if (isLogo(img)) return;', 'if (isLogo(img) || fpOculto(img)) return;', 'animación: imágenes ocultas')
+  html = cambiaAnim(html, 'if (isLogo(b)) return;', 'if (isLogo(b) || fpOculto(b)) return;', 'animación: bloques ocultos')
+  html = cambiaAnim(html, 'if (isLogo(img)) return;', 'if (isLogo(img) || fpOculto(img)) return;', 'animación: imágenes ocultas')
 
   // Lo que sigue hasta el cierre del bloque es solo de Casa Zurbano (presupuesto,
   // recorrido, carrusel vertical, vídeo de portada, controles Índice · idioma).
@@ -71,7 +76,7 @@ export function arreglarDossier(html, { quitar = [], perfil = '' } = {}) {
   }
 
   // Transición entre diapositivas más suave (ver también arreglarDeckStage).
-  html = cambia(html,
+  html = cambiaAnim(html,
     "run(slide, [{ opacity: 0 }, { opacity: 1 }], { duration: 700, easing: 'cubic-bezier(.4,0,.2,1)' });",
     `run(slide, [{ opacity: 0 }, { opacity: 1 }], { duration: 1100, easing: 'cubic-bezier(.45,0,.25,1)' });
     // Equipo: telón de abajo arriba en diagonal, y el nombre detrás de cada foto.
@@ -135,11 +140,11 @@ export function arreglarDossier(html, { quitar = [], perfil = '' } = {}) {
   // bloque ya tuviera. El título de la Portada va centrado con
   // translateY(-50%): durante la animación perdía el centrado y al terminar
   // saltaba hacia arriba. Ahora el movimiento se SUMA al transform propio.
-  html = cambia(html,
+  html = cambiaAnim(html,
     "run(b, [{ opacity: 0, transform: 'translate3d(0,28px,0)' }, { opacity: 1, transform: 'translate3d(0,0,0)' }], { duration: 1400, delay: d });",
     "run(b, [{ opacity: 0, transform: ((b.style.transform || '') + ' translate3d(0,28px,0)').trim() }, { opacity: 1, transform: b.style.transform || 'translate3d(0,0,0)' }], { duration: 1400, delay: d });",
     'animación: títulos con transform propio')
-  html = cambia(html,
+  html = cambiaAnim(html,
     "run(b, [{ opacity: 0, transform: 'translate3d(0,16px,0)' }, { opacity: 1, transform: 'translate3d(0,0,0)' }], { duration: 1200, delay: d });",
     "run(b, [{ opacity: 0, transform: ((b.style.transform || '') + ' translate3d(0,16px,0)').trim() }, { opacity: 1, transform: b.style.transform || 'translate3d(0,0,0)' }], { duration: 1200, delay: d });",
     'animación: bloques con transform propio')

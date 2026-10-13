@@ -33,6 +33,12 @@ interface Props {
   apaisado?: boolean
   /** Es una sala: mide tiempo por diapositiva e interacciones (ver medicionSala.ts). */
   medir?: boolean
+  /**
+   * El dossier tiene versión anterior: aviso "propuesta actualizada" una vez por
+   * dispositivo y conmutador siempre visible (actual ⇄ anterior). La anterior se
+   * sirve con ?rev=anterior; comparte PIN y cookie con la actual.
+   */
+  versionAnterior?: { etiquetaActual: string; etiquetaAnterior: string }
 }
 
 type Idioma = 'es' | 'en'
@@ -58,17 +64,45 @@ const T = {
   },
 }
 
+// Aviso de actualización y conmutador de versión (bilingüe). No explica los
+// cambios: solo avisa de que los hay y deja volver a la versión anterior.
+const AV = {
+  es: {
+    eyebrow: 'Actualización',
+    titulo: 'Hemos actualizado tu propuesta',
+    texto: 'Esta es la versión más reciente de tu propuesta de honorarios. Puedes consultar la anterior cuando quieras.',
+    verActual: 'Ver propuesta actualizada',
+    verAnterior: 'Ver la versión anterior',
+    viendoAnterior: 'Estás viendo la versión anterior',
+    volver: 'Volver a la actualizada',
+  },
+  en: {
+    eyebrow: 'Update',
+    titulo: 'We have updated your proposal',
+    texto: 'This is the latest version of your fee proposal. You can review the previous one whenever you like.',
+    verActual: 'View updated proposal',
+    verAnterior: 'View the previous version',
+    viendoAnterior: 'You are viewing the previous version',
+    volver: 'Back to the updated one',
+  },
+}
+
 function modoEscritorio() {
   return window.innerWidth >= 900 && window.innerWidth > window.innerHeight
 }
 
-export default function PropuestaDossier({ slug, proyecto, descripcion, portada, tema, logo, formato = 'vertical', apaisado = false, medir = false }: Props) {
+export default function PropuestaDossier({ slug, proyecto, descripcion, portada, tema, logo, formato = 'vertical', apaisado = false, medir = false, versionAnterior }: Props) {
   const horizontal = formato === 'horizontal'
   const iframe = useRef<HTMLIFrameElement>(null)
   const [escritorio, setEscritorio] = useState<boolean | null>(null)
   const [src, setSrc] = useState('')
   const [idioma, setIdioma] = useState<Idioma>('es')
   const [formulario, setFormulario] = useState(false)
+  // Versión mostrada y aviso de actualización (solo si hay versión anterior).
+  const [rev, setRev] = useState<'actual' | 'anterior'>('actual')
+  const [aviso, setAviso] = useState(false)
+  const revRef = useRef<'actual' | 'anterior'>('actual')
+  const decidirRef = useRef<(() => void) | null>(null)
   const finalAvisado = useRef(false)
   const progreso = useRef<{ max: number; n: number; l: string; t?: ReturnType<typeof setTimeout> }>({ max: 0, n: 0, l: '' })
   const { alSlide, alVida, alEvento } = useMedicionSala(slug, medir)
@@ -93,10 +127,14 @@ export default function PropuestaDossier({ slug, proyecto, descripcion, portada,
       modo.current = esc
       const alto = esc ? 1920 : Math.max(1920, Math.round((1080 * window.innerHeight) / window.innerWidth))
       setEscritorio(esc)
-      setSrc(horizontal ? `/propuesta/${slug}/deck`
+      // La versión anterior se pide con ?rev=anterior sobre la misma ruta.
+      const q = revRef.current === 'anterior' ? 'rev=anterior' : ''
+      const u = (base: string) => base + (q ? (base.includes('?') ? '&' : '?') + q : '')
+      setSrc(u(horizontal ? `/propuesta/${slug}/deck`
         : esc && apaisado ? `/propuesta/${slug}/deck?escritorio=1&alto=${Math.round((2304 * window.innerHeight) / window.innerWidth)}`
-        : `/propuesta/${slug}/deck?alto=${alto}`)
+        : `/propuesta/${slug}/deck?alto=${alto}`))
     }
+    decidirRef.current = decidir
     decidir()
     let t: ReturnType<typeof setTimeout>
     const alCambiar = () => { clearTimeout(t); t = setTimeout(decidir, 250) }
@@ -104,6 +142,32 @@ export default function PropuestaDossier({ slug, proyecto, descripcion, portada,
     registrarEventoPropuestaWeb(slug, 'abierta').catch(() => {})
     return () => { clearTimeout(t); window.removeEventListener('resize', alCambiar) }
   }, [slug, horizontal, apaisado])
+
+  // Aviso de "propuesta actualizada": una sola vez por dispositivo.
+  useEffect(() => {
+    if (!versionAnterior) return
+    let visto = false
+    try { visto = localStorage.getItem(`fp_av_${slug}`) === '1' } catch {}
+    if (!visto) setAviso(true)
+  }, [slug, versionAnterior])
+
+  const cerrarAviso = useCallback((irAnterior: boolean) => {
+    try { localStorage.setItem(`fp_av_${slug}`, '1') } catch {}
+    setAviso(false)
+    if (irAnterior) setRev('anterior')
+  }, [slug])
+
+  // Cambio de versión: recomponer el src (misma ruta, ?rev=anterior) y, si es
+  // sala, dejar traza de qué versión mira. La primera pasada no recompone (el
+  // montaje ya fijó el src), pero sí registra que arrancó en la actual.
+  const primeraRev = useRef(true)
+  useEffect(() => {
+    revRef.current = rev
+    if (primeraRev.current) { primeraRev.current = false; if (medir) alEvento('version', rev); return }
+    modo.current = null
+    decidirRef.current?.()
+    if (medir) alEvento('version', rev)
+  }, [rev, medir, alEvento])
 
   // Sin zoom con los dedos también en la página que contiene el iframe (iOS
   // ignora user-scalable=no; gesturestart sí se puede cancelar).
@@ -265,6 +329,76 @@ export default function PropuestaDossier({ slug, proyecto, descripcion, portada,
           </div>
           <style dangerouslySetInnerHTML={{ __html: '@media (max-width:1180px){.fpd-lado{display:none!important}}' }} />
         </>
+      )}
+
+      {/* Conmutador de versión siempre disponible (solo si hay versión anterior). */}
+      {versionAnterior && !aviso && (
+        rev === 'anterior' ? (
+          <div role="status" style={{
+            position: 'fixed', zIndex: 25, left: '50%', transform: 'translateX(-50%)',
+            top: 'calc(env(safe-area-inset-top) + 48px)', display: 'flex', alignItems: 'center', gap: 14,
+            padding: '9px 10px 9px 18px', borderRadius: 999, background: tema.claro ? 'rgba(246,241,234,.92)' : 'rgba(13,13,13,.82)',
+            color: tema.tinta, border: `1px solid ${tema.claro ? 'rgba(43,38,34,.16)' : 'rgba(251,251,250,.18)'}`,
+            backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', boxShadow: '0 8px 30px rgba(0,0,0,.22)',
+            fontFamily: "'Hanken Grotesk', sans-serif", maxWidth: 'calc(100vw - 32px)',
+          }}>
+            <span style={{ fontSize: 12, fontWeight: 300, opacity: 0.85, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {AV[idioma].viendoAnterior}
+            </span>
+            <button type="button" onClick={() => setRev('actual')} style={{
+              appearance: 'none', cursor: 'pointer', flex: 'none', fontFamily: 'inherit',
+              fontSize: 11, fontWeight: 600, letterSpacing: '.12em', textTransform: 'uppercase',
+              padding: '8px 16px', borderRadius: 999, border: 0, background: tema.tinta, color: tema.fondo, whiteSpace: 'nowrap',
+            }}>{AV[idioma].volver}</button>
+          </div>
+        ) : (
+          <button type="button" onClick={() => setRev('anterior')} aria-label={AV[idioma].verAnterior} style={{
+            position: 'fixed', zIndex: 25, left: 'max(16px, env(safe-area-inset-left))',
+            bottom: 'calc(env(safe-area-inset-bottom) + 16px)', display: 'flex', alignItems: 'center', gap: 8,
+            padding: '10px 16px', borderRadius: 999, cursor: 'pointer',
+            background: tema.claro ? 'rgba(246,241,234,.82)' : 'rgba(13,13,13,.62)', color: tema.tinta,
+            border: `1px solid ${tema.claro ? 'rgba(43,38,34,.16)' : 'rgba(251,251,250,.2)'}`,
+            backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', boxShadow: '0 6px 22px rgba(0,0,0,.18)',
+            fontFamily: "'Hanken Grotesk', sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: '.1em', textTransform: 'uppercase',
+          }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 2.6-6.4" /><path d="M3 4v5h5" /></svg>
+            {AV[idioma].verAnterior}
+          </button>
+        )
+      )}
+
+      {/* Aviso de "propuesta actualizada": una vez por dispositivo. */}
+      {versionAnterior && aviso && (
+        <div role="dialog" aria-modal="true" aria-label={AV[idioma].titulo} style={{
+          position: 'fixed', inset: 0, zIndex: 40, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 24, background: tema.claro ? 'rgba(43,38,34,.4)' : 'rgba(0,0,0,.62)',
+          backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', animation: 'fpa-in .35s ease both',
+        }}>
+          <style dangerouslySetInnerHTML={{ __html: '@keyframes fpa-in{from{opacity:0}to{opacity:1}}@keyframes fpa-up{from{transform:translateY(16px);opacity:0}to{transform:none;opacity:1}}' }} />
+          <div style={{
+            width: '100%', maxWidth: 440, background: tema.fondo, color: tema.tinta,
+            border: `1px solid ${tema.claro ? 'rgba(43,38,34,.12)' : 'rgba(251,251,250,.12)'}`,
+            padding: '40px 34px 34px', textAlign: 'center', animation: 'fpa-up .45s cubic-bezier(.16,1,.3,1) both',
+          }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={logo} alt="Forma Prima" style={{ height: 15, width: 'auto', opacity: 0.9, marginBottom: 26 }} />
+            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.28em', textTransform: 'uppercase', color: tema.acento }}>{AV[idioma].eyebrow}</div>
+            <h2 style={{ margin: '14px 0 0', fontFamily: serif, fontSize: 34, fontWeight: 500, lineHeight: 1.08 }}>{AV[idioma].titulo}</h2>
+            <p style={{ margin: '16px 0 0', fontSize: 15, fontWeight: 300, lineHeight: 1.55, opacity: 0.78 }}>{AV[idioma].texto}</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 30 }}>
+              <button type="button" onClick={() => cerrarAviso(false)} style={{
+                appearance: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
+                letterSpacing: '.18em', textTransform: 'uppercase', padding: '17px 24px',
+                background: tema.tinta, color: tema.fondo, border: `1px solid ${tema.tinta}`,
+              }}>{AV[idioma].verActual}</button>
+              <button type="button" onClick={() => cerrarAviso(true)} style={{
+                appearance: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 400,
+                letterSpacing: '.1em', padding: '12px 24px', background: 'transparent', color: tema.tinta,
+                border: 0, opacity: 0.72, textDecoration: 'underline', textUnderlineOffset: 4,
+              }}>{AV[idioma].verAnterior}</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {formulario && (

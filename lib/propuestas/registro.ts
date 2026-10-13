@@ -54,6 +54,14 @@ export interface PropuestaWeb {
   logoSocio?: string
   /** Paleta de la pantalla del PIN y del marco; por defecto, la oscura de Forma Prima. */
   tema?: { fondo: string; tinta: string; acento: string; claro: boolean }
+  /**
+   * Solo 'dc': el dossier tiene una versión anterior accesible. Al entrar se
+   * muestra una vez un aviso de "propuesta actualizada" y un conmutador siempre
+   * visible alterna entre la actual y la anterior. La versión anterior vive en
+   * `decks/<slug>-anterior.ts` + `public/propuestas/<slug>-anterior/`, se sirve
+   * con `/propuesta/<slug>/deck?rev=anterior` y comparte PIN y cookie con la actual.
+   */
+  versionAnterior?: { etiquetaActual: string; etiquetaAnterior: string }
   /** false = la URL responde "no disponible" (propuesta retirada). */
   activa: boolean
   publicada: string
@@ -108,6 +116,7 @@ export const PROPUESTAS: PropuestaWeb[] = [
     portada: '/propuestas/torre-del-mangle-zxu7z/assets/manglar-cover.webp',
     og: '/propuestas/torre-del-mangle-zxu7z/og.jpg',
     descripcion: 'Edificio multifamiliar · 8 niveles · Vía a la Costa, Guayaquil, Ecuador',
+    versionAnterior: { etiquetaActual: 'Propuesta actualizada', etiquetaAnterior: 'Versión anterior' },
     activa: true,
     publicada: '2026-10-02',
   },
@@ -135,6 +144,29 @@ export const PROPUESTAS: PropuestaWeb[] = [
     },
     activa: true,
     publicada: '2026-10-06',
+  },
+  {
+    // Sala cerrada (sala_salas, acceso_anonimo = false), como Isla Creta: sin PIN
+    // común ni del estudio; cada persona entra con su PIN personal de 6 cifras,
+    // creado en salas.formaprima.es, y los avisos los manda Salas.
+    slug: 'ne56-miami-5jjoy',
+    tipo: 'dc',
+    formato: 'horizontal',
+    audiencia: 'cliente',
+    nombreCliente: '', // sin nombre: el final dice solo "¿Empezamos?"
+    cliente: '223–231 NE 56th Street · Miami',
+    proyecto: '223–231 NE 56th Street',
+    pin: null,
+    portada: '/propuestas/ne56-miami-5jjoy/assets/ne56-aerea.webp',
+    og: '/propuestas/ne56-miami-5jjoy/og.jpg',
+    descripcion: '6 townhouses de obra nueva · 3 edificios dúplex · Miami, FL',
+    pantallaPin: {
+      antetitulo: 'Propuesta de honorarios',
+      titulo: '223–231 NE 56th Street',
+      texto: 'Seis townhouses en Miami. Introduce tu código personal de 6 cifras para ver la propuesta.',
+    },
+    activa: true,
+    publicada: '2026-10-13',
   },
 ]
 

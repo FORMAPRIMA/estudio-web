@@ -92,7 +92,7 @@ function slideSiguienteCliente(p: PropuestaWeb, obras: ProyectoEnlace[], numero:
   <div style="padding:96px 88px 96px 104px;display:flex;flex-direction:column;justify-content:space-between;min-width:0;">
     <span style="display:inline-flex;align-items:baseline;gap:12px;color:${SAGE};"><span style="font-size:12px;font-weight:500;letter-spacing:.02em;font-variant-numeric:tabular-nums;">${numero}</span><span style="font-family:'Newsreader',serif;font-style:italic;font-size:19px;font-weight:400;">Siguiente paso</span></span>
     <div>
-      <h2 style="margin:0;font-size:88px;font-weight:200;letter-spacing:-.035em;line-height:.98;">¿Empezamos,<br>${esc(p.nombreCliente)}?</h2>
+      <h2 style="margin:0;font-size:88px;font-weight:200;letter-spacing:-.035em;line-height:.98;">${p.nombreCliente ? `¿Empezamos,<br>${esc(p.nombreCliente)}?` : '¿Empezamos?'}</h2>
       <div style="width:64px;height:1px;background:${SAGE};margin:40px 0 28px;"></div>
       <p style="margin:0;max-width:620px;font-size:22px;font-weight:300;line-height:1.5;opacity:.75;">Si la propuesta encaja, acéptala aquí. Te escribimos hoy mismo para enviarte el documento a firma y fijar la fecha de arranque.</p>
     </div>
@@ -110,7 +110,7 @@ function slideSiguienteCliente(p: PropuestaWeb, obras: ProyectoEnlace[], numero:
       </div>
     </div>
     <div data-fp-paso="hecho" style="display:none;border-top:1px solid ${SAGE};padding-top:28px;">
-      <div style="font-size:34px;font-weight:200;letter-spacing:-.02em;line-height:1.1;">Recibido, ${esc(p.nombreCliente)}.</div>
+      <div style="font-size:34px;font-weight:200;letter-spacing:-.02em;line-height:1.1;">${p.nombreCliente ? `Recibido, ${esc(p.nombreCliente)}.` : 'Recibido.'}</div>
       <p style="margin:14px 0 0;font-size:18px;font-weight:300;line-height:1.5;opacity:.7;">Te escribimos hoy mismo con el documento para firmar y la fecha de arranque.</p>
     </div>
     <div style="font-size:14px;font-weight:300;line-height:1.6;opacity:.5;"><a href="mailto:contacto@formaprima.es" style="color:inherit;text-decoration:none;">contacto@formaprima.es</a> · Príncipe de Vergara 56, Madrid</div>
@@ -315,7 +315,12 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
   const ok = !!p && p.tipo === 'dc' && await accesoDossier(p, cookies())
   if (!p || !ok) return new Response('No disponible', { status: 404, headers: { 'Cache-Control': 'no-store' } })
 
-  let html = await cargarDossier(p.slug)
+  // Versión anterior del dossier (misma PIN/cookie): su módulo y su carpeta de
+  // assets viven en `<slug>-anterior`, para que no se pisen con los de la actual.
+  const esAnterior = new URL(req.url).searchParams.get('rev') === 'anterior' && !!p.versionAnterior
+  const slugDoc = esAnterior ? `${p.slug}-anterior` : p.slug
+
+  let html = await cargarDossier(slugDoc)
   if (!html) return new Response('No disponible', { status: 404 })
 
   const obras = await obrasDestacadas().catch(() => [])
@@ -350,7 +355,7 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
     if (apaisado) html = escritorioDe(p.slug)!(html.replace(/(<x-import\b[^>]*\bwidth=")1080(")/, '$12304$2'))
   }
   html = html
-    .replace(/<head>/i, `<head>\n<base href="/propuestas/${p.slug}/">\n<meta name="robots" content="noindex, nofollow">\n<title>${esc(p.proyecto)} — Forma Prima</title>\n${PUENTE}`)
+    .replace(/<head>/i, `<head>\n<base href="/propuestas/${slugDoc}/">\n<meta name="robots" content="noindex, nofollow">\n<title>${esc(p.proyecto)} — Forma Prima</title>\n${PUENTE}`)
     // Los scripts del dossier (deck-stage.js, support.js…) se cachean un día más
     // siete de margen (next.config.mjs): sin versión, un navegador que ya los
     // tenía seguía con los viejos tras publicar un arreglo (p. ej. el carril de
