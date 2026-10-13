@@ -59,7 +59,17 @@ class Component extends DCLogic {
   motionOff() {
     return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   }
+  // Chrome deja a veces congelado el `visibility: hidden` heredado en los
+  // elementos animados de una diapositiva ya vista: al volver, se veía solo el
+  // fondo. Reasignar la herencia en línea fuerza a recalcularla.
+  refrescar(slide) {
+    const ns = slide.querySelectorAll('*');
+    ns.forEach((n) => { n.style.visibility = ''; });
+    void slide.offsetWidth;
+    ns.forEach((n) => { n.style.visibility = 'inherit'; });
+  }
   animateSlide(slide) {
+    if (slide) this.refrescar(slide);
     if (!slide || this.motionOff() || !slide.hasAttribute('data-deck-active')) return;
     this.finishAll();
     this._anims = []; this._counters = [];

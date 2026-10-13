@@ -27,7 +27,7 @@ const LOGO = /logo|sophiq|isotipo/i
  *  3. El vídeo largo ya no se descarga entero al abrir: se va cargando al verse.
  *  4. Los controles (Índice · idioma) arriba; el gesto de ocultarse, hacia arriba.
  */
-export function arreglarDossier(html, { quitar = [], perfil = '' } = {}) {
+export function arreglarDossier(html, { quitar = [], perfil = '', scroll = false } = {}) {
   // Instrumentación del editor de Claude Design ("omelette"), que el servidor de
   // vista previa inyecta al descargar: reenvía la consola a la ventana padre,
   // intercepta fetch y abre un canal eval() para el editor. En una página
@@ -52,6 +52,8 @@ export function arreglarDossier(html, { quitar = [], perfil = '' } = {}) {
   html = html.replace(/<section\b[\s\S]*?<\/section>/g, (sec) => {
     n++
     if (n <= 2) return sec
+    // Página de scroll (versión móvil): carga diferida del propio navegador.
+    if (scroll) return sec.replace(/<img\b/g, '<img loading="lazy" decoding="async"')
     return sec.replace(/<img\b([^>]*?)\ssrc="([^"]+)"/g, (m, a, s) => (LOGO.test(s) ? m : `<img${a} data-fp-src="${s}"`))
   })
 
@@ -192,6 +194,13 @@ export function arreglarDossier(html, { quitar = [], perfil = '' } = {}) {
     'carrusel: parar')
 
   html = cambia(html, /(<video data-video=""[^>]*?)preload="auto"/, '$1preload="metadata"', 'vídeo: carga progresiva')
+
+  // Rueda: un gesto = una diapositiva (la inercia del trackpad dura más de los
+  // 700 ms del bloqueo original y pasaba dos). Se espera a que el gesto acabe.
+  html = cambia(html,
+    "    this._wh = (e) => { if (Math.abs(e.deltaY) < 20 || Date.now() < lock) return; lock = Date.now() + 700; nav(e.deltaY > 0 ? 1 : -1); };",
+    "    let tW = 0, enG = false;\n    this._wh = (e) => { const ahora = Date.now(); if (ahora - tW > 200) enG = false; tW = ahora; if (enG || Math.abs(e.deltaY) < 20) return; enG = true; nav(e.deltaY > 0 ? 1 : -1); };",
+    'rueda: un gesto, una diapositiva')
 
   html = cambia(html, "c.style.transform = 'translateX(-50%) translateY(8px)'", "c.style.transform = 'translateX(-50%) translateY(-6px)'", 'controles: ocultarse hacia arriba')
   }
@@ -354,16 +363,48 @@ export function arreglarDeckStage(js) {
       pointer-events: none;
       visibility: hidden;
       z-index: 1;
-      transition: opacity 0s linear 1.1s, visibility 0s linear 1.1s;
+    }
+    ::slotted([data-fp-saliente]) {
+      opacity: 1;
+      visibility: visible;
     }
     ::slotted([data-deck-active]) {
       opacity: 1;
       pointer-events: auto;
       visibility: visible;
       z-index: 2;
-      transition: opacity 1.1s cubic-bezier(.45,0,.25,1), visibility 0s;
+      transition: opacity 1.1s cubic-bezier(.45,0,.25,1);
     }`,
     'deck-stage: fundido cruzado')
+  // La que sale se marca con data-fp-saliente durante el fundido (1,1 s). Antes
+  // esto se hacía con una transición retardada de \`visibility\`, y Chrome dejaba
+  // a veces el CONTENIDO de una diapositiva ya vista oculto al volver a ella
+  // (se veía solo el fondo: Equipo, Honorarios… en negro). Sin transiciones de
+  // visibility, el problema no puede darse.
+  js = cambia(js,
+    `      this._slides.forEach((s, i) => {
+        if (i === curr) s.setAttribute('data-deck-active', '');
+        else s.removeAttribute('data-deck-active');
+      });`,
+    `      clearTimeout(this._fpSalT);
+      this._slides.forEach((s, i) => {
+        if (i === curr) { s.setAttribute('data-deck-active', ''); s.removeAttribute('data-fp-saliente'); }
+        else if (i === prev && reason !== 'init') { s.removeAttribute('data-deck-active'); s.setAttribute('data-fp-saliente', ''); }
+        else { s.removeAttribute('data-deck-active'); s.removeAttribute('data-fp-saliente'); }
+      });
+      this._fpSalT = setTimeout(() => this._slides.forEach((s) => s.removeAttribute('data-fp-saliente')), 1150);
+      // Chrome no siempre propaga a los hijos el cambio de visibility que
+      // viene de ::slotted(): la diapositiva aparecía con su contenido aún
+      // oculto (solo el fondo). Un estilo en línea fugaz fuerza el recálculo.
+      // Se reasigna en línea la herencia de cada elemento de la que entra.
+      const sEnt = this._slides[curr];
+      if (sEnt) {
+        const ns = [...sEnt.querySelectorAll('*')].filter((n) => !n.style.visibility || n.style.visibility === 'inherit');
+        ns.forEach((n) => { n.style.visibility = ''; });
+        void sEnt.offsetWidth;
+        ns.forEach((n) => { n.style.visibility = 'inherit'; });
+      }`,
+    'deck-stage: diapositiva saliente')
   return js
 }
 

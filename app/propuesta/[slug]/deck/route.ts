@@ -70,6 +70,52 @@ function slideSiguiente(p: PropuestaWeb, obras: ProyectoEnlace[], numero: string
 </section>`
 }
 
+// Final de la versión móvil (página de scroll) de una propuesta horizontal: lo
+// mismo que slideSiguienteCliente (aceptar, dudas, obras), a una columna. Usa los
+// mismos data-fp-* que el puente tramita.
+function seccionSiguienteMovil(p: PropuestaWeb, obras: ProyectoEnlace[]): string {
+  const INK = '#0d0d0d', PAPER = '#fbfbfa', SAGE = '#8fa596', LINE = 'rgba(251,251,250,.18)'
+  const mail = `mailto:contacto@formaprima.es?subject=${encodeURIComponent(`Propuesta de honorarios · ${p.proyecto}`)}`
+  const boton = 'appearance:none;-webkit-appearance:none;cursor:pointer;font-family:inherit;font-size:12px;font-weight:500;letter-spacing:.2em;text-transform:uppercase;padding:20px 16px;border-radius:0;text-align:center;text-decoration:none;display:block;width:100%;'
+  const primario = `${boton}background:${PAPER};color:${INK};border:1px solid ${PAPER};`
+  const secundario = `${boton}background:transparent;color:${PAPER};border:1px solid rgba(251,251,250,.32);`
+  const tarjetas = obras.map((o) => `
+      <a href="https://formaprima.es/proyectos/${esc(o.slug)}" target="_blank" rel="noopener" style="color:${PAPER};text-decoration:none;display:flex;flex-direction:column;gap:10px;min-width:0;">
+        <div style="position:relative;overflow:hidden;aspect-ratio:4/3;background:#1a1a1a;"><img loading="lazy" decoding="async" src="${esc(o.imagen)}" alt="${esc(o.nombre)}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;filter:saturate(.75);"></div>
+        <span style="font-size:13px;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(o.nombre)}</span>
+      </a>`).join('')
+  return `
+<section data-label="Siguiente paso" data-fp-final="" style="background:${INK};color:${PAPER};font-family:'Hanken Grotesk',sans-serif;padding:72px 24px calc(env(safe-area-inset-bottom) + 48px);">
+  <span style="font-family:'Newsreader',serif;font-style:italic;font-size:17px;color:${SAGE};">Siguiente paso</span>
+  <h2 style="margin:22px 0 0;font-size:48px;font-weight:200;letter-spacing:-.035em;line-height:1;">${p.nombreCliente ? `¿Empezamos,<br>${esc(p.nombreCliente)}?` : '¿Empezamos?'}</h2>
+  <div style="width:48px;height:1px;background:${SAGE};margin:28px 0 22px;"></div>
+  <p style="margin:0 0 32px;font-size:16px;font-weight:300;line-height:1.55;opacity:.75;">Si la propuesta encaja, acéptala aquí. Te escribimos hoy mismo para enviarte el documento a firma y fijar la fecha de arranque.</p>
+  <div data-fp-paso="inicio" style="display:flex;flex-direction:column;gap:12px;">
+    <button type="button" data-fp-accion="confirmar" style="${primario}">Aceptar propuesta</button>
+    <a href="${mail}" style="${secundario}">Tengo dudas · escríbenos</a>
+  </div>
+  <div data-fp-paso="confirmar" style="display:none;flex-direction:column;gap:14px;">
+    <div style="font-size:15px;font-weight:300;line-height:1.45;opacity:.85;">Vas a aceptar la propuesta de honorarios de ${esc(p.proyecto)}.</div>
+    <textarea data-fp-comentario="" rows="3" placeholder="¿Quieres comentarnos algo? (opcional)" style="font-family:inherit;font-size:16px;font-weight:300;color:${PAPER};line-height:1.45;background:rgba(251,251,250,.04);border:1px solid rgba(251,251,250,.2);border-radius:0;padding:14px;resize:none;outline:none;"></textarea>
+    <div data-fp-error="" style="display:none;font-size:14px;color:#e0a39a;"></div>
+    <button type="button" data-fp-accion="aceptar" style="${primario}">Confirmar aceptación</button>
+    <button type="button" data-fp-accion="volver" style="${secundario}">Volver</button>
+  </div>
+  <div data-fp-paso="hecho" style="display:none;border-top:1px solid ${SAGE};padding-top:22px;">
+    <div style="font-size:28px;font-weight:200;letter-spacing:-.02em;line-height:1.1;">${p.nombreCliente ? `Recibido, ${esc(p.nombreCliente)}.` : 'Recibido.'}</div>
+    <p style="margin:12px 0 0;font-size:15px;font-weight:300;line-height:1.5;opacity:.7;">Te escribimos hoy mismo con el documento para firmar y la fecha de arranque.</p>
+  </div>
+  <div style="margin-top:64px;padding-top:22px;border-top:1px solid ${LINE};">
+    <span style="font-size:10px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:${SAGE};">Mientras tanto, conoce el estudio</span>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 14px;margin-top:20px;">${tarjetas}</div>
+    <a href="https://formaprima.es" target="_blank" rel="noopener" style="display:flex;justify-content:space-between;align-items:baseline;color:${PAPER};text-decoration:none;border-top:1px solid ${LINE};margin-top:28px;padding-top:18px;">
+      <span style="font-size:22px;font-weight:200;letter-spacing:-.02em;">Visitar formaprima.es</span><span style="font-size:22px;font-weight:200;color:${SAGE};">→</span>
+    </a>
+  </div>
+  <div style="margin-top:36px;font-size:12px;font-weight:300;line-height:1.6;opacity:.5;"><a href="mailto:contacto@formaprima.es" style="color:inherit;text-decoration:none;">contacto@formaprima.es</a> · Príncipe de Vergara 56, Madrid</div>
+</section>`
+}
+
 // Diapositiva final de una propuesta de honorarios horizontal (1920×1080) para
 // un cliente: aceptar o preguntar, y la puerta a la web con las obras. El mismo
 // lenguaje que SlideSiguiente (tipo 'deck') y que el diseño de Torre del Mangle:
@@ -318,14 +364,21 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
   // Versión anterior del dossier (misma PIN/cookie): su módulo y su carpeta de
   // assets viven en `<slug>-anterior`, para que no se pisen con los de la actual.
   const esAnterior = new URL(req.url).searchParams.get('rev') === 'anterior' && !!p.versionAnterior
-  const slugDoc = esAnterior ? `${p.slug}-anterior` : p.slug
+  // Versión móvil (página de scroll) de una propuesta horizontal: `<slug>-movil`.
+  const esMovil = new URL(req.url).searchParams.get('movil') === '1' && !!p.versionMovil
+  const slugDoc = esMovil ? `${p.slug}-movil` : esAnterior ? `${p.slug}-anterior` : p.slug
 
   let html = await cargarDossier(slugDoc)
   if (!html) return new Response('No disponible', { status: 404 })
 
   const obras = await obrasDestacadas().catch(() => [])
 
-  if (p.formato === 'horizontal') {
+  if (esMovil) {
+    html = html
+      .replace('<!--FP:SIGUIENTE-->', seccionSiguienteMovil(p, obras))
+      // El puente fija html/body para el deck; aquí la página se desplaza.
+      .replace(/<\/head>/i, '<style>html,body{height:auto!important;overflow-x:hidden!important;overflow-y:visible!important}[data-fp-pista]{display:none!important}</style>\n</head>')
+  } else if (p.formato === 'horizontal') {
     // Presentación 1920×1080: el lienzo no se estira (deck-stage la encaja con
     // bandas). Numeración: la siguiente a la de la última diapositiva ("05 Cierre"
     // → "06"); no la mayor, que dentro de un capítulo hay subnúmeros (01–10).

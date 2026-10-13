@@ -39,6 +39,8 @@ interface Props {
    * sirve con ?rev=anterior; comparte PIN y cookie con la actual.
    */
   versionAnterior?: { etiquetaActual: string; etiquetaAnterior: string }
+  /** Horizontal con versión móvil: en un teléfono se sirve esa (deck?movil=1). */
+  versionMovil?: boolean
 }
 
 type Idioma = 'es' | 'en'
@@ -91,8 +93,13 @@ function modoEscritorio() {
   return window.innerWidth >= 900 && window.innerWidth > window.innerHeight
 }
 
-export default function PropuestaDossier({ slug, proyecto, descripcion, portada, tema, logo, formato = 'vertical', apaisado = false, medir = false, versionAnterior }: Props) {
-  const horizontal = formato === 'horizontal'
+export default function PropuestaDossier({ slug, proyecto, descripcion, portada, tema, logo, formato = 'vertical', apaisado = false, medir = false, versionAnterior, versionMovil = false }: Props) {
+  // Un teléfono (táctil, lado corto < 600) con versión móvil la ve en vertical,
+  // con scroll, en lugar de la presentación que pide girar la pantalla. Se
+  // decide una vez: girar el móvil no cambia de versión ni pierde la posición.
+  const [telefono] = useState(() => typeof window !== 'undefined' && versionMovil
+    && matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 600)
+  const horizontal = formato === 'horizontal' && !telefono
   const iframe = useRef<HTMLIFrameElement>(null)
   const [escritorio, setEscritorio] = useState<boolean | null>(null)
   const [src, setSrc] = useState('')
@@ -122,7 +129,7 @@ export default function PropuestaDossier({ slug, proyecto, descripcion, portada,
   const modo = useRef<boolean | null>(null)
   useEffect(() => {
     const decidir = () => {
-      const esc = horizontal || modoEscritorio()
+      const esc = !telefono && (horizontal || modoEscritorio())
       if (modo.current === esc) return
       modo.current = esc
       const alto = esc ? 1920 : Math.max(1920, Math.round((1080 * window.innerHeight) / window.innerWidth))
@@ -130,7 +137,7 @@ export default function PropuestaDossier({ slug, proyecto, descripcion, portada,
       // La versión anterior se pide con ?rev=anterior sobre la misma ruta.
       const q = revRef.current === 'anterior' ? 'rev=anterior' : ''
       const u = (base: string) => base + (q ? (base.includes('?') ? '&' : '?') + q : '')
-      setSrc(u(horizontal ? `/propuesta/${slug}/deck`
+      setSrc(telefono ? `/propuesta/${slug}/deck?movil=1` : u(horizontal ? `/propuesta/${slug}/deck`
         : esc && apaisado ? `/propuesta/${slug}/deck?escritorio=1&alto=${Math.round((2304 * window.innerHeight) / window.innerWidth)}`
         : `/propuesta/${slug}/deck?alto=${alto}`))
     }
@@ -141,7 +148,7 @@ export default function PropuestaDossier({ slug, proyecto, descripcion, portada,
     window.addEventListener('resize', alCambiar)
     registrarEventoPropuestaWeb(slug, 'abierta').catch(() => {})
     return () => { clearTimeout(t); window.removeEventListener('resize', alCambiar) }
-  }, [slug, horizontal, apaisado])
+  }, [slug, horizontal, apaisado, telefono])
 
   // Aviso de "propuesta actualizada": una sola vez por dispositivo.
   useEffect(() => {

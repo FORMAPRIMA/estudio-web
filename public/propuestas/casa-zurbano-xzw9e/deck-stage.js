@@ -185,14 +185,17 @@
       pointer-events: none;
       visibility: hidden;
       z-index: 1;
-      transition: opacity 0s linear 1.1s, visibility 0s linear 1.1s;
+    }
+    ::slotted([data-fp-saliente]) {
+      opacity: 1;
+      visibility: visible;
     }
     ::slotted([data-deck-active]) {
       opacity: 1;
       pointer-events: auto;
       visibility: visible;
       z-index: 2;
-      transition: opacity 1.1s cubic-bezier(.45,0,.25,1), visibility 0s;
+      transition: opacity 1.1s cubic-bezier(.45,0,.25,1);
     }
 
     .overlay {
@@ -1182,10 +1185,24 @@
       // (reload banner path in viewer-handle.ts) lands on the current slide,
       // not the stale deep-link hash from initial load.
       try { history.replaceState(null, '', location.pathname + location.search + '#' + (curr + 1)); } catch (e) {}
+      clearTimeout(this._fpSalT);
       this._slides.forEach((s, i) => {
-        if (i === curr) s.setAttribute('data-deck-active', '');
-        else s.removeAttribute('data-deck-active');
+        if (i === curr) { s.setAttribute('data-deck-active', ''); s.removeAttribute('data-fp-saliente'); }
+        else if (i === prev && reason !== 'init') { s.removeAttribute('data-deck-active'); s.setAttribute('data-fp-saliente', ''); }
+        else { s.removeAttribute('data-deck-active'); s.removeAttribute('data-fp-saliente'); }
       });
+      this._fpSalT = setTimeout(() => this._slides.forEach((s) => s.removeAttribute('data-fp-saliente')), 1150);
+      // Chrome no siempre propaga a los hijos el cambio de visibility que
+      // viene de ::slotted(): la diapositiva aparecía con su contenido aún
+      // oculto (solo el fondo). Un estilo en línea fugaz fuerza el recálculo.
+      // Se reasigna en línea la herencia de cada elemento de la que entra.
+      const sEnt = this._slides[curr];
+      if (sEnt) {
+        const ns = [...sEnt.querySelectorAll('*')].filter((n) => !n.style.visibility || n.style.visibility === 'inherit');
+        ns.forEach((n) => { n.style.visibility = ''; });
+        void sEnt.offsetWidth;
+        ns.forEach((n) => { n.style.visibility = 'inherit'; });
+      }
       if (this._countEl) this._countEl.textContent = String(curr + 1);
       // Follow-scroll on every navigation (init deep-link, keyboard, click,
       // tap, external goTo) — the only time we *don't* want the rail to

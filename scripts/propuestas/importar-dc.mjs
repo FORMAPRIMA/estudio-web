@@ -37,6 +37,12 @@ if (args.includes('--perfil')) { const i = args.indexOf('--perfil'); perfil = ar
 // de Torre del Mangle (animacion-dc.js: bloques, telón en imágenes, cifras que suben).
 const animar = args.includes('--animar')
 if (animar) args.splice(args.indexOf('--animar'), 1)
+// --movil <slug-escritorio>: versión móvil (página de scroll, no presentación) de
+// una propuesta horizontal. Se publica como <slug-escritorio>-movil; sus secciones
+// toman las etiquetas de las diapositivas de escritorio (Salas mide igual) y
+// llevan movil-dc.js (medición por scroll y animación al aparecer).
+let movil = ''
+if (args.includes('--movil')) { const i = args.indexOf('--movil'); movil = args[i + 1]; args.splice(i, 2) }
 const [slug, origen, archivo] = args
 if (!slug || !origen || !archivo || !/^[a-z0-9-]+$/.test(slug)) {
   console.error('Uso: node scripts/propuestas/importar-dc.mjs <slug> <carpeta-origen> "<archivo>.dc.html"')
@@ -46,8 +52,8 @@ if (!slug || !origen || !archivo || !/^[a-z0-9-]+$/.test(slug)) {
 const RAIZ = path.resolve(new URL('../..', import.meta.url).pathname)
 const PUB = path.join(RAIZ, 'public', 'propuestas', slug)
 const DIR_DECK = path.join(RAIZ, 'lib', 'propuestas', 'decks')
-const MAX_FOTO = 2000
-const MAX_RETRATO = 900
+const MAX_FOTO = movil ? 1300 : 2000
+const MAX_RETRATO = movil ? 700 : 900
 
 const src = (f) => path.join(origen, f)
 
@@ -177,20 +183,25 @@ async function main() {
   // Navegación con rueda, deslizando el dedo y con ↑ ↓, si el dossier no la trae
   // (Casa Zurbano sí la trae; Torre del Mangle no). deck-stage solo pasa con
   // ← →, espacio y tocando los lados de la pantalla.
-  if (!/addEventListener\('(wheel|touchstart)'/.test(html)) {
+  if (!movil && !/addEventListener\('(wheel|touchstart)'/.test(html)) {
     html = cambiaUna(html, '</body>', `<script>
 (function () {
   var deck = function () { return document.querySelector('#dc-root deck-stage') || document.querySelector('deck-stage'); };
   var libre = 0;
   function pasar(d) { var k = deck(); if (!k || Date.now() < libre) return; libre = Date.now() + 850; d > 0 ? k.next() : k.prev(); }
   function propio(t) { return t && t.closest && t.closest('textarea,input,select,[data-fp-scroll]'); }
-  var acum = 0, tAcum = 0;
+  // Un gesto = una diapositiva. La inercia del trackpad sigue mandando eventos
+  // más de un segundo: tras pasar, se ignora la rueda hasta que el gesto
+  // termina (200 ms sin eventos). Antes, a los 850 ms pasaba otra (se saltaba).
+  var acum = 0, tAcum = 0, enGesto = false;
   window.addEventListener('wheel', function (e) {
     if (propio(e.target) || e.ctrlKey) return;
-    var v = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
-    if (Date.now() - tAcum > 250) acum = 0;
-    acum += v; tAcum = Date.now();
-    if (Math.abs(acum) > 40) { pasar(acum); acum = 0; }
+    var v = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX, ahora = Date.now();
+    if (ahora - tAcum > 200) { acum = 0; enGesto = false; }
+    tAcum = ahora;
+    if (enGesto) return;
+    acum += v;
+    if (Math.abs(acum) > 40) { libre = 0; pasar(acum); acum = 0; enGesto = true; }
   }, { passive: true });
   window.addEventListener('keydown', function (e) {
     if (propio(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -222,12 +233,23 @@ async function main() {
   html = html.replace(/assets\/([A-Za-z0-9_.-]+\.(?:png|jpe?g|webp))/gi, (m, f) => `assets/${nombres.get(f) ?? f}`)
 
   // Arreglos para móvil (memoria, animaciones, controles): ver arreglos-dc.mjs.
-  html = arreglarDossier(html, { quitar, perfil })
+  html = arreglarDossier(html, { quitar, perfil, scroll: !!movil })
 
   // Limpieza y hueco para la diapositiva final.
-  html = html
-    .replace(/\s+data-speaker-notes="[^"]*"/g, '')
-    .replace(/<\/x-import>/, '<!--FP:SIGUIENTE-->\n</x-import>')
+  html = html.replace(/\s+data-speaker-notes="[^"]*"/g, '')
+  if (movil) {
+    // Etiquetas de escritorio, en el mismo orden (si no cuadran, para).
+    const esc = fs.readFileSync(path.join(DIR_DECK, `${movil}.ts`), 'utf8')
+    const etiquetas = [...esc.matchAll(/<section data-label=\\"([^"\\]+)\\"/g)].map((m) => m[1])
+    let k = 0
+    html = html.replace(/<section\b/g, () => `<section data-label="${etiquetas[k++] ?? ''}"`)
+    if (k !== etiquetas.length) throw new Error(`--movil: ${k} secciones en móvil y ${etiquetas.length} diapositivas en ${movil}`)
+    const js = fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), 'movil-dc.js'), 'utf8')
+    html = cambiaUna(html, '</main>', '<!--FP:SIGUIENTE-->\n</main>')
+    html = cambiaUna(html, '</body>', `<script>\n${js}</script>\n</body>`)
+  } else {
+    html = html.replace(/<\/x-import>/, '<!--FP:SIGUIENTE-->\n</x-import>')
+  }
   if (!html.includes('<!--FP:SIGUIENTE-->')) throw new Error('No encuentro el </x-import> del deck.')
 
   const ts = `// Generado por scripts/propuestas/importar-dc.mjs — no editar a mano.

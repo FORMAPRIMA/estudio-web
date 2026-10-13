@@ -62,6 +62,12 @@ export interface PropuestaWeb {
    * con `/propuesta/<slug>/deck?rev=anterior` y comparte PIN y cookie con la actual.
    */
   versionAnterior?: { etiquetaActual: string; etiquetaAnterior: string }
+  /**
+   * Solo 'dc' horizontal: tiene versión móvil (página de scroll) para teléfonos,
+   * en `decks/<slug>-movil.ts` + `public/propuestas/<slug>-movil/`, servida con
+   * `/propuesta/<slug>/deck?movil=1` (importar-dc.mjs --movil <slug>).
+   */
+  versionMovil?: boolean
   /** false = la URL responde "no disponible" (propuesta retirada). */
   activa: boolean
   publicada: string
@@ -160,6 +166,7 @@ export const PROPUESTAS: PropuestaWeb[] = [
     portada: '/propuestas/ne56-miami-5jjoy/assets/ne56-aerea.webp',
     og: '/propuestas/ne56-miami-5jjoy/og.jpg',
     descripcion: '6 townhouses de obra nueva · 3 edificios dúplex · Miami, FL',
+    versionMovil: true,
     pantallaPin: {
       antetitulo: 'Propuesta de honorarios',
       titulo: '223–231 NE 56th Street',
@@ -181,6 +188,7 @@ export const PROPUESTAS: PropuestaWeb[] = [
     portada: '/propuestas/palmetto-sw77-xkp5c/assets/sw77-aerea.webp',
     og: '/propuestas/palmetto-sw77-xkp5c/og.jpg',
     descripcion: 'Remodelación integral de vivienda unifamiliar · 2.192 sq ft · Palmetto Bay, FL',
+    versionMovil: true,
     pantallaPin: {
       antetitulo: 'Propuesta de honorarios',
       titulo: '14321 SW 77th Ave',
