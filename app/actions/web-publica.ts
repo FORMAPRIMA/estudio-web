@@ -119,9 +119,23 @@ const leerProyecto = unstable_cache(
   { tags: [TAG.proyectos], revalidate: VIDA.normal },
 )
 
+/**
+ * `null` significa SOLO que el proyecto no existe: la página lo convierte en 404.
+ * Un fallo de Supabase no puede acabar ahí, o un proyecto real sale como
+ * inexistente (pasó con ALM44 el 13 oct 2026). Si la caché no tiene nada y la
+ * consulta se pasa del reloj, se repite sin reloj; si aun así falla, se lanza y
+ * se ve la página de error, no un 404 falso.
+ */
 export async function getProyectoBySlug(slug: string): Promise<WebProyecto | null> {
   try { return await leerProyecto(slug) }
-  catch (e) { console.error('[web-publica] getProyectoBySlug:', (e as Error).message); return null }
+  catch (e) {
+    console.error('[web-publica] getProyectoBySlug:', (e as Error).message)
+    const admin = createAdminClient()
+    const { data, error } = await leerProyectos((sel) => admin.from('web_proyectos').select(sel)
+      .eq('slug', slug).eq('activo', true).maybeSingle())
+    if (error) throw new Error(error.message)
+    return data ? mapRow(data) : null
+  }
 }
 
 // ── Lectura ─────────────────────────────────────────────────────────────────
