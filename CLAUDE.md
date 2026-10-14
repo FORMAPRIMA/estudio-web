@@ -223,7 +223,8 @@ Sistema de control financiero completo.
   (migración `estudio_config_pago_usd.sql`, editables en Información empresa); en las facturas en USD
   sustituyen al IBAN en el PDF y en el correo (`pagoUsdDesdeConfig()`)
   **Cobros por proyecto en USD** (`facturas.moneda` + `monto_moneda`, migración `facturas_moneda.sql`):
-  `monto` sigue en euros (P&L, kanban, totales) — estimado al cambio BCE de hoy hasta emitir y el real
+  `monto` sigue en euros (P&L, kanban, totales) — estimado al cambio BCE del día hasta emitir (cron
+  `/api/cron/cambio-cobros` L-V 15:30 UTC + al abrir la ficha del proyecto, `lib/facturas/cobrosMoneda.ts`) y el real
   (base en euros de la emitida) después. `emitirFacturaDesdeContrato` crea el borrador en USD, IVA 0 % y
   `MENCION_NO_SUJETA`. Ojo: el portal del cliente aún pinta `monto` en euros
 

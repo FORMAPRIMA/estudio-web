@@ -1,4 +1,6 @@
 import { redirect, notFound } from 'next/navigation'
+import { actualizarContravalores } from '@/lib/facturas/cobrosMoneda'
+import type { Moneda } from '@/lib/facturasUtils'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import FacturacionProyectoDetalle from '@/components/team/finanzas/FacturacionProyectoDetalle'
@@ -72,6 +74,8 @@ export default async function Page({ params }: { params: { id: string } }) {
 
   // Fall back if clientes_ids column is missing (migration not yet applied)
   let facturas = facturasResult.data
+  // Cobros en dólares sin emitir: contravalor en euros al cambio BCE de hoy.
+  const contravalores = await actualizarContravalores(admin, { proyectoId: params.id })
   if (facturasResult.error) {
     const { data: fallback } = await admin
       .from('facturas')
@@ -164,7 +168,9 @@ export default async function Page({ params }: { params: { id: string } }) {
         seccion:             f.seccion,
         concepto:            f.concepto,
         numero_factura:      f.numero_factura      ?? null,
-        monto:               f.monto,
+        monto:               contravalores.get(f.id) ?? f.monto,
+        moneda:              ((f as Record<string, unknown>).moneda as Moneda | null) ?? 'EUR',
+        monto_moneda:        ((f as Record<string, unknown>).monto_moneda as number | null) ?? null,
         fecha_emision:       f.fecha_emision       ?? null,
         fecha_pago_acordada: f.fecha_pago_acordada ?? null,
         fecha_cobro:         f.fecha_cobro         ?? null,
