@@ -167,6 +167,9 @@ export const PROPUESTAS: PropuestaWeb[] = [
     og: '/propuestas/ne56-miami-5jjoy/og.jpg',
     descripcion: '6 townhouses de obra nueva · 3 edificios dúplex · Miami, FL',
     versionMovil: true,
+    // 2026-10-14: v2 — fase 02 pasa a «Sistemas de ejecución» (el AoR redacta y firma el
+    // proyecto de ejecución), sin tarifa por SF: 38.180 + 65.320 = USD 103.500.
+    versionAnterior: { etiquetaActual: 'Propuesta actualizada', etiquetaAnterior: 'Versión anterior' },
     pantallaPin: {
       antetitulo: 'Propuesta de honorarios',
       titulo: '223–231 NE 56th Street',
