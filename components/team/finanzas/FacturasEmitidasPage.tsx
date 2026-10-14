@@ -463,8 +463,10 @@ function CreateModal({
   const [items, setItems] = useState<FacturaItem[]>(() => {
     if (editData) return editData.items?.length ? editData.items : [{ descripcion: '', cantidad: 1, precio_unitario: 0, subtotal: 0 }]
     if (!prefill) return [{ descripcion: '', cantidad: 1, precio_unitario: 0, subtotal: 0 }]
-    const desc = prefill.proyectoDireccion
-      ? `${prefill.concepto} — ${prefill.proyectoDireccion}`
+    // La dirección puede venir en varias líneas: en la descripción, una sola
+    const direccion = prefill.proyectoDireccion?.replace(/\s*[\r\n]+\s*/g, ', ').trim()
+    const desc = direccion
+      ? `${prefill.concepto} — ${direccion}`
       : prefill.concepto
     return [{ descripcion: desc, cantidad: 1, precio_unitario: prefill.monto, subtotal: prefill.monto }]
   })

@@ -33,7 +33,9 @@ const C = {
 
 const s = StyleSheet.create({
   page: {
-    paddingTop: 0,
+    // Margen superior para las páginas 2+; la cabecera de la 1.ª lo compensa con
+    // marginTop negativo y sigue a sangre.
+    paddingTop: 40,
     paddingBottom: 64,
     paddingHorizontal: 0,
     fontFamily: 'Helvetica',
@@ -44,6 +46,7 @@ const s = StyleSheet.create({
 
   // ── Header block (full bleed, dark) ─────────────────────────────────────────
   headerBlock: {
+    marginTop: -40,
     backgroundColor: C.headerBg,
     paddingTop: 40,
     paddingBottom: 0,
@@ -442,7 +445,7 @@ export function FacturaEmitidaPDF({ data }: { data: FacturaPDFData }) {
   const pagoUsd     = moneda === 'USD' ? data.pago_usd ?? null : null
   const hasPayment  = !!(pagoUsd || data.iban || data.condiciones_pago)
   const hasNotes    = !!data.notas
-  const showInfoRow = hasPayment || hasNotes
+  const showInfoRow = hasPayment || hasNotes || extranjera
 
   return (
     <Document
@@ -454,7 +457,7 @@ export function FacturaEmitidaPDF({ data }: { data: FacturaPDFData }) {
 
         {/* ── Header negro ────────────────────────────────────────────── */}
         <View style={s.headerBlock}>
-          <View style={s.headerInner}>
+          <View style={extranjera ? { ...s.headerInner, marginBottom: 20 } : s.headerInner}>
             <View style={s.headerLeft}>
               <Image src={LOGO_BLANCO} style={s.logo} />
               <Text style={s.brandTagline}>Taller de arquitectura y diseño</Text>
@@ -479,10 +482,11 @@ export function FacturaEmitidaPDF({ data }: { data: FacturaPDFData }) {
         </View>
 
         {/* ── Body blanco ─────────────────────────────────────────────── */}
-        <View style={s.body}>
+        {/* En moneda extranjera hay más texto: márgenes algo más justos para que quepa en una página */}
+        <View style={extranjera ? { ...s.body, paddingTop: 20 } : s.body}>
 
           {/* Parties */}
-          <View style={s.parties}>
+          <View style={extranjera ? { ...s.parties, marginBottom: 18 } : s.parties}>
             <View style={s.party}>
               <Text style={s.partyLabel}>Prestador del servicio</Text>
               <Text style={s.partyName}>{data.emisor_nombre}</Text>
@@ -561,7 +565,7 @@ export function FacturaEmitidaPDF({ data }: { data: FacturaPDFData }) {
           </View>
 
           {/* Totales */}
-          <View style={s.totalsWrapper}>
+          <View style={extranjera ? { ...s.totalsWrapper, marginBottom: 14 } : s.totalsWrapper} wrap={false}>
             <View style={s.totalsBox}>
               <View style={s.totalRow}>
                 <Text style={s.totalLabel}>Base imponible</Text>
@@ -620,7 +624,7 @@ export function FacturaEmitidaPDF({ data }: { data: FacturaPDFData }) {
           {showInfoRow && (
             <>
               <View style={s.rule} />
-              <View style={s.infoRow}>
+              <View style={extranjera ? { ...s.infoRow, marginTop: 12, marginBottom: 12 } : s.infoRow} wrap={false}>
                 {hasPayment && pagoUsd && (
                   <View style={s.infoBlock}>
                     <Text style={s.infoLabel}>Payment details · USD</Text>
@@ -630,7 +634,10 @@ export function FacturaEmitidaPDF({ data }: { data: FacturaPDFData }) {
                     <Text style={s.infoMeta}>Routing number (ACH & wire): {pagoUsd.routing}</Text>
                     <Text style={s.infoMeta}>Account number: {pagoUsd.cuenta}{pagoUsd.tipo_cuenta ? `  ·  ${pagoUsd.tipo_cuenta}` : ''}</Text>
                     {pagoUsd.swift && (
-                      <Text style={s.infoMeta}>From outside the US (SWIFT): {pagoUsd.swift}{pagoUsd.direccion ? `  ·  ${pagoUsd.direccion}` : ''}</Text>
+                      <Text style={s.infoMeta}>From outside the US (SWIFT): {pagoUsd.swift}</Text>
+                    )}
+                    {pagoUsd.swift && pagoUsd.direccion && (
+                      <Text style={s.infoMeta}>{pagoUsd.direccion}</Text>
                     )}
                     <Text style={s.infoMeta}>Reference: {data.numero_completo}</Text>
                     {data.condiciones_pago && (
@@ -650,7 +657,25 @@ export function FacturaEmitidaPDF({ data }: { data: FacturaPDFData }) {
                     )}
                   </View>
                 )}
-                {hasNotes && (
+                {extranjera && (
+                  <View style={s.infoBlock}>
+                    <Text style={s.infoLabel}>Tipo de cambio · Exchange rate</Text>
+                    <Text style={s.infoText}>1 € = {data.tipo_cambio!.toLocaleString('es-ES', { maximumFractionDigits: 6 })} {moneda}</Text>
+                    <Text style={{ ...s.infoMeta, fontSize: 6.5, lineHeight: 1.5 }}>
+                      {`Tipo de referencia del euro publicado por el Banco Central Europeo el ${data.tipo_cambio_fecha ? fmtDate(data.tipo_cambio_fecha) : '—'}, último disponible en la fecha de emisión (el BCE publica un único tipo diario, los días hábiles hacia las 16:00 CET). Contravalor: base imponible ${eur(data.base_imponible)}, cuota de IVA ${eur(data.cuota_iva)}${showIrpf ? `, retención IRPF −${eur(data.cuota_irpf!)}` : ''}, total ${eur(data.total)}.`}
+                    </Text>
+                    <Text style={{ ...s.infoMeta, fontSize: 6.5, lineHeight: 1.5, marginTop: 3 }}>
+                      {`ECB euro reference rate of ${data.tipo_cambio_fecha ?? '—'}. Amount due: ${fmt(vista.total)}.`}
+                    </Text>
+                    {hasNotes && (
+                      <>
+                        <Text style={{ ...s.infoLabel, marginTop: 10 }}>Observaciones</Text>
+                        <Text style={s.infoMeta}>{data.notas}</Text>
+                      </>
+                    )}
+                  </View>
+                )}
+                {hasNotes && !extranjera && (
                   <View style={s.infoBlock}>
                     <Text style={s.infoLabel}>Observaciones</Text>
                     <Text style={s.infoMeta}>{data.notas}</Text>
@@ -661,27 +686,19 @@ export function FacturaEmitidaPDF({ data }: { data: FacturaPDFData }) {
           )}
 
           {/* Condiciones de pago — siempre presentes */}
-          <View style={{ ...s.legal, marginTop: showInfoRow ? 0 : 12 }}>
+          <View style={{ ...s.legal, marginTop: showInfoRow ? 0 : 12, ...(extranjera ? { marginBottom: 0 } : {}) }} wrap={false}>
             <Text style={s.legalText}>
               {'Esta factura deberá ser abonada en el plazo de quince (15) días naturales a contar desde su emisión, mediante transferencia bancaria a la cuenta indicada por el Estudio. Cualquier retraso en el pago constituirá al deudor en mora de forma automática, sin necesidad de intimación o requerimiento previo. Dicho retraso devengará, desde el día siguiente al del vencimiento y hasta la fecha de su íntegro pago, un interés de demora pactado del 3% mensual sobre el importe total de la factura impagada.'}
             </Text>
+            {/* En moneda extranjera la mención va en el mismo bloque: la factura cabe en una página */}
+            {extranjera && data.mencion_legal && (
+              <Text style={{ ...s.legalText, marginTop: 4 }}>{data.mencion_legal}</Text>
+            )}
           </View>
 
-          {/* Justificación del tipo de cambio (facturas en moneda extranjera) */}
-          {extranjera && (
-            <View style={s.legal}>
-              <Text style={s.legalText}>
-                {`Tipo de cambio aplicado: 1 € = ${data.tipo_cambio!.toLocaleString('es-ES', { maximumFractionDigits: 6 })} ${moneda}, tipo de referencia del euro publicado por el Banco Central Europeo el ${data.tipo_cambio_fecha ? fmtDate(data.tipo_cambio_fecha) : '—'}, último disponible en la fecha de emisión de esta factura (el BCE publica un único tipo diario, los días hábiles hacia las 16:00 CET). Contravalor en euros: base imponible ${eur(data.base_imponible)}; cuota de IVA (${data.tipo_iva}%) ${eur(data.cuota_iva)}${showIrpf ? `; retención IRPF −${eur(data.cuota_irpf!)}` : ''}; total ${eur(data.total)}.`}
-              </Text>
-              <Text style={{ ...s.legalText, marginTop: 4 }}>
-                {`Exchange rate applied: 1 EUR = ${data.tipo_cambio} ${moneda} (European Central Bank euro reference rate of ${data.tipo_cambio_fecha ?? '—'}). Amount due: ${fmt(vista.total)}.`}
-              </Text>
-            </View>
-          )}
-
           {/* Mención legal */}
-          {data.mencion_legal && (
-            <View style={s.legal}>
+          {data.mencion_legal && !extranjera && (
+            <View style={s.legal} wrap={false}>
               <Text style={s.legalText}>{data.mencion_legal}</Text>
             </View>
           )}

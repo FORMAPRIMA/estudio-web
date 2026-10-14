@@ -410,7 +410,7 @@ export async function emitirFacturaDesdeContrato(
     // proveedor se referencia el proyecto por su código, no por dónde vive nadie.
     const referenciaProyecto = receptorProveedor
       ? (proyecto?.codigo ?? null)
-      : (proyecto?.direccion ?? null)
+      : (proyecto?.direccion?.replace(/\s*[\r\n]+\s*/g, ', ').trim() || null)
     const descripcionItem = referenciaProyecto
       ? `${f.concepto} — ${referenciaProyecto}`
       : f.concepto
