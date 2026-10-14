@@ -54,6 +54,10 @@ export function pagoUsdDesdeConfig(c: {
 }
 export const MONEDAS: Moneda[] = ['EUR', 'USD']
 
+// En una factura en dólares (cliente de EE. UU.) se propone IVA 0 % y esta
+// mención si no hay otra. Es editable: confirmar cada caso con la gestoría.
+export const MENCION_NO_SUJETA = 'Operación no sujeta al IVA español por reglas de localización (arts. 69 y 70 de la Ley 37/1992 del IVA).'
+
 export function fmtMoneda(n: number, moneda: Moneda = 'EUR') {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: moneda }).format(n)
 }

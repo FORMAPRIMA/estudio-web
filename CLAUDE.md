@@ -222,6 +222,10 @@ Sistema de control financiero completo.
   Datos de cobro en USD (cuenta USD de Wise Business: routing/account ACH + SWIFT) en `estudio_config.usd_*`
   (migración `estudio_config_pago_usd.sql`, editables en Información empresa); en las facturas en USD
   sustituyen al IBAN en el PDF y en el correo (`pagoUsdDesdeConfig()`)
+  **Cobros por proyecto en USD** (`facturas.moneda` + `monto_moneda`, migración `facturas_moneda.sql`):
+  `monto` sigue en euros (P&L, kanban, totales) — estimado al cambio BCE de hoy hasta emitir y el real
+  (base en euros de la emitida) después. `emitirFacturaDesdeContrato` crea el borrador en USD, IVA 0 % y
+  `MENCION_NO_SUJETA`. Ojo: el portal del cliente aún pinta `monto` en euros
 
 ### 5.4 Clientes (`/team/clientes`)
 - **Base de datos** (`/base-datos`) — `ClientesBDPage` — CRUD de clientes. `fp_partner` + `fp_manager`

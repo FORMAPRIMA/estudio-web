@@ -41,7 +41,7 @@ export default async function Page({ params }: { params: { id: string } }) {
   const [facturasResult, { data: proyectoClientes }, { data: comprasMobRows }, { data: proveedoresRows }] = await Promise.all([
     admin
       .from('facturas')
-      .select(`${BASE_SELECT}, clientes_ids, proveedor_id, margen_estimado_pct`)
+      .select(`${BASE_SELECT}, clientes_ids, proveedor_id, margen_estimado_pct, moneda, monto_moneda`)
       .eq('proyecto_id', params.id)
       .order('created_at'),
     admin

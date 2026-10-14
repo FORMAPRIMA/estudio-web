@@ -19,7 +19,7 @@ import {
   type PartnerCC,
 } from '@/app/actions/facturasEmitidas'
 import type { ExtraEmail } from '@/lib/email'
-import { calcTotals, calcTotalsMoneda, fmtMoneda, type Moneda } from '@/lib/facturasUtils'
+import { calcTotals, calcTotalsMoneda, fmtMoneda, MENCION_NO_SUJETA, type Moneda } from '@/lib/facturasUtils'
 import { esFacturaNoCliente } from '@/lib/finanzas/costs'
 import { destinatariosFactura, emailsInvalidos } from '@/lib/email/reparto'
 
@@ -93,10 +93,6 @@ const ESTADO_COLOR: Record<string, { bg: string; color: string; label: string }>
 }
 
 const IVA_OPTS = [21, 10, 4, 0]
-
-// Al pasar una factura a dólares (cliente de EE. UU.) se propone IVA 0 % y esta
-// mención si no hay otra. Es editable: confirmar cada caso con la gestoría.
-const MENCION_NO_SUJETA = 'Operación no sujeta al IVA español por reglas de localización (arts. 69 y 70 de la Ley 37/1992 del IVA).'
 const IRPF_OPTS = [null, 7, 15, 19]
 
 // ── Formatters ────────────────────────────────────────────────────────────────

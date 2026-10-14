@@ -5,6 +5,7 @@ import type { CSSProperties } from 'react'
 import { useRouter } from 'next/navigation'
 import { createFactura, updateFactura, deleteFactura, updateClienteBilling, aplazarFactura, emitirFacturaDesdeContrato, updateMobiliarioLiquidado } from '@/app/actions/facturacion'
 import { SECCION_MOBILIARIO } from '@/lib/finanzas/costs'
+import type { Moneda } from '@/lib/facturasUtils'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -27,6 +28,8 @@ interface Factura {
   fecha_cobro: string | null; status: string; notas: string | null
   factura_emitida_id: string | null; clientes_ids: string[]; proveedor_id: string | null
   margen_estimado_pct: number | null
+  /** USD: el importe pactado está en monto_moneda y `monto` es su contravalor en euros */
+  moneda?: Moneda | null; monto_moneda?: number | null
 }
 
 interface ConstructorInfo {
@@ -125,7 +128,7 @@ export default function FacturacionProyectoDetalle({
 
   const commitCell = (id: string, field: string, rawValue: string) => {
     setEditCell(null)
-    const numericFields = ['monto', 'margen_estimado_pct']
+    const numericFields = ['monto', 'monto_moneda', 'margen_estimado_pct']
     const value = numericFields.includes(field)
       ? parseFloat(rawValue.replace(',', '.')) || 0
       : rawValue || null
@@ -146,7 +149,7 @@ export default function FacturacionProyectoDetalle({
     })
   }
 
-  const handleAdd = (seccion: string, data: { concepto: string; monto: string; fecha_pago_acordada: string; clientes_ids: string[]; proveedor_id: string | null }) => {
+  const handleAdd = (seccion: string, data: { concepto: string; monto: string; moneda: Moneda; fecha_pago_acordada: string; clientes_ids: string[]; proveedor_id: string | null }) => {
     setAddingSeccion(null)
     const monto = parseFloat(data.monto.replace(',', '.')) || 0
     startTransition(async () => {
@@ -155,6 +158,7 @@ export default function FacturacionProyectoDetalle({
         seccion,
         concepto:            data.concepto || 'Nueva factura',
         monto,
+        moneda:              data.moneda,
         fecha_pago_acordada: data.fecha_pago_acordada || null,
         clientes_ids:        data.proveedor_id ? [] : data.clientes_ids,
         proveedor_id:        data.proveedor_id ?? null,
@@ -162,7 +166,8 @@ export default function FacturacionProyectoDetalle({
       if ('id' in res) {
         setFacturas(prev => [...prev, {
           id: res.id, seccion, concepto: data.concepto || 'Nueva factura',
-          numero_factura: null, monto,
+          numero_factura: null, monto: res.monto,
+          moneda: data.moneda, monto_moneda: data.moneda === 'EUR' ? null : monto,
           fecha_emision: null, fecha_pago_acordada: data.fecha_pago_acordada || null,
           fecha_cobro: null, status: 'acordada_contrato', notas: null,
           factura_emitida_id: null,
@@ -953,7 +958,7 @@ function FacturaRow({
       </span>
     )
 
-  const InlineNum = ({ field, value }: { field: string; value: number }) =>
+  const InlineNum = ({ field, value, simbolo = '€' }: { field: string; value: number; simbolo?: string }) =>
     isActive(field) ? (
       <input
         autoFocus
@@ -975,7 +980,7 @@ function FacturaRow({
         onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#F0EEE8' }}
         onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
       >
-        € {fmtE.format(value)}
+        {simbolo} {fmtE.format(value)}
       </span>
     )
 
@@ -1040,7 +1045,19 @@ function FacturaRow({
         {/* N.º Factura */}
         <td style={{ ...TD }}><InlineText field="numero_factura" value={factura.numero_factura} width={110} /></td>
         {/* Monto */}
-        <td style={{ ...TD, textAlign: 'right' }}><InlineNum field="monto" value={factura.monto} /></td>
+        <td style={{ ...TD, textAlign: 'right' }}>
+          {factura.moneda === 'USD' ? (
+            <>
+              <InlineNum field="monto_moneda" value={Number(factura.monto_moneda ?? 0)} simbolo="$" />
+              <div style={{ fontSize: 10, color: '#AAA', fontVariantNumeric: 'tabular-nums' }}
+                title={factura.factura_emitida_id ? 'Contravalor al cambio BCE de la factura' : 'Estimado al cambio BCE de hoy; se fija al emitir'}>
+                {factura.factura_emitida_id ? '' : '≈ '}€ {fmtE.format(factura.monto)}
+              </div>
+            </>
+          ) : (
+            <InlineNum field="monto" value={factura.monto} />
+          )}
+        </td>
         {/* % Margen estimado (interno, solo mobiliario) */}
         {/* En un rappel a proveedor el importe ES el margen: el % no aplica. */}
         {showMargenPct && factura.proveedor_id && (
@@ -1380,9 +1397,10 @@ function AddFacturaForm({
   clientes: ClienteInfo[]
   constructor: ConstructorInfo | null
   proveedores: ProveedorInfo[]
-  onConfirm: (data: { concepto: string; monto: string; fecha_pago_acordada: string; clientes_ids: string[]; proveedor_id: string | null }) => void
+  onConfirm: (data: { concepto: string; monto: string; moneda: Moneda; fecha_pago_acordada: string; clientes_ids: string[]; proveedor_id: string | null }) => void
   onCancel: () => void
 }) {
+  const [moneda, setMoneda] = useState<Moneda>('EUR')
   const concRef  = useRef<HTMLInputElement>(null)
   const montRef  = useRef<HTMLInputElement>(null)
   const fechaRef = useRef<HTMLInputElement>(null)
@@ -1396,7 +1414,15 @@ function AddFacturaForm({
   return (
     <div style={{ padding: '12px 16px', background: '#FFF8F0', borderTop: '1px solid #F0EEE8', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
       <input ref={concRef}  autoFocus placeholder="Concepto"        style={{ ...INPUT, flex: 1, minWidth: 160 }} />
-      <input ref={montRef}  type="number" min={0} placeholder="Monto €" style={{ ...INPUT, width: 110 }} />
+      <div style={{ display: 'flex' }}>
+        {(['EUR', 'USD'] as Moneda[]).map(m => (
+          <button key={m} type="button" onClick={() => setMoneda(m)} title={m === 'USD' ? 'Cliente de EE. UU.: la factura saldrá en dólares, sin IVA' : undefined}
+            style={{ height: 30, padding: '0 9px', fontSize: 11, border: `1px solid ${moneda === m ? '#D85A30' : '#E8E6E0'}`, background: moneda === m ? '#FDF0EC' : '#fff', color: moneda === m ? '#D85A30' : '#888', cursor: 'pointer', fontWeight: moneda === m ? 600 : 400 }}>
+            {m === 'EUR' ? '€' : '$'}
+          </button>
+        ))}
+      </div>
+      <input ref={montRef}  type="number" min={0} placeholder={moneda === 'EUR' ? 'Monto €' : 'Monto $'} style={{ ...INPUT, width: 110 }} />
       <input ref={fechaRef} type="date"  placeholder="Fecha acordada" style={{ ...INPUT, width: 140 }} />
 
       {showSelector && (
@@ -1416,6 +1442,7 @@ function AddFacturaForm({
           onClick={() => onConfirm({
             concepto:            concRef.current?.value  ?? '',
             monto:               montRef.current?.value  ?? '0',
+            moneda,
             fecha_pago_acordada: fechaRef.current?.value ?? '',
             clientes_ids:        selectedProveedorId ? [] : Array.from(selectedIds),
             proveedor_id:        selectedProveedorId,

@@ -139,6 +139,20 @@ async function calcularImportes(
   }
 }
 
+/**
+ * Factura en moneda extranjera vinculada a un cobro del proyecto: el cobro
+ * (facturas.monto, en euros) pasa a valer el contravalor real de la factura.
+ * En EUR no se toca: ahí el importe pactado y el facturado se gestionan aparte.
+ */
+function columnasCobro(imp: ImportesFactura) {
+  if (imp.moneda === 'EUR') return null
+  return {
+    moneda:       imp.moneda,
+    monto_moneda: imp.enMoneda.base_imponible,
+    monto:        imp.eur.base_imponible,
+  }
+}
+
 function columnasImportes(imp: ImportesFactura, tipoIrpf: number | null | undefined) {
   const extranjera = imp.moneda !== 'EUR'
   return {
@@ -258,7 +272,7 @@ export async function createFacturaEmitida(
     if (input.factura_origen_id && row) {
       await admin
         .from('facturas')
-        .update({ factura_emitida_id: row.id })
+        .update({ factura_emitida_id: row.id, ...columnasCobro(importes) })
         .eq('id', input.factura_origen_id)
     }
 
@@ -429,6 +443,15 @@ export async function updateFacturaEmitida(
     }).eq('id', id)
 
     if (error) return { error: error.message }
+
+    const cobro = columnasCobro(importes)
+    if (cobro) {
+      const { data: em } = await admin
+        .from('facturas_emitidas').select('factura_origen_id').eq('id', id).single()
+      if (em?.factura_origen_id) {
+        await admin.from('facturas').update(cobro).eq('id', em.factura_origen_id)
+      }
+    }
 
     revalidatePath(PATH)
     revalidatePath('/team/finanzas/facturacion/control')

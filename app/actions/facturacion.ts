@@ -4,7 +4,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { buscarEmitidaVigente, mensajeYaEmitida } from '@/lib/facturas/emitidaVigente'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import { calcTotals, formatNumeroCompleto } from '@/lib/facturasUtils'
+import { calcTotalsMoneda, formatNumeroCompleto, MENCION_NO_SUJETA, type Moneda } from '@/lib/facturasUtils'
+import { tipoCambioBCE } from '@/lib/facturas/tipoCambioBCE'
 import { SECCIONES_PRIVADAS, SECCION_CONSTRUCTORA } from '@/lib/finanzas/costs'
 
 async function requirePartner() {
@@ -28,15 +29,26 @@ function revalidateBoth(proyectoId?: string) {
 
 // ── Facturas ──────────────────────────────────────────────────────────────────
 
+const hoy = () => new Date().toISOString().split('T')[0]
+
+/** Contravalor en euros de un importe en moneda extranjera, al cambio BCE de hoy. */
+async function aEurosHoy(importe: number, moneda: Moneda): Promise<number> {
+  if (moneda === 'EUR') return importe
+  const { tipo } = await tipoCambioBCE(hoy(), moneda)
+  return Math.round((importe / tipo) * 100) / 100
+}
+
 export async function createFactura(data: {
   proyecto_id: string
   seccion: string
   concepto?: string
+  /** En la moneda de la fila. Con USD, `monto` (euros) se estima al cambio BCE de hoy. */
   monto?: number
+  moneda?: Moneda
   fecha_pago_acordada?: string | null
   clientes_ids?: string[]
   proveedor_id?: string | null
-}): Promise<{ id: string } | { error: string }> {
+}): Promise<{ id: string; monto: number } | { error: string }> {
   try {
     await requirePartner()
     const admin = createAdminClient()
@@ -44,13 +56,18 @@ export async function createFactura(data: {
     // es lo que filtra el portal del cliente, así que dejarlo poblado en una
     // factura a proveedor la haría visible a quien nunca debe verla.
     const proveedorId = data.proveedor_id ?? null
+    const moneda      = data.moneda ?? 'EUR'
+    const importe     = data.monto ?? 0
+    const montoEur    = await aEurosHoy(importe, moneda)
     const { data: row, error } = await admin
       .from('facturas')
       .insert({
         proyecto_id:         data.proyecto_id,
         seccion:             data.seccion,
         concepto:            data.concepto ?? 'Nueva factura',
-        monto:               data.monto ?? 0,
+        monto:               montoEur,
+        moneda,
+        monto_moneda:        moneda === 'EUR' ? null : importe,
         fecha_pago_acordada: data.fecha_pago_acordada ?? null,
         status:              'acordada_contrato',
         clientes_ids:        proveedorId ? [] : (data.clientes_ids ?? []),
@@ -60,7 +77,7 @@ export async function createFactura(data: {
       .single()
     if (error) return { error: error.message }
     revalidateBoth(data.proyecto_id)
-    return { id: row.id }
+    return { id: row.id, monto: montoEur }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
   }
@@ -81,6 +98,8 @@ export async function updateFactura(
     seccion:             string
     numero_factura:      string | null
     monto:               number
+    /** Importe en dólares de una fila USD: recalcula `monto` al cambio BCE de hoy */
+    monto_moneda:        number
     fecha_emision:       string | null
     fecha_pago_acordada: string | null
     fecha_cobro:         string | null
@@ -99,6 +118,12 @@ export async function updateFactura(
     // clientes, y asignar clientes quita el proveedor. Se refuerza aquí y no solo
     // en la UI porque de este par depende quién puede ver y recibir la factura.
     const patch = { ...data }
+    if (patch.monto_moneda != null) {
+      const { data: actual } = await admin.from('facturas').select('moneda').eq('id', id).single()
+      const moneda = (actual?.moneda ?? 'EUR') as Moneda
+      if (moneda === 'EUR') delete patch.monto_moneda
+      else patch.monto = await aEurosHoy(patch.monto_moneda, moneda)
+    }
     if (patch.proveedor_id) patch.clientes_ids = []
     else if (patch.clientes_ids && patch.clientes_ids.length > 0) patch.proveedor_id = null
 
@@ -254,7 +279,7 @@ export async function emitirFacturaDesdeContrato(
     const { data: f, error: fErr } = await admin
       .from('facturas')
       .select(`
-        id, concepto, monto, seccion, proyecto_id, clientes_ids, proveedor_id,
+        id, concepto, monto, moneda, monto_moneda, seccion, proyecto_id, clientes_ids, proveedor_id,
         proyectos(
           id, nombre, codigo, direccion, constructor_id,
           proyectoCliente:clientes!cliente_id(
@@ -390,15 +415,22 @@ export async function emitirFacturaDesdeContrato(
       ? `${f.concepto} — ${referenciaProyecto}`
       : f.concepto
 
+    // Fila en dólares: el borrador sale en USD, sin IVA (cliente de EE. UU.) y con
+    // el cambio BCE de hoy; si luego se cambia la fecha, el guardado lo recalcula.
+    const moneda   = ((f as unknown as { moneda?: Moneda }).moneda ?? 'EUR') as Moneda
+    const importe  = moneda === 'EUR'
+      ? f.monto
+      : Number((f as unknown as { monto_moneda?: number | null }).monto_moneda ?? 0)
     const items = [{
       descripcion:     descripcionItem,
       cantidad:        1,
-      precio_unitario: f.monto,
-      subtotal:        f.monto,
+      precio_unitario: importe,
+      subtotal:        importe,
     }]
-    const tipo_iva = 21
-    const totals   = calcTotals(items, tipo_iva)
-    const today    = new Date().toISOString().split('T')[0]
+    const today    = hoy()
+    const tipo_iva = moneda === 'EUR' ? 21 : 0
+    const cambio   = moneda === 'EUR' ? null : await tipoCambioBCE(today, moneda)
+    const totals   = calcTotalsMoneda(items, tipo_iva, null, moneda, cambio?.tipo ?? null)
 
     // 4. Insert facturas_emitidas as borrador
     const { data: emitida, error: insErr } = await admin
@@ -430,12 +462,18 @@ export async function emitirFacturaDesdeContrato(
           : null,
         seccion:           f.seccion,
         items,
+        moneda,
+        tipo_cambio:           cambio?.tipo  ?? null,
+        tipo_cambio_fecha:     cambio?.fecha ?? null,
+        base_imponible_moneda: cambio ? totals.enMoneda.base_imponible : null,
+        total_moneda:          cambio ? totals.enMoneda.total : null,
+        mencion_legal:     cambio ? MENCION_NO_SUJETA : null,
         tipo_iva,
-        base_imponible:    totals.base_imponible,
-        cuota_iva:         totals.cuota_iva,
+        base_imponible:    totals.eur.base_imponible,
+        cuota_iva:         totals.eur.cuota_iva,
         tipo_irpf:         null,
         cuota_irpf:        null,
-        total:             totals.total,
+        total:             totals.eur.total,
         iban:              cfg.iban          ?? null,
         forma_pago:        'Transferencia bancaria',
         estado:            'borrador',
@@ -448,9 +486,13 @@ export async function emitirFacturaDesdeContrato(
     if (insErr || !emitida) return { error: insErr?.message ?? 'Error al crear la factura.' }
 
     // 5. Link back to the contract factura
+    // En USD, el contravalor del cobro pasa a ser el de la factura (cambio real).
     await admin
       .from('facturas')
-      .update({ factura_emitida_id: emitida.id })
+      .update({
+        factura_emitida_id: emitida.id,
+        ...(cambio ? { monto: totals.eur.base_imponible } : {}),
+      })
       .eq('id', facturaId)
 
     revalidateBoth(f.proyecto_id)
