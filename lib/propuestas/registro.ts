@@ -189,6 +189,8 @@ export const PROPUESTAS: PropuestaWeb[] = [
     og: '/propuestas/palmetto-sw77-xkp5c/og.jpg',
     descripcion: 'Remodelación integral de vivienda unifamiliar · 2.192 sq ft · Palmetto Bay, FL',
     versionMovil: true,
+    // 2026-10-14: segundo proyecto del ciclo (el nº 1 es 10820) → tramo 02, USD 9.488.
+    versionAnterior: { etiquetaActual: 'Propuesta actualizada', etiquetaAnterior: 'Versión anterior' },
     pantallaPin: {
       antetitulo: 'Propuesta de honorarios',
       titulo: '14321 SW 77th Ave',

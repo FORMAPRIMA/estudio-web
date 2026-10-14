@@ -137,7 +137,7 @@ export default function PropuestaDossier({ slug, proyecto, descripcion, portada,
       // La versión anterior se pide con ?rev=anterior sobre la misma ruta.
       const q = revRef.current === 'anterior' ? 'rev=anterior' : ''
       const u = (base: string) => base + (q ? (base.includes('?') ? '&' : '?') + q : '')
-      setSrc(telefono ? `/propuesta/${slug}/deck?movil=1` : u(horizontal ? `/propuesta/${slug}/deck`
+      setSrc(telefono ? u(`/propuesta/${slug}/deck?movil=1`) : u(horizontal ? `/propuesta/${slug}/deck`
         : esc && apaisado ? `/propuesta/${slug}/deck?escritorio=1&alto=${Math.round((2304 * window.innerHeight) / window.innerWidth)}`
         : `/propuesta/${slug}/deck?alto=${alto}`))
     }

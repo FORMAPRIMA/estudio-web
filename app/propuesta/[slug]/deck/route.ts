@@ -366,7 +366,8 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
   const esAnterior = new URL(req.url).searchParams.get('rev') === 'anterior' && !!p.versionAnterior
   // Versión móvil (página de scroll) de una propuesta horizontal: `<slug>-movil`.
   const esMovil = new URL(req.url).searchParams.get('movil') === '1' && !!p.versionMovil
-  const slugDoc = esMovil ? `${p.slug}-movil` : esAnterior ? `${p.slug}-anterior` : p.slug
+  // Si tiene ambas, la anterior móvil vive en `<slug>-movil-anterior`.
+  const slugDoc = (esMovil ? `${p.slug}-movil` : p.slug) + (esAnterior ? '-anterior' : '')
 
   let html = await cargarDossier(slugDoc)
   if (!html) return new Response('No disponible', { status: 404 })
