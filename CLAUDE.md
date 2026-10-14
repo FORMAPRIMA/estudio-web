@@ -212,6 +212,16 @@ Sistema de control financiero completo.
 - Numeración: serie `F`, formato `F-NNN`, con offset configurable en `estudio_config`
 - PDF: `components/pdfs/FacturaEmitidaPDF.tsx`
 - Envío por email con recordatorio/reenvío
+- **Moneda (EUR/USD)** — migración `facturas_emitidas_moneda.sql`. Las líneas (`items`) van en
+  `moneda`; `base_imponible`/`cuota_iva`/`cuota_irpf`/`total` siguen **siempre en euros** (contabilidad,
+  portal del gestor, IVA). Con USD el servidor fija al guardar el **cambio de referencia del BCE** de
+  `fecha_emision` (`lib/facturas/tipoCambioBCE.ts`, API data-api.ecb.europa.eu; fin de semana/festivo →
+  último publicado) en `tipo_cambio` (USD por 1 €) + `tipo_cambio_fecha`, y guarda `base_imponible_moneda`
+  / `total_moneda`. Cálculo en `calcTotalsMoneda()` (`lib/facturasUtils.ts`). El PDF y el correo pintan
+  USD y el contravalor en euros. No usar `/api/exchange-rates` (open.er-api.com) para facturas
+  Datos de cobro en USD (cuenta USD de Wise Business: routing/account ACH + SWIFT) en `estudio_config.usd_*`
+  (migración `estudio_config_pago_usd.sql`, editables en Información empresa); en las facturas en USD
+  sustituyen al IBAN en el PDF y en el correo (`pagoUsdDesdeConfig()`)
 
 ### 5.4 Clientes (`/team/clientes`)
 - **Base de datos** (`/base-datos`) — `ClientesBDPage` — CRUD de clientes. `fp_partner` + `fp_manager`

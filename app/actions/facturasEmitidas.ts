@@ -3,7 +3,8 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import { calcTotals, formatNumeroCompleto } from '@/lib/facturasUtils'
+import { calcTotals, calcTotalsMoneda, formatNumeroCompleto, type Moneda } from '@/lib/facturasUtils'
+import { tipoCambioBCE } from '@/lib/facturas/tipoCambioBCE'
 import { SECCION_ORDER, esFacturaNoCliente } from '@/lib/finanzas/costs'
 import { getPartnersCCDetallado, type PartnerCC } from '@/lib/email/destinatarios'
 import { buscarEmitidaVigente, mensajeYaEmitida } from '@/lib/facturas/emitidaVigente'
@@ -56,6 +57,8 @@ export interface CreateFacturaInput {
   proyecto_id?:     string | null
   proyecto_nombre?: string | null
   seccion?:         string | null
+  /** Moneda de las líneas. Con USD el servidor pone el cambio del BCE de fecha_emision. */
+  moneda?:          Moneda
   items:            FacturaItem[]
   tipo_iva:         number
   tipo_irpf?:       number | null
@@ -78,6 +81,10 @@ export type EstudioConfig = {
   email: string | null; email_cc: string | null; telefono: string | null
   iban: string | null; banco_nombre: string | null; banco_swift: string | null
   factura_numero_inicio: number | null
+  // Cuenta en dólares (Wise): sale en las facturas en USD en lugar del IBAN
+  usd_titular?: string | null; usd_banco?: string | null
+  usd_routing?: string | null; usd_cuenta?: string | null; usd_tipo_cuenta?: string | null
+  usd_swift?: string | null; usd_direccion?: string | null
 }
 
 export async function getEstudioConfig(): Promise<EstudioConfig | null> {
@@ -99,11 +106,73 @@ export async function updateEstudioConfig(data: Partial<EstudioConfig>): Promise
   }
 }
 
+// ── Importes y moneda ─────────────────────────────────────────────────────────
+
+/** Importes que se guardan en la factura. Los totales de la fila van siempre en euros. */
+export interface ImportesFactura {
+  moneda:            Moneda
+  tipo_cambio:       number | null
+  tipo_cambio_fecha: string | null
+  /** En euros */
+  eur:      ReturnType<typeof calcTotals>
+  /** En la moneda de la factura (igual que `eur` si es EUR) */
+  enMoneda: ReturnType<typeof calcTotals>
+}
+
+/**
+ * Con moneda extranjera consulta el cambio del BCE de la fecha de emisión.
+ * Se recalcula en cada guardado: para una fecha dada el dato del BCE no cambia,
+ * y si se edita la fecha el cambio la sigue.
+ */
+async function calcularImportes(
+  input: Pick<CreateFacturaInput, 'moneda' | 'fecha_emision' | 'items' | 'tipo_iva' | 'tipo_irpf'>,
+): Promise<ImportesFactura> {
+  const moneda = input.moneda ?? 'EUR'
+  const cambio = moneda === 'EUR' ? null : await tipoCambioBCE(input.fecha_emision, moneda)
+  const t = calcTotalsMoneda(input.items, input.tipo_iva, input.tipo_irpf, moneda, cambio?.tipo ?? null)
+  return {
+    moneda,
+    tipo_cambio:       cambio?.tipo  ?? null,
+    tipo_cambio_fecha: cambio?.fecha ?? null,
+    eur:      t.eur,
+    enMoneda: t.enMoneda,
+  }
+}
+
+function columnasImportes(imp: ImportesFactura, tipoIrpf: number | null | undefined) {
+  const extranjera = imp.moneda !== 'EUR'
+  return {
+    moneda:                imp.moneda,
+    tipo_cambio:           imp.tipo_cambio,
+    tipo_cambio_fecha:     imp.tipo_cambio_fecha,
+    base_imponible_moneda: extranjera ? imp.enMoneda.base_imponible : null,
+    total_moneda:          extranjera ? imp.enMoneda.total : null,
+    base_imponible:        imp.eur.base_imponible,
+    cuota_iva:             imp.eur.cuota_iva,
+    cuota_irpf:            tipoIrpf ? imp.eur.cuota_irpf : null,
+    total:                 imp.eur.total,
+  }
+}
+
+/** Para que el formulario enseñe el equivalente en euros antes de emitir. */
+export async function getTipoCambioBCE(
+  fecha: string,
+  moneda: Moneda,
+): Promise<{ tipo: number; fecha: string } | { error: string }> {
+  try {
+    await requirePartner()
+    if (moneda === 'EUR') return { tipo: 1, fecha }
+    return await tipoCambioBCE(fecha, moneda)
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error inesperado.' }
+  }
+}
+
 // ── CRUD facturas emitidas ────────────────────────────────────────────────────
 
 export async function createFacturaEmitida(
   input: CreateFacturaInput
-): Promise<{ id: string; numero_completo: string } | { error: string }> {
+): Promise<{ id: string; numero_completo: string; importes: ImportesFactura } | { error: string }> {
   try {
     const userId = await requirePartner()
     const admin  = createAdminClient()
@@ -128,7 +197,7 @@ export async function createFacturaEmitida(
     const offset          = (cfg as { factura_numero_inicio: number | null } | null)?.factura_numero_inicio ?? 0
     const numero          = Math.max(maxRow?.numero ?? 0, offset) + 1
     const numero_completo = formatNumeroCompleto(input.serie, año, numero)
-    const totals          = calcTotals(input.items, input.tipo_iva, input.tipo_irpf)
+    const importes        = await calcularImportes(input)
 
     // Receptor proveedor: por tipo explícito, por proveedor_id, o por sección privada.
     // Ante cualquiera de las tres señales se cierra el canal cliente.
@@ -167,10 +236,7 @@ export async function createFacturaEmitida(
         items:             input.items,
         tipo_iva:          input.tipo_iva,
         tipo_irpf:         input.tipo_irpf ?? null,
-        base_imponible:    totals.base_imponible,
-        cuota_iva:         totals.cuota_iva,
-        cuota_irpf:        input.tipo_irpf ? totals.cuota_irpf : null,
-        total:             totals.total,
+        ...columnasImportes(importes, input.tipo_irpf),
         notas:             input.notas ?? null,
         mencion_legal:     input.mencion_legal ?? null,
         iban:              input.iban ?? null,
@@ -197,7 +263,7 @@ export async function createFacturaEmitida(
     }
 
     revalidatePath(PATH)
-    return { id: row.id, numero_completo }
+    return { id: row.id, numero_completo, importes }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error inesperado.' }
   }
@@ -318,7 +384,7 @@ export async function updateFacturaEmitida(
   try {
     await requirePartner()
     const admin  = createAdminClient()
-    const totals = calcTotals(input.items, input.tipo_iva, input.tipo_irpf)
+    const importes = await calcularImportes(input)
 
     const esEdicionAProveedor = esFacturaNoCliente({
       seccion:      input.seccion,
@@ -351,10 +417,7 @@ export async function updateFacturaEmitida(
       items:                input.items,
       tipo_iva:             input.tipo_iva,
       tipo_irpf:            input.tipo_irpf            ?? null,
-      base_imponible:       totals.base_imponible,
-      cuota_iva:            totals.cuota_iva,
-      cuota_irpf:           input.tipo_irpf ? totals.cuota_irpf : null,
-      total:                totals.total,
+      ...columnasImportes(importes, input.tipo_irpf),
       notas:                input.notas                ?? null,
       mencion_legal:        input.mencion_legal        ?? null,
       iban:                 input.iban                 ?? null,

@@ -9,6 +9,7 @@ import path from 'path'
 const LOGO_BLANCO   = path.join(process.cwd(), 'public', 'FORMA_PRIMA_BLANCO.png')
 const ISOTIPO_NEGRO = path.join(process.cwd(), 'public', 'ISOTIPO NEGRO cropped.png')
 import type { FacturaItem } from '@/app/actions/facturasEmitidas'
+import { calcTotals, fmtMoneda, type Moneda, type PagoUSD } from '@/lib/facturasUtils'
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 
@@ -300,6 +301,12 @@ const s = StyleSheet.create({
     fontSize: 6.5,
     color: C.meta,
   },
+  taxNoteHead: {
+    fontSize: 6.5,
+    color: C.mid,
+    fontFamily: 'Helvetica-Bold',
+    marginBottom: 2,
+  },
 
   // ── Info ─────────────────────────────────────────────────────────────────────
   infoRow: {
@@ -382,8 +389,14 @@ export interface FacturaPDFData {
   cliente_nif?:     string | null
   cliente_direccion?: string | null
   proyecto_nombre?: string | null
+  /** Moneda de las líneas. Sin informar = EUR. */
+  moneda?:            Moneda | null
+  /** Unidades de `moneda` por 1 € (referencia BCE) y fecha del dato */
+  tipo_cambio?:       number | null
+  tipo_cambio_fecha?: string | null
   items:            FacturaItem[]
   tipo_iva:         number
+  /** base_imponible, cuota_iva, cuota_irpf y total: SIEMPRE en euros */
   base_imponible:   number
   cuota_iva:        number
   tipo_irpf?:       number | null
@@ -394,6 +407,8 @@ export interface FacturaPDFData {
   iban?:            string | null
   banco_nombre?:    string | null
   banco_swift?:     string | null
+  /** Cuenta USD (Wise). En facturas en USD sustituye al IBAN. */
+  pago_usd?:        PagoUSD | null
   forma_pago?:      string | null
   condiciones_pago?: string | null
   es_rectificativa?: boolean
@@ -416,7 +431,16 @@ function fmtDate(d: string) {
 
 export function FacturaEmitidaPDF({ data }: { data: FacturaPDFData }) {
   const showIrpf    = !!data.tipo_irpf && !!data.cuota_irpf
-  const hasPayment  = !!(data.iban || data.condiciones_pago)
+  // Factura en moneda extranjera: líneas y totales en esa moneda, y debajo el
+  // contravalor en euros al cambio del BCE (la cuota de IVA se declara en euros).
+  const moneda      = data.moneda ?? 'EUR'
+  const extranjera  = moneda !== 'EUR' && !!data.tipo_cambio
+  const fmt         = (n: number) => fmtMoneda(n, extranjera ? moneda : 'EUR')
+  const tm          = extranjera ? calcTotals(data.items, data.tipo_iva, data.tipo_irpf) : null
+  const vista       = tm ?? data
+  // Factura en dólares con cuenta USD configurada: se cobra por ACH, no al IBAN.
+  const pagoUsd     = moneda === 'USD' ? data.pago_usd ?? null : null
+  const hasPayment  = !!(pagoUsd || data.iban || data.condiciones_pago)
   const hasNotes    = !!data.notas
   const showInfoRow = hasPayment || hasNotes
 
@@ -527,10 +551,10 @@ export function FacturaEmitidaPDF({ data }: { data: FacturaPDFData }) {
                   <Text style={s.cellText}>{item.cantidad}</Text>
                 </View>
                 <View style={s.cellPrice}>
-                  <Text style={s.cellText}>{eur(item.precio_unitario)}</Text>
+                  <Text style={s.cellText}>{fmt(item.precio_unitario)}</Text>
                 </View>
                 <View style={s.cellAmt}>
-                  <Text style={s.cellText}>{eur(item.subtotal)}</Text>
+                  <Text style={s.cellText}>{fmt(item.subtotal)}</Text>
                 </View>
               </View>
             ))}
@@ -541,25 +565,33 @@ export function FacturaEmitidaPDF({ data }: { data: FacturaPDFData }) {
             <View style={s.totalsBox}>
               <View style={s.totalRow}>
                 <Text style={s.totalLabel}>Base imponible</Text>
-                <Text style={s.totalValue}>{eur(data.base_imponible)}</Text>
+                <Text style={s.totalValue}>{fmt(vista.base_imponible)}</Text>
               </View>
               <View style={s.totalRow}>
                 <Text style={s.totalLabel}>IVA {data.tipo_iva}%</Text>
-                <Text style={s.totalValue}>{eur(data.cuota_iva)}</Text>
+                <Text style={s.totalValue}>{fmt(vista.cuota_iva)}</Text>
               </View>
               {showIrpf && (
                 <View style={s.totalRow}>
                   <Text style={s.totalLabel}>Retención IRPF {data.tipo_irpf}%</Text>
-                  <Text style={s.totalValue}>−{eur(data.cuota_irpf!)}</Text>
+                  <Text style={s.totalValue}>−{fmt(vista.cuota_irpf!)}</Text>
                 </View>
               )}
               <View style={s.totalSep} />
               <View style={s.totalFinalRow}>
                 <Text style={s.totalFinalLabel}>Total a pagar</Text>
-                <Text style={s.totalFinalValue}>{eur(data.total)}</Text>
+                <Text style={s.totalFinalValue}>{fmt(vista.total)}</Text>
               </View>
 
               <View style={s.taxNote}>
+                {extranjera && (
+                  <>
+                    <Text style={s.taxNoteHead}>Contravalor en euros</Text>
+                    <Text style={{ ...s.taxNoteText, marginBottom: 3 }}>
+                      Cambio de referencia BCE {data.tipo_cambio_fecha ? fmtDate(data.tipo_cambio_fecha) : ''}: 1 € = {data.tipo_cambio!.toLocaleString('es-ES', { maximumFractionDigits: 6 })} {moneda}
+                    </Text>
+                  </>
+                )}
                 <View style={s.taxNoteRow}>
                   <Text style={s.taxNoteText}>Base {data.tipo_iva}% IVA</Text>
                   <Text style={s.taxNoteText}>{eur(data.base_imponible)}</Text>
@@ -574,6 +606,12 @@ export function FacturaEmitidaPDF({ data }: { data: FacturaPDFData }) {
                     <Text style={s.taxNoteText}>−{eur(data.cuota_irpf!)}</Text>
                   </View>
                 )}
+                {extranjera && (
+                  <View style={s.taxNoteRow}>
+                    <Text style={s.taxNoteText}>Total</Text>
+                    <Text style={s.taxNoteText}>{eur(data.total)}</Text>
+                  </View>
+                )}
               </View>
             </View>
           </View>
@@ -583,7 +621,24 @@ export function FacturaEmitidaPDF({ data }: { data: FacturaPDFData }) {
             <>
               <View style={s.rule} />
               <View style={s.infoRow}>
-                {hasPayment && (
+                {hasPayment && pagoUsd && (
+                  <View style={s.infoBlock}>
+                    <Text style={s.infoLabel}>Payment details · USD</Text>
+                    <Text style={s.infoText}>Bank transfer (ACH or wire) from the US</Text>
+                    {pagoUsd.titular && <Text style={s.infoMeta}>Account holder: {pagoUsd.titular}</Text>}
+                    {pagoUsd.banco && <Text style={s.infoMeta}>Bank: {pagoUsd.banco}</Text>}
+                    <Text style={s.infoMeta}>Routing number (ACH & wire): {pagoUsd.routing}</Text>
+                    <Text style={s.infoMeta}>Account number: {pagoUsd.cuenta}{pagoUsd.tipo_cuenta ? `  ·  ${pagoUsd.tipo_cuenta}` : ''}</Text>
+                    {pagoUsd.swift && (
+                      <Text style={s.infoMeta}>From outside the US (SWIFT): {pagoUsd.swift}{pagoUsd.direccion ? `  ·  ${pagoUsd.direccion}` : ''}</Text>
+                    )}
+                    <Text style={s.infoMeta}>Reference: {data.numero_completo}</Text>
+                    {data.condiciones_pago && (
+                      <Text style={s.infoMeta}>{data.condiciones_pago}</Text>
+                    )}
+                  </View>
+                )}
+                {hasPayment && !pagoUsd && (
                   <View style={s.infoBlock}>
                     <Text style={s.infoLabel}>Forma de pago</Text>
                     <Text style={s.infoText}>{data.forma_pago ?? 'Transferencia bancaria'}</Text>

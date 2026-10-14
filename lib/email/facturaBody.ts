@@ -1,3 +1,5 @@
+import { calcTotals, fmtMoneda, type Moneda, type PagoUSD } from '@/lib/facturasUtils'
+
 /**
  * El cuerpo del correo de una factura, en un solo sitio.
  *
@@ -31,6 +33,13 @@ export interface FacturaEmailBodyOpts {
   introHtml?: string | null
 
   items:          FacturaEmailItem[]
+  /**
+   * Moneda de las líneas. En moneda extranjera los importes se pintan en ella y
+   * `baseImponible`/`cuotaIva`/`total` (que llegan en euros) solo como contravalor.
+   */
+  moneda?:        Moneda | null
+  /** Cambio BCE: unidades de `moneda` por 1 € y fecha del dato */
+  cambio?:        { tipo: number; fecha: string } | null
   tipoIva:        number
   baseImponible:  number
   cuotaIva:       number
@@ -45,6 +54,9 @@ export interface FacturaEmailBodyOpts {
     banco_swift:  string | null
   } | null
 
+  /** Cuenta USD (Wise). En una factura en USD sustituye al bloque del IBAN. */
+  pagoUsd?: PagoUSD | null
+
   /**
    * Id de proyecto para el botón del área de cliente. Se ignora si
    * `esParaProveedor`, aunque venga informado.
@@ -58,6 +70,14 @@ function eur(n: number) {
 
 export function buildFacturaEmailBody(o: FacturaEmailBodyOpts): string {
   const showIrpf = !!o.tipoIrpf && !!o.cuotaIrpf && o.cuotaIrpf > 0
+  const extranjera = !!o.moneda && o.moneda !== 'EUR' && !!o.cambio
+  const fmt = (n: number) => fmtMoneda(n, extranjera ? o.moneda! : 'EUR')
+  const tm  = extranjera ? calcTotals(o.items, o.tipoIva, o.tipoIrpf) : null
+  const baseVista  = tm?.base_imponible ?? o.baseImponible
+  const ivaVista   = tm?.cuota_iva      ?? o.cuotaIva
+  const irpfVista  = tm?.cuota_irpf     ?? o.cuotaIrpf ?? 0
+  const totalVista = tm?.total          ?? o.total
+  const [cy, cm, cd] = (o.cambio?.fecha ?? '').split('-')
   const saludo   = o.esParaProveedor ? 'Estimados' : 'Estimado/a'
   // El portal es del cliente: un proveedor nunca ve ese botón.
   const mostrarCTA = !o.esParaProveedor && !!o.ctaProyectoId
@@ -65,8 +85,8 @@ export function buildFacturaEmailBody(o: FacturaEmailBodyOpts): string {
   const itemsRows = o.items.map(item => `
       <tr>
         <td style="padding:9px 0;border-bottom:1px solid #F0EEE8;font-size:13px;color:#3A3A3A;line-height:1.4;">${item.descripcion}</td>
-        <td style="padding:9px 0;border-bottom:1px solid #F0EEE8;font-size:13px;color:#888;text-align:right;white-space:nowrap;padding-left:16px;">${item.cantidad} × ${eur(item.precio_unitario)}</td>
-        <td style="padding:9px 0;border-bottom:1px solid #F0EEE8;font-size:13px;color:#3A3A3A;text-align:right;white-space:nowrap;padding-left:16px;font-weight:600;">${eur(item.subtotal)}</td>
+        <td style="padding:9px 0;border-bottom:1px solid #F0EEE8;font-size:13px;color:#888;text-align:right;white-space:nowrap;padding-left:16px;">${item.cantidad} × ${fmt(item.precio_unitario)}</td>
+        <td style="padding:9px 0;border-bottom:1px solid #F0EEE8;font-size:13px;color:#3A3A3A;text-align:right;white-space:nowrap;padding-left:16px;font-weight:600;">${fmt(item.subtotal)}</td>
       </tr>`).join('')
 
   return `
@@ -92,27 +112,40 @@ export function buildFacturaEmailBody(o: FacturaEmailBodyOpts): string {
           <table width="100%" cellpadding="0" cellspacing="0">
             <tr>
               <td style="padding:6px 0;font-size:12px;color:#AAAAAA;">Base imponible</td>
-              <td style="padding:6px 0;font-size:12px;color:#555;text-align:right;">${eur(o.baseImponible)}</td>
+              <td style="padding:6px 0;font-size:12px;color:#555;text-align:right;">${fmt(baseVista)}</td>
             </tr>
             <tr>
               <td style="padding:6px 0;font-size:12px;color:#AAAAAA;">IVA (${o.tipoIva}%)</td>
-              <td style="padding:6px 0;font-size:12px;color:#555;text-align:right;">${eur(o.cuotaIva)}</td>
+              <td style="padding:6px 0;font-size:12px;color:#555;text-align:right;">${fmt(ivaVista)}</td>
             </tr>
             ${showIrpf ? `
             <tr>
               <td style="padding:6px 0;font-size:12px;color:#AAAAAA;">Retención IRPF (${o.tipoIrpf}%)</td>
-              <td style="padding:6px 0;font-size:12px;color:#555;text-align:right;">−${eur(o.cuotaIrpf!)}</td>
+              <td style="padding:6px 0;font-size:12px;color:#555;text-align:right;">−${fmt(irpfVista)}</td>
             </tr>` : ''}
             <tr><td colspan="2" style="padding:4px 0 0;"><div style="height:1px;background:#E6E4DF;"></div></td></tr>
             <tr>
               <td style="padding:10px 16px;background:#1A1A1A;font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#F0EDE8;">Total a pagar</td>
-              <td style="padding:10px 16px;background:#1A1A1A;font-size:17px;font-weight:700;color:#ffffff;text-align:right;letter-spacing:-0.3px;">${eur(o.total)}</td>
+              <td style="padding:10px 16px;background:#1A1A1A;font-size:17px;font-weight:700;color:#ffffff;text-align:right;letter-spacing:-0.3px;">${fmt(totalVista)}</td>
             </tr>
+            ${extranjera ? `
+            <tr>
+              <td colspan="2" style="padding:8px 0 0;font-size:11px;color:#AAAAAA;text-align:right;">Contravalor ${eur(o.total)} · cambio BCE ${cd}/${cm}/${cy}: 1 € = ${o.cambio!.tipo.toLocaleString('es-ES', { maximumFractionDigits: 6 })} ${o.moneda}</td>
+            </tr>` : ''}
           </table>
         </td></tr>
       </table>
 
-      ${o.banco?.iban ? `
+      ${o.moneda === 'USD' && o.pagoUsd ? `
+      <div style="background:#F8F7F4;border-left:3px solid #D85A30;padding:16px 20px;margin-bottom:32px;">
+        <p style="margin:0 0 10px;font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#AAAAAA;">Payment details · USD</p>
+        <p style="margin:0 0 6px;font-size:13px;color:#3A3A3A;">Bank transfer (ACH or wire) from the US</p>
+        ${o.pagoUsd.titular ? `<p style="margin:0 0 4px;font-size:13px;color:#555555;">Account holder: ${o.pagoUsd.titular}</p>` : ''}
+        ${o.pagoUsd.banco ? `<p style="margin:0 0 4px;font-size:13px;color:#555555;">Bank: ${o.pagoUsd.banco}</p>` : ''}
+        <p style="margin:0 0 4px;font-size:13px;color:#555555;font-family:'Courier New',monospace;">Routing number: ${o.pagoUsd.routing}</p>
+        <p style="margin:0 0 4px;font-size:13px;color:#555555;font-family:'Courier New',monospace;">Account number: ${o.pagoUsd.cuenta}${o.pagoUsd.tipo_cuenta ? ` (${o.pagoUsd.tipo_cuenta})` : ''}</p>
+        ${o.pagoUsd.swift ? `<p style="margin:0;font-size:12px;color:#888888;">From outside the US (SWIFT): <span style="font-family:'Courier New',monospace;">${o.pagoUsd.swift}</span></p>` : ''}
+      </div>` : o.banco?.iban ? `
       <div style="background:#F8F7F4;border-left:3px solid #D85A30;padding:16px 20px;margin-bottom:32px;">
         <p style="margin:0 0 10px;font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#AAAAAA;">Datos de pago</p>
         ${o.banco.banco_nombre ? `<p style="margin:0 0 5px;font-size:13px;color:#3A3A3A;font-weight:600;">${o.banco.banco_nombre}</p>` : ''}

@@ -31,7 +31,7 @@ export default async function Page({
   ] = await Promise.all([
     admin
       .from('facturas_emitidas')
-      .select('id, numero_completo, serie, fecha_emision, fecha_operacion, receptor_tipo, proveedor_id, cliente_id, cliente_nombre, cliente_contacto, cliente_nif, cliente_direccion, proyecto_id, proyecto_nombre, seccion, items, tipo_iva, base_imponible, cuota_iva, tipo_irpf, cuota_irpf, total, iban, forma_pago, condiciones_pago, notas, mencion_legal, es_rectificativa, factura_original_id, motivo_rectificacion, estado, created_at')
+      .select('id, numero_completo, serie, fecha_emision, fecha_operacion, receptor_tipo, proveedor_id, cliente_id, cliente_nombre, cliente_contacto, cliente_nif, cliente_direccion, proyecto_id, proyecto_nombre, seccion, items, moneda, tipo_cambio, tipo_cambio_fecha, total_moneda, tipo_iva, base_imponible, cuota_iva, tipo_irpf, cuota_irpf, total, iban, forma_pago, condiciones_pago, notas, mencion_legal, es_rectificativa, factura_original_id, motivo_rectificacion, estado, created_at')
       .order('año', { ascending: false })
       .order('numero', { ascending: false }),
     admin

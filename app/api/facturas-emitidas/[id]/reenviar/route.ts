@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { pagoUsdDesdeConfig } from '@/lib/facturasUtils'
 import { createElement } from 'react'
 import { renderToBuffer } from '@react-pdf/renderer'
 import { createClient } from '@/lib/supabase/server'
@@ -118,6 +119,9 @@ export async function POST(
       cliente_nif:          f.cliente_nif,
       cliente_direccion:    f.cliente_direccion,
       proyecto_nombre:      f.proyecto_nombre,
+      moneda:            f.moneda ?? 'EUR',
+      tipo_cambio:       f.tipo_cambio ?? null,
+      tipo_cambio_fecha: f.tipo_cambio_fecha ?? null,
       items:                f.items,
       tipo_iva:             f.tipo_iva,
       base_imponible:       f.base_imponible,
@@ -130,6 +134,7 @@ export async function POST(
       iban:                 f.iban,
       banco_nombre:         config?.banco_nombre   ?? null,
       banco_swift:          config?.banco_swift    ?? null,
+      pago_usd:          pagoUsdDesdeConfig(config),
       forma_pago:           f.forma_pago,
       condiciones_pago:     f.condiciones_pago,
       es_rectificativa:     f.es_rectificativa,
@@ -168,6 +173,8 @@ export async function POST(
       esParaProveedor: esPrivada,
       introHtml:       cuerpoIntro,
       items:           f.items as { descripcion: string; cantidad: number; precio_unitario: number; subtotal: number }[],
+      moneda:          f.moneda ?? 'EUR',
+      cambio:          f.tipo_cambio && f.tipo_cambio_fecha ? { tipo: Number(f.tipo_cambio), fecha: f.tipo_cambio_fecha } : null,
       tipoIva:         f.tipo_iva,
       baseImponible:   f.base_imponible,
       cuotaIva:        f.cuota_iva,
@@ -175,6 +182,7 @@ export async function POST(
       cuotaIrpf:       f.cuota_irpf,
       total:           f.total,
       banco:           config,
+      pagoUsd:         pagoUsdDesdeConfig(config),
       ctaProyectoId:   includeCTA ? (f.proyecto_id ?? null) : null,
     })
 

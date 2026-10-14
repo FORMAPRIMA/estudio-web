@@ -40,6 +40,7 @@ async function prepararRecordatorio(id: string): Promise<Preparado> {
       id, numero_completo, fecha_emision, cliente_nombre, cliente_contacto,
       cliente_id, receptor_tipo, proveedor_id,
       proyecto_id, proyecto_nombre, seccion, factura_origen_id, total, base_imponible, tipo_iva, cuota_iva,
+      moneda, total_moneda,
       condiciones_pago, iban, forma_pago,
       clientes(id, email, email_cc)
     `)
@@ -132,6 +133,11 @@ export async function POST(
     const fmtEuros = (n: number) =>
       new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(n)
 
+    // En una factura en dólares lo que se debe son dólares, no su contravalor.
+    const importeDebido = factura.moneda && factura.moneda !== 'EUR' && factura.total_moneda != null
+      ? new Intl.NumberFormat('es-ES', { style: 'currency', currency: factura.moneda }).format(Number(factura.total_moneda))
+      : fmtEuros(factura.total)
+
     const fmtDate = (iso: string) => {
       const [y, m, d] = iso.split('-')
       const meses = ['enero','febrero','marzo','abril','mayo','junio',
@@ -154,7 +160,7 @@ export async function POST(
         Nos ponemos en contacto para recordarle amablemente que tenemos
         pendiente el pago de la factura <strong>${factura.numero_completo}</strong>${projectLabel},
         emitida el ${fmtDate(factura.fecha_emision)} por un importe de
-        <strong>${fmtEuros(factura.total)}</strong>.
+        <strong>${importeDebido}</strong>.
       </p>
       <p style="font-size:13px;color:#555;margin:0 0 20px;line-height:1.6;">
         Entendemos que pueden existir demoras administrativas y esperamos que

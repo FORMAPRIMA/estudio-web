@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { pagoUsdDesdeConfig } from '@/lib/facturasUtils'
 
 /**
  * Genera el PDF de una factura emitida. Compartido entre la route interna
@@ -49,6 +50,9 @@ export async function buildFacturaPdfBuffer(
     cliente_nif:       f.cliente_nif,
     cliente_direccion: f.cliente_direccion,
     proyecto_nombre:   f.proyecto_nombre,
+    moneda:            f.moneda ?? 'EUR',
+    tipo_cambio:       f.tipo_cambio ?? null,
+    tipo_cambio_fecha: f.tipo_cambio_fecha ?? null,
     items:             f.items,
     tipo_iva:          f.tipo_iva,
     base_imponible:    f.base_imponible,
@@ -61,6 +65,7 @@ export async function buildFacturaPdfBuffer(
     iban:              f.iban,
     banco_nombre:      config?.banco_nombre ?? null,
     banco_swift:       config?.banco_swift  ?? null,
+    pago_usd:          pagoUsdDesdeConfig(config),
     forma_pago:        f.forma_pago,
     condiciones_pago:  f.condiciones_pago,
     es_rectificativa:  f.es_rectificativa,

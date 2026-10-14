@@ -33,6 +33,18 @@ const SECTIONS: { title: string; fields: Field[] }[] = [
       { key: 'banco_swift', label: 'SWIFT / BIC', placeholder: 'BSCHESMMXXX', mono: true },
     ],
   },
+  {
+    title: 'Cobros en dólares (Wise) — salen en las facturas en USD',
+    fields: [
+      { key: 'usd_titular',     label: 'Titular',                   placeholder: 'GEINEX GROUP SL.' },
+      { key: 'usd_routing',     label: 'Routing number (ACH y wire)', placeholder: '101019628', mono: true },
+      { key: 'usd_cuenta',      label: 'Account number',            placeholder: '213698780437', mono: true },
+      { key: 'usd_tipo_cuenta', label: 'Tipo de cuenta',            placeholder: 'Checking' },
+      { key: 'usd_banco',       label: 'Banco',                     placeholder: 'Lead Bank (Wise US Inc.)' },
+      { key: 'usd_swift',       label: 'SWIFT / BIC (desde fuera de EE. UU.)', placeholder: 'TRWIUS35XXX', mono: true },
+      { key: 'usd_direccion',   label: 'Dirección (para SWIFT)',    placeholder: 'Wise US Inc, 108 W 13th St, Wilmington, DE, 19801, United States' },
+    ],
+  },
 ]
 
 function formatNumPreview(n: number) {

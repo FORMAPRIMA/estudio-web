@@ -7,6 +7,7 @@ import {
   deleteFacturaEmitida,
   updateEstudioConfig,
   createFacturaEmitida,
+  getTipoCambioBCE,
   getClientesDelProyecto,
   getPartnerCCEmails,
   getDestinoEnvioFactura,
@@ -18,7 +19,7 @@ import {
   type PartnerCC,
 } from '@/app/actions/facturasEmitidas'
 import type { ExtraEmail } from '@/lib/email'
-import { calcTotals } from '@/lib/facturasUtils'
+import { calcTotals, calcTotalsMoneda, fmtMoneda, type Moneda } from '@/lib/facturasUtils'
 import { esFacturaNoCliente } from '@/lib/finanzas/costs'
 import { destinatariosFactura, emailsInvalidos } from '@/lib/email/reparto'
 
@@ -42,6 +43,11 @@ interface FacturaEmitida {
   proyecto_nombre:      string | null
   seccion:              string | null
   items:                FacturaItem[]
+  /** Moneda de las líneas. base_imponible / total van siempre en euros. */
+  moneda:               Moneda | null
+  tipo_cambio:          number | null
+  tipo_cambio_fecha:    string | null
+  total_moneda:         number | null
   tipo_iva:             number
   base_imponible:       number
   cuota_iva:            number
@@ -87,6 +93,10 @@ const ESTADO_COLOR: Record<string, { bg: string; color: string; label: string }>
 }
 
 const IVA_OPTS = [21, 10, 4, 0]
+
+// Al pasar una factura a dólares (cliente de EE. UU.) se propone IVA 0 % y esta
+// mención si no hay otra. Es editable: confirmar cada caso con la gestoría.
+const MENCION_NO_SUJETA = 'Operación no sujeta al IVA español por reglas de localización (arts. 69 y 70 de la Ley 37/1992 del IVA).'
 const IRPF_OPTS = [null, 7, 15, 19]
 
 // ── Formatters ────────────────────────────────────────────────────────────────
@@ -248,9 +258,9 @@ const ProyectoCombobox = memo(function ProyectoCombobox({
 // ── ItemsTable ────────────────────────────────────────────────────────────────
 
 const ItemsTable = memo(function ItemsTable({
-  items, onChange,
+  items, onChange, moneda = 'EUR',
 }: {
-  items: FacturaItem[]; onChange: (items: FacturaItem[]) => void
+  items: FacturaItem[]; onChange: (items: FacturaItem[]) => void; moneda?: Moneda
 }) {
   const update = (i: number, field: keyof FacturaItem, val: string) => {
     const next = items.map((item, idx) => {
@@ -277,7 +287,7 @@ const ItemsTable = memo(function ItemsTable({
     <div>
       {/* Table header */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px 110px 110px 28px', gap: 4, marginBottom: 4 }}>
-        {['Descripción del servicio / concepto', 'Cant.', 'Precio unit.', 'Subtotal', ''].map((h, i) => (
+        {['Descripción del servicio / concepto', 'Cant.', `Precio unit. (${moneda})`, `Subtotal (${moneda})`, ''].map((h, i) => (
           <p key={i} style={{ fontSize: 9, fontWeight: 700, color: '#888', letterSpacing: '0.08em', textTransform: 'uppercase', margin: 0 }}>{h}</p>
         ))}
       </div>
@@ -314,11 +324,19 @@ const ItemsTable = memo(function ItemsTable({
 // ── TotalsPreview ─────────────────────────────────────────────────────────────
 
 const TotalsPreview = memo(function TotalsPreview({
-  items, tipoIva, tipoIrpf,
+  items, tipoIva, tipoIrpf, moneda = 'EUR', cambio = null, cambioError = null,
 }: {
   items: FacturaItem[]; tipoIva: number; tipoIrpf: number | null
+  moneda?: Moneda
+  cambio?: { tipo: number; fecha: string } | null
+  cambioError?: string | null
 }) {
   const t = calcTotals(items, tipoIva, tipoIrpf)
+  const extranjera = moneda !== 'EUR'
+  const eur = (n: number) => fmtMoneda(n, moneda)
+  const enEuros = extranjera && cambio
+    ? calcTotalsMoneda(items, tipoIva, tipoIrpf, moneda, cambio.tipo).eur
+    : null
   return (
     <div style={{ background: '#F8F7F4', border: '1px solid #E8E6E0', padding: '16px 20px', minWidth: 240 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -339,6 +357,28 @@ const TotalsPreview = memo(function TotalsPreview({
         <span style={{ fontSize: 13, fontWeight: 700, color: '#1A1A1A' }}>Total a pagar</span>
         <span style={{ fontSize: 13, fontWeight: 700, color: '#D85A30' }}>{eur(t.total)}</span>
       </div>
+      {extranjera && (
+        <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px dashed #E8E6E0', fontSize: 10, color: '#888', lineHeight: 1.6 }}>
+          {enEuros && cambio ? (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Contravalor en euros</span>
+                <span style={{ color: '#1A1A1A', fontWeight: 600 }}>{fmtMoneda(enEuros.total, 'EUR')}</span>
+              </div>
+              {tipoIva > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Cuota IVA en euros</span>
+                  <span>{fmtMoneda(enEuros.cuota_iva, 'EUR')}</span>
+                </div>
+              )}
+              <div>BCE {fmtDate(cambio.fecha)}: 1 € = {cambio.tipo.toLocaleString('es-ES', { maximumFractionDigits: 6 })} {moneda}</div>
+              <div style={{ color: '#AAA' }}>Al emitir se fija el cambio de la fecha de emisión.</div>
+            </>
+          ) : (
+            <span style={{ color: cambioError ? '#DC2626' : '#AAA' }}>{cambioError ?? 'Consultando el cambio del BCE…'}</span>
+          )}
+        </div>
+      )}
     </div>
   )
 })
@@ -433,6 +473,12 @@ function CreateModal({
     return [{ descripcion: desc, cantidad: 1, precio_unitario: prefill.monto, subtotal: prefill.monto }]
   })
 
+  // Moneda. En USD el cambio lo fija el servidor al guardar (BCE de la fecha de
+  // emisión); aquí solo se consulta para enseñar el contravalor en euros.
+  const [moneda, setMoneda] = useState<Moneda>(() => editData?.moneda ?? 'EUR')
+  const [cambio, setCambio] = useState<{ tipo: number; fecha: string } | null>(null)
+  const [cambioError, setCambioError] = useState<string | null>(null)
+
   // Impuestos
   const [tipoIva,  setTipoIva]  = useState(() => editData?.tipo_iva  ?? 21)
   const [tipoIrpf, setTipoIrpf] = useState<number | null>(() => editData?.tipo_irpf ?? null)
@@ -451,6 +497,29 @@ function CreateModal({
 
   const [loading,    setLoading]   = useState(false)
   const [previewing, setPreviewing] = useState(false)
+
+  // Contravalor en euros: el cambio BCE de la fecha de emisión, solo informativo.
+  useEffect(() => {
+    if (moneda === 'EUR' || !fechaEmision) { setCambio(null); setCambioError(null); return }
+    let vigente = true
+    setCambio(null); setCambioError(null)
+    getTipoCambioBCE(fechaEmision, moneda).then(r => {
+      if (!vigente) return
+      if ('error' in r) setCambioError(r.error)
+      else setCambio(r)
+    })
+    return () => { vigente = false }
+  }, [moneda, fechaEmision])
+
+  const cambiarMoneda = (m: Moneda) => {
+    if (m === moneda) return
+    setMoneda(m)
+    // Cliente de EE. UU.: normalmente sin IVA español. Se propone, no se impone.
+    if (m !== 'EUR') {
+      setTipoIva(0)
+      setMencionLegal(prev => prev.trim() ? prev : MENCION_NO_SUJETA)
+    }
+  }
   const [error,      setError]     = useState<string | null>(null)
 
   // Edit-mode: correction email compose
@@ -599,6 +668,7 @@ function CreateModal({
       cliente_direccion:    clienteDireccion || null,
       proyecto_id:          proyectoId      || null,
       proyecto_nombre:      proyectoNombre  || null,
+      moneda,
       items,
       tipo_iva:             tipoIva,
       tipo_irpf:            tipoIrpf,
@@ -735,6 +805,7 @@ function CreateModal({
       cliente_nif:      clienteNif      || null,
       cliente_direccion: clienteDireccion || null,
       proyecto_nombre:  proyectoNombre   || null,
+      moneda,
       items,
       tipo_iva:         tipoIva,
       tipo_irpf:        tipoIrpf,
@@ -944,8 +1015,18 @@ function CreateModal({
 
           {/* ── Conceptos / Líneas ────────────────────────── */}
           <div style={section()}>
-            <p style={sectionTitle()}>Conceptos facturados</p>
-            <ItemsTable items={items} onChange={setItems} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <p style={sectionTitle()}>Conceptos facturados</p>
+              <div style={{ display: 'flex', gap: 4 }}>
+                {(['EUR', 'USD'] as Moneda[]).map(m => (
+                  <button key={m} type="button" onClick={() => cambiarMoneda(m)}
+                    style={{ height: 26, padding: '0 12px', fontSize: 11, border: `1px solid ${moneda === m ? '#D85A30' : '#E8E6E0'}`, background: moneda === m ? '#FDF0EC' : '#fff', color: moneda === m ? '#D85A30' : '#888', cursor: 'pointer', fontWeight: moneda === m ? 600 : 400 }}>
+                    {m === 'EUR' ? '€ EUR' : '$ USD'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <ItemsTable items={items} onChange={setItems} moneda={moneda} />
           </div>
 
           {/* ── Impuestos ─────────────────────────────────── */}
@@ -976,7 +1057,7 @@ function CreateModal({
               </div>
             </div>
             <div style={{ marginTop: 20, display: 'flex', justifyContent: 'flex-end' }}>
-              <TotalsPreview items={items} tipoIva={tipoIva} tipoIrpf={tipoIrpf} />
+              <TotalsPreview items={items} tipoIva={tipoIva} tipoIrpf={tipoIrpf} moneda={moneda} cambio={cambio} cambioError={cambioError} />
             </div>
           </div>
 
@@ -1934,7 +2015,12 @@ export default function FacturasEmitidasPage({
                       <AsignarProyectoCell factura={f} proyectos={proyectos} onAssigned={handleAssigned} />
                     </td>
                     <td style={{ ...TD, textAlign: 'right', color: '#555' }}>{eur(f.base_imponible)}</td>
-                    <td style={{ ...TD, textAlign: 'right', fontWeight: 600 }}>{eur(f.total)}</td>
+                    <td style={{ ...TD, textAlign: 'right', fontWeight: 600 }}>
+                      {eur(f.total)}
+                      {f.moneda && f.moneda !== 'EUR' && f.total_moneda != null && (
+                        <div style={{ fontSize: 10, fontWeight: 400, color: '#AAA' }}>{fmtMoneda(Number(f.total_moneda), f.moneda)}</div>
+                      )}
+                    </td>
                     <td style={TD}>
                       <EstadoBadge estado={f.estado} id={f.id} onUpdate={handleEstadoUpdate} />
                     </td>

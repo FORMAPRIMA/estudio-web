@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { pagoUsdDesdeConfig } from '@/lib/facturasUtils'
 import { createElement } from 'react'
 import { renderToBuffer } from '@react-pdf/renderer'
 import { createClient } from '@/lib/supabase/server'
@@ -8,7 +9,6 @@ import { leerEstudioConfig as getEstudioConfig } from '@/lib/facturas/estudioCon
 import type { CreateFacturaInput } from '@/app/actions/facturasEmitidas'
 import { FacturaEmitidaPDF } from '@/components/pdfs/FacturaEmitidaPDF'
 import type { FacturaPDFData } from '@/components/pdfs/FacturaEmitidaPDF'
-import { calcTotals } from '@/lib/facturasUtils'
 import { sendEmail, wrapEmail, type ExtraEmail } from '@/lib/email'
 import { resolverReceptorFactura } from '@/lib/finanzas/proveedorDestino'
 import { assertSinClientesEnDestinatarios, ClienteEnDestinatariosError } from '@/lib/finanzas/guardCliente'
@@ -89,7 +89,10 @@ export async function POST(req: NextRequest) {
     if ('error' in created) {
       return NextResponse.json({ error: created.error }, { status: 422 })
     }
-    const { id, numero_completo } = created
+    const { id, numero_completo, importes } = created
+    const cambio = importes.tipo_cambio && importes.tipo_cambio_fecha
+      ? { tipo: importes.tipo_cambio, fecha: importes.tipo_cambio_fecha }
+      : null
 
     // ── 2. Config de estudio + sección de la factura origen ─────────────────
     const admin = createAdminClient()
@@ -101,8 +104,8 @@ export async function POST(req: NextRequest) {
     ])
     const seccion: string | null = (seccionRow.data as { seccion?: string } | null)?.seccion ?? null
 
-    // ── 3. Totales ──────────────────────────────────────────────────────────
-    const totals   = calcTotals(input.items, input.tipo_iva, input.tipo_irpf)
+    // ── 3. Totales (en euros; en USD los calcula el servidor con el cambio BCE) ──
+    const totals   = importes.eur
     const showIrpf = !!input.tipo_irpf && totals.cuota_irpf > 0
 
     // ── 4. PDF ──────────────────────────────────────────────────────────────
@@ -123,6 +126,9 @@ export async function POST(req: NextRequest) {
       cliente_nif:      input.cliente_nif      ?? null,
       cliente_direccion:input.cliente_direccion ?? null,
       proyecto_nombre:  input.proyecto_nombre  ?? null,
+      moneda:            importes.moneda,
+      tipo_cambio:       importes.tipo_cambio,
+      tipo_cambio_fecha: importes.tipo_cambio_fecha,
       items:            input.items,
       tipo_iva:         input.tipo_iva,
       base_imponible:   totals.base_imponible,
@@ -135,6 +141,7 @@ export async function POST(req: NextRequest) {
       iban:             input.iban             ?? null,
       banco_nombre:     config?.banco_nombre   ?? null,
       banco_swift:      config?.banco_swift    ?? null,
+      pago_usd:          pagoUsdDesdeConfig(config),
       forma_pago:       input.forma_pago       ?? null,
       condiciones_pago: input.condiciones_pago ?? null,
       es_rectificativa: input.es_rectificativa ?? false,
@@ -188,6 +195,8 @@ export async function POST(req: NextRequest) {
       esParaProveedor: esPrivada,
       introHtml,
       items:           input.items,
+      moneda:          importes.moneda,
+      cambio,
       tipoIva:         input.tipo_iva,
       baseImponible:   totals.base_imponible,
       cuotaIva:        totals.cuota_iva,
@@ -195,6 +204,7 @@ export async function POST(req: NextRequest) {
       cuotaIrpf:       showIrpf ? totals.cuota_irpf : null,
       total:           totals.total,
       banco:           config,
+      pagoUsd:         pagoUsdDesdeConfig(config),
       ctaProyectoId:   includeCTA ? (input.proyecto_id ?? null) : null,
     })
 
