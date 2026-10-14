@@ -667,6 +667,18 @@ export function FacturaEmitidaPDF({ data }: { data: FacturaPDFData }) {
             </Text>
           </View>
 
+          {/* Justificación del tipo de cambio (facturas en moneda extranjera) */}
+          {extranjera && (
+            <View style={s.legal}>
+              <Text style={s.legalText}>
+                {`Tipo de cambio aplicado: 1 € = ${data.tipo_cambio!.toLocaleString('es-ES', { maximumFractionDigits: 6 })} ${moneda}, tipo de referencia del euro publicado por el Banco Central Europeo el ${data.tipo_cambio_fecha ? fmtDate(data.tipo_cambio_fecha) : '—'}, último disponible en la fecha de emisión de esta factura (el BCE publica un único tipo diario, los días hábiles hacia las 16:00 CET). Contravalor en euros: base imponible ${eur(data.base_imponible)}; cuota de IVA (${data.tipo_iva}%) ${eur(data.cuota_iva)}${showIrpf ? `; retención IRPF −${eur(data.cuota_irpf!)}` : ''}; total ${eur(data.total)}.`}
+              </Text>
+              <Text style={{ ...s.legalText, marginTop: 4 }}>
+                {`Exchange rate applied: 1 EUR = ${data.tipo_cambio} ${moneda} (European Central Bank euro reference rate of ${data.tipo_cambio_fecha ?? '—'}). Amount due: ${fmt(vista.total)}.`}
+              </Text>
+            </View>
+          )}
+
           {/* Mención legal */}
           {data.mencion_legal && (
             <View style={s.legal}>

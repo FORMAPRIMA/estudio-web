@@ -471,12 +471,13 @@ function CreateModal({
 
   // Moneda. En USD el cambio lo fija el servidor al guardar (BCE de la fecha de
   // emisión); aquí solo se consulta para enseñar el contravalor en euros.
-  const [moneda, setMoneda] = useState<Moneda>(() => editData?.moneda ?? 'EUR')
+  const [moneda, setMoneda] = useState<Moneda>(() => editData?.moneda ?? prefill?.moneda ?? 'EUR')
+  const prefillExtranjera = !editData && !!prefill?.moneda && prefill.moneda !== 'EUR'
   const [cambio, setCambio] = useState<{ tipo: number; fecha: string } | null>(null)
   const [cambioError, setCambioError] = useState<string | null>(null)
 
   // Impuestos
-  const [tipoIva,  setTipoIva]  = useState(() => editData?.tipo_iva  ?? 21)
+  const [tipoIva,  setTipoIva]  = useState(() => editData?.tipo_iva  ?? (prefillExtranjera ? 0 : 21))
   const [tipoIrpf, setTipoIrpf] = useState<number | null>(() => editData?.tipo_irpf ?? null)
 
   // Pago / notas
@@ -484,7 +485,7 @@ function CreateModal({
   const [formaPago,       setFormaPago]       = useState(() => editData?.forma_pago      ?? 'Transferencia bancaria')
   const [condicionesPago, setCondicionesPago] = useState(() => editData?.condiciones_pago ?? '')
   const [notas,           setNotas]           = useState(() => editData?.notas           ?? '')
-  const [mencionLegal,    setMencionLegal]    = useState(() => editData?.mencion_legal   ?? '')
+  const [mencionLegal,    setMencionLegal]    = useState(() => editData?.mencion_legal   ?? (prefillExtranjera ? MENCION_NO_SUJETA : ''))
 
   // Rectificativa
   const [esRectificativa,     setEsRectificativa]     = useState(() => editData?.es_rectificativa     ?? false)
@@ -1652,6 +1653,8 @@ function BatchPDFModal({ facturas, onClose }: { facturas: FacturaEmitida[]; onCl
 export interface PrefillData {
   facturaOrigenId:  string
   concepto:         string
+  /** Moneda del cobro. Con USD, `monto` va en dólares. */
+  moneda?:          Moneda
   monto:            number
   /** Proveedor destinatario. Si viene, la factura NO va al cliente. */
   proveedorId?:     string

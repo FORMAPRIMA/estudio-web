@@ -2,7 +2,8 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import FacturasEmitidasPage from '@/components/team/finanzas/FacturasEmitidasPage'
-import { getEstudioConfig } from '@/app/actions/facturasEmitidas'
+import { leerEstudioConfig } from '@/lib/facturas/estudioConfig'
+import type { Moneda } from '@/lib/facturasUtils'
 import { SECCION_CONSTRUCTORA, esFacturaNoCliente } from '@/lib/finanzas/costs'
 import type { PrefillData } from '@/components/team/finanzas/FacturasEmitidasPage'
 
@@ -23,11 +24,31 @@ export default async function Page({
 
   const admin = createAdminClient()
 
+  // La factura de contrato de "Revisión final" se pide a la vez que el resto:
+  // antes iba detrás y alargaba la apertura del formulario.
+  const origenQuery = searchParams.from
+    ? admin
+      .from('facturas')
+      .select(`
+        id, concepto, monto, moneda, monto_moneda, seccion, proyecto_id, clientes_ids, proveedor_id,
+        proyectos(
+          id, nombre, codigo, direccion, constructor_id,
+          clientes!cliente_id(
+            id, nombre, apellidos, empresa,
+            nif_cif, direccion_facturacion, ciudad, codigo_postal, email, email_cc
+          )
+        )
+      `)
+      .eq('id', searchParams.from)
+      .single()
+    : Promise.resolve({ data: null })
+
   const [
     { data: facturas },
     { data: clientes },
     { data: proyectos },
     estudioConfig,
+    { data: origen },
   ] = await Promise.all([
     admin
       .from('facturas_emitidas')
@@ -42,27 +63,16 @@ export default async function Page({
       .from('proyectos')
       .select('id, nombre, codigo, direccion')
       .order('nombre'),
-    getEstudioConfig(),
+    // El rol de socio ya se ha comprobado arriba: lectura directa, sin repetir la auth
+    leerEstudioConfig(),
+    origenQuery,
   ])
 
   // ── Pre-fill desde factura de contrato ────────────────────────────────────
   let prefill: PrefillData | null = null
 
   if (searchParams.from) {
-    const { data: f } = await admin
-      .from('facturas')
-      .select(`
-        id, concepto, monto, seccion, proyecto_id, clientes_ids, proveedor_id,
-        proyectos(
-          id, nombre, codigo, direccion, constructor_id,
-          clientes!cliente_id(
-            id, nombre, apellidos, empresa,
-            nif_cif, direccion_facturacion, ciudad, codigo_postal, email, email_cc
-          )
-        )
-      `)
-      .eq('id', searchParams.from)
-      .single()
+    const f = origen
 
     if (f) {
       type ClienteRow = {
@@ -93,10 +103,14 @@ export default async function Page({
         ? [cliente.nombre, cliente.apellidos].filter(Boolean).join(' ')
         : ''
 
+      // Cobro en dólares: el formulario abre en USD con el importe pactado en dólares
+      const monedaF = (((f as Record<string, unknown>).moneda as Moneda | null) ?? 'EUR')
+      const montoMonedaF = (f as Record<string, unknown>).monto_moneda as number | null
       prefill = {
         facturaOrigenId:  f.id,
         concepto:         f.concepto,
-        monto:            f.monto,
+        moneda:           monedaF,
+        monto:            monedaF !== 'EUR' && montoMonedaF != null ? Number(montoMonedaF) : f.monto,
         proveedorId:      undefined,
         clienteId:        cliente?.id        ?? '',
         clienteContacto:  clienteNombreCompleto,
