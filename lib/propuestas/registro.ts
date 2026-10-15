@@ -10,6 +10,9 @@
 //     un diseño importado: lleva una maqueta 3D real y su final pide una reunión,
 //     no aceptar. Sus recursos 3D viven en public/propuesta/<slug>/maqueta/ y el
 //     middleware solo los sirve con la cookie del PIN.
+//   · 'presentacion3d' — presentación horizontal propia en React (Isla Creta,
+//     components/propuesta/isla-creta/) cuyo escenario es la maqueta 3D real;
+//     mismos recursos protegidos que el teaser.
 // Las cifras viven en el propio diseño: cada proyecto tiene las suyas.
 //
 // El slug lleva un sufijo aleatorio para que la URL no se adivine a partir del
@@ -19,7 +22,7 @@
 
 export interface PropuestaWeb {
   slug: string
-  tipo: 'deck' | 'dc' | 'teaser'
+  tipo: 'deck' | 'dc' | 'teaser' | 'presentacion3d'
   /**
    * A quién va: 'cliente' = una persona concreta (se la saluda por su nombre y
    * el final pide ACEPTAR); 'comprador' = un dossier que puede circular entre
@@ -150,6 +153,33 @@ export const PROPUESTAS: PropuestaWeb[] = [
     },
     activa: true,
     publicada: '2026-10-06',
+  },
+  {
+    // La propuesta de honorarios que sigue al teaser (reunión del 15 oct 2026):
+    // presentación en directo cuyo escenario es la maqueta 3D. La interacción
+    // sigue limitada a la manzana 1, con estados y precios de ejemplo. Sala
+    // cerrada, como el teaser: PIN personal de 6 cifras por persona de RSA.
+    slug: 'isla-creta-propuesta-jnpho',
+    tipo: 'presentacion3d',
+    audiencia: 'cliente',
+    nombreCliente: 'Grupo RSA',
+    cliente: 'Grupo inmobiliario RSA',
+    proyecto: 'Isla Creta',
+    pin: null,
+    // PIN del estudio (6 cifras, como los de la sala): para presentarla en directo
+    // sin generar avisos ni medirse como visita de RSA.
+    pinAdmin: '880336',
+    portada: '/propuestas/isla-creta-propuesta-jnpho/portada.webp',
+    og: '/propuestas/isla-creta-propuesta-jnpho/og.jpg',
+    descripcion: 'Maqueta digital comercial, casas tipo y casa club · Samborondón, Ecuador',
+    logoSocio: '/propuestas/isla-creta-propuesta-jnpho/logo-rsa-claro.png',
+    pantallaPin: {
+      antetitulo: 'Isla Creta · Grupo RSA',
+      titulo: 'Propuesta de honorarios',
+      texto: 'Maqueta digital comercial, casas tipo y casa club para Grupo RSA. Introduzca su código personal de 6 cifras.',
+    },
+    activa: true,
+    publicada: '2026-10-15',
   },
   {
     // Sala cerrada (sala_salas, acceso_anonimo = false), como Isla Creta: sin PIN

@@ -8,6 +8,7 @@ import PropuestaDeck from '@/components/propuesta/PropuestaDeck'
 import PropuestaDossier from '@/components/propuesta/PropuestaDossier'
 import { escritorioDe } from '@/lib/propuestas/escritorio'
 import TeaserIslaCreta from '@/components/propuesta/teaser/TeaserIslaCreta'
+import PropuestaIslaCreta from '@/components/propuesta/isla-creta/PropuestaIslaCreta'
 
 // Propuesta de honorarios de un cliente: formaprima.es/propuesta/<slug>.
 // Ver lib/propuestas/registro.ts (alta) y scripts/propuestas/importar.mjs (diseño).
@@ -66,7 +67,7 @@ export default async function PropuestaPage({ params }: { params: { slug: string
     return (
       <>
         {fuente}
-        <PropuestaGate slug={p.slug} nombreCliente={p.nombreCliente} proyecto={p.proyecto} portada={p.portada} textos={p.pantallaPin} tema={p.tema} digitos={sala && p.pin === null ? 6 : 4} formal={p.tipo === 'teaser'} logoSocio={p.logoSocio} />
+        <PropuestaGate slug={p.slug} nombreCliente={p.nombreCliente} proyecto={p.proyecto} portada={p.portada} textos={p.pantallaPin} tema={p.tema} digitos={sala && p.pin === null ? 6 : 4} formal={p.tipo === 'teaser' || p.tipo === 'presentacion3d'} logoSocio={p.logoSocio} />
       </>
     )
   }
@@ -76,6 +77,15 @@ export default async function PropuestaPage({ params }: { params: { slug: string
       <>
         {fuente}
         <TeaserIslaCreta slug={p.slug} medir={!!sala} />
+      </>
+    )
+  }
+
+  if (p.tipo === 'presentacion3d') {
+    return (
+      <>
+        {fuente}
+        <PropuestaIslaCreta slug={p.slug} medir={!!sala} />
       </>
     )
   }
