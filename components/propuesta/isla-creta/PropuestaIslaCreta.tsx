@@ -1356,6 +1356,7 @@ export default function PropuestaIslaCreta({ slug, medir = false }: { slug: stri
           <div className="pic-rotar-titulo">Isla Creta</div>
           <div className="pic-rotar-linea" />
           <p className="pic-rotar-texto">Para explorar esta propuesta,<br />gire su iPhone en horizontal.</p>
+          <p className="pic-rotar-ordenador">Para la mejor experiencia con la maqueta 3D, le recomendamos abrirla en un ordenador.</p>
         </div>
         <p className="pic-rotar-pie">¿No gira la pantalla? Desactive el bloqueo de rotación en el Centro de control.</p>
       </div>
@@ -1886,6 +1887,7 @@ html,body{background:#0d0d0d!important;margin:0;overflow:hidden;overscroll-behav
   .pic-rotar-titulo{margin-top:14px;font-size:44px;font-weight:200;letter-spacing:-.03em;line-height:1.02;}
   .pic-rotar-linea{width:48px;height:1px;background:var(--oro);margin:30px 0 26px;}
   .pic-rotar-texto{margin:0;font-size:16px;font-weight:300;line-height:1.55;opacity:.8;}
+  .pic-rotar-ordenador{margin:22px 0 0;max-width:270px;padding:12px 16px;border:1px solid rgba(226,180,90,.45);font-size:13px;font-weight:300;line-height:1.5;color:var(--oro);}
   .pic-rotar-pie{margin:0;max-width:280px;font-size:11px;font-weight:300;line-height:1.5;opacity:.42;}
 }
 @keyframes pic-rotar-in{from{opacity:0}to{opacity:1}}
