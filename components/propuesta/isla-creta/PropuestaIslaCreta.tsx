@@ -157,6 +157,117 @@ function Leyenda({ lotes, filtro }: { lotes: Lote[]; filtro?: ((l: Lote) => bool
   )
 }
 
+// Paneles del equipo comercial (maqueta de pantalla, datos de ejemplo).
+const AGENTES = [
+  { n: 'Andrea Molina', d: 46, s: 28, c: 9, v: 4 },
+  { n: 'Carlos Vera', d: 38, s: 24, c: 7, v: 3 },
+  { n: 'Daniela Ortiz', d: 33, s: 19, c: 4, v: 2 },
+  { n: 'Luis Andrade', d: 27, s: 13, c: 2, v: 1 },
+  { n: 'Paula Cedeño', d: 20, s: 8, c: 1, v: 1 },
+]
+const CALIENTES = [
+  ['Comprador 014', 'MZ1-7', 6, 'hace 2 h', 92],
+  ['Comprador 021', 'MZ1-11', 4, 'hace 5 h', 81],
+  ['Comprador 009', 'MZ1-16', 5, 'ayer', 74],
+  ['Comprador 032', 'MZ1-4', 3, 'ayer', 66],
+  ['Comprador 027', 'MZ1-13', 2, 'hace 2 días', 61],
+] as const
+
+function Ventana({ url, children }: { url: string; children: ReactNode }) {
+  return (
+    <div className="pv">
+      <div className="pv-barra"><i /><i /><i /><span>{url}</span></div>
+      <div className="pv-cuerpo">{children}</div>
+    </div>
+  )
+}
+
+function PanelAgente() {
+  return (
+    <Ventana url="salas.formaprima.es/isla-creta/mi-cartera">
+      <div className="pv-cab">
+        <div><span className="pv-lbl">Panel del agente · Isla Creta</span><b>Mi cartera</b></div>
+        <div className="pv-yo"><i>CV</i><div><b>Carlos Vera</b><span>Agente comercial</span></div></div>
+      </div>
+      <div className="pv-kpis">
+        <div><b>38</b><span>Dossiers enviados</span><em>+6 esta semana</em></div>
+        <div><b>24</b><span>Leads en seguimiento</span><em>+3 esta semana</em></div>
+        <div className="hot"><b>7</b><span>Leads calientes</span><em>2 nuevos hoy</em></div>
+        <div><b>3</b><span>Ventas cerradas</span><em>octubre</em></div>
+      </div>
+      <div className="pv-dos">
+        <div>
+          <span className="pv-lbl">Leads calientes</span>
+          <div className="pv-tabla">
+            <div className="pv-th"><span>Comprador</span><span>Parcela</span><span>Visitas</span><span>Última</span><span>Temp.</span></div>
+            {CALIENTES.map(([n, p, v, u, t]) => (
+              <div key={n} className="pv-tr"><span>{n}</span><span>{p}</span><span>{v}</span><span>{u}</span><span><em className="pv-temp" style={{ ['--t' as string]: `${t}%` }}>{t}</em></span></div>
+            ))}
+          </div>
+        </div>
+        <div>
+          <span className="pv-lbl">Actividad reciente</span>
+          <ul className="pv-act">
+            <li><i className="r" /><div><b>Comprador 014 volvió a abrir su dossier</b><span>Miró MZ1-7 y la comparó con MZ1-11 · hace 2 h</span></div></li>
+            <li><i className="a" /><div><b>Comprador 021 pasó 9 min en la maqueta</b><span>Se detuvo en la casa club · hace 5 h</span></div></li>
+            <li><i className="v" /><div><b>Reserva confirmada · MZ1-10</b><span>Comprador 017 · ayer</span></div></li>
+            <li><i /><div><b>Dossier enviado a Comprador 036</b><span>Parcela MZ1-19 · ayer</span></div></li>
+          </ul>
+        </div>
+      </div>
+      <div className="pv-embudo">
+        <span className="pv-lbl">Embudo de este mes</span>
+        <div>{[['Dossiers enviados', 38], ['Los abrieron', 31], ['Volvieron a entrar', 18], ['Calientes', 7], ['Ventas', 3]].map(([t, n], k) => (
+          <div key={t as string} className={k === 3 ? 'hot' : k === 4 ? 'ok' : ''}><b>{n as number}</b><span>{t as string}</span><i style={{ width: `${((n as number) / 38) * 100}%` }} /></div>
+        ))}</div>
+      </div>
+    </Ventana>
+  )
+}
+
+function PanelDirector() {
+  const max = Math.max(...AGENTES.map((a) => a.d))
+  return (
+    <Ventana url="salas.formaprima.es/isla-creta/equipo">
+      <div className="pv-cab">
+        <div><span className="pv-lbl">Panel de dirección comercial · Isla Creta</span><b>Equipo comercial</b></div>
+        <div className="pv-filtro"><span>Octubre 2026</span><span>5 agentes</span></div>
+      </div>
+      <div className="pv-kpis cinco">
+        <div><b>164</b><span>Dossiers enviados</span></div>
+        <div><b>92</b><span>Leads en seguimiento</span></div>
+        <div className="hot"><b>23</b><span>Leads calientes</span></div>
+        <div><b>11</b><span>Ventas cerradas</span></div>
+        <div><b>12 %</b><span>Conversión</span></div>
+      </div>
+      <span className="pv-lbl">Rendimiento por agente</span>
+      <div className="pv-agentes">
+        <div className="pv-th"><span>Agente</span><span>Dossiers</span><span>Seguimiento</span><span>Calientes</span><span>Ventas</span><span>Conv.</span></div>
+        {AGENTES.map((a) => (
+          <div key={a.n} className="pv-tr">
+            <span className="pv-ag"><i>{a.n.split(' ').map((x) => x[0]).join('')}</i>{a.n}</span>
+            <span className="pv-bar"><u style={{ width: `${(a.d / max) * 100}%` }} /><b>{a.d}</b></span>
+            <span>{a.s}</span>
+            <span className="hot">{a.c}</span>
+            <span>{a.v}</span>
+            <span>{Math.round((a.v / a.s) * 100)} %</span>
+          </div>
+        ))}
+      </div>
+      <div className="pv-pie">
+        <div>
+          <span className="pv-lbl">Ventas por semana</span>
+          <div className="pv-semanas">{[1, 2, 1, 3, 2, 2].map((v, k) => <div key={k}><i style={{ height: v * 16 }} /><span>S{k + 36}</span></div>)}</div>
+        </div>
+        <div>
+          <span className="pv-lbl">Parcelas más vistas</span>
+          <ol className="pv-top">{[['MZ1-7', 41], ['MZ1-11', 29], ['MZ1-16', 22], ['MZ1-4', 17]].map(([p, n]) => <li key={p as string}><span>{p}</span><b>{n} visitas</b></li>)}</ol>
+        </div>
+      </div>
+    </Ventana>
+  )
+}
+
 const DIAPOS: Diapo[] = [
   // ── 01 · El estudio ──────────────────────────────────────────────────────
   {
@@ -431,6 +542,24 @@ const DIAPOS: Diapo[] = [
           </div>
           <p className="pc-pie">Ejemplo ilustrativo · comprador y datos ficticios</p>
         </div>
+      </div>
+    ),
+  },
+  {
+    id: 'paneles', cap: 2, titulo: 'Paneles del equipo comercial', tipo: 'velado',
+    escena: () => ({ vista: 'manzana', lado: 'centro', deriva: 0.02, capas: { parcelas: 'estados' } }),
+    notas: 'Cada agente tiene su panel: su cartera, sus leads calientes y la actividad de sus compradores en tiempo real. La dirección comercial ve a todo el equipo: dossiers enviados, leads en seguimiento y calientes, ventas y conversión por agente.',
+    render: () => (
+      <div className="pic-pad pic-paneles">
+        <div className="pic-paneles-cab">
+          <h2 className="pic-t2 r">Un panel para cada agente, y otro para la dirección.</h2>
+          <p className="pic-p r">Cada agente ve su cartera y sus leads calientes. La dirección comercial ve el rendimiento de todo el equipo: dossiers enviados, seguimiento, ventas y conversión por agente.</p>
+        </div>
+        <div className="pic-paneles-dos">
+          <div className="r"><span className="pic-lbl">Agente comercial</span><PanelAgente /></div>
+          <div className="r"><span className="pic-lbl">Director comercial</span><PanelDirector /></div>
+        </div>
+        <p className="pic-nota r">Datos de ejemplo · agentes y compradores ficticios.</p>
       </div>
     ),
   },
@@ -1374,6 +1503,73 @@ html,body{background:#0d0d0d!important;margin:0;overflow:hidden;overscroll-behav
 .pic-resultado b{font-size:64px;font-weight:200;letter-spacing:-.04em;line-height:1;animation:pic-salta .6s cubic-bezier(.16,1,.3,1);}
 .pic-resultado span{font-size:14px;font-weight:300;opacity:.75;}
 @keyframes pic-salta{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+
+/* Paneles del equipo comercial */
+.pic-paneles{padding-top:118px;display:flex;flex-direction:column;}
+.pic-paneles-cab{display:flex;justify-content:space-between;align-items:flex-end;gap:80px;}
+.pic-paneles-cab .pic-t2{font-size:44px;max-width:760px;}
+.pic-paneles-cab .pic-p{max-width:520px;margin:0!important;}
+.pic-paneles-dos{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:30px;}
+.pic-paneles-dos .pic-lbl{margin-bottom:10px;color:var(--oro);opacity:.9;}
+.pic-paneles .pic-nota{margin-top:16px!important;}
+.pv{background:#fbfbfa;color:var(--tinta);box-shadow:0 40px 90px rgba(0,0,0,.45);overflow:hidden;height:640px;display:flex;flex-direction:column;}
+.pv-barra{display:flex;align-items:center;gap:6px;height:30px;padding:0 12px;background:#e9e8e3;border-bottom:1px solid rgba(20,20,20,.08);}
+.pv-barra i{width:9px;height:9px;border-radius:50%;background:rgba(20,20,20,.18);}
+.pv-barra span{margin-left:14px;font-size:11px;opacity:.55;background:#fbfbfa;padding:3px 12px;border-radius:4px;}
+.pv-cuerpo{padding:20px 22px;flex:1;display:flex;flex-direction:column;}
+.pv-lbl{display:block;font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;opacity:.5;margin-bottom:8px;}
+.pv-cab{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:14px;border-bottom:1px solid rgba(20,20,20,.1);}
+.pv-cab b{display:block;font-size:22px;font-weight:300;letter-spacing:-.02em;}
+.pv-yo{display:flex;align-items:center;gap:10px;}
+.pv-yo i,.pv-ag i{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;background:var(--verde);color:#fff;font-style:normal;font-size:11px;font-weight:600;}
+.pv-yo b{font-size:13px;font-weight:500;letter-spacing:0;}
+.pv-yo span{display:block;font-size:11px;opacity:.55;}
+.pv-filtro{display:flex;gap:6px;}
+.pv-filtro span{font-size:11px;border:1px solid rgba(20,20,20,.2);padding:5px 10px;}
+.pv-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0 16px;}
+.pv-kpis.cinco{grid-template-columns:repeat(5,1fr);}
+.pv-kpis div{background:#f1f0eb;padding:12px 14px;}
+.pv-kpis b{display:block;font-size:28px;font-weight:300;letter-spacing:-.03em;line-height:1.05;}
+.pv-kpis span{display:block;font-size:11px;opacity:.6;margin-top:2px;}
+.pv-kpis em{display:block;font-style:normal;font-size:10px;color:var(--verde);margin-top:4px;font-weight:600;}
+.pv-kpis .hot{background:rgba(255,45,85,.09);}
+.pv-kpis .hot b{color:#d6002a;}
+.pv-dos{display:grid;grid-template-columns:1.25fr 1fr;gap:18px;flex:1;}
+.pv-th,.pv-tr{display:grid;align-items:center;gap:8px;font-size:12px;}
+.pv-tabla .pv-th,.pv-tabla .pv-tr{grid-template-columns:1.4fr .8fr .6fr .9fr .9fr;}
+.pv-th{font-size:10px;font-weight:600;opacity:.45;padding-bottom:6px;border-bottom:1px solid rgba(20,20,20,.1);}
+.pv-tr{padding:9px 0;border-bottom:1px solid rgba(20,20,20,.06);}
+.pv-temp{display:inline-block;font-style:normal;font-size:10px;font-weight:700;color:#fff;padding:3px 7px;background:linear-gradient(90deg,#ff8a00,#ff2d55);border-radius:10px;min-width:34px;text-align:center;}
+.pv-act li{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid rgba(20,20,20,.06);}
+.pv-act i{flex:none;width:8px;height:8px;border-radius:50%;margin-top:5px;background:rgba(20,20,20,.25);}
+.pv-act i.r{background:#ff2d55;}
+.pv-act i.a{background:#ffb000;}
+.pv-act i.v{background:#19c26a;}
+.pv-act b{display:block;font-size:12px;font-weight:500;}
+.pv-act span{display:block;font-size:11px;opacity:.55;margin-top:2px;}
+.pv-agentes .pv-th,.pv-agentes .pv-tr{grid-template-columns:1.5fr 1.4fr .9fr .8fr .6fr .6fr;}
+.pv-ag{display:flex;align-items:center;gap:8px;}
+.pv-ag i{width:24px;height:24px;font-size:9px;}
+.pv-bar{display:flex;align-items:center;gap:8px;}
+.pv-bar u{display:block;height:6px;background:var(--verde);text-decoration:none;}
+.pv-bar b{font-weight:500;}
+.pv-agentes .hot{color:#d6002a;font-weight:600;}
+.pv-pie{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:auto;padding-top:14px;}
+.pv-semanas{display:flex;align-items:flex-end;gap:10px;height:66px;}
+.pv-semanas div{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;}
+.pv-semanas i{width:100%;background:var(--verde);}
+.pv-semanas span{font-size:9px;opacity:.5;}
+.pv-embudo{margin-top:auto;padding-top:14px;}
+.pv-embudo>div{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;}
+.pv-embudo>div>div{position:relative;background:#f1f0eb;padding:10px 12px 14px;overflow:hidden;}
+.pv-embudo b{display:block;font-size:20px;font-weight:300;}
+.pv-embudo span{display:block;font-size:10px;opacity:.6;}
+.pv-embudo i{position:absolute;left:0;bottom:0;height:3px;background:var(--verde);}
+.pv-embudo .hot i{background:#ff2d55;}
+.pv-embudo .hot b{color:#d6002a;}
+.pv-embudo .ok i{background:#19c26a;}
+.pv-top li{display:flex;justify-content:space-between;font-size:12px;padding:5px 0;border-bottom:1px solid rgba(20,20,20,.06);}
+.pv-top b{font-weight:500;opacity:.7;}
 
 /* Dossier personalizado */
 .pic-dossier{display:grid;grid-template-columns:560px 1fr;gap:104px;align-items:center;padding-top:120px;}
