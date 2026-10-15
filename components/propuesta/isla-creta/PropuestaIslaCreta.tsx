@@ -586,7 +586,7 @@ const DIAPOS: Diapo[] = [
   // ── 04 · Casas tipo y casa club ─────────────────────────────────────────
   {
     id: 'casas', cap: 3, titulo: 'Casas tipo', tipo: 'casas', tono: 'claro', pasos: 4,
-    notas: 'Un lote se vende mejor cuando se ve la casa. Pasar por las cuatro direcciones (o tocar las pestañas) y girar la maqueta con el ratón. Dejar claro: son placeholders, volúmenes de referencia; las casas no se han diseñado y se definirán con su equipo.',
+    notas: 'Un lote se vende mejor cuando se ve la casa. Pasar por las cuatro direcciones (o tocar las pestañas) y girar la maqueta con el ratón. Dejar claro: son referencias volumétricas, no nuestro diseño; las casas no se han diseñado y se definirán con su equipo.',
     render: ({ paso, irPaso, refCasas, casasListas }) => (
       <div className="pic-casas">
         <div className="pic-casas-txt">
@@ -600,7 +600,7 @@ const DIAPOS: Diapo[] = [
             ))}
           </div>
           <div className="pic-aviso r">
-            <b>Placeholder</b>
+            <b>Referencia volumétrica</b>
             <p>Volúmenes de referencia para imaginar el lenguaje. Las casas de Isla Creta aún no se han diseñado: se definirán con su equipo, según el perfil de comprador.</p>
           </div>
         </div>
@@ -608,7 +608,35 @@ const DIAPOS: Diapo[] = [
           <div ref={refCasas} className="pic-casas-lienzo" />
           {!casasListas && <span className="pic-casas-carga">Cargando las casas…</span>}
           <span className="pic-casas-pista">Arrastre para girar · rueda para acercarse</span>
-          <span className="pic-casas-sello">Placeholder · Dirección 0{paso + 1} · {CASAS[paso].nombre}</span>
+          <div className="pic-casas-sello"><b>Referencia volumétrica</b><span>No es el diseño propuesto · Dirección 0{paso + 1} · {CASAS[paso].nombre}</span></div>
+        </div>
+      </div>
+    ),
+  },
+  {
+    id: 'zurbano', cap: 3, titulo: 'Casa Zurbano · dossier digital', tipo: 'opaco', tono: 'oscuro',
+    notas: 'Un ejemplo real de cómo aplicamos un anteproyecto con enfoque comercial: el dossier digital de Casa Zurbano, en Madrid. El comprador ve cómo podría quedar su casa y lo que costaría, y el dossier termina con un cierre comercial digital. Así presentaríamos cada casa tipo de Isla Creta. Se puede abrir en directo con el botón.',
+    render: () => (
+      <div className="pic-zurbano">
+        <div className="pic-zurbano-txt">
+          <span className="pic-it r">Un ejemplo de nuestro trabajo</span>
+          <h2 className="pic-t2 r">Casa Zurbano: el anteproyecto, convertido en herramienta de venta.</h2>
+          <p className="pic-p r">Así aplicamos nuestros anteproyectos con enfoque comercial. Un dossier digital con el que el comprador ve cómo podría quedar su casa, y cierres comerciales digitales para que dé el siguiente paso desde el propio dossier.</p>
+          <ul className="pic-zurbano-lista r">
+            <li><i>01</i><span>Antes y después, con renders de cada estancia</span></li>
+            <li><i>02</i><span>Cuánto cuesta reformarla y cuánto tarda</span></li>
+            <li><i>03</i><span>Cierre comercial digital: el interesado deja sus datos y entra en el seguimiento</span></li>
+          </ul>
+          <a className="pic-zurbano-btn r" href="https://formaprima.es/propuesta/casa-zurbano-xzw9e" target="_blank" rel="noopener">Abrir el dossier de Casa Zurbano <span aria-hidden="true">↗</span></a>
+          <p className="pic-nota r">Zurbano 6 · Madrid · dossier publicado para compradores</p>
+        </div>
+        <div className="pic-zurbano-moviles r">
+          {['cz-cover-end', 'z6-03', 'z6-06'].map((f, k) => (
+            <div key={f} className={`pic-movil m${k}`}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={`/propuestas/casa-zurbano-xzw9e/assets/${f}.webp`} alt="" />
+            </div>
+          ))}
         </div>
       </div>
     ),
@@ -746,7 +774,7 @@ const DIAPOS: Diapo[] = [
               {fila('08', 'Proyecto de ejecución', 'Documentación para construir · ingenierías aparte', '600 m² × 30', '18.000', '15.300')}
               <div className="h-sub">Opcionales · se contratan aparte</div>
               {fila('09', 'Seguimiento de obra', 'Residente semanal · visita trimestral de un socio', 'USD / mes', '2.400', '2.040')}
-              {fila('10', 'Interiorismo', 'Interiores, materiales, iluminación y mobiliario', 'USD / m²', '13', '11,05')}
+              {fila('10', 'Interiorismo', 'Interiores, materiales, iluminación y mobiliario · 13 → 11,05 USD/m²', '600 m² × 13', '7.800', '6.630')}
             </div>
           </div>
           <div className={`pic-hon-barra r${d ? ' on' : ''}`}>
@@ -1504,6 +1532,22 @@ html,body{background:#0d0d0d!important;margin:0;overflow:hidden;overscroll-behav
 .pic-resultado span{font-size:14px;font-weight:300;opacity:.75;}
 @keyframes pic-salta{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 
+/* Casa Zurbano */
+.pic-zurbano{position:absolute;inset:0;display:grid;grid-template-columns:680px 1fr;gap:80px;padding:130px 104px 120px;align-items:center;}
+.pic-zurbano .pic-t2{font-size:46px;}
+.pic-zurbano-lista{margin-top:30px!important;border-top:1px solid rgba(251,251,250,.18);}
+.pic-zurbano-lista li{display:flex;gap:18px;padding:14px 0;border-bottom:1px solid rgba(251,251,250,.18);font-size:15px;font-weight:300;}
+.pic-zurbano-lista i{font-style:normal;font-size:12px;font-weight:500;color:var(--oro);width:22px;}
+.pic-zurbano-btn{display:inline-flex;align-items:center;gap:10px;margin-top:32px;height:48px;padding:0 22px;background:var(--blanco);color:var(--tinta);font-size:14px;font-weight:500;text-decoration:none;align-self:flex-start;transition:background .25s;}
+.pic-zurbano-btn:hover{background:var(--oro);}
+.pic-zurbano-txt{display:flex;flex-direction:column;}
+.pic-zurbano-moviles{position:relative;height:100%;}
+.pic-movil{position:absolute;top:50%;width:300px;aspect-ratio:9/19.5;border-radius:38px;padding:10px;background:#1c1c1c;box-shadow:0 40px 80px rgba(0,0,0,.55),inset 0 0 0 1.5px rgba(255,255,255,.12);}
+.pic-movil img{width:100%;height:100%;object-fit:cover;border-radius:29px;}
+.pic-movil.m0{left:50%;transform:translate(-50%,-50%);z-index:2;width:330px;}
+.pic-movil.m1{left:8%;transform:translate(0,-46%) rotate(-6deg);opacity:.9;}
+.pic-movil.m2{right:8%;transform:translate(0,-46%) rotate(6deg);opacity:.9;}
+
 /* Paneles del equipo comercial */
 .pic-paneles{padding-top:118px;display:flex;flex-direction:column;}
 .pic-paneles-cab{display:flex;justify-content:space-between;align-items:flex-end;gap:80px;}
@@ -1627,7 +1671,9 @@ html,body{background:#0d0d0d!important;margin:0;overflow:hidden;overscroll-behav
 .pic-casas-lienzo{position:absolute;inset:0;}
 .pic-casas-carga{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:13px;opacity:.55;}
 .pic-casas-pista{position:absolute;left:24px;bottom:20px;font-size:12px;opacity:.5;pointer-events:none;}
-.pic-casas-sello{position:absolute;right:20px;top:20px;font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#9a6a12;background:rgba(226,180,90,.2);border:1px solid rgba(154,106,18,.4);padding:7px 12px;pointer-events:none;}
+.pic-casas-sello{position:absolute;left:50%;top:28px;transform:translateX(-50%) rotate(-1.5deg);display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 26px 11px;border:2px solid rgba(154,106,18,.75);outline:1px solid rgba(154,106,18,.35);outline-offset:3px;background:rgba(251,248,238,.82);backdrop-filter:blur(4px);color:#8a5d0c;pointer-events:none;white-space:nowrap;}
+.pic-casas-sello b{font-size:15px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;}
+.pic-casas-sello span{font-size:11px;font-weight:500;letter-spacing:.06em;opacity:.85;}
 
 .pic-entregas{display:grid;grid-template-columns:repeat(3,1fr);gap:48px 40px;margin-top:80px;}
 .pic-entregas>div{border-top:1px solid rgba(251,251,250,.3);padding-top:18px;}
