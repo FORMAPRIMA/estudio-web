@@ -373,7 +373,7 @@ const DIAPOS: Diapo[] = [
             <div key={p.img} className="r">
               <figure className="pic-marco">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={`${A}/${p.img}.webp`} alt={p.nombre} />
+                <img src={`${A}/${p.img}.webp?v=2`} alt={p.nombre} />
               </figure>
               <strong>{p.nombre}</strong><span>{p.rol}</span>
             </div>
