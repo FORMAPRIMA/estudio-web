@@ -2,7 +2,16 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import FinanzasDashboard from '@/components/team/finanzas/FinanzasDashboard'
-import { SECCION_ORDER } from '@/lib/finanzas/costs'
+import { SECCION_ORDER, SECCION_MOBILIARIO } from '@/lib/finanzas/costs'
+import { salaryAt } from '@/lib/finanzas/salaryHistory'
+import type { SalaryRecord } from '@/lib/finanzas/salaryHistory'
+import { totalFixedCostsAt } from '@/lib/finanzas/fixedCostHistory'
+import type { FixedCostRecord } from '@/lib/finanzas/fixedCostHistory'
+import {
+  crearCosteHora, ingresosProyecto, ingresoNetoEstimado, comprasMobiliarioPorProyecto,
+} from '@/lib/finanzas/rentabilidad'
+import type { FacturaIngreso } from '@/lib/finanzas/rentabilidad'
+import { selectTodo } from '@/lib/supabase/select-todo'
 
 export const metadata = { title: 'Dashboard · Finanzas' }
 export const dynamic = 'force-dynamic'
@@ -27,16 +36,19 @@ export default async function Page() {
     { data: costosFijos },
     { data: costosVariables },
     { data: configRows },
-    { data: allTimeEntries },
+    allTimeEntries,
     { data: allProjFases },
     { data: allFacturasKPI },
     { data: facturasDetalle },
     { data: proyectosInfo },
+    { data: salaryHistory },
+    { data: fixedCostHistory },
+    { data: costosVariablesProyecto },
   ] = await Promise.all([
     // Billing chart — current year ± 1
     admin
       .from('facturas')
-      .select('monto, fecha_pago_acordada, status')
+      .select('monto, seccion, proveedor_id, margen_estimado_pct, fecha_pago_acordada, status')
       .not('fecha_pago_acordada', 'is', null)
       .gte('fecha_pago_acordada', `${year - 1}-01-01`)
       .lte('fecha_pago_acordada', `${year + 1}-12-31`)
@@ -44,7 +56,7 @@ export default async function Page() {
     // Cost data
     admin
       .from('profiles')
-      .select('salario_mensual, horas_mensuales, blocked')
+      .select('id, salario_mensual, horas_mensuales, blocked')
       .in('rol', ['fp_team', 'fp_manager', 'fp_partner']),
     admin
       .from('costos_fijos')
@@ -58,10 +70,13 @@ export default async function Page() {
       .select('key, value')
       .eq('key', 'minoracion_no_facturable'),
     // KPI: time entries (all-time, for margin analysis)
-    admin
+    // Paginado: son miles de filas y PostgREST corta en 1000 sin avisar.
+    selectTodo<{ user_id: string; proyecto_id: string; fase_id: string | null; horas: number; fecha: string }>((desde, hasta) => admin
       .from('time_entries')
-      .select('user_id, proyecto_id, fase_id, horas')
-      .not('proyecto_id', 'is', null),
+      .select('user_id, proyecto_id, fase_id, horas, fecha')
+      .not('proyecto_id', 'is', null)
+      .order('id')
+      .range(desde, hasta)),
     // KPI: fase → seccion lookup
     admin
       .from('proyecto_fases')
@@ -69,7 +84,7 @@ export default async function Page() {
     // KPI: billing by project + section (all-time, all statuses)
     admin
       .from('facturas')
-      .select('proyecto_id, seccion, monto'),
+      .select('proyecto_id, seccion, monto, status, proveedor_id, margen_estimado_pct'),
     // Breakdown: facturas of current year + facturas with no date
     admin
       .from('facturas')
@@ -78,17 +93,29 @@ export default async function Page() {
     // Project lookup for breakdown rows
     admin
       .from('proyectos')
-      .select('id, nombre, codigo'),
+      .select('id, nombre, codigo, mobiliario_liquidado'),
+    admin
+      .from('salarios_historia')
+      .select('user_id, salario_mensual, horas_mensuales, valid_from, valid_to'),
+    admin
+      .from('costos_fijos_historia')
+      .select('concepto, monto, valid_from, valid_to'),
+    admin
+      .from('costos_variables')
+      .select('proyecto_id, categoria, monto')
+      .not('proyecto_id', 'is', null),
   ])
 
   // ── Monthly costs (for billing vs cost chart) ────────────────────────────────
+  // Nóminas y costes fijos vigentes a mitad de cada mes según los históricos; si
+  // el histórico no cubre el mes, los valores actuales.
 
-  const minoracion       = configRows?.[0]?.value ?? 0
-  const teamCostMonthly  = (members ?? [])
-    .filter(m => !m.blocked)
-    .reduce((s, m) => s + (m.salario_mensual ?? 0), 0)
-  const fixedCostMonthly = (costosFijos ?? [])
-    .reduce((s, c) => s + c.monto * (1 + IVA_RATE), 0)
+  const minoracion   = configRows?.[0]?.value ?? 0
+  const salHist      = (salaryHistory    ?? []) as SalaryRecord[]
+  const fixedHistory = (fixedCostHistory ?? []) as FixedCostRecord[]
+  const activos      = (members ?? []).filter(m => !m.blocked)
+  const fixedActual  = (costosFijos ?? []).reduce((s, c) => s + c.monto * (1 + IVA_RATE), 0)
+  const histUserIds  = Array.from(new Set(salHist.map(r => r.user_id)))
 
   const varByMonth: Record<number, number> = {}
   for (const v of costosVariables ?? []) {
@@ -98,17 +125,25 @@ export default async function Page() {
 
   const monthlyCosts: Record<number, number> = {}
   for (let m = 0; m < 12; m++) {
-    monthlyCosts[m] = teamCostMonthly + fixedCostMonthly + (varByMonth[m] ?? 0)
+    const fecha = `${year}-${String(m + 1).padStart(2, '0')}-15`
+    const sinHistoria = activos.filter(p => !histUserIds.includes(p.id))
+    const nominas =
+      histUserIds.reduce((s, uid) => s + (salaryAt(salHist, uid, fecha)?.salario_mensual ?? 0), 0) +
+      sinHistoria.reduce((s, p) => s + (p.salario_mensual ?? 0), 0)
+    const fijosHist = totalFixedCostsAt(fixedHistory, fecha) * (1 + IVA_RATE)
+    monthlyCosts[m] = nominas + (fijosHist > 0 ? fijosHist : fixedActual) + (varByMonth[m] ?? 0)
   }
 
   // ── KPI: margin analysis ─────────────────────────────────────────────────────
+  // Mismas cuentas que la ficha P&L de cada proyecto (lib/finanzas/rentabilidad).
 
-  // Average cost per hour (simplified: current rates, not historical)
-  const totalHrs        = (members ?? []).filter(m => !m.blocked).reduce((s, m) => s + (m.horas_mensuales ?? 0), 0)
-  const hrsEfectivas    = totalHrs * (1 - minoracion / 100)
-  const repercusion     = hrsEfectivas > 0 ? fixedCostMonthly / hrsEfectivas : 0
-  const avgWagePerHour  = totalHrs > 0 ? teamCostMonthly / totalHrs : 0
-  const avgCostPerHour  = avgWagePerHour + repercusion
+  const { costeHora } = crearCosteHora({
+    members:     members ?? [],
+    costosFijos: costosFijos ?? [],
+    minoracion,
+    salHist,
+    fixedHistory,
+  })
 
   // fase_id → { proyecto_id, seccion }
   type PFRow = { id: string; proyecto_id: string; catalogo_fases: { seccion: string } | null }
@@ -123,9 +158,9 @@ export default async function Page() {
   const costByProject  = new Map<string, number>()
   const costBySection  = new Map<string, number>()
 
-  for (const e of allTimeEntries ?? []) {
+  for (const e of allTimeEntries) {
     if (!e.proyecto_id) continue
-    const cost = (e.horas ?? 0) * avgCostPerHour
+    const cost = (e.horas ?? 0) * costeHora(e.user_id, e.fecha)
 
     costByProject.set(e.proyecto_id, (costByProject.get(e.proyecto_id) ?? 0) + cost)
 
@@ -137,27 +172,43 @@ export default async function Page() {
     }
   }
 
-  // Aggregate billing per project + per section (all-time)
-  const billingByProject = new Map<string, number>()
-  const billingBySection = new Map<string, number>()
-
+  // Billing per project + per section (all-time) — mobiliario a margen neto
+  const facturasPorProyecto = new Map<string, FacturaIngreso[]>()
+  const billingBySection    = new Map<string, number>()
   for (const f of allFacturasKPI ?? []) {
-    billingByProject.set(f.proyecto_id, (billingByProject.get(f.proyecto_id) ?? 0) + f.monto)
-    billingBySection.set(f.seccion, (billingBySection.get(f.seccion) ?? 0) + f.monto)
-  }
-
-  // Per-project margins (only projects with both billing > 0 and cost > 0)
-  const projectMargins: number[] = []
-  for (const [proyId, billing] of Array.from(billingByProject)) {
-    const cost = costByProject.get(proyId) ?? 0
-    if (billing > 0 && cost > 0) {
-      projectMargins.push((billing - cost) / billing * 100)
+    const arr = facturasPorProyecto.get(f.proyecto_id) ?? []
+    arr.push(f)
+    facturasPorProyecto.set(f.proyecto_id, arr)
+    if (f.seccion !== SECCION_MOBILIARIO) {
+      billingBySection.set(f.seccion, (billingBySection.get(f.seccion) ?? 0) + f.monto)
     }
   }
 
-  const avgProjectMargin = projectMargins.length > 0
-    ? projectMargins.reduce((s, m) => s + m, 0) / projectMargins.length
-    : null
+  const comprasMob   = comprasMobiliarioPorProyecto(costosVariablesProyecto ?? [])
+  const liquidadoMap = new Map((proyectosInfo ?? []).map(p => [p.id, Boolean(p.mobiliario_liquidado)]))
+  const billingByProject = new Map<string, number>()
+  for (const [proyId, fs] of Array.from(facturasPorProyecto)) {
+    const ing = ingresosProyecto(fs, {
+      comprasMobiliario:   comprasMob.get(proyId) ?? 0,
+      mobiliarioLiquidado: liquidadoMap.get(proyId) ?? false,
+    })
+    billingByProject.set(proyId, ing.acordado)
+    if (fs.some(f => f.seccion === SECCION_MOBILIARIO)) {
+      billingBySection.set(SECCION_MOBILIARIO, (billingBySection.get(SECCION_MOBILIARIO) ?? 0) + ing.mobEfectivo)
+    }
+  }
+
+  // Margen ponderado por facturación sobre todos los proyectos con horas o
+  // facturas: un proyecto pequeño no pesa lo mismo que uno grande, y uno con
+  // coste pero aún sin facturar también cuenta.
+  const proyectosConDatos = new Set([...Array.from(billingByProject.keys()), ...Array.from(costByProject.keys())])
+  let sumBilling = 0
+  let sumCost    = 0
+  for (const proyId of Array.from(proyectosConDatos)) {
+    sumBilling += billingByProject.get(proyId) ?? 0
+    sumCost    += costByProject.get(proyId)    ?? 0
+  }
+  const avgProjectMargin = sumBilling > 0 ? (sumBilling - sumCost) / sumBilling * 100 : null
 
   // Per-section margins
   const sectionMargins = SECCION_ORDER.map(sec => {
@@ -174,7 +225,7 @@ export default async function Page() {
   return (
     <FinanzasDashboard
       facturas={(facturas ?? []).map(f => ({
-        monto:               f.monto,
+        monto:               ingresoNetoEstimado(f),
         fecha_pago_acordada: f.fecha_pago_acordada ?? null,
         status:              f.status,
       }))}
@@ -182,7 +233,7 @@ export default async function Page() {
       monthlyCosts={monthlyCosts}
       kpis={{
         avgProjectMargin,
-        projectCount: projectMargins.length,
+        projectCount: proyectosConDatos.size,
         sectionMargins,
       }}
       facturasDetalle={(facturasDetalle ?? []).map(f => ({

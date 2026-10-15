@@ -2,11 +2,11 @@ import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import ProyectoFinanzasDetalle, { type CostoVariableRow } from '@/components/team/finanzas/ProyectoFinanzasDetalle'
-import { historicalCostPerHour } from '@/lib/finanzas/salaryHistory'
 import type { SalaryRecord } from '@/lib/finanzas/salaryHistory'
-import { repercusionAt } from '@/lib/finanzas/fixedCostHistory'
 import type { FixedCostRecord } from '@/lib/finanzas/fixedCostHistory'
-import { calcRepercusion, SECCION_ORDER, SECCION_MOBILIARIO, CATEGORIA_MOBILIARIO } from '@/lib/finanzas/costs'
+import { SECCION_ORDER, SECCION_MOBILIARIO } from '@/lib/finanzas/costs'
+import { crearCosteHora, ingresosProyecto, comprasMobiliarioPorProyecto } from '@/lib/finanzas/rentabilidad'
+import { selectTodo } from '@/lib/supabase/select-todo'
 
 export default async function Page({ params }: { params: { id: string } }) {
   const supabase = await createClient()
@@ -39,7 +39,7 @@ export default async function Page({ params }: { params: { id: string } }) {
 
   const [
     { data: members },
-    { data: timeEntries },
+    timeEntries,
     { data: costosFijos },
     { data: configRows },
     { data: salaryHistory },
@@ -51,11 +51,13 @@ export default async function Page({ params }: { params: { id: string } }) {
       .from('profiles')
       .select('id, nombre, apellido, avatar_url, salario_mensual, horas_mensuales')
       .in('rol', ['fp_team', 'fp_manager', 'fp_partner']),
-    admin
+    selectTodo<{ id: string; user_id: string; fase_id: string | null; horas: number; fecha: string; notas: string | null }>((desde, hasta) => admin
       .from('time_entries')
       .select('id, user_id, fase_id, horas, fecha, notas')
       .eq('proyecto_id', params.id)
-      .order('fecha', { ascending: false }),
+      .order('fecha', { ascending: false })
+      .order('id')
+      .range(desde, hasta)),
     admin
       .from('costos_fijos')
       .select('monto'),
@@ -68,7 +70,7 @@ export default async function Page({ params }: { params: { id: string } }) {
       .select('user_id, salario_mensual, horas_mensuales, valid_from, valid_to'),
     admin
       .from('facturas')
-      .select('id, seccion, concepto, monto, status')
+      .select('id, seccion, concepto, monto, status, proveedor_id, margen_estimado_pct')
       .eq('proyecto_id', params.id)
       .order('created_at'),
     admin
@@ -82,22 +84,21 @@ export default async function Page({ params }: { params: { id: string } }) {
       .order('mes', { ascending: false }),
   ])
 
-  // Repercusión ajustada
-  const minoracion  = configRows?.[0]?.value ?? 0
-  const repercusion = calcRepercusion(costosFijos ?? [], members ?? [], minoracion)
+  const { costeHora, repercusionActual: repercusion } = crearCosteHora({
+    members:      members ?? [],
+    costosFijos:  costosFijos ?? [],
+    minoracion:   configRows?.[0]?.value ?? 0,
+    salHist:      (salaryHistory    ?? []) as SalaryRecord[],
+    fixedHistory: (fixedCostHistory ?? []) as FixedCostRecord[],
+  })
 
-  // Cost/hour per member
-  type MemberInfo = { nombre: string; apellido: string | null; avatar_url: string | null; costeHora: number }
+  type MemberInfo = { nombre: string; apellido: string | null; avatar_url: string | null }
   const memberMap = new Map<string, MemberInfo>()
   for (const m of (members ?? [])) {
-    const base = m.salario_mensual && m.horas_mensuales
-      ? m.salario_mensual / m.horas_mensuales
-      : 0
     memberMap.set(m.id, {
       nombre:     m.nombre,
       apellido:   m.apellido  ?? null,
       avatar_url: m.avatar_url ?? null,
-      costeHora:  base + repercusion,
     })
   }
 
@@ -117,12 +118,6 @@ export default async function Page({ params }: { params: { id: string } }) {
     }
   }
 
-  const salHist      = (salaryHistory    ?? []) as SalaryRecord[]
-  const fixedHistory = (fixedCostHistory ?? []) as FixedCostRecord[]
-
-  // Cache repercusion per date — many entries share the same fecha
-  const repercusionCache = new Map<string, number>()
-
   // Aggregations — costs use both the salary AND the fixed costs active on each entry's fecha
   type EmpStats     = { nombre: string; apellido: string | null; avatar_url: string | null; costeHora: number; horas: number; costo: number }
   type FaseStats    = { label: string; horas: number; costo: number }
@@ -135,20 +130,11 @@ export default async function Page({ params }: { params: { id: string } }) {
   let totalHoras = 0
   let totalCosto = 0
 
-  for (const e of (timeEntries ?? [])) {
+  for (const e of timeEntries) {
     const mi = memberMap.get(e.user_id)
 
-    // Historically-correct fixed-cost repercusion for this specific date
-    let rep = repercusionCache.get(e.fecha)
-    if (rep === undefined) {
-      rep = repercusionAt(fixedHistory, salHist, e.fecha, minoracion, repercusion)
-      repercusionCache.set(e.fecha, rep)
-    }
-
-    const fallback = mi?.costeHora ?? repercusion
-    // Use historical salary rate + historical fixed-cost repercusion for this date
-    const ch       = historicalCostPerHour(salHist, e.user_id, e.fecha, fallback, rep)
-    const costo    = e.horas * ch
+    // Salario + repercusión de costes fijos vigentes en la fecha de la entrada
+    const costo    = e.horas * costeHora(e.user_id, e.fecha)
     totalHoras    += e.horas
     totalCosto    += costo
 
@@ -187,49 +173,18 @@ export default async function Page({ params }: { params: { id: string } }) {
 
   // ── Mobiliario: pass-through con margen ──────────────────────────────────────
   // El suplido bruto NO es ingreso del estudio; solo cuenta el margen (estimado
-  // mientras no se liquide, real al liquidar). Evita inflar la rentabilidad.
-  const pctMap  = new Map<string, number>()
-  const provMap = new Map<string, string>()   // factura.id → proveedor_id (si lo tiene)
-  const { data: pctRows } = await admin
-    .from('facturas').select('id, margen_estimado_pct, proveedor_id').eq('proyecto_id', params.id)
-  for (const r of (pctRows ?? [])) {
-    const v = (r as { margen_estimado_pct?: number | null }).margen_estimado_pct
-    if (v != null) pctMap.set(r.id, Number(v))
-    const pv = (r as { proveedor_id?: string | null }).proveedor_id
-    if (pv) provMap.set(r.id, pv)
-  }
-  let mobiliarioLiquidado = false
+  // mientras no se liquide, real al liquidar). La regla vive en rentabilidad.ts.
   const { data: liqRow } = await admin
     .from('proyectos').select('mobiliario_liquidado').eq('id', params.id).maybeSingle()
-  if (liqRow) mobiliarioLiquidado = Boolean((liqRow as { mobiliario_liquidado?: boolean }).mobiliario_liquidado)
+  const mobiliarioLiquidado = Boolean((liqRow as { mobiliario_liquidado?: boolean } | null)?.mobiliario_liquidado)
 
-  // "Compra de mobiliario" mezcla dos naturalezas y hay que separarlas:
-  //  · Suplidos (sin proveedor): los paga el cliente y alimentan el depósito.
-  //  · Rappels / descuentos (con proveedor): los paga el proveedor de muebles por
-  //    ser interioristas. Son margen íntegro, no suplido. Contarlos como suplido
-  //    inflaría el depósito y el margen saldría mal por ambos lados.
-  const mobFacturas  = (facturas ?? []).filter(f => f.seccion === SECCION_MOBILIARIO)
-  const esRappel     = (f: { id: string }) => !!provMap.get(f.id)
-  const mobSuplidos  = mobFacturas.filter(f => !esRappel(f))
-  const mobRappels   = mobFacturas.filter(f =>  esRappel(f))
-
-  const mobCompras   = ((costosVariablesProyecto ?? []) as unknown as { categoria: string; monto: number }[])
-    .filter(c => c.categoria === CATEGORIA_MOBILIARIO)
-    .reduce((s, c) => s + Number(c.monto ?? 0), 0)
-  const mobSuplido   = mobSuplidos.reduce((s, f) => s + f.monto, 0)
-  const mobRappel    = mobRappels .reduce((s, f) => s + f.monto, 0)
-  // El rappel es margen tanto en la previsión como en la liquidación.
-  const mobEstimado  = mobSuplidos.reduce((s, f) => s + f.monto * ((pctMap.get(f.id) ?? 0) / 100), 0) + mobRappel
-  const mobReal      = mobSuplido - mobCompras + mobRappel
-  const mobEfectivo  = mobiliarioLiquidado ? mobReal : mobEstimado
-
-  const mobRappelCobrado   = mobRappels.filter(f => f.status === 'pagada').reduce((s, f) => s + f.monto, 0)
-  const mobEstimadoCobrado = mobSuplidos.filter(f => f.status === 'pagada')
-    .reduce((s, f) => s + f.monto * ((pctMap.get(f.id) ?? 0) / 100), 0) + mobRappelCobrado
-  const mobSuplidoCobrado  = mobSuplidos.filter(f => f.status === 'pagada').reduce((s, f) => s + f.monto, 0)
-  const mobEfectivoCobrado = mobiliarioLiquidado
-    ? Math.max(0, mobSuplidoCobrado - mobCompras) + mobRappelCobrado
-    : mobEstimadoCobrado
+  const ingresos = ingresosProyecto(facturas ?? [], {
+    comprasMobiliario: comprasMobiliarioPorProyecto(
+      ((costosVariablesProyecto ?? []) as unknown as { categoria: string; monto: number }[])
+        .map((c) => ({ ...c, proyecto_id: params.id }))
+    ).get(params.id) ?? 0,
+    mobiliarioLiquidado,
+  })
 
   // Aggregate billing by section
   const STATUS_ORDER = ['acordada_contrato', 'cobrable', 'enviada', 'pagada', 'impagada']
@@ -248,7 +203,7 @@ export default async function Page({ params }: { params: { id: string } }) {
   // El mobiliario aporta su margen neto, no el suplido bruto
   const mobStats = bySectionMap.get(SECCION_MOBILIARIO)
   if (mobStats) {
-    bySectionMap.set(SECCION_MOBILIARIO, { ...mobStats, monto: mobEfectivo, cobrado: mobEfectivoCobrado })
+    bySectionMap.set(SECCION_MOBILIARIO, { ...mobStats, monto: ingresos.mobEfectivo, cobrado: ingresos.mobEfectivoCobrado })
   }
 
   const billingBySec = Array.from(bySectionMap.values()).sort((a, b) => {
@@ -257,12 +212,8 @@ export default async function Page({ params }: { params: { id: string } }) {
     return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib)
   })
 
-  const totalAcordado = (facturas ?? [])
-    .filter(f => f.seccion !== SECCION_MOBILIARIO)
-    .reduce((s, f) => s + f.monto, 0) + mobEfectivo
-  const totalCobrado  = (facturas ?? [])
-    .filter(f => f.seccion !== SECCION_MOBILIARIO && f.status === 'pagada')
-    .reduce((s, f) => s + f.monto, 0) + mobEfectivoCobrado
+  const totalAcordado = ingresos.acordado
+  const totalCobrado  = ingresos.cobrado
 
   const costBySec = Array.from(bySeccion.entries())
     .map(([seccion, s]) => ({ seccion, horas: s.horas, costo: s.costo }))

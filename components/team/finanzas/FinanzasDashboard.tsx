@@ -396,7 +396,7 @@ function AvgProjectMarginCard({ kpis }: { kpis: KPIs }) {
               <span style={{ fontSize: 24, fontWeight: 300 }}>%</span>
             </p>
             <p style={{ fontSize: 10, color: '#AAA', margin: '10px 0 0' }}>
-              promedio · {projectCount} proyecto{projectCount !== 1 ? 's' : ''} con datos
+              ponderado · {projectCount} proyecto{projectCount !== 1 ? 's' : ''} con datos
             </p>
           </div>
         ) : (

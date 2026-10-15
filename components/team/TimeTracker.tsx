@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { selectTodo } from '@/lib/supabase/select-todo'
 import { deleteTimeEntry } from '@/app/actions/time-tracker'
 import { MarketingMetricsView } from '@/components/team/marketing/MarketingMetricsView'
 import {
@@ -32,7 +33,7 @@ interface Proyecto {
   id: string
   nombre: string
   codigo: string
-  status: string  // 'activo' | 'on_hold'
+  status: string  // 'activo' | 'on_hold' | 'terminado' | …
 }
 
 interface Fase {
@@ -237,11 +238,12 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
       setTeamMembers(members)
     }
 
-    // Load active projects (activo + on_hold)
+    // Todos los proyectos, también los terminados: las horas ya apuntadas a un
+    // proyecto cerrado tienen que seguir viéndose en la rejilla y contando en los
+    // análisis. El desplegable filtra luego solo los activos (proyectosActivos).
     const { data: proyData } = await supabase
       .from('proyectos')
       .select('id, nombre, codigo, status')
-      .in('status', ['activo', 'on_hold'])
       .order('nombre')
 
     if (proyData) {
@@ -382,15 +384,17 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
       endDate = `${year}-12-31`
     }
 
-    const { data } = await supabase
+    // Un año de una persona pasa de 1000 filas: hay que paginar o el análisis se corta.
+    const data = await selectTodo<TimeEntry>((desde, hasta) => supabase
       .from('time_entries')
       .select('*')
       .eq('user_id', currentUserId)
       .gte('fecha', startDate)
       .lte('fecha', endDate)
-      .order('fecha')
+      .order('fecha').order('hora_inicio')
+      .range(desde, hasta))
 
-    setAnalysisEntries((data as TimeEntry[]) ?? [])
+    setAnalysisEntries(data)
     setAnalysisLoading(false)
   }, [supabase, currentUserId])
 
@@ -420,15 +424,16 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
     const allIds = teamMembers.map((m) => m.id)
     if (allIds.length === 0) { setTeamAnalysisLoading(false); return }
 
-    const { data } = await supabase
+    const data = await selectTodo<TimeEntry>((desde, hasta) => supabase
       .from('time_entries')
       .select('*')
       .in('user_id', allIds)
       .gte('fecha', startDate)
       .lte('fecha', endDate)
-      .order('fecha')
+      .order('fecha').order('user_id').order('hora_inicio')
+      .range(desde, hasta))
 
-    setTeamAnalysisEntries((data as TimeEntry[]) ?? [])
+    setTeamAnalysisEntries(data)
     setTeamAnalysisLoading(false)
   }, [supabase, teamMembers])
 
@@ -618,13 +623,14 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
 
   const exportCSV = async () => {
     const year = new Date().getFullYear()
-    const { data: entries } = await supabase
+    const entries = await selectTodo<TimeEntry>((desde, hasta) => supabase
       .from('time_entries')
       .select('*')
       .in('user_id', teamMembers.map((m) => m.id))
       .gte('fecha', `${year}-01-01`)
       .lte('fecha', `${year}-12-31`)
-      .order('fecha').order('hora_inicio')
+      .order('fecha').order('user_id').order('hora_inicio')
+      .range(desde, hasta))
 
     if (!entries || entries.length === 0) return
 
@@ -713,6 +719,12 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
 
   // ── Phase lookup helpers ──
 
+  // Solo a estos se pueden apuntar horas nuevas; los terminados se ven pero no se ofrecen.
+  const proyectosActivos = useMemo(
+    () => proyectos.filter((p) => p.status === 'activo' || p.status === 'on_hold'),
+    [proyectos]
+  )
+
   const phasesByProject = useMemo(() => {
     const map: Record<string, { proyecto: Proyecto; fases: Fase[] }> = {}
     proyectos.forEach((p) => { map[p.id] = { proyecto: p, fases: [] } })
@@ -800,7 +812,7 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
     // Architecture projects: drill into fases when project name doesn't match.
     // A fase is shown if its label or its section matches; if the project matches,
     // all its fases are shown.
-    const filteredProjects = proyectos.map((p) => {
+    const filteredProjects = proyectosActivos.map((p) => {
       const projFases = phasesByProject[p.id]?.fases ?? []
       if (!q) return { proyecto: p, fases: projFases }
       const projectMatches = p.nombre.toLowerCase().includes(q) || p.codigo.toLowerCase().includes(q)
@@ -843,7 +855,7 @@ export default function TimeTracker({ currentUserId, currentUserRole }: TimeTrac
         (o.cliente_potencial ?? '').toLowerCase().includes(q))
 
     return { filteredCatsTrabajo, filteredCatsAusencia, filteredProjects, filteredProyectosNegocio, filteredOfertas }
-  }, [dropSearch, proyectos, phasesByProject, proyectosNegocio, seccionesNegocio, fasesNegocio, ofertasFP, categoriasInternas, currentUserId, currentUserRole])
+  }, [dropSearch, proyectosActivos, phasesByProject, proyectosNegocio, seccionesNegocio, fasesNegocio, ofertasFP, categoriasInternas, currentUserId, currentUserRole])
 
   // ── Notes ──
 

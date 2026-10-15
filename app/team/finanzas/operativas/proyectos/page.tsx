@@ -2,11 +2,11 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import ProyectosAnalisisPage from '@/components/team/finanzas/ProyectosAnalisisPage'
-import { historicalCostPerHour } from '@/lib/finanzas/salaryHistory'
 import type { SalaryRecord } from '@/lib/finanzas/salaryHistory'
-import { repercusionAt } from '@/lib/finanzas/fixedCostHistory'
 import type { FixedCostRecord } from '@/lib/finanzas/fixedCostHistory'
-import { calcRepercusion } from '@/lib/finanzas/costs'
+import { crearCosteHora, ingresosProyecto, comprasMobiliarioPorProyecto } from '@/lib/finanzas/rentabilidad'
+import type { FacturaIngreso } from '@/lib/finanzas/rentabilidad'
+import { selectTodo } from '@/lib/supabase/select-todo'
 
 export const metadata = { title: 'Análisis de proyectos · Finanzas operativas' }
 
@@ -27,25 +27,29 @@ export default async function Page() {
   const [
     { data: proyectos },
     { data: members },
-    { data: timeEntries },
+    timeEntries,
     { data: costosFijos },
     { data: fixedCostHistory },
     { data: configRows },
     { data: facturas },
     { data: salaryHistory },
+    { data: costosVariables },
   ] = await Promise.all([
     admin
       .from('proyectos')
-      .select('id, nombre, codigo, imagen_url, status, clientes!cliente_id(id, nombre)')
+      .select('id, nombre, codigo, imagen_url, status, mobiliario_liquidado, clientes!cliente_id(id, nombre)')
       .order('created_at', { ascending: false }),
     admin
       .from('profiles')
       .select('id, salario_mensual, horas_mensuales')
       .in('rol', ['fp_team', 'fp_manager', 'fp_partner']),
-    admin
+    // Paginado: son miles de filas y PostgREST corta en 1000 sin avisar.
+    selectTodo<{ user_id: string; proyecto_id: string; horas: number; fecha: string }>((desde, hasta) => admin
       .from('time_entries')
       .select('user_id, proyecto_id, horas, fecha')
-      .not('proyecto_id', 'is', null),
+      .not('proyecto_id', 'is', null)
+      .order('id')
+      .range(desde, hasta)),
     admin
       .from('costos_fijos')
       .select('monto'),
@@ -58,64 +62,50 @@ export default async function Page() {
       .eq('key', 'minoracion_no_facturable'),
     admin
       .from('facturas')
-      .select('proyecto_id, monto, status'),
+      .select('proyecto_id, seccion, monto, status, proveedor_id, margen_estimado_pct'),
     admin
       .from('salarios_historia')
       .select('user_id, salario_mensual, horas_mensuales, valid_from, valid_to'),
+    admin
+      .from('costos_variables')
+      .select('proyecto_id, categoria, monto')
+      .not('proyecto_id', 'is', null),
   ])
 
-  // Current repercusión (used as fallback for entries without full history coverage)
-  const minoracion  = configRows?.[0]?.value ?? 0
-  const repercusion = calcRepercusion(costosFijos ?? [], members ?? [], minoracion)
-
-  // Current cost/hour per member (used as fallback when no salary history covers the date)
-  const memberCostMap = new Map<string, number>()
-  for (const m of (members ?? [])) {
-    const base = m.salario_mensual && m.horas_mensuales
-      ? m.salario_mensual / m.horas_mensuales
-      : 0
-    memberCostMap.set(m.id, base + repercusion)
-  }
-
-  const salHist      = (salaryHistory     ?? []) as SalaryRecord[]
-  const fixedHistory = (fixedCostHistory  ?? []) as FixedCostRecord[]
-
-  // Cache repercusion per date — many entries share the same fecha
-  const repercusionCache = new Map<string, number>()
+  const { costeHora } = crearCosteHora({
+    members:      members ?? [],
+    costosFijos:  costosFijos ?? [],
+    minoracion:   configRows?.[0]?.value ?? 0,
+    salHist:      (salaryHistory    ?? []) as SalaryRecord[],
+    fixedHistory: (fixedCostHistory ?? []) as FixedCostRecord[],
+  })
 
   // Aggregate hours + cost per project using fully historical rates
   const aggr = new Map<string, { horas: number; costo: number }>()
-  for (const e of (timeEntries ?? [])) {
+  for (const e of timeEntries) {
     if (!e.proyecto_id || !e.fecha) continue
-
-    let rep = repercusionCache.get(e.fecha)
-    if (rep === undefined) {
-      rep = repercusionAt(fixedHistory, salHist, e.fecha, minoracion, repercusion)
-      repercusionCache.set(e.fecha, rep)
-    }
-
-    const prev     = aggr.get(e.proyecto_id) ?? { horas: 0, costo: 0 }
-    const fallback = memberCostMap.get(e.user_id) ?? repercusion
-    const chTotal  = historicalCostPerHour(salHist, e.user_id, e.fecha, fallback, rep)
+    const prev = aggr.get(e.proyecto_id) ?? { horas: 0, costo: 0 }
     aggr.set(e.proyecto_id, {
       horas: prev.horas + e.horas,
-      costo: prev.costo + e.horas * chTotal,
+      costo: prev.costo + e.horas * costeHora(e.user_id, e.fecha),
     })
   }
 
-  // Aggregate billing per project
-  const billing = new Map<string, { acordado: number; cobrado: number }>()
+  // Billing per project — mobiliario a margen neto, igual que la ficha
+  const facturasPorProyecto = new Map<string, FacturaIngreso[]>()
   for (const f of (facturas ?? [])) {
-    const prev = billing.get(f.proyecto_id) ?? { acordado: 0, cobrado: 0 }
-    billing.set(f.proyecto_id, {
-      acordado: prev.acordado + f.monto,
-      cobrado:  prev.cobrado  + (f.status === 'pagada' ? f.monto : 0),
-    })
+    const arr = facturasPorProyecto.get(f.proyecto_id) ?? []
+    arr.push(f)
+    facturasPorProyecto.set(f.proyecto_id, arr)
   }
+  const comprasMob = comprasMobiliarioPorProyecto(costosVariables ?? [])
 
   const cards = (proyectos ?? []).map(p => {
     const s       = aggr.get(p.id) ?? { horas: 0, costo: 0 }
-    const b       = billing.get(p.id) ?? { acordado: 0, cobrado: 0 }
+    const b       = ingresosProyecto(facturasPorProyecto.get(p.id) ?? [], {
+      comprasMobiliario:   comprasMob.get(p.id) ?? 0,
+      mobiliarioLiquidado: Boolean(p.mobiliario_liquidado),
+    })
     const cliente = p.clientes as unknown as { nombre: string } | null
     return {
       id:            p.id,

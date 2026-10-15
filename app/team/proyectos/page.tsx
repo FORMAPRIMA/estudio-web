@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import KanbanBoard from '@/components/team/proyectos/KanbanBoard'
+import { selectTodo } from '@/lib/supabase/select-todo'
 import type { ProyectoInterno, CatalogoFase, UserProfile } from '@/lib/types'
 
 export const metadata = { title: 'Proyectos' }
@@ -98,13 +99,16 @@ export default async function ProyectosPage() {
   }
 
   // Sum executed hours from time_entries per project
-  const { data: timeEntriesRaw } = await admin
+  // Paginado: son miles de filas y PostgREST corta en 1000 sin avisar.
+  const timeEntriesRaw = await selectTodo<{ proyecto_id: string; horas: number }>((desde, hasta) => admin
     .from('time_entries')
     .select('proyecto_id, horas')
     .not('proyecto_id', 'is', null)
+    .order('id')
+    .range(desde, hasta))
 
   const horasEjecutadasByProject: Record<string, number> = {}
-  for (const e of timeEntriesRaw ?? []) {
+  for (const e of timeEntriesRaw) {
     if (!e.proyecto_id) continue
     horasEjecutadasByProject[e.proyecto_id] = (horasEjecutadasByProject[e.proyecto_id] ?? 0) + (e.horas ?? 0)
   }
