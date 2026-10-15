@@ -1335,6 +1335,31 @@ export default function PropuestaIslaCreta({ slug, medir = false }: { slug: stri
       </div>
       <i className="pic-avance" style={{ transform: `scaleX(${(i + (paso + 1) / pasos) / N})` }} aria-hidden="true" />
 
+      {/* Móvil en vertical: la presentación no se lee; se tapa hasta que lo giren
+          (Safari no deja bloquear la orientación desde una web). Como en los dossiers. */}
+      <div className="pic-rotar" role="dialog" aria-label="Gire el móvil para ver la propuesta">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={`${A}/portada.webp`} alt="" aria-hidden="true" className="pic-rotar-fondo" />
+        <div className="pic-rotar-logos">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/propuestas/logo-fp.png" alt="Forma Prima" className="fp" />
+          <i />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={`${A}/logo-rsa-claro.png`} alt="Grupo RSA" className="rsa" />
+        </div>
+        <div className="pic-rotar-centro">
+          <svg className="pic-rotar-movil" width="64" height="64" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+            <rect x="20" y="6" width="24" height="52" rx="5" stroke="currentColor" strokeWidth="1.2" />
+            <line x1="29" y1="11" x2="35" y2="11" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+          </svg>
+          <div className="pic-rotar-ante">Propuesta de honorarios</div>
+          <div className="pic-rotar-titulo">Isla Creta</div>
+          <div className="pic-rotar-linea" />
+          <p className="pic-rotar-texto">Para explorar esta propuesta,<br />gire su iPhone en horizontal.</p>
+        </div>
+        <p className="pic-rotar-pie">¿No gira la pantalla? Desactive el bloqueo de rotación en el Centro de control.</p>
+      </div>
+
       {/* Carga */}
       <div className={`pic-splash${splash ? '' : ' fuera'}`} role="status" aria-hidden={!splash}>
         <div className="pic-splash-logos">
@@ -1843,5 +1868,27 @@ html,body{background:#0d0d0d!important;margin:0;overflow:hidden;overscroll-behav
 .pic-barra i{display:block;height:100%;background:var(--blanco);transform-origin:0 50%;transition:transform .3s;}
 .pic-splash-saltar{position:absolute;bottom:40px;background:none;border:0;color:rgba(251,251,250,.4);font-size:12px;cursor:pointer;text-decoration:underline;}
 
-@media (prefers-reduced-motion:reduce){.pic-slide,.pic-3d{transition:none!important;}}
+/* Gire el móvil */
+.pic-rotar{display:none;}
+@media (orientation:portrait) and (max-width:600px){
+  .pic-rotar{display:flex;position:fixed;inset:0;z-index:200;flex-direction:column;align-items:center;justify-content:space-between;
+    padding:calc(env(safe-area-inset-top) + 40px) 32px calc(env(safe-area-inset-bottom) + 32px);background:var(--negro);color:var(--blanco);
+    text-align:center;overflow:hidden;animation:pic-rotar-in .8s cubic-bezier(.4,0,.2,1) both;touch-action:none;}
+  .pic-rotar>*{position:relative;}
+  .pic-rotar-fondo{position:absolute!important;inset:-40px;width:calc(100% + 80px);height:calc(100% + 80px);max-width:none!important;object-fit:cover;filter:blur(30px) saturate(.7);opacity:.3;transform:scale(1.05);}
+  .pic-rotar-logos{display:flex;align-items:center;gap:14px;}
+  .pic-rotar-logos .fp{height:14px;width:auto;}
+  .pic-rotar-logos .rsa{height:30px;width:auto;}
+  .pic-rotar-logos i{width:1px;height:24px;background:rgba(251,251,250,.35);}
+  .pic-rotar-centro{display:flex;flex-direction:column;align-items:center;}
+  .pic-rotar-movil{color:var(--oro);margin-bottom:40px;transform-origin:50% 50%;animation:pic-rotar 3.2s cubic-bezier(.65,0,.35,1) .9s infinite;}
+  .pic-rotar-ante{font-family:'Newsreader',serif;font-style:italic;font-size:17px;color:var(--oro);}
+  .pic-rotar-titulo{margin-top:14px;font-size:44px;font-weight:200;letter-spacing:-.03em;line-height:1.02;}
+  .pic-rotar-linea{width:48px;height:1px;background:var(--oro);margin:30px 0 26px;}
+  .pic-rotar-texto{margin:0;font-size:16px;font-weight:300;line-height:1.55;opacity:.8;}
+  .pic-rotar-pie{margin:0;max-width:280px;font-size:11px;font-weight:300;line-height:1.5;opacity:.42;}
+}
+@keyframes pic-rotar-in{from{opacity:0}to{opacity:1}}
+@keyframes pic-rotar{0%,22%{transform:rotate(0)}48%,78%{transform:rotate(-90deg)}100%{transform:rotate(0)}}
+@media (prefers-reduced-motion:reduce){.pic-slide,.pic-3d{transition:none!important;}.pic-rotar-movil{animation:none!important;}}
 `
