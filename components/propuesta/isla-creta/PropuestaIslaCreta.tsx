@@ -1356,7 +1356,7 @@ export default function PropuestaIslaCreta({ slug, medir = false }: { slug: stri
           <div className="pic-rotar-titulo">Isla Creta</div>
           <div className="pic-rotar-linea" />
           <p className="pic-rotar-texto">Para explorar esta propuesta,<br />gire su iPhone en horizontal.</p>
-          <p className="pic-rotar-ordenador">Para la mejor experiencia con la maqueta 3D, le recomendamos abrirla en un ordenador.</p>
+          <p className="pic-rotar-ordenador">Para la mejor experiencia con la maqueta 3D, le recomendamos abrirla en una computadora.</p>
         </div>
         <p className="pic-rotar-pie">¿No gira la pantalla? Desactive el bloqueo de rotación en el Centro de control.</p>
       </div>
