@@ -44,14 +44,14 @@ export default async function Page() {
     { data: salaryHistory },
     { data: fixedCostHistory },
     { data: costosVariablesProyecto },
+    { data: bizDev },
   ] = await Promise.all([
-    // Billing chart — current year ± 1
+    // Billing chart — current year ± 1, por fecha acordada o de cobro (una
+    // factura cobrada se pinta en el mes en que entró el dinero)
     admin
       .from('facturas')
-      .select('monto, seccion, proveedor_id, margen_estimado_pct, fecha_pago_acordada, status')
-      .not('fecha_pago_acordada', 'is', null)
-      .gte('fecha_pago_acordada', `${year - 1}-01-01`)
-      .lte('fecha_pago_acordada', `${year + 1}-12-31`)
+      .select('monto, seccion, proveedor_id, margen_estimado_pct, fecha_pago_acordada, fecha_cobro, status')
+      .or(`and(fecha_pago_acordada.gte.${year - 1}-01-01,fecha_pago_acordada.lte.${year + 1}-12-31),and(fecha_cobro.gte.${year - 1}-01-01,fecha_cobro.lte.${year + 1}-12-31)`)
       .order('fecha_pago_acordada'),
     // Cost data
     admin
@@ -89,7 +89,7 @@ export default async function Page() {
     admin
       .from('facturas')
       .select('id, proyecto_id, seccion, concepto, numero_factura, factura_emitida_id, monto, fecha_pago_acordada, fecha_emision, fecha_cobro, status')
-      .or(`and(fecha_pago_acordada.gte.${year}-01-01,fecha_pago_acordada.lte.${year}-12-31),fecha_pago_acordada.is.null`),
+      .or(`and(fecha_pago_acordada.gte.${year}-01-01,fecha_pago_acordada.lte.${year}-12-31),and(fecha_cobro.gte.${year}-01-01,fecha_cobro.lte.${year}-12-31),fecha_pago_acordada.is.null`),
     // Project lookup for breakdown rows
     admin
       .from('proyectos')
@@ -104,6 +104,10 @@ export default async function Page() {
       .from('costos_variables')
       .select('proyecto_id, categoria, monto')
       .not('proyecto_id', 'is', null),
+    admin
+      .from('profiles')
+      .select('id')
+      .eq('rol', 'fp_biz_dev'),
   ])
 
   // ── Monthly costs (for billing vs cost chart) ────────────────────────────────
@@ -143,6 +147,7 @@ export default async function Page() {
     minoracion,
     salHist,
     fixedHistory,
+    excluirDelReparto: (bizDev ?? []).map(p => p.id),
   })
 
   // fase_id → { proyecto_id, seccion }
@@ -227,6 +232,7 @@ export default async function Page() {
       facturas={(facturas ?? []).map(f => ({
         monto:               ingresoNetoEstimado(f),
         fecha_pago_acordada: f.fecha_pago_acordada ?? null,
+        fecha_cobro:         f.fecha_cobro ?? null,
         status:              f.status,
       }))}
       year={year}

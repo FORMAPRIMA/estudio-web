@@ -1,6 +1,10 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { MarketingHorasPage } from '@/components/team/marketing/MarketingHorasPage'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { tarifasDeSueldo } from '@/lib/finanzas/rentabilidad'
+import type { TarifaHora } from '@/lib/finanzas/rentabilidad'
+import type { SalaryRecord } from '@/lib/finanzas/salaryHistory'
 import type {
   ProyectoNegocio,
   SeccionNegocio,
@@ -75,8 +79,21 @@ export default async function MarketingHorasRoute() {
     color:    PALETTE[i % PALETTE.length],
   }))
 
+  // Coste en € de las horas: sale de los sueldos, así que solo llega a los socios.
+  let tarifas: TarifaHora[] | undefined
+  if (profile.rol === 'fp_partner') {
+    const admin = createAdminClient()
+    const ids = teamMembers.map(m => m.id)
+    const [{ data: salHist }, { data: perfiles }] = await Promise.all([
+      admin.from('salarios_historia').select('user_id, salario_mensual, horas_mensuales, valid_from, valid_to').in('user_id', ids),
+      admin.from('profiles').select('id, salario_mensual, horas_mensuales').in('id', ids),
+    ])
+    tarifas = tarifasDeSueldo((salHist ?? []) as SalaryRecord[], perfiles ?? [])
+  }
+
   return (
     <MarketingHorasPage
+      tarifas={tarifas}
       currentUserId={user.id}
       currentUserRole={profile.rol as 'fp_partner' | 'fp_biz_dev'}
       proyectosNegocio={(proyectosData ?? []) as ProyectoNegocio[]}

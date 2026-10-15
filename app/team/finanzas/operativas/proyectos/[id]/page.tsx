@@ -46,6 +46,7 @@ export default async function Page({ params }: { params: { id: string } }) {
     { data: facturas },
     { data: fixedCostHistory },
     { data: costosVariablesProyecto },
+    { data: bizDev },
   ] = await Promise.all([
     admin
       .from('profiles')
@@ -82,6 +83,10 @@ export default async function Page({ params }: { params: { id: string } }) {
       .eq('proyecto_id', params.id)
       .order('año', { ascending: false })
       .order('mes', { ascending: false }),
+    admin
+      .from('profiles')
+      .select('id')
+      .eq('rol', 'fp_biz_dev'),
   ])
 
   const { costeHora, repercusionActual: repercusion } = crearCosteHora({
@@ -90,6 +95,7 @@ export default async function Page({ params }: { params: { id: string } }) {
     minoracion:   configRows?.[0]?.value ?? 0,
     salHist:      (salaryHistory    ?? []) as SalaryRecord[],
     fixedHistory: (fixedCostHistory ?? []) as FixedCostRecord[],
+    excluirDelReparto: (bizDev ?? []).map(p => p.id),
   })
 
   type MemberInfo = { nombre: string; apellido: string | null; avatar_url: string | null }

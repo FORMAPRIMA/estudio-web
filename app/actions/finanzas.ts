@@ -4,6 +4,18 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 
+/**
+ * Hoy y ayer como 'YYYY-MM-DD' en hora de Madrid. Con toISOString() salían en
+ * UTC: un cambio hecho entre las 0:00 y las 2:00 se fechaba el día anterior.
+ */
+function hoyYAyerMadrid() {
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid' }).format(new Date())
+  const d = new Date(`${today}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() - 1)
+  return { today, yesterday: d.toISOString().slice(0, 10) }
+}
+
+
 async function requirePartner() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -43,8 +55,7 @@ export async function updateMemberCosts(
     // 2. If salary or hours changed, snapshot into salary history
     //    so past project costs are never affected by future changes
     if (data.salario_mensual !== undefined || data.horas_mensuales !== undefined) {
-      const today     = new Date().toISOString().split('T')[0]
-      const yesterday = new Date(Date.now() - 86_400_000).toISOString().split('T')[0]
+      const { today, yesterday } = hoyYAyerMadrid()
 
       // Read back the full updated profile so we always store both values together
       const { data: profile } = await admin
@@ -140,8 +151,7 @@ export async function updateCostoFijo(
 
     // If monto changed, snapshot into history so past costs are never affected
     if (data.monto !== undefined) {
-      const today     = new Date().toISOString().split('T')[0]
-      const yesterday = new Date(Date.now() - 86_400_000).toISOString().split('T')[0]
+      const { today, yesterday } = hoyYAyerMadrid()
 
       // Read back current state (concepto may have been updated simultaneously)
       const { data: current } = await admin

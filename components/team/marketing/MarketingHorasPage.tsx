@@ -1,5 +1,6 @@
 'use client'
 
+import type { TarifaHora } from '@/lib/finanzas/rentabilidad'
 import { useState } from 'react'
 import { ProyectosInternosTab } from '@/components/team/proyectos/PlantillaManager'
 import { MarketingMetricsTab } from '@/components/team/marketing/MarketingMetricsTab'
@@ -17,6 +18,7 @@ interface Props {
   seccionesNegocio: SeccionNegocio[]
   fasesNegocio:     FaseNegocio[]
   teamMembers:      TeamMemberSimple[]
+  tarifas?:         TarifaHora[]
 }
 
 export function MarketingHorasPage({
@@ -26,6 +28,7 @@ export function MarketingHorasPage({
   seccionesNegocio,
   fasesNegocio,
   teamMembers,
+  tarifas,
 }: Props) {
   const [activeTab, setActiveTab] = useState<'estructura' | 'metricas'>('estructura')
 
@@ -74,6 +77,7 @@ export function MarketingHorasPage({
 
       {activeTab === 'metricas' && (
         <MarketingMetricsTab
+          tarifas={tarifas}
           currentUserId={currentUserId}
           currentUserRole={currentUserRole}
           proyectosNegocio={proyectosNegocio}

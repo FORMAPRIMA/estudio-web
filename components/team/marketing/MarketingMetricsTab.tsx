@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { MarketingMetricsView } from '@/components/team/marketing/MarketingMetricsView'
+import { selectTodo } from '@/lib/supabase/select-todo'
+import type { TarifaHora } from '@/lib/finanzas/rentabilidad'
 import type {
   ProyectoNegocio,
   SeccionNegocio,
@@ -17,10 +19,12 @@ interface Props {
   seccionesNegocio: SeccionNegocio[]
   fasesNegocio:     FaseNegocio[]
   teamMembers:      TeamMemberSimple[]
+  tarifas?:         TarifaHora[]
 }
 
 interface RawEntry {
   user_id:           string
+  fecha:             string
   horas:             number
   es_extra:          boolean
   categoria_interna: string | null
@@ -65,6 +69,7 @@ export function MarketingMetricsTab({
   seccionesNegocio,
   fasesNegocio,
   teamMembers,
+  tarifas,
 }: Props) {
   const supabase = createClient()
 
@@ -120,15 +125,17 @@ export function MarketingMetricsTab({
 
     if (userIds.length === 0) { setEntries([]); setLoading(false); return }
 
-    const { data } = await supabase
+    const data = await selectTodo<RawEntry>((desde, hasta) => supabase
       .from('time_entries')
-      .select('user_id, horas, es_extra, categoria_interna')
+      .select('user_id, fecha, horas, es_extra, categoria_interna')
       .in('user_id', userIds)
       .gte('fecha', startDate)
       .lte('fecha', endDate)
       .like('categoria_interna', 'iproj_%')
+      .order('id')
+      .range(desde, hasta))
 
-    setEntries((data as RawEntry[] | null) ?? [])
+    setEntries(data)
     setLoading(false)
   }, [supabase, period, week, month, year, scope, teamMembers, currentUserId])
 
@@ -249,6 +256,7 @@ export function MarketingMetricsTab({
           mode={scope}
           userIdFilter={scope === 'personal' ? currentUserId : undefined}
           periodLabel={periodLabel}
+          tarifas={tarifas}
         />
       )}
     </div>

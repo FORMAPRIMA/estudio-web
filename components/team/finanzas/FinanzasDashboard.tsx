@@ -8,6 +8,7 @@ import { useMemo, useState } from 'react'
 interface Factura {
   monto: number
   fecha_pago_acordada: string | null
+  fecha_cobro: string | null
   status: string
 }
 
@@ -88,10 +89,10 @@ function BillingChart({ facturas, year, monthlyCosts }: Pick<Props, 'facturas' |
     const grid: Record<number, Record<string, number>> = {}
     for (let m = 0; m < 12; m++) grid[m] = {}
     for (const f of facturas) {
-      if (!f.fecha_pago_acordada) continue
-      const d = new Date(f.fecha_pago_acordada)
-      if (d.getFullYear() !== year) continue
-      const m = d.getMonth()
+      const fecha = fechaRef(f)
+      if (!fecha) continue
+      const { y, m } = anioMes(fecha)
+      if (y !== year) continue
       grid[m][f.status] = (grid[m][f.status] ?? 0) + f.monto
     }
     return grid
@@ -557,10 +558,20 @@ const SIN_FECHA_KEY = 'sin_fecha'
 
 type BucketKey = number | typeof SIN_FECHA_KEY
 
+// Las fechas llegan como 'YYYY-MM-DD' y se leen como texto: new Date() las toma
+// como medianoche UTC y en un huso americano (Miami) el día 1 caía en el mes anterior.
+function anioMes(iso: string) {
+  return { y: Number(iso.slice(0, 4)), m: Number(iso.slice(5, 7)) - 1 }
+}
+
+/** Dónde cae la factura en el calendario: cuándo se cobró si ya está pagada; si no, la fecha acordada. */
+function fechaRef(f: { status: string; fecha_cobro?: string | null; fecha_pago_acordada: string | null }) {
+  return (f.status === 'pagada' && f.fecha_cobro) || f.fecha_pago_acordada
+}
+
 function formatDate(iso: string | null): string {
   if (!iso) return '—'
-  const d = new Date(iso)
-  return d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' })
+  return `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(2, 4)}`
 }
 
 function FacturasBreakdown({
@@ -585,12 +596,13 @@ function FacturasBreakdown({
     const map = new Map<BucketKey, FacturaDetalle[]>()
     for (const f of facturasDetalle) {
       let key: BucketKey
-      if (!f.fecha_pago_acordada) {
+      const fecha = fechaRef(f)
+      if (!fecha) {
         key = SIN_FECHA_KEY
       } else {
-        const d = new Date(f.fecha_pago_acordada)
-        if (d.getFullYear() !== year) continue
-        key = d.getMonth()
+        const { y, m } = anioMes(fecha)
+        if (y !== year) continue
+        key = m
       }
       const list = map.get(key) ?? []
       list.push(f)
@@ -627,7 +639,7 @@ function FacturasBreakdown({
   }
 
   const totalAnual = facturasDetalle
-    .filter(f => f.fecha_pago_acordada && new Date(f.fecha_pago_acordada).getFullYear() === year)
+    .filter(f => { const fecha = fechaRef(f); return !!fecha && anioMes(fecha).y === year })
     .reduce((s, f) => s + f.monto, 0)
 
   const bucketLabel = (k: BucketKey) => k === SIN_FECHA_KEY ? 'Sin fecha asignada' : `${MONTHS_LONG[k as number]} ${year}`
@@ -860,8 +872,8 @@ export default function FinanzasDashboard({ facturas, year, monthlyCosts, kpis, 
   const fmtE0 = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
   const yearFacturas = facturas.filter(f => {
-    if (!f.fecha_pago_acordada) return false
-    return new Date(f.fecha_pago_acordada).getFullYear() === year
+    const fecha = fechaRef(f)
+    return !!fecha && anioMes(fecha).y === year
   })
 
   const totalAnual    = yearFacturas.reduce((s, f) => s + f.monto, 0)

@@ -1,6 +1,8 @@
 'use client'
 
 import { useMemo } from 'react'
+import { sueldoHoraEn } from '@/lib/finanzas/rentabilidad'
+import type { TarifaHora } from '@/lib/finanzas/rentabilidad'
 import type {
   ProyectoNegocio,
   SeccionNegocio,
@@ -12,6 +14,7 @@ import type {
 export interface MarketingMetricsEntry {
   user_id:            string
   horas:              number
+  fecha?:             string
   es_extra:           boolean
   categoria_interna?: string | null
 }
@@ -38,7 +41,12 @@ interface Props {
   userIdFilter?:    string
   /** Optional period label shown in the header (e.g. "Mar 2026", "1 abr — 7 abr"). */
   periodLabel?:     string
+  /** Solo socios: con esto se pinta el coste en € (sueldo de esas horas). */
+  tarifas?:         TarifaHora[]
 }
+
+const fmtEur = (n: number) =>
+  new Intl.NumberFormat('es-ES', { maximumFractionDigits: 0, useGrouping: 'always' } as Intl.NumberFormatOptions).format(n) + ' €'
 
 // ── Color helpers ─────────────────────────────────────────────────────────
 
@@ -83,6 +91,7 @@ export function MarketingMetricsView({
   mode,
   userIdFilter,
   periodLabel,
+  tarifas,
 }: Props) {
   // Build lookups once
   const lookup = useMemo(() => {
@@ -99,6 +108,7 @@ export function MarketingMetricsView({
       nombre:   string
       hours:    number
       extra:    number
+      cost:     number
       fases:    Map<string, { id: string; nombre: string; hours: number; extra: number }>
     }
     type ProyectoAgg = {
@@ -106,13 +116,15 @@ export function MarketingMetricsView({
       nombre:   string
       hours:    number
       extra:    number
+      cost:     number
       secciones: Map<string, SeccionAgg>
     }
     const proyectoMap = new Map<string, ProyectoAgg>()
-    const memberMap = new Map<string, { hours: number; extra: number; topProyectos: Map<string, number> }>()
+    const memberMap = new Map<string, { hours: number; extra: number; cost: number; topProyectos: Map<string, number> }>()
 
     let totalHours = 0
     let totalExtra = 0
+    let totalCost  = 0
 
     for (const entry of entries) {
       if (userIdFilter && entry.user_id !== userIdFilter) continue
@@ -126,21 +138,25 @@ export function MarketingMetricsView({
       const proyecto = lookup.proyectosById.get(seccion.proyecto_id)
       if (!proyecto || proyecto.equipo !== 'marketing') continue
 
+      const cost = tarifas && entry.fecha ? entry.horas * sueldoHoraEn(tarifas, entry.user_id, entry.fecha) : 0
+
       // Aggregate by proyecto/seccion/fase
       let proy = proyectoMap.get(proyecto.id)
       if (!proy) {
-        proy = { id: proyecto.id, nombre: proyecto.nombre, hours: 0, extra: 0, secciones: new Map() }
+        proy = { id: proyecto.id, nombre: proyecto.nombre, hours: 0, extra: 0, cost: 0, secciones: new Map() }
         proyectoMap.set(proyecto.id, proy)
       }
       proy.hours += entry.horas
+      proy.cost  += cost
       if (entry.es_extra) proy.extra += entry.horas
 
       let sec = proy.secciones.get(seccion.id)
       if (!sec) {
-        sec = { id: seccion.id, nombre: seccion.nombre, hours: 0, extra: 0, fases: new Map() }
+        sec = { id: seccion.id, nombre: seccion.nombre, hours: 0, extra: 0, cost: 0, fases: new Map() }
         proy.secciones.set(seccion.id, sec)
       }
       sec.hours += entry.horas
+      sec.cost  += cost
       if (entry.es_extra) sec.extra += entry.horas
 
       let f = sec.fases.get(fase.id)
@@ -154,14 +170,16 @@ export function MarketingMetricsView({
       // Per-member aggregation (for team mode)
       let mb = memberMap.get(entry.user_id)
       if (!mb) {
-        mb = { hours: 0, extra: 0, topProyectos: new Map() }
+        mb = { hours: 0, extra: 0, cost: 0, topProyectos: new Map() }
         memberMap.set(entry.user_id, mb)
       }
       mb.hours += entry.horas
+      mb.cost  += cost
       if (entry.es_extra) mb.extra += entry.horas
       mb.topProyectos.set(proyecto.id, (mb.topProyectos.get(proyecto.id) ?? 0) + entry.horas)
 
       totalHours += entry.horas
+      totalCost  += cost
       if (entry.es_extra) totalExtra += entry.horas
     }
 
@@ -190,6 +208,7 @@ export function MarketingMetricsView({
           color:         member?.color ?? '#888',
           avatar_url:    member?.avatar_url ?? null,
           hours:         agg.hours,
+          cost:          agg.cost,
           extra:         agg.extra,
           topProyecto:   topNombre,
           topHours:      topProyecto?.[1] ?? 0,
@@ -200,8 +219,8 @@ export function MarketingMetricsView({
     const maxProyectoHours = Math.max(...proyectos.map(p => p.hours), 1)
     const maxMemberHours = Math.max(...memberRows.map(m => m.hours), 1)
 
-    return { proyectos, memberRows, totalHours, totalExtra, maxProyectoHours, maxMemberHours }
-  }, [entries, lookup, teamMembers, userIdFilter])
+    return { proyectos, memberRows, totalHours, totalExtra, totalCost, maxProyectoHours, maxMemberHours }
+  }, [entries, lookup, teamMembers, userIdFilter, tarifas])
 
   if (data.totalHours === 0) {
     return (
@@ -234,6 +253,14 @@ export function MarketingMetricsView({
             horas marketing
           </div>
         </div>
+        {tarifas && (
+          <div style={{ paddingBottom: 4 }}>
+            <div style={{ fontSize: 22, fontWeight: 300, color: '#555' }}>{fmtEur(data.totalCost)}</div>
+            <div style={{ fontSize: 10, color: '#AAA', textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: 2 }}>
+              coste (sueldo)
+            </div>
+          </div>
+        )}
         <div style={{ paddingBottom: 4 }}>
           <div style={{ fontSize: 22, fontWeight: 300, color: '#555' }}>{data.proyectos.length}</div>
           <div style={{ fontSize: 10, color: '#AAA', textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: 2 }}>
@@ -273,6 +300,7 @@ export function MarketingMetricsView({
                   <span style={{ fontSize: 11, color: '#666' }}>
                     <strong style={{ fontWeight: 600 }}>{proy.hours}</strong>
                     <span style={{ color: '#AAA' }}>h</span>
+                    {tarifas && <span style={{ color: '#888', marginLeft: 6 }}>· {fmtEur(proy.cost)}</span>}
                     {proy.extra > 0 && (
                       <span style={{ color: '#D85A30', marginLeft: 6 }}>+{proy.extra} extra</span>
                     )}
@@ -310,7 +338,7 @@ export function MarketingMetricsView({
                       <div key={sec.id} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                         <span style={{ width: 8, height: 8, borderRadius: 2, background: c.bg, border: `1px solid ${c.tc}33`, display: 'inline-block' }} />
                         <span style={{ fontSize: 10, color: '#666' }}>
-                          {sec.nombre} <span style={{ color: '#AAA' }}>· {sec.hours}h</span>
+                          {sec.nombre} <span style={{ color: '#AAA' }}>· {sec.hours}h{tarifas ? ` · ${fmtEur(sec.cost)}` : ''}</span>
                         </span>
                       </div>
                     )
@@ -386,6 +414,9 @@ export function MarketingMetricsView({
                     <div style={{ fontSize: 14, fontWeight: 600, color: '#333' }}>
                       {m.hours}<span style={{ fontSize: 10, color: '#AAA', fontWeight: 400, marginLeft: 1 }}>h</span>
                     </div>
+                    {tarifas && (
+                      <div style={{ fontSize: 10, color: '#888' }}>{fmtEur(m.cost)}</div>
+                    )}
                     {m.extra > 0 && (
                       <div style={{ fontSize: 10, color: '#D85A30', fontWeight: 500 }}>+{m.extra} extra</div>
                     )}

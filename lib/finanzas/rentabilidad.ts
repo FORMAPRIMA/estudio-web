@@ -21,6 +21,12 @@ export interface CosteHoraInput {
   minoracion:   number
   salHist:      SalaryRecord[]
   fixedHistory: FixedCostRecord[]
+  /**
+   * Personas cuyas horas NO reparten costes fijos (fp_biz_dev): no trabajan en
+   * proyectos de cliente, así que contar sus horas abarataría la hora de proyecto.
+   * Su sueldo sí es coste del estudio, pero se ve aparte (Marketing → Horas).
+   */
+  excluirDelReparto?: string[]
 }
 
 /**
@@ -28,7 +34,8 @@ export interface CosteHoraInput {
  * fecha + repercusión de costes fijos histórica de esa fecha. Cuando el histórico
  * no cubre la fecha, cae al salario y la repercusión actuales.
  */
-export function crearCosteHora({ members, costosFijos, minoracion, salHist, fixedHistory }: CosteHoraInput) {
+export function crearCosteHora({ members, costosFijos, minoracion, salHist, fixedHistory, excluirDelReparto = [] }: CosteHoraInput) {
+  const salHistReparto = salHist.filter((r) => !excluirDelReparto.includes(r.user_id))
   const repercusionActual = calcRepercusion(costosFijos, members, minoracion)
 
   const actualPorMiembro = new Map<string, number>()
@@ -42,7 +49,7 @@ export function crearCosteHora({ members, costosFijos, minoracion, salHist, fixe
   const repercusionDe = (fecha: string) => {
     let rep = repercusionCache.get(fecha)
     if (rep === undefined) {
-      rep = repercusionAt(fixedHistory, salHist, fecha, minoracion, repercusionActual)
+      rep = repercusionAt(fixedHistory, salHistReparto, fecha, minoracion, repercusionActual)
       repercusionCache.set(fecha, rep)
     }
     return rep
@@ -132,4 +139,37 @@ export function comprasMobiliarioPorProyecto(
     map.set(c.proyecto_id, (map.get(c.proyecto_id) ?? 0) + Number(c.monto ?? 0))
   }
   return map
+}
+
+// ── Coste de sueldo (sin repercusión) ─────────────────────────────────────────
+
+/** Sueldo por hora de una persona en un tramo de fechas. `hasta` null = vigente. */
+export interface TarifaHora {
+  user_id: string
+  desde:   string | null   // null = sin histórico: tarifa actual, vale para cualquier fecha
+  hasta:   string | null
+  eurHora: number
+}
+
+/** Tramos de sueldo/hora desde salarios_historia, con el sueldo actual de respaldo. */
+export function tarifasDeSueldo(
+  salHist: SalaryRecord[],
+  perfiles: { id: string; salario_mensual: number | null; horas_mensuales: number | null }[]
+): TarifaHora[] {
+  const tarifas: TarifaHora[] = salHist
+    .filter((r) => r.horas_mensuales > 0)
+    .map((r) => ({ user_id: r.user_id, desde: r.valid_from, hasta: r.valid_to, eurHora: r.salario_mensual / r.horas_mensuales }))
+  for (const p of perfiles) {
+    if (p.salario_mensual && p.horas_mensuales) {
+      tarifas.push({ user_id: p.id, desde: null, hasta: null, eurHora: p.salario_mensual / p.horas_mensuales })
+    }
+  }
+  return tarifas
+}
+
+/** €/h de sueldo de esa persona en esa fecha (tramo histórico o, si no hay, el actual). */
+export function sueldoHoraEn(tarifas: TarifaHora[], userId: string, fecha: string): number {
+  const propias = tarifas.filter((t) => t.user_id === userId)
+  const tramo = propias.find((t) => t.desde !== null && t.desde <= fecha && (t.hasta === null || t.hasta >= fecha))
+  return (tramo ?? propias.find((t) => t.desde === null))?.eurHora ?? 0
 }

@@ -34,6 +34,7 @@ export default async function Page() {
     { data: facturas },
     { data: salaryHistory },
     { data: costosVariables },
+    { data: bizDev },
   ] = await Promise.all([
     admin
       .from('proyectos')
@@ -70,6 +71,10 @@ export default async function Page() {
       .from('costos_variables')
       .select('proyecto_id, categoria, monto')
       .not('proyecto_id', 'is', null),
+    admin
+      .from('profiles')
+      .select('id')
+      .eq('rol', 'fp_biz_dev'),
   ])
 
   const { costeHora } = crearCosteHora({
@@ -78,6 +83,7 @@ export default async function Page() {
     minoracion:   configRows?.[0]?.value ?? 0,
     salHist:      (salaryHistory    ?? []) as SalaryRecord[],
     fixedHistory: (fixedCostHistory ?? []) as FixedCostRecord[],
+    excluirDelReparto: (bizDev ?? []).map(p => p.id),
   })
 
   // Aggregate hours + cost per project using fully historical rates
