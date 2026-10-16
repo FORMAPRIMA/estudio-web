@@ -81,6 +81,14 @@ Publicadas así: Casa Zurbano (vertical, comprador, sin PIN) y Torre del Mangle
 **sin script de animación**: los arreglos de animación de `arreglos-dc.mjs` solo se aplican
 si el diseño trae `const isLogo`. Es sala cerrada, como Isla Creta (PIN personal por persona).
 
+**Presentación del estudio** (Chalet en Arturo Soria · Alejandra y Damián, `arturo-soria-bl6at`,
+16 oct 2026): deck horizontal sin cifras del proyecto. Con `final: 'reunion'` en el registro, la
+diapositiva final pide **la primera reunión** en vez de aceptar (mismo flujo; `aceptarPropuestaWeb`
+manda aviso + correo de reunión con la disponibilidad que escriban). Sala con PIN común
+(`acceso_anonimo = true`, como Torre). `--animar` ahora admite un diseño con script propio: queda
+como clase base y la animación la extiende; y los selectores `[src*="<vídeo>"]` del dossier pasan a
+`[data-fp-video="<vídeo>"]` (el `<video>` importado no tiene `src`, lo llevan sus `<source>`).
+
 ## Publicar una propuesta de diapositivas (`deck`)
 
 1. **Diseño.** En Claude Design, dos archivos por propuesta: la versión horizontal

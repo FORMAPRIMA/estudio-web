@@ -94,9 +94,23 @@ function cambiaUna(texto, buscar, poner) {
 async function main() {
   let html = fs.readFileSync(src(archivo), 'utf8')
   if (animar) {
-    if (html.includes('data-dc-script')) throw new Error('--animar: el diseño ya trae su propio script')
     const js = fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), 'animacion-dc.js'), 'utf8')
-    html = cambiaUna(html, '</x-dc>', '</x-dc>\n<script type="text/x-dc" data-dc-script data-props="{}">\n' + js + '</script>')
+    const propio = html.match(/(<script type="text\/x-dc" data-dc-script[^>]*>)([\s\S]*?)<\/script>/)
+    if (propio) {
+      // El diseño trae su propio script (p. ej. arrancar vídeos, botón de sonido):
+      // queda como clase base y la animación la extiende, llamando a los dos.
+      if (!/class Component extends DCLogic/.test(propio[2])) throw new Error('--animar: no reconozco el script propio del diseño')
+      const base = propio[2]
+        .replace('class Component extends DCLogic', 'class ComponenteDiseno extends DCLogic')
+        .replace(/this\._onSlide\b/g, 'this._onSlideDiseno')
+      const anim = js
+        .replace('class Component extends DCLogic', 'class Component extends ComponenteDiseno')
+        .replace(/componentDidMount\(\) \{/, 'componentDidMount() {\n    if (super.componentDidMount) super.componentDidMount();')
+        .replace(/componentWillUnmount\(\) \{/, 'componentWillUnmount() {\n    if (super.componentWillUnmount) super.componentWillUnmount();')
+      html = html.replace(propio[0], () => propio[1] + base + '\n' + anim + '</script>')
+    } else {
+      html = cambiaUna(html, '</x-dc>', '</x-dc>\n<script type="text/x-dc" data-dc-script data-props="{}">\n' + js + '</script>')
+    }
   }
   // og.jpg (vista previa al compartir) se hace aparte: que sobreviva a la reimportación.
   const og = path.join(PUB, 'og.jpg')
@@ -128,10 +142,14 @@ async function main() {
     fs.copyFileSync(av1, path.join(PUB, 'assets', `${base}.av1.mp4`))
     fs.copyFileSync(hevc, path.join(PUB, 'assets', `${base}.hevc.mp4`))
     videos.push(`${base}: AV1 ${(fs.statSync(av1).size / 1e6).toFixed(1)} MB + HEVC ${(fs.statSync(hevc).size / 1e6).toFixed(1)} MB`)
-    return `<video${a}${b}>` +
+    return `<video data-fp-video="${base}"${a}${b}>` +
       `<source src="assets/${base}.av1.mp4${frag}" type='video/mp4; codecs="av01.0.08M.10"'>` +
       `<source src="assets/${base}.hevc.mp4${frag}" type='video/mp4; codecs="hvc1.2.4.L120.B0"'>`
   })
+
+  // El <video> ya no tiene src (lo llevan sus <source>): los selectores del
+  // dossier que lo buscaban por src pasan a data-fp-video.
+  html = html.replace(/\[src\*="([^"\]]+)"\]/g, (m, base) => (html.includes(`data-fp-video="${base}"`) ? `[data-fp-video="${base}"]` : m))
 
   // Vídeos que el propio dossier asigna por código (v.src = 'uploads/x.mp4'),
   // p. ej. los de fondo con capas sincronizadas de Torre del Mangle: la cadena

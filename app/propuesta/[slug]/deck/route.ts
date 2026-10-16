@@ -24,6 +24,36 @@ const VERSION_ASSETS = (process.env.VERCEL_GIT_COMMIT_SHA || process.env.VERCEL_
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!))
 const bi = (es: string, en: string) => `<span data-es="">${es}</span><span data-en="" style="display:none;">${en}</span>`
 
+// Textos del final de una propuesta a un cliente. 'aceptar' (por defecto): aceptar
+// la propuesta. 'reunion': presentación del estudio sin cifras del proyecto, que
+// pide la primera reunión (en vosotros: suele ir a una pareja). El flujo y los
+// data-fp-* son los mismos; lo que cambia lo tramita aceptarPropuestaWeb().
+function textosFinal(p: PropuestaWeb) {
+  const nombre = esc(p.nombreCliente)
+  if (p.final === 'reunion') return {
+    titulo: nombre ? `¿Hablamos,<br>${nombre}?` : '¿Hablamos?',
+    texto: 'Si nuestra forma de trabajar encaja con lo que buscáis, pedid aquí la primera reunión. Os escribimos hoy mismo para fijarla y preparar la visita a la parcela.',
+    boton: 'Pedir una reunión',
+    aviso: `Vais a pedir una primera reunión sobre ${esc(p.proyecto)}.`,
+    comentario: '¿Qué días u horas os vienen mejor? (opcional)',
+    enviar: 'Enviar solicitud',
+    hecho: nombre ? `Recibido, ${nombre}.` : 'Recibido.',
+    hechoTexto: 'Os escribimos hoy mismo para cerrar la fecha de la reunión.',
+    asunto: `Reunión · ${p.proyecto}`,
+  }
+  return {
+    titulo: nombre ? `¿Empezamos,<br>${nombre}?` : '¿Empezamos?',
+    texto: 'Si la propuesta encaja, acéptala aquí. Te escribimos hoy mismo para enviarte el documento a firma y fijar la fecha de arranque.',
+    boton: 'Aceptar propuesta',
+    aviso: `Vas a aceptar la propuesta de honorarios de ${esc(p.proyecto)}.`,
+    comentario: '¿Quieres comentarnos algo? (opcional)',
+    enviar: 'Confirmar aceptación',
+    hecho: nombre ? `Recibido, ${nombre}.` : 'Recibido.',
+    hechoTexto: 'Te escribimos hoy mismo con el documento para firmar y la fecha de arranque.',
+    asunto: `Propuesta de honorarios · ${p.proyecto}`,
+  }
+}
+
 function slideSiguiente(p: PropuestaWeb, obras: ProyectoEnlace[], numero: string): string {
   const INK = '#2b2622', ACC = '#8c6a55', LINE = 'rgba(43,38,34,.18)'
   const serif = "font-family:'Cormorant Garamond',serif;font-variant-numeric:lining-nums;"
@@ -75,7 +105,8 @@ function slideSiguiente(p: PropuestaWeb, obras: ProyectoEnlace[], numero: string
 // mismos data-fp-* que el puente tramita.
 function seccionSiguienteMovil(p: PropuestaWeb, obras: ProyectoEnlace[]): string {
   const INK = '#0d0d0d', PAPER = '#fbfbfa', SAGE = '#8fa596', LINE = 'rgba(251,251,250,.18)'
-  const mail = `mailto:contacto@formaprima.es?subject=${encodeURIComponent(`Propuesta de honorarios · ${p.proyecto}`)}`
+  const T = textosFinal(p)
+  const mail = `mailto:contacto@formaprima.es?subject=${encodeURIComponent(T.asunto)}`
   const boton = 'appearance:none;-webkit-appearance:none;cursor:pointer;font-family:inherit;font-size:12px;font-weight:500;letter-spacing:.2em;text-transform:uppercase;padding:20px 16px;border-radius:0;text-align:center;text-decoration:none;display:block;width:100%;'
   const primario = `${boton}background:${PAPER};color:${INK};border:1px solid ${PAPER};`
   const secundario = `${boton}background:transparent;color:${PAPER};border:1px solid rgba(251,251,250,.32);`
@@ -87,23 +118,23 @@ function seccionSiguienteMovil(p: PropuestaWeb, obras: ProyectoEnlace[]): string
   return `
 <section data-label="Siguiente paso" data-fp-final="" style="background:${INK};color:${PAPER};font-family:'Hanken Grotesk',sans-serif;padding:72px 24px calc(env(safe-area-inset-bottom) + 48px);">
   <span style="font-family:'Newsreader',serif;font-style:italic;font-size:17px;color:${SAGE};">Siguiente paso</span>
-  <h2 style="margin:22px 0 0;font-size:48px;font-weight:200;letter-spacing:-.035em;line-height:1;">${p.nombreCliente ? `¿Empezamos,<br>${esc(p.nombreCliente)}?` : '¿Empezamos?'}</h2>
+  <h2 style="margin:22px 0 0;font-size:48px;font-weight:200;letter-spacing:-.035em;line-height:1;">${T.titulo}</h2>
   <div style="width:48px;height:1px;background:${SAGE};margin:28px 0 22px;"></div>
-  <p style="margin:0 0 32px;font-size:16px;font-weight:300;line-height:1.55;opacity:.75;">Si la propuesta encaja, acéptala aquí. Te escribimos hoy mismo para enviarte el documento a firma y fijar la fecha de arranque.</p>
+  <p style="margin:0 0 32px;font-size:16px;font-weight:300;line-height:1.55;opacity:.75;">${T.texto}</p>
   <div data-fp-paso="inicio" style="display:flex;flex-direction:column;gap:12px;">
-    <button type="button" data-fp-accion="confirmar" style="${primario}">Aceptar propuesta</button>
+    <button type="button" data-fp-accion="confirmar" style="${primario}">${T.boton}</button>
     <a href="${mail}" style="${secundario}">Tengo dudas · escríbenos</a>
   </div>
   <div data-fp-paso="confirmar" style="display:none;flex-direction:column;gap:14px;">
-    <div style="font-size:15px;font-weight:300;line-height:1.45;opacity:.85;">Vas a aceptar la propuesta de honorarios de ${esc(p.proyecto)}.</div>
-    <textarea data-fp-comentario="" rows="3" placeholder="¿Quieres comentarnos algo? (opcional)" style="font-family:inherit;font-size:16px;font-weight:300;color:${PAPER};line-height:1.45;background:rgba(251,251,250,.04);border:1px solid rgba(251,251,250,.2);border-radius:0;padding:14px;resize:none;outline:none;"></textarea>
+    <div style="font-size:15px;font-weight:300;line-height:1.45;opacity:.85;">${T.aviso}</div>
+    <textarea data-fp-comentario="" rows="3" placeholder="${T.comentario}" style="font-family:inherit;font-size:16px;font-weight:300;color:${PAPER};line-height:1.45;background:rgba(251,251,250,.04);border:1px solid rgba(251,251,250,.2);border-radius:0;padding:14px;resize:none;outline:none;"></textarea>
     <div data-fp-error="" style="display:none;font-size:14px;color:#e0a39a;"></div>
-    <button type="button" data-fp-accion="aceptar" style="${primario}">Confirmar aceptación</button>
+    <button type="button" data-fp-accion="aceptar" data-fp-texto="${T.enviar}" style="${primario}">${T.enviar}</button>
     <button type="button" data-fp-accion="volver" style="${secundario}">Volver</button>
   </div>
   <div data-fp-paso="hecho" style="display:none;border-top:1px solid ${SAGE};padding-top:22px;">
-    <div style="font-size:28px;font-weight:200;letter-spacing:-.02em;line-height:1.1;">${p.nombreCliente ? `Recibido, ${esc(p.nombreCliente)}.` : 'Recibido.'}</div>
-    <p style="margin:12px 0 0;font-size:15px;font-weight:300;line-height:1.5;opacity:.7;">Te escribimos hoy mismo con el documento para firmar y la fecha de arranque.</p>
+    <div style="font-size:28px;font-weight:200;letter-spacing:-.02em;line-height:1.1;">${T.hecho}</div>
+    <p style="margin:12px 0 0;font-size:15px;font-weight:300;line-height:1.5;opacity:.7;">${T.hechoTexto}</p>
   </div>
   <div style="margin-top:64px;padding-top:22px;border-top:1px solid ${LINE};">
     <span style="font-size:10px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:${SAGE};">Mientras tanto, conoce el estudio</span>
@@ -123,7 +154,8 @@ function seccionSiguienteMovil(p: PropuestaWeb, obras: ProyectoEnlace[]): string
 // La aceptación la tramita la página (puente: 'aceptar' → 'aceptada' | 'error').
 function slideSiguienteCliente(p: PropuestaWeb, obras: ProyectoEnlace[], numero: string): string {
   const INK = '#0d0d0d', PAPER = '#fbfbfa', SAGE = '#8fa596', LINE = 'rgba(251,251,250,.18)'
-  const mail = `mailto:contacto@formaprima.es?subject=${encodeURIComponent(`Propuesta de honorarios · ${p.proyecto}`)}`
+  const T = textosFinal(p)
+  const mail = `mailto:contacto@formaprima.es?subject=${encodeURIComponent(T.asunto)}`
   const boton = 'appearance:none;cursor:pointer;font-family:inherit;font-size:14px;font-weight:500;letter-spacing:.2em;text-transform:uppercase;padding:24px 40px;border-radius:0;text-align:center;text-decoration:none;display:inline-block;transition:background .25s,color .25s,border-color .25s;'
   const primario = `${boton}background:${PAPER};color:${INK};border:1px solid ${PAPER};`
   const secundario = `${boton}background:transparent;color:${PAPER};border:1px solid rgba(251,251,250,.32);`
@@ -138,26 +170,26 @@ function slideSiguienteCliente(p: PropuestaWeb, obras: ProyectoEnlace[], numero:
   <div style="padding:96px 88px 96px 104px;display:flex;flex-direction:column;justify-content:space-between;min-width:0;">
     <span style="display:inline-flex;align-items:baseline;gap:12px;color:${SAGE};"><span style="font-size:12px;font-weight:500;letter-spacing:.02em;font-variant-numeric:tabular-nums;">${numero}</span><span style="font-family:'Newsreader',serif;font-style:italic;font-size:19px;font-weight:400;">Siguiente paso</span></span>
     <div>
-      <h2 style="margin:0;font-size:88px;font-weight:200;letter-spacing:-.035em;line-height:.98;">${p.nombreCliente ? `¿Empezamos,<br>${esc(p.nombreCliente)}?` : '¿Empezamos?'}</h2>
+      <h2 style="margin:0;font-size:88px;font-weight:200;letter-spacing:-.035em;line-height:.98;">${T.titulo}</h2>
       <div style="width:64px;height:1px;background:${SAGE};margin:40px 0 28px;"></div>
-      <p style="margin:0;max-width:620px;font-size:22px;font-weight:300;line-height:1.5;opacity:.75;">Si la propuesta encaja, acéptala aquí. Te escribimos hoy mismo para enviarte el documento a firma y fijar la fecha de arranque.</p>
+      <p style="margin:0;max-width:620px;font-size:22px;font-weight:300;line-height:1.5;opacity:.75;">${T.texto}</p>
     </div>
     <div data-fp-paso="inicio" style="display:flex;gap:20px;">
-      <button type="button" data-fp-accion="confirmar" style="${primario}">Aceptar propuesta</button>
+      <button type="button" data-fp-accion="confirmar" style="${primario}">${T.boton}</button>
       <a href="${mail}" style="${secundario}">Tengo dudas · escríbenos</a>
     </div>
     <div data-fp-paso="confirmar" style="display:none;flex-direction:column;gap:18px;">
-      <div style="font-size:18px;font-weight:300;line-height:1.45;opacity:.85;">Vas a aceptar la propuesta de honorarios de ${esc(p.proyecto)}.</div>
-      <textarea data-fp-comentario="" rows="2" placeholder="¿Quieres comentarnos algo? (opcional)" style="font-family:inherit;font-size:16px;font-weight:300;color:${PAPER};line-height:1.45;background:rgba(251,251,250,.04);border:1px solid rgba(251,251,250,.2);border-radius:0;padding:16px;resize:none;outline:none;"></textarea>
+      <div style="font-size:18px;font-weight:300;line-height:1.45;opacity:.85;">${T.aviso}</div>
+      <textarea data-fp-comentario="" rows="2" placeholder="${T.comentario}" style="font-family:inherit;font-size:16px;font-weight:300;color:${PAPER};line-height:1.45;background:rgba(251,251,250,.04);border:1px solid rgba(251,251,250,.2);border-radius:0;padding:16px;resize:none;outline:none;"></textarea>
       <div data-fp-error="" style="display:none;font-size:14px;color:#e0a39a;"></div>
       <div style="display:flex;gap:16px;">
-        <button type="button" data-fp-accion="aceptar" style="${primario}">Confirmar aceptación</button>
+        <button type="button" data-fp-accion="aceptar" data-fp-texto="${T.enviar}" style="${primario}">${T.enviar}</button>
         <button type="button" data-fp-accion="volver" style="${secundario}">Volver</button>
       </div>
     </div>
     <div data-fp-paso="hecho" style="display:none;border-top:1px solid ${SAGE};padding-top:28px;">
-      <div style="font-size:34px;font-weight:200;letter-spacing:-.02em;line-height:1.1;">${p.nombreCliente ? `Recibido, ${esc(p.nombreCliente)}.` : 'Recibido.'}</div>
-      <p style="margin:14px 0 0;font-size:18px;font-weight:300;line-height:1.5;opacity:.7;">Te escribimos hoy mismo con el documento para firmar y la fecha de arranque.</p>
+      <div style="font-size:34px;font-weight:200;letter-spacing:-.02em;line-height:1.1;">${T.hecho}</div>
+      <p style="margin:14px 0 0;font-size:18px;font-weight:300;line-height:1.5;opacity:.7;">${T.hechoTexto}</p>
     </div>
     <div style="font-size:14px;font-weight:300;line-height:1.6;opacity:.5;"><a href="mailto:contacto@formaprima.es" style="color:inherit;text-decoration:none;">contacto@formaprima.es</a> · Príncipe de Vergara 56, Madrid</div>
   </div>
@@ -323,7 +355,7 @@ const PUENTE = `<script>
     if (e.data.t === 'aceptada') paso('hecho');
     if (e.data.t === 'error') {
       var b = document.querySelector('[data-fp-accion="aceptar"]'), err = document.querySelector('[data-fp-error]');
-      if (b) { b.disabled = false; b.style.opacity = ''; b.textContent = 'Confirmar aceptación'; }
+      if (b) { b.disabled = false; b.style.opacity = ''; b.textContent = b.getAttribute('data-fp-texto') || 'Confirmar aceptación'; }
       if (err) { err.textContent = e.data.msg || 'No se ha podido enviar. Inténtalo de nuevo.'; err.style.display = ''; }
     }
     if (e.data.t === 'hecho') {
@@ -384,6 +416,8 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
     // bandas). Numeración: la siguiente a la de la última diapositiva ("05 Cierre"
     // → "06"); no la mayor, que dentro de un capítulo hay subnúmeros (01–10).
     const caps = Array.from(html.matchAll(/font-variant-numeric:tabular-nums;">(\d{2})<\/span><span style="font-family:'Newsreader'/g)).map((m) => parseInt(m[1], 10))
+    // Otros diseños (presentación del estudio) marcan el capítulo con <span style="opacity:.45;">05</span>.
+    if (!caps.length) caps.push(...Array.from(html.matchAll(/<span style="opacity:\.45;">(\d{2})<\/span>/g)).map((m) => parseInt(m[1], 10)))
     const numero = String((caps[caps.length - 1] ?? 0) + 1).padStart(2, '0')
     html = html.replace('<!--FP:SIGUIENTE-->', slideSiguienteCliente(p, obras, numero))
   } else {

@@ -71,6 +71,12 @@ export interface PropuestaWeb {
    * `/propuesta/<slug>/deck?movil=1` (importar-dc.mjs --movil <slug>).
    */
   versionMovil?: boolean
+  /**
+   * Solo 'dc' horizontal con audiencia 'cliente': qué pide el final. 'aceptar'
+   * (por defecto) = aceptar la propuesta; 'reunion' = presentación del estudio
+   * sin cifras del proyecto, que pide la primera reunión.
+   */
+  final?: 'aceptar' | 'reunion'
   /** false = la URL responde "no disponible" (propuesta retirada). */
   activa: boolean
   publicada: string
@@ -231,6 +237,33 @@ export const PROPUESTAS: PropuestaWeb[] = [
     },
     activa: true,
     publicada: '2026-10-13',
+  },
+  {
+    // Presentación del estudio (sin cifras del proyecto) para una pareja que valora
+    // a Forma Prima para su chalet de obra nueva. Sala con PIN común
+    // (acceso_anonimo = true, como Torre del Mangle): sus visitas se miden como
+    // anónimas. El final pide la primera reunión, no aceptar.
+    slug: 'arturo-soria-bl6at',
+    tipo: 'dc',
+    formato: 'horizontal',
+    audiencia: 'cliente',
+    final: 'reunion',
+    nombreCliente: 'Alejandra y Damián',
+    cliente: 'Alejandra y Damián · Arturo Soria',
+    proyecto: 'Chalet en Arturo Soria',
+    pin: '6889',
+    pinAdmin: '163759',
+    avisarA: ['jlorag@formaprima.es'],
+    portada: '/propuestas/arturo-soria-bl6at/assets/cc38-3919-portada.webp',
+    og: '/propuestas/arturo-soria-bl6at/og.jpg',
+    descripcion: 'Forma Prima · estudio, método de trabajo y honorarios · Vivienda unifamiliar de obra nueva, Madrid',
+    pantallaPin: {
+      antetitulo: 'Forma Prima · Arquitectura e interiorismo',
+      titulo: 'Alejandra y Damián',
+      texto: 'Os presentamos el estudio, cómo trabajamos y cómo calculamos los honorarios. Introducid el PIN que os hemos facilitado.',
+    },
+    activa: true,
+    publicada: '2026-10-16',
   },
 ]
 

@@ -291,6 +291,33 @@ export async function aceptarPropuestaWeb(slug: string, comentario: string): Pro
   const nota = comentario.trim().slice(0, 2000)
   const cuando = new Date().toLocaleString('es-ES', { timeZone: 'Europe/Madrid' })
 
+  // Presentación del estudio (final 'reunion'): el mismo botón pide la primera
+  // reunión; el comentario son los días u horas que les vienen bien.
+  if (p.final === 'reunion') {
+    await crearAviso(
+      `${prueba ? '[Prueba] ' : ''}${p.cliente} pide una reunión · ${p.proyecto}`,
+      nota ? `Disponibilidad: «${nota}». Escribirles hoy para fijarla.` : 'Sin disponibilidad indicada. Escribirles hoy para fijarla.',
+      'importante',
+    )
+    const ccR = await getPartnersCC().catch(() => [] as string[])
+    const paraR = p.avisarA?.length ? p.avisarA : [TEAM_EMAIL]
+    const rR = await sendEmail({
+      to: paraR,
+      cc: [TEAM_EMAIL, ...ccR].filter((e) => !paraR.includes(e)),
+      subject: `${prueba ? '[Prueba] ' : ''}${p.cliente} pide una reunión · ${p.proyecto}`,
+      html: wrapEmail(`
+        <p style="margin:0 0 16px;font-size:16px;"><strong>${esc(p.cliente)}</strong> ha visto la presentación del estudio y pide una primera reunión sobre <strong>${esc(p.proyecto)}</strong>.</p>
+        <p style="margin:0 0 16px;color:#555;">${esc(cuando)}${prueba ? ' · solicitud hecha con una sesión del equipo (prueba)' : ''}</p>
+        ${nota ? `<p style="margin:0 0 16px;padding:12px 16px;background:#F2F2F0;border-left:2px solid #8fa596;">${esc(nota)}</p>` : ''}
+        <p style="margin:0 0 8px;">Les hemos dicho que les escribimos hoy mismo para cerrar la fecha.</p>
+        <p style="margin:0;"><a href="${URL_BASE}/${p.slug}">${URL_BASE}/${p.slug}</a></p>
+      `),
+    })
+    if (rR.error) console.error('[propuesta-web] email reunión', rR.error)
+    try { await visitaAlFinal(p) } catch (e) { console.error('[propuesta-web] visita reunión', e) }
+    return { ok: true }
+  }
+
   await crearAviso(
     `${prueba ? '[Prueba] ' : ''}${p.cliente} ha ACEPTADO la propuesta de ${p.proyecto}`,
     nota ? `Comentario: «${nota}»` : 'Sin comentarios. Toca preparar la firma y el primer pago.',
