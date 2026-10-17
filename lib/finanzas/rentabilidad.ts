@@ -79,7 +79,7 @@ export interface FacturaIngreso {
  *    ingreso del estudio; solo cuenta su margen.
  *  · Rappel / descuento (con proveedor): margen íntegro.
  */
-const esSuplido = (f: FacturaIngreso) => f.seccion === SECCION_MOBILIARIO && !f.proveedor_id
+export const esSuplido = (f: Pick<FacturaIngreso, 'seccion' | 'proveedor_id'>) => f.seccion === SECCION_MOBILIARIO && !f.proveedor_id
 
 /**
  * Lo que una factura aporta como ingreso del estudio, a margen estimado: el

@@ -6,7 +6,9 @@ import { useMemo, useState } from 'react'
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Factura {
-  monto: number
+  monto: number            // base imponible en euros
+  suplido: boolean         // compra de mobiliario que paga el cliente (sin proveedor)
+  iva_pct: number          // 0.21, 0 en USD, o el real de la factura emitida
   fecha_pago_acordada: string | null
   fecha_cobro: string | null
   status: string
@@ -491,18 +493,112 @@ function SectionMarginsCard({ kpis }: { kpis: KPIs }) {
   )
 }
 
-function PlaceholderCard({ label }: { label: string }) {
+// ── Facturación: con/sin suplidos, con/sin IVA ────────────────────────────────
+
+type Vista = { suplidos: boolean; iva: boolean }
+
+/** Importe de una factura en la vista elegida; 0 si es un suplido y se ven sin suplidos. */
+function valorEnVista(f: Factura, v: Vista) {
+  if (f.suplido && !v.suplidos) return 0
+  return f.monto * (v.iva ? 1 + f.iva_pct : 1)
+}
+
+function Segmented<T extends string>({ value, options, onChange }: {
+  value: T
+  options: { value: T; label: string }[]
+  onChange: (v: T) => void
+}) {
   return (
-    <div style={{
-      background: '#FAFAF8', borderRadius: 12,
-      border: '1px dashed #E0DDD6',
-      padding: '28px 32px', minHeight: 160,
-      display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+    <div style={{ display: 'inline-flex', background: '#F2F0EB', borderRadius: 7, padding: 2, gap: 2 }}>
+      {options.map(o => {
+        const active = o.value === value
+        return (
+          <button
+            key={o.value}
+            onClick={() => onChange(o.value)}
+            style={{
+              border: 'none', cursor: 'pointer', borderRadius: 5,
+              padding: '6px 12px', fontSize: 11, fontFamily: 'inherit', letterSpacing: '0.02em',
+              background: active ? '#fff' : 'transparent',
+              color: active ? '#1A1A1A' : '#999',
+              fontWeight: active ? 600 : 400,
+              boxShadow: active ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+            }}
+          >
+            {o.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function FacturacionDesgloseCard({ facturas, iva, year }: { facturas: Factura[]; iva: boolean; year: number }) {
+  const fmtE = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const v = (f: Factura) => valorEnVista(f, { suplidos: true, iva })
+  const fila = (fs: Factura[]) => {
+    const contratado = fs.reduce((s, f) => s + v(f), 0)
+    const cobrado    = fs.filter(f => f.status === 'pagada').reduce((s, f) => s + v(f), 0)
+    return { contratado, cobrado, pendiente: contratado - cobrado }
+  }
+  const filas = [
+    { label: 'Honorarios y servicios', sub: 'sin suplidos', ...fila(facturas.filter(f => !f.suplido)) },
+    { label: 'Suplidos de mobiliario', sub: 'paga el cliente', ...fila(facturas.filter(f => f.suplido)) },
+  ]
+  const total = fila(facturas)
+  const ivaTotal = facturas.reduce((s, f) => s + f.monto * f.iva_pct, 0)
+
+  const th: React.CSSProperties = { fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#BBB', textAlign: 'right', padding: '0 0 10px 12px' }
+  const td: React.CSSProperties = { fontSize: 13, color: '#1A1A1A', textAlign: 'right', padding: '10px 0 10px 12px', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }
+  const eur = (n: number) => n !== 0 ? `€ ${fmtE.format(n)}` : '—'
+
+  return (
+    <div className="finanzas-desglose-card" style={{
+      gridColumn: 'span 2',
+      background: '#fff', borderRadius: 12, border: '1px solid #E8E6E0',
+      padding: '28px 32px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+      display: 'flex', flexDirection: 'column', minHeight: 160,
     }}>
-      <p style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#CCC', margin: 0 }}>
-        {label}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, margin: '0 0 20px', flexWrap: 'wrap' }}>
+        <p style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#BBB', margin: 0 }}>
+          Facturación {year} · desglose
+        </p>
+        <p style={{ fontSize: 10, color: '#AAA', margin: 0 }}>{iva ? 'Con IVA' : 'Sin IVA (base imponible)'}</p>
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 420 }}>
+          <thead>
+            <tr>
+              <th style={{ ...th, textAlign: 'left', paddingLeft: 0 }} />
+              <th style={th}>Contratado</th>
+              <th style={th}>Cobrado</th>
+              <th style={th}>Por cobrar</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filas.map(r => (
+              <tr key={r.label} style={{ borderTop: '1px solid #F0EEE9' }}>
+                <td style={{ ...td, textAlign: 'left', paddingLeft: 0, whiteSpace: 'normal' }}>
+                  {r.label}
+                  <span style={{ display: 'block', fontSize: 10, color: '#AAA' }}>{r.sub}</span>
+                </td>
+                <td style={td}>{eur(r.contratado)}</td>
+                <td style={{ ...td, color: '#1D9E75' }}>{eur(r.cobrado)}</td>
+                <td style={{ ...td, color: '#E8913A' }}>{eur(r.pendiente)}</td>
+              </tr>
+            ))}
+            <tr style={{ borderTop: '1px solid #1A1A1A' }}>
+              <td style={{ ...td, textAlign: 'left', paddingLeft: 0, fontWeight: 600 }}>Total facturado</td>
+              <td style={{ ...td, fontWeight: 600 }}>{eur(total.contratado)}</td>
+              <td style={{ ...td, fontWeight: 600, color: '#1D9E75' }}>{eur(total.cobrado)}</td>
+              <td style={{ ...td, fontWeight: 600, color: '#E8913A' }}>{eur(total.pendiente)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p style={{ fontSize: 10, color: '#AAA', margin: '14px 0 0', lineHeight: 1.5 }}>
+        IVA del año: € {fmtE.format(ivaTotal)}. Se toma el de la factura emitida; si aún no se ha emitido, 21 % (0 % en USD).
       </p>
-      <p style={{ fontSize: 11, color: '#D4D0C8', margin: 0 }}>Próximamente</p>
     </div>
   )
 }
@@ -871,17 +967,33 @@ function FacturasBreakdown({
 export default function FinanzasDashboard({ facturas, year, monthlyCosts, kpis, facturasDetalle, proyectos }: Props) {
   const fmtE0 = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
+  const [vista, setVista] = useState<Vista>({ suplidos: true, iva: false })
+
   const yearFacturas = facturas.filter(f => {
     const fecha = fechaRef(f)
     return !!fecha && anioMes(fecha).y === year
   })
 
-  const totalAnual    = yearFacturas.reduce((s, f) => s + f.monto, 0)
-  const totalCobrado  = yearFacturas.filter(f => f.status === 'pagada').reduce((s, f) => s + f.monto, 0)
-  const totalEnviadas = yearFacturas.filter(f => f.status === 'enviada').reduce((s, f) => s + f.monto, 0)
-  const totalImpagado = yearFacturas.filter(f => f.status === 'impagada').reduce((s, f) => s + f.monto, 0)
+  // Lo que pintan KPIs y gráfico según la vista elegida
+  const facturasVista = facturas
+    .filter(f => vista.suplidos || !f.suplido)
+    .map(f => ({ ...f, monto: valorEnVista(f, vista) }))
+  const suma = (fs: Factura[]) => fs.reduce((s, f) => s + valorEnVista(f, vista), 0)
+  const pagadas = yearFacturas.filter(f => f.status === 'pagada')
+
+  const totalAnual    = suma(yearFacturas)
+  const totalCobrado  = suma(pagadas)
+  const totalEnviadas = suma(yearFacturas.filter(f => f.status === 'enviada'))
+  const totalImpagado = suma(yearFacturas.filter(f => f.status === 'impagada'))
+  // Cuánto de cada cifra son suplidos (solo se enseña si se ven con suplidos)
+  const suplidoDe = (fs: Factura[]) => fs.filter(f => f.suplido).reduce((s, f) => s + valorEnVista(f, vista), 0)
+  const notaSuplidos = (fs: Factura[]) => {
+    const sup = suplidoDe(fs)
+    return vista.suplidos && sup > 0 ? ` · ${fmtE0.format(sup)} suplidos` : ''
+  }
   const targetAnual   = TARGET_MONTHLY * 12
-  const pctObjetivo   = totalCobrado / targetAnual * 100
+  // El objetivo es sin IVA: el % no se infla al ver con IVA
+  const pctObjetivo   = pagadas.reduce((s, f) => s + valorEnVista(f, { ...vista, iva: false }), 0) / targetAnual * 100
   const currentMonth  = new Date().getMonth()
   const mesesPasados  = currentMonth + 1
   const targetParcial = TARGET_MONTHLY * mesesPasados
@@ -894,17 +1006,31 @@ export default function FinanzasDashboard({ facturas, year, monthlyCosts, kpis, 
         <p style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#AAA', marginBottom: 6, fontWeight: 600 }}>
           Finanzas · {year}
         </p>
-        <h1 style={{ fontSize: 28, fontWeight: 200, color: '#1A1A1A', margin: 0, letterSpacing: '-0.01em' }}>
-          Dashboard
-        </h1>
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+          <h1 style={{ fontSize: 28, fontWeight: 200, color: '#1A1A1A', margin: 0, letterSpacing: '-0.01em' }}>
+            Dashboard
+          </h1>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <Segmented
+              value={vista.suplidos ? 'con' : 'sin'}
+              options={[{ value: 'con', label: 'Con suplidos' }, { value: 'sin', label: 'Sin suplidos' }]}
+              onChange={v => setVista(prev => ({ ...prev, suplidos: v === 'con' }))}
+            />
+            <Segmented
+              value={vista.iva ? 'con' : 'sin'}
+              options={[{ value: 'sin', label: 'Sin IVA' }, { value: 'con', label: 'Con IVA' }]}
+              onChange={v => setVista(prev => ({ ...prev, iva: v === 'con' }))}
+            />
+          </div>
+        </div>
       </div>
 
       {/* KPIs */}
       <div className="finanzas-kpi-section" style={{ padding: '24px 40px 0', background: '#fff', borderBottom: '1px solid #E8E6E0' }}>
         <div className="finanzas-kpi-strip" style={{ display: 'flex', background: '#F8F7F4', borderRadius: 8, border: '1px solid #E8E6E0', overflow: 'hidden', marginBottom: 24 }}>
           {[
-            { label: 'Contratado año',       value: `€ ${fmtE0.format(totalAnual)}`,    sub: `Obj. anual € ${fmtE0.format(targetAnual)}` },
-            { label: 'Cobrado',              value: `€ ${fmtE0.format(totalCobrado)}`,  sub: `${pctObjetivo.toFixed(0)}% del objetivo anual`, color: '#1D9E75' },
+            { label: 'Contratado año',       value: `€ ${fmtE0.format(totalAnual)}`,    sub: `Obj. anual € ${fmtE0.format(targetAnual)}${notaSuplidos(yearFacturas)}` },
+            { label: 'Cobrado',              value: `€ ${fmtE0.format(totalCobrado)}`,  sub: `${pctObjetivo.toFixed(0)}% del objetivo anual${notaSuplidos(pagadas)}`, color: '#1D9E75' },
             { label: 'Cobrable acum.',       value: `€ ${fmtE0.format(targetParcial)}`, sub: `Objetivo a ${mesesPasados} meses`, color: '#888' },
             { label: 'Enviadas pendientes',  value: totalEnviadas > 0 ? `€ ${fmtE0.format(totalEnviadas)}` : '—', color: '#E8913A' },
             { label: 'Impagadas',            value: totalImpagado > 0 ? `€ ${fmtE0.format(totalImpagado)}` : '—', color: totalImpagado > 0 ? '#E53E3E' : '#CCC' },
@@ -916,12 +1042,11 @@ export default function FinanzasDashboard({ facturas, year, monthlyCosts, kpis, 
         </div>
       </div>
 
-      {/* KPI Grid — 4 slots, 2 filled */}
+      {/* KPI Grid — 4 slots: rentabilidad (margen neto, no cambia con la vista) + desglose de facturación */}
       <div className="finanzas-kpi-grid" style={{ padding: '32px 40px 0', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 16 }}>
         <AvgProjectMarginCard kpis={kpis} />
         <SectionMarginsCard   kpis={kpis} />
-        <PlaceholderCard label="KPI disponible" />
-        <PlaceholderCard label="KPI disponible" />
+        <FacturacionDesgloseCard facturas={yearFacturas} iva={vista.iva} year={year} />
       </div>
 
       {/* Chart */}
@@ -940,7 +1065,7 @@ export default function FinanzasDashboard({ facturas, year, monthlyCosts, kpis, 
           </div>
           <div className="finanzas-chart-scroll" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
             <div style={{ minWidth: 600 }}>
-              <BillingChart facturas={facturas} year={year} monthlyCosts={monthlyCosts} />
+              <BillingChart facturas={facturasVista} year={year} monthlyCosts={monthlyCosts} />
             </div>
           </div>
         </div>

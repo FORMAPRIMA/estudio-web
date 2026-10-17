@@ -8,7 +8,7 @@ import type { SalaryRecord } from '@/lib/finanzas/salaryHistory'
 import { totalFixedCostsAt } from '@/lib/finanzas/fixedCostHistory'
 import type { FixedCostRecord } from '@/lib/finanzas/fixedCostHistory'
 import {
-  crearCosteHora, ingresosProyecto, ingresoNetoEstimado, comprasMobiliarioPorProyecto,
+  crearCosteHora, ingresosProyecto, comprasMobiliarioPorProyecto, esSuplido,
 } from '@/lib/finanzas/rentabilidad'
 import type { FacturaIngreso } from '@/lib/finanzas/rentabilidad'
 import { selectTodo } from '@/lib/supabase/select-todo'
@@ -45,12 +45,13 @@ export default async function Page() {
     { data: fixedCostHistory },
     { data: costosVariablesProyecto },
     { data: bizDev },
+    { data: emitidasIva },
   ] = await Promise.all([
     // Billing chart — current year ± 1, por fecha acordada o de cobro (una
     // factura cobrada se pinta en el mes en que entró el dinero)
     admin
       .from('facturas')
-      .select('monto, seccion, proveedor_id, margen_estimado_pct, fecha_pago_acordada, fecha_cobro, status')
+      .select('monto, moneda, seccion, proveedor_id, margen_estimado_pct, fecha_pago_acordada, fecha_cobro, status, factura_emitida_id')
       .or(`and(fecha_pago_acordada.gte.${year - 1}-01-01,fecha_pago_acordada.lte.${year + 1}-12-31),and(fecha_cobro.gte.${year - 1}-01-01,fecha_cobro.lte.${year + 1}-12-31)`)
       .order('fecha_pago_acordada'),
     // Cost data
@@ -108,6 +109,10 @@ export default async function Page() {
       .from('profiles')
       .select('id')
       .eq('rol', 'fp_biz_dev'),
+    // IVA real de las facturas ya emitidas (base y cuota siempre en euros)
+    admin
+      .from('facturas_emitidas')
+      .select('id, base_imponible, cuota_iva'),
   ])
 
   // ── Monthly costs (for billing vs cost chart) ────────────────────────────────
@@ -227,10 +232,21 @@ export default async function Page() {
     }
   })
 
+  // % de IVA por factura: el de la emitida si existe; si no, 21 % (0 % en USD, clientes de EE. UU.)
+  const ivaEmitida = new Map((emitidasIva ?? []).map(e => [
+    e.id as string,
+    Number(e.base_imponible) > 0 ? Number(e.cuota_iva ?? 0) / Number(e.base_imponible) : null,
+  ]))
+  const ivaPct = (f: { moneda?: string | null; factura_emitida_id?: string | null }) =>
+    (f.factura_emitida_id ? ivaEmitida.get(f.factura_emitida_id) : null)
+      ?? (f.moneda && f.moneda !== 'EUR' ? 0 : IVA_RATE)
+
   return (
     <FinanzasDashboard
       facturas={(facturas ?? []).map(f => ({
-        monto:               ingresoNetoEstimado(f),
+        monto:               f.monto,
+        suplido:             esSuplido(f),
+        iva_pct:             ivaPct(f),
         fecha_pago_acordada: f.fecha_pago_acordada ?? null,
         fecha_cobro:         f.fecha_cobro ?? null,
         status:              f.status,
