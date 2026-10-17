@@ -248,6 +248,7 @@ export const PROPUESTAS: PropuestaWeb[] = [
     formato: 'horizontal',
     audiencia: 'cliente',
     final: 'reunion',
+    versionMovil: true,
     nombreCliente: 'Alejandra y Damián',
     cliente: 'Alejandra y Damián · Arturo Soria',
     proyecto: 'Chalet en Arturo Soria',
