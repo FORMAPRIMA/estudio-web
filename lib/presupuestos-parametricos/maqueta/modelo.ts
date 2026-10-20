@@ -159,6 +159,14 @@ export function medicionesDesdeModelo(m: ModeloEstadoActual): MedicionesModelo {
 
   set('m2_suelo_levantar', r2(util), 'm²', 'toda la superficie útil (reforma integral)')
 
+  const exteriores = m.muros.filter(w => w.tipo === 'exterior')
+  const estructurales = m.muros.filter(w => w.tipo === 'estructural')
+  set('ml_muro_exterior', r2(exteriores.reduce((s, w) => s + m1(dist(w.a, w.b)), 0)), 'ml', `${exteriores.length} fachadas y medianeras`)
+  set('ml_muro_estructural', r2(estructurales.reduce((s, w) => s + m1(dist(w.a, w.b)), 0)), 'ml', `${estructurales.length} muros estructurales interiores`)
+  const idsExt = new Set(exteriores.map(w => w.id))
+  const huecosExt = m.huecos.filter(h => idsExt.has(h.muro))
+  set('m2_huecos_exteriores', r2(huecosExt.reduce((s, h) => s + m1(dist(h.a, h.b)) * Math.min(ALTURAS_HUECO[h.tipo].alto, H), 0)), 'm²', `${huecosExt.length} ventanas, balconeras y puertas en fachada`)
+
   const humedas = interiores.filter(e => e.uso === 'bano' || e.uso === 'aseo')
   const cocinas = interiores.filter(e => e.uso === 'cocina')
   const alic =

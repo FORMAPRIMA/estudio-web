@@ -54,6 +54,10 @@ export const VARIABLES: Variable[] = [
     pregunta: '¿Cuántas estancias tiene hoy, contadas con la misma regla?',
     ayuda: 'Dormitorios + baños + aseos + cocina si es cerrada + salón-comedor (2 si están separados). No cuentan vestidores, lavanderías, almacenes ni pasillos.' },
 
+  { codigo: 'pct_trasdosado', nombre: 'Fachadas y medianeras trasdosadas', unidad: '%', tipo: 'numero', nivel: 'express',
+    pregunta: '¿Qué porcentaje de fachadas, medianeras y muros estructurales se trasdosará?',
+    ayuda: 'El resto se guarnece y enluce. 100 % = todo trasdosado; 0 % = todo guarnecido.', defecto: 100 },
+
   // ── Técnico: el arquitecto lo mide en poco tiempo ──────────────────────────
   { codigo: 'altura_libre', nombre: 'Altura libre', unidad: 'm', tipo: 'numero', nivel: 'tecnico',
     pregunta: 'Altura de suelo acabado a cara inferior del forjado',
@@ -74,6 +78,12 @@ export const VARIABLES: Variable[] = [
     ayuda: 'Solo techos descolgados. No cuenta el yeso directo a forjado.' },
   { codigo: 'n_ventanas_grandes', nombre: 'Ventanas de suelo a techo', unidad: 'ud', tipo: 'numero', nivel: 'tecnico',
     pregunta: 'De esas ventanas, ¿cuántas son balconeras o de suelo a techo?' },
+  { codigo: 'ml_muro_exterior', nombre: 'Fachadas y medianeras', unidad: 'ml', tipo: 'numero', nivel: 'tecnico',
+    pregunta: 'Longitud de fachadas y medianeras', ayuda: 'Sale de la maqueta.' },
+  { codigo: 'ml_muro_estructural', nombre: 'Muros estructurales interiores', unidad: 'ml', tipo: 'numero', nivel: 'tecnico',
+    pregunta: 'Longitud de muros estructurales interiores', ayuda: 'Sale de la maqueta.' },
+  { codigo: 'm2_huecos_exteriores', nombre: 'Huecos en fachada', unidad: 'm²', tipo: 'numero', nivel: 'tecnico',
+    pregunta: 'Superficie de ventanas, balconeras y puertas en fachada', ayuda: 'Sale de la maqueta.' },
   { codigo: 'n_armarios_demoler', nombre: 'Armarios empotrados a desmontar', unidad: 'ud', tipo: 'numero', nivel: 'tecnico',
     pregunta: 'Armarios empotrados a desmontar',
     ayuda: 'Por armario completo, no por módulo.' },
