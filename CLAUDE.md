@@ -356,6 +356,22 @@ Aplicaciones internas. Acceso: todos los roles FP.
   - `app/actions/control-obra.ts` — todas las mutaciones (`requirePartner()`)
   - Tablas `obra_control_*` (obras, partidas, proveedores, pagos, depositos, log). Solo `service_role` (RLS sin políticas). Seed inicial: **Casa Claudio Coello 38** (baseline 14/01/2026, 11 capítulos, 259 partidas)
 
+- **Presupuestos paramétricos** (`/team/apps/presupuestos-parametricos`) — **`fp_partner` + `fp_manager`** (`canAccessPresupuestosParametricos` en `lib/presupuestos-parametricos/domain.ts`) — `components/team/presupuestos-parametricos/PresupuestosParametricosPage.tsx`
+  - Estima el coste de una reforma antes de tener proyecto, con **ratios por capítulo y nivel de calidad** sacados de presupuestos **reales** de constructor. Sustituye al MVP en Google Sheets («PRESUPUESTO PARAMÉTRICO - BACKEND/FRONTEND»), del que **no se migra ningún dato**: la base arranca vacía.
+  - **Obras de referencia** (`pp_obras`): un presupuesto real por obra con sus partidas (`pp_obra_partidas`, clasificadas en `presupuesto_subcapitulos`), sus mediciones (`pp_obra_mediciones`, una fila por variable de las fichas) y el **nivel de calidad por capítulo** (`pp_obra_capitulos`): una obra puede tener cocina Masterpiece y baños Functional. Solo las `publicada` alimentan ratios.
+  - 🔴 **La base guarda solo coste.** Si el documento trae márgenes o referral fees prorrateados, se quitan al entrar (`descuento_margen_pct`). Los márgenes del estudio se prorratean al final del flujo de estimación, antes de presentar al cliente.
+  - **Vigencia y peso** (`domain.ts`): hasta 12 meses el presupuesto se usa tal cual; más antiguo se lleva a euros de hoy con el índice del INE (`pp_indices`, serie `ine_icce_edificacion`) y se rotula «ajustado con índice INE». Peso = 0,5^(edad/24 meses) × 0,6 si está ajustado: las obras recién terminadas mandan.
+  - Fases: 0 base ✅ · 1 fichas de cálculo por capítulo (preguntas express + técnicas) · 2 ingesta de PDFs con IA + revisión humana · 3 dashboard de ratios · 4 generador con horquilla, márgenes y documento brandeado · 5 alimentación continua (índice, backtesting de cada obra nueva).
+  - **Maqueta del estado actual** (`/team/apps/presupuestos-parametricos/maqueta`, prototipo de Demoliciones): plano obligatorio → la IA (`claude-opus-5-5`, structured outputs) lo lee sobre una **cuadrícula de coordenadas** y propone el modelo → el código **ajusta cada muro a los píxeles** (máscara de oscuros con cierre morfológico, eje y grosor por cortes perpendiculares, uniones en T, contorno a la cara exterior) → escala por **cotas** si hay ≥2 coherentes (±6 %), si no por m² construidos (−6 % si son de Catastro/anuncio) → la persona revisa en 3D/2D, corrige a mano o **por chat** (la IA devuelve operaciones sobre el modelo, nunca lo redibuja) → **visto bueno** congela la versión y salen las mediciones de la ficha de Demoliciones.
+    - 🔴 **La fuente de verdad es el modelo** (`lib/presupuestos-parametricos/maqueta/modelo.ts`, coordenadas en px del plano + `pxPorMetro`); la maqueta 3D (`Visor3D.tsx`) y el GLB se generan desde él y **los cálculos nunca leen el GLB**. Solo se modela lo que piden los cálculos: muros (exterior/tabique/estructural), huecos, estancias con uso, falso techo y altura.
+    - 🔴 **Muros estructurales**: la IA marca «probable estructural» en caso de duda y **nunca entran en demolición** salvo que alguien los pase a tabique.
+    - `lib/presupuestos-parametricos/maqueta/levantamiento.ts` (servidor: sharp, máscara, ajuste, llamadas a la IA) · `svg.ts` (dibujo 2D compartido servidor/UI) · rutas `app/api/presupuestos-parametricos/maqueta/{levantar,corregir}` (`maxDuration` 300; la imagen normalizada vuelve al cliente y se reenvía en cada corrección) · UI `components/team/presupuestos-parametricos/maqueta/` (`next/dynamic` no reenvía refs: el visor publica `exportarGLB` en la prop `control`).
+    - **Dudas ancladas** (`modelo.dudas`): la IA devuelve cada ambigüedad como pregunta sobre ids concretos con 2-3 respuestas de un clic (acciones mínimas `ACCION_DUDA`: con la operación completa anidada la API rechaza el esquema por «grammar too large»); el sistema añade las de muros probables estructurales, muros sin trazo y plano que no parece el estado actual. Se pintan en ámbar con «?» en 3D y en el plano (también limpio) y se resuelven en la tarjeta del panel lateral; las resueltas quedan como traza.
+    - UI: maqueta 3D y plano lado a lado en un mismo marco (plano limpio / con la maqueta, encuadrado al contorno), cámara que se encuadra sola según la vivienda y el panel (`Encuadre` en `Visor3D.tsx`), dos estilos de vista que solo cambian materiales y ambiente (**Maqueta**: blanca con `ContactShadows` + N8AO · **Técnica**: fondo oscuro, aristas de neón por tipo de muro y `Bloom`), **Sección** a 1,2 m (el GLB se exporta siempre sin cortar), muros que crecen al cargar, resaltado al pasar el ratón y etiquetas selectivas (dudas, estructurales, seleccionado y bajo el ratón; el interruptor muestra todas), panel lateral con progreso de dudas, secciones plegables y visto bueno fijo abajo. Piezas en `components/team/presupuestos-parametricos/maqueta/ui.tsx`.
+    - Prototipo: la sesión vive en `localStorage` (`fp.pp.maqueta.v1`); aún no se guarda en BD.
+  - **Fichas de cálculo** (`lib/presupuestos-parametricos/fichas/`): una por capítulo, con partes fijas que cualquier presupuesto se traduce a ellas; `variables.ts` es el catálogo (el código es la clave de `pp_obra_mediciones`: no renombrar). Hecha: Demoliciones (no depende del nivel; 9 partes: tabiquería, pavimentos y alicatados, falsos techos, carpintería exterior, carpintería interior, armarios empotrados, baños y cocina, trabajos generales por m², residuos por m³).
+  - `app/actions/presupuestos-parametricos.ts` (`requirePresupuestosAccess()`). Migración `presupuestos_parametricos.sql` + bucket privado `pp-presupuestos`. Solo `service_role` (RLS sin políticas).
+
 - **Modelo Café Goya** (`/team/apps/modelo-cafe`) — **SOLO `fp_partner`** — `components/team/modelo-cafe/ModeloCafePage.tsx`
   - Modelo financiero interactivo del quiosco → café de especialidad to-go (Calle Goya 63, Madrid): P&L mensual/anual, financiación (entrada + aplazamiento del traspaso al vendedor + préstamo bancario), punto de equilibrio, caja mensual por fases, payback y ROI sobre capital propio
   - **5 secciones (tabs grandes)**:
@@ -647,6 +663,15 @@ Registro de horas por proyecto y fase. Todos los roles FP.
 | `memoria_estancias` | Estancias de la memoria de ejecución de un proyecto (solo nombre + orden) |
 | `memoria_estancia_items` | Items por estancia: **snapshot** del warehouse + cantidad, proveedor asignado, precios, acabado, `estado_compra` |
 
+### Presupuestos paramétricos
+| Tabla | Propósito |
+|---|---|
+| `pp_obras` | Obra de referencia = presupuesto real de constructor (fecha, tipo de reforma, estado, total del documento, `descuento_margen_pct`, PDF) |
+| `pp_obra_mediciones` | Mediciones de la obra, una fila por variable de las fichas `(obra_id, variable)` |
+| `pp_obra_capitulos` | Nivel de calidad por capítulo (`nivel_calidad`, propuesta de la IA, `incluido`) |
+| `pp_obra_partidas` | Partidas del presupuesto, clasificadas en `presupuesto_subcapitulos` |
+| `pp_indices` | Serie mensual del índice de costes de construcción del INE `(serie, periodo)` |
+
 ### Modelo Café Goya
 | Tabla | Propósito |
 |---|---|
@@ -771,6 +796,7 @@ Registro de horas por proyecto y fase. Todos los roles FP.
 /team/apps/repasos          Repasos de obra — índice de proyectos
 /team/apps/repasos/[id]     Repasos de obra — visor del plano con pins
 /team/apps/control-obra     Control económico de obra (solo fp_partner)
+/team/apps/presupuestos-parametricos  Presupuestos paramétricos de reforma (fp_partner, fp_manager)
 /team/apps/modelo-cafe      Modelo financiero Café Goya (solo fp_partner)
 /team/memorias-calidad/warehouse        Catálogo de producto (warehouse)
 /team/memorias-calidad/anteproyecto     Memoria de calidades de anteproyecto (favoritos FP → PDF)
