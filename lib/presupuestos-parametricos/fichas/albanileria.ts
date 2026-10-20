@@ -6,16 +6,16 @@
 // Sí depende del nivel de calidad: el ratio €/m² de tabique sale por nivel.
 //
 // Tabiquería nueva (acordada con José, 20 oct 2026):
-//   m² = tabique demolido (maqueta del estado actual, ml) × N reformado / N actual × H × corrección
+//   m² = tabique demolido (maqueta del estado actual, ml) × N reformado / N actual × H
 // N cuenta dormitorios + baños + aseos + cocina si es cerrada + salón-comedor (2 si
 // van separados). No cuentan vestidores, lavanderías, almacenes ni pasillos.
 // Probada en 4 distribuciones reales (un piso de 76 m² y Lope de Rueda 4 con tres
-// propuestas): sin corrección el error fue de +2 % a +15 %. José pide ir sobrados.
+// propuestas): el error fue de +2 % a +15 %, siempre al alza, así que no lleva
+// coeficiente de corrección (se probó un +7 % y José lo descartó: ya va del lado seguro).
 
 import { type Ficha, type Valores, type Cantidad, num, siNo, n2, SIN_DATO } from './tipos'
 
 const K = {
-  correccion_tabique: { valor: 1.07, provisional: false, nota: 'margen de seguridad al alza decidido por José (20 oct 2026): «ir curados en salud»' },
   altura_defecto:     { valor: 2.6,  provisional: true,  nota: 'altura libre si no se ha medido' },
 }
 const k = (c: keyof typeof K) => K[c].valor
@@ -39,11 +39,10 @@ function tabiqueriaNueva(v: Valores): Cantidad {
   const n1 = estanciasProyectadas(v)
   if (n1 == null) return SIN_DATO('programa reformado (dormitorios y baños)')
   const h = num(v, 'altura_libre') ?? k('altura_defecto')
-  const c = k('correccion_tabique')
   return {
-    cantidad: demolido * (n1 / n0) * h * c,
+    cantidad: demolido * (n1 / n0) * h,
     fuente: num(v, 'altura_libre') != null ? 'tecnico' : 'express',
-    formula: `${n2(demolido)} ml demolidos × ${n1}/${n0} estancias × ${n2(h)} m × ${c}`,
+    formula: `${n2(demolido)} ml demolidos × ${n1}/${n0} estancias × ${n2(h)} m`,
   }
 }
 
