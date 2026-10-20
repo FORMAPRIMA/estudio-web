@@ -38,6 +38,22 @@ export const VARIABLES: Variable[] = [
       { value: 'ninguno', label: 'No, o no lo sé' },
     ] },
 
+  // ── Programa del estado reformado (integral con redistribución) ────────────
+  { codigo: 'n_dormitorios_proy', nombre: 'Dormitorios proyectados', unidad: 'ud', tipo: 'numero', nivel: 'express',
+    pregunta: '¿Cuántos dormitorios tendrá la vivienda reformada?' },
+  { codigo: 'n_banos_proy', nombre: 'Baños proyectados', unidad: 'ud', tipo: 'numero', nivel: 'express',
+    pregunta: '¿Cuántos baños completos tendrá?' },
+  { codigo: 'n_aseos_proy', nombre: 'Aseos proyectados', unidad: 'ud', tipo: 'numero', nivel: 'express',
+    pregunta: '¿Cuántos aseos (solo lavabo e inodoro)?', defecto: 0 },
+  { codigo: 'cocina_cerrada_proy', nombre: 'Cocina cerrada', unidad: '', tipo: 'si_no', nivel: 'express',
+    pregunta: '¿La cocina será una estancia cerrada?',
+    ayuda: 'Si se separa del salón solo con puertas correderas o plegables, cuenta como abierta: eso es carpintería, no tabique.' },
+  { codigo: 'salon_comedor_separados_proy', nombre: 'Salón y comedor separados', unidad: '', tipo: 'si_no', nivel: 'express',
+    pregunta: '¿Salón y comedor serán estancias separadas?', defecto: 'no' },
+  { codigo: 'n_estancias_actual', nombre: 'Estancias del estado actual', unidad: 'ud', tipo: 'numero', nivel: 'express',
+    pregunta: '¿Cuántas estancias tiene hoy, contadas con la misma regla?',
+    ayuda: 'Dormitorios + baños + aseos + cocina si es cerrada + salón-comedor (2 si están separados). No cuentan vestidores, lavanderías, almacenes ni pasillos.' },
+
   // ── Técnico: el arquitecto lo mide en poco tiempo ──────────────────────────
   { codigo: 'altura_libre', nombre: 'Altura libre', unidad: 'm', tipo: 'numero', nivel: 'tecnico',
     pregunta: 'Altura de suelo acabado a cara inferior del forjado',
