@@ -12,6 +12,9 @@ import { svgDudas, svgModelo } from '@/lib/presupuestos-parametricos/maqueta/svg
 import { FICHA_DEMOLICIONES } from '@/lib/presupuestos-parametricos/fichas/demoliciones'
 import { cantidadesFicha } from '@/lib/presupuestos-parametricos/fichas'
 import { LEYENDA_ESTILO, type Visor3DHandle, type EstiloVista } from './Visor3D'
+import { medicionesVentanas, type Elecciones } from '@/lib/presupuestos-parametricos/maqueta/ventanas'
+
+const EditorVentanas = dynamic(() => import('./EditorVentanas'), { ssr: false })
 import { T, fmt, Rotulo, Boton, Segmentado, Seccion, Chip, Punto, Campo, input, Interruptor, Contador } from './ui'
 
 const Visor3D = dynamic(() => import('./Visor3D'), { ssr: false })
@@ -21,7 +24,7 @@ const ALTO_TRABAJO = 'calc(100vh - 132px)'
 
 type Fase = 'subir' | 'levantando' | 'revisar' | 'aprobado'
 type Mensaje = { rol: 'usuario' | 'ia'; texto: string }
-type DatosObra = { m2: string; comunes: boolean; altura: string; planta: string; ascensor: 'si' | 'no'; acceso: 'si' | 'no' }
+type DatosObra = { m2: string; comunes: boolean; altura: string; planta: string; ascensor: 'si' | 'no'; acceso: 'si' | 'no'; ventanas: Elecciones }
 type Guardado = { fase: Fase; imagen: string; modelo: ModeloEstadoActual; chat: Mensaje[]; datos: DatosObra; aprobado: ModeloEstadoActual | null }
 
 const USOS: { value: UsoEstancia; label: string }[] = [
@@ -32,7 +35,7 @@ const USOS: { value: UsoEstancia; label: string }[] = [
 
 export default function MaquetaPage() {
   const [fase, setFase] = useState<Fase>('subir')
-  const [datos, setDatos] = useState<DatosObra>({ m2: '', comunes: true, altura: '', planta: '', ascensor: 'si', acceso: 'si' })
+  const [datos, setDatos] = useState<DatosObra>({ m2: '', comunes: true, altura: '', planta: '', ascensor: 'si', acceso: 'si', ventanas: {} })
   const [archivo, setArchivo] = useState<File | null>(null)
   const [imagen, setImagen] = useState<string | null>(null)
   const [modelo, setModelo] = useState<ModeloEstadoActual | null>(null)
@@ -48,6 +51,7 @@ export default function MaquetaPage() {
   const [seccion, setSeccion] = useState(false)
   const [camara, setCamara] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  const [isVentanasAbierto, setIsVentanasAbierto] = useState(false)
   const [segundos, setSegundos] = useState(0)
   const visor = useRef<Visor3DHandle | null>(null)
 
@@ -58,7 +62,7 @@ export default function MaquetaPage() {
       if (!raw) return
       const g = JSON.parse(raw) as Guardado
       setFase(g.fase === 'levantando' ? 'subir' : g.fase); setImagen(g.imagen); setModelo(normalizarModelo(g.modelo))
-      setChat(g.chat); setDatos(g.datos); setAprobado(g.aprobado ? normalizarModelo(g.aprobado) : null)
+      setChat(g.chat); setDatos({ ...g.datos, ventanas: g.datos.ventanas ?? {} }); setAprobado(g.aprobado ? normalizarModelo(g.aprobado) : null)
     } catch { /* sin almacenamiento: se empieza de cero */ }
   }, [])
   useEffect(() => {
@@ -205,10 +209,14 @@ export default function MaquetaPage() {
                 onAprobar={() => { setAprobado(modelo); setFase('aprobado'); setSeleccion(null); setDudaActiva(null) }}
               />
             ) : (
-              <LateralResultado modelo={vista} datos={datos} setDatos={setDatos} onReabrir={() => setFase('revisar')} />
+              <LateralResultado modelo={vista} datos={datos} setDatos={setDatos} onReabrir={() => setFase('revisar')} onVentanas={() => setIsVentanasAbierto(true)} />
             )}
           </aside>
         </div>
+      )}
+      {isVentanasAbierto && vista && imagen && (
+        <EditorVentanas modelo={vista} imagen={imagen} elecciones={datos.ventanas}
+          onCambio={ventanas => setDatos({ ...datos, ventanas })} onCerrar={() => setIsVentanasAbierto(false)} />
       )}
     </div>
   )
@@ -712,7 +720,8 @@ function SliderAltura({ valor, onConfirmar }: { valor: number; onConfirmar: (v: 
 
 // ── Lateral: resultado ───────────────────────────────────────────────────────
 
-function LateralResultado({ modelo, datos, setDatos, onReabrir }: { modelo: ModeloEstadoActual; datos: DatosObra; setDatos: (d: DatosObra) => void; onReabrir: () => void }) {
+function LateralResultado({ modelo, datos, setDatos, onReabrir, onVentanas }: { modelo: ModeloEstadoActual; datos: DatosObra; setDatos: (d: DatosObra) => void; onReabrir: () => void; onVentanas: () => void }) {
+  const ven = useMemo(() => medicionesVentanas(modelo, datos.ventanas), [modelo, datos.ventanas])
   const med = useMemo(() => medicionesDesdeModelo(modelo), [modelo])
   const valores = useMemo(() => ({
     ...med.valores,
@@ -765,6 +774,20 @@ function LateralResultado({ modelo, datos, setDatos, onReabrir }: { modelo: Mode
           <p style={{ fontSize: 11, color: T.tinta3, marginTop: 12, lineHeight: 1.5, padding: '10px 12px', background: T.crema, borderRadius: 8 }}>
             Cada cantidad se multiplicará por su ratio €/unidad cuando haya obras de referencia publicadas.
           </p>
+        </Seccion>
+
+        <Seccion titulo="Ventanas y balconeras" extra={`${ven.n_ventanas_cambiar} de ${ven.total} se cambian`}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <div style={{ background: T.crema, borderRadius: 8, padding: '9px 11px' }}>
+              <p style={{ fontSize: 15, fontWeight: 600, color: T.tinta }}>{fmt(ven.m2_ventanas_cambiar, 2)} m²</p>
+              <p style={{ fontSize: 11, color: T.tinta3 }}>carpintería y vidrio</p>
+            </div>
+            <div style={{ background: T.crema, borderRadius: 8, padding: '9px 11px' }}>
+              <p style={{ fontSize: 15, fontWeight: 600, color: T.tinta }}>{ven.n_persianas}</p>
+              <p style={{ fontSize: 11, color: T.tinta3 }}>persianas</p>
+            </div>
+          </div>
+          <Boton variante="secundario" onClick={onVentanas} style={{ width: '100%', marginTop: 10 }}>Elegir ventana a ventana</Boton>
         </Seccion>
 
         <Seccion titulo="Logística de la obra">

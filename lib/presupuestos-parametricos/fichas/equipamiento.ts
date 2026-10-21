@@ -18,7 +18,7 @@ const k = (c: keyof typeof K) => K[c].valor
 
 type Piezas = { inodoros: number; lavabos: number; duchas: number; banera: number; total: number; formula: string }
 
-function piezas(v: Valores): Piezas | null {
+export function piezas(v: Valores): Piezas | null {
   const banos = num(v, 'n_banos_proy')
   const z = zonasHumedas(v)
   if (banos == null || !z) return null
