@@ -9,10 +9,10 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { DatosSala, LeadRow } from '@/lib/salas/panel'
+import type { DatosSala, LeadRow, ReunionRow } from '@/lib/salas/panel'
 import { NOMBRE_EVENTO, calor, duracion, eventosDe, fecha, hace, lugarDe, resumenLeads, type ResumenLead } from '@/lib/salas/metricas'
 import {
-  actualizarProspecto, crearProspecto, estadoLeadSala, marcarProspecto, modoLogoProspecto, quitarLogoProspecto, subirLogoProspecto,
+  actualizarProspecto, crearProspecto, estadoLeadSala, estadoReunionSala, marcarProspecto, modoLogoProspecto, quitarLogoProspecto, subirLogoProspecto,
   type ProspectoInput,
 } from '@/app/actions/salas'
 import { correoPresentacion, enlacePara } from '@/lib/para/correo'
@@ -25,16 +25,25 @@ const PERFIL = { developer: 'Developers', constructora: 'Constructoras' } as con
 const PAISES = ['España', 'México', 'Estados Unidos', 'Ecuador', 'Colombia', 'Panamá', 'República Dominicana', 'Portugal']
 const DIAS_SIN_ABRIR = 5
 
-type Etapa = 'preparado' | 'enviado' | 'sin_abrir' | 'abierto' | 'interesado' | 'descartado' | 'revocado'
+type Etapa = 'preparado' | 'enviado' | 'sin_abrir' | 'abierto' | 'interesado' | 'otra_fecha' | 'reunion' | 'confirmada' | 'descartado' | 'revocado'
 const NOMBRE_ETAPA: Record<Etapa, string> = {
   preparado: 'Preparado', enviado: 'Enviado', sin_abrir: 'Enviado · sin abrir', abierto: 'Abierto', interesado: 'Interesado',
-  descartado: 'Descartado', revocado: 'Enlace revocado',
+  otra_fecha: 'Pide otra fecha', reunion: 'Reunión pedida', confirmada: 'Reunión confirmada', descartado: 'Descartado', revocado: 'Enlace revocado',
+}
+const CALIENTES: Etapa[] = ['interesado', 'otra_fecha', 'reunion', 'confirmada']
+
+/** La reunión vigente de cada lead (la última que no está cancelada). */
+const reunionesVigentes = (rs: ReunionRow[]) => {
+  const m = new Map<string, ReunionRow>()
+  for (const r of rs) if (r.estado !== 'cancelada' && !m.has(r.leadId)) m.set(r.leadId, r)
+  return m
 }
 
-export function etapaDe(r: ResumenLead, ahora = Date.now()): Etapa {
+export function etapaDe(r: ResumenLead, ahora = Date.now(), reunion?: ReunionRow | null): Etapa {
   const l = r.lead
   if (l.estado === 'revocado') return 'revocado'
   if (l.descartadoEn) return 'descartado'
+  if (reunion) return reunion.estado === 'confirmada' ? 'confirmada' : reunion.estado === 'propuesta' ? 'otra_fecha' : 'reunion'
   if (r.interes) return 'interesado'
   if (r.visitas > 0) return 'abierto'
   if (l.enviadoEn) return ahora - Date.parse(l.enviadoEn) > DIAS_SIN_ABRIR * 864e5 ? 'sin_abrir' : 'enviado'
@@ -42,7 +51,7 @@ export function etapaDe(r: ResumenLead, ahora = Date.now()): Etapa {
 }
 
 function EtiquetaEtapa({ e }: { e: Etapa }) {
-  const tono = e === 'interesado' ? 'acento' : e === 'abierto' ? 'vivo' : e === 'sin_abrir' || e === 'revocado' ? 'rojo' : 'neutro'
+  const tono = CALIENTES.includes(e) ? 'acento' : e === 'abierto' ? 'vivo' : e === 'sin_abrir' || e === 'revocado' ? 'rojo' : 'neutro'
   return <Etiqueta tono={tono}>{NOMBRE_ETAPA[e]}</Etiqueta>
 }
 
@@ -73,13 +82,14 @@ export default function ProspeccionPanel({ slug, nombre, perfil, firma, datos }:
     return () => clearInterval(t)
   }, [router])
 
-  const filas = useMemo(() => resumenLeads(datos, ahora).map((r) => ({ r, e: etapaDe(r, ahora) })), [datos, ahora])
+  const reus = useMemo(() => reunionesVigentes(datos.reuniones), [datos])
+  const filas = useMemo(() => resumenLeads(datos, ahora).map((r) => ({ r, e: etapaDe(r, ahora, reus.get(r.lead.id)) })), [datos, ahora, reus])
   const cuenta = (es: Etapa[]) => filas.filter((f) => es.includes(f.e)).length
   const visibles = useMemo(() => {
     const q = busca.trim().toLowerCase()
-    const orden: Etapa[] = ['interesado', 'abierto', 'sin_abrir', 'enviado', 'preparado', 'descartado', 'revocado']
+    const orden: Etapa[] = ['confirmada', 'reunion', 'otra_fecha', 'interesado', 'abierto', 'sin_abrir', 'enviado', 'preparado', 'descartado', 'revocado']
     return filas
-      .filter((f) => filtro === 'todos' || f.e === filtro || (filtro === 'enviado' && f.e === 'sin_abrir'))
+      .filter((f) => filtro === 'todos' || f.e === filtro || (filtro === 'enviado' && f.e === 'sin_abrir') || (filtro === 'interesado' && CALIENTES.includes(f.e)))
       .filter((f) => !q || [f.r.lead.nombre, f.r.lead.empresa, f.r.lead.cargo, f.r.lead.pais].some((x) => x?.toLowerCase().includes(q)))
       .sort((a, b) => Number(b.r.viendoAhora) - Number(a.r.viendoAhora) || orden.indexOf(a.e) - orden.indexOf(b.e) || b.r.lead.createdAt.localeCompare(a.r.lead.createdAt))
   }, [filas, filtro, busca])
@@ -89,7 +99,7 @@ export default function ProspeccionPanel({ slug, nombre, perfil, firma, datos }:
     { e: 'preparado', t: 'Preparados', v: cuenta(['preparado']), pie: 'listos para enviar' },
     { e: 'enviado', t: 'Enviados', v: cuenta(['enviado', 'sin_abrir']), pie: `${cuenta(['sin_abrir'])} sin abrir tras ${DIAS_SIN_ABRIR} días` },
     { e: 'abierto', t: 'Abiertos', v: cuenta(['abierto']), pie: 'han visto el dossier' },
-    { e: 'interesado', t: 'Interesados', v: cuenta(['interesado']), pie: 'piden hablar' },
+    { e: 'interesado', t: 'Reuniones', v: cuenta(CALIENTES), pie: `${cuenta(['reunion', 'confirmada'])} con hora · ${cuenta(['otra_fecha', 'interesado'])} por cerrar` },
     { e: 'descartado', t: 'Descartados', v: cuenta(['descartado']), pie: 'fuera del embudo' },
   ]
 
@@ -370,7 +380,8 @@ export function ProspectoFicha({ slug, sala, perfil, firma, datos, etiquetas }: 
   const [confirmar, setConfirmar] = useState(false)
   const [isOcupado, setIsOcupado] = useState(false)
   const l = r.lead
-  const e = etapaDe(r)
+  const reunion = reunionesVigentes(datos.reuniones).get(l.id) ?? null
+  const e = etapaDe(r, Date.now(), reunion)
   const sesiones = datos.sesiones.filter((s) => s.totalSlides > 0)
 
   const accion = async (f: () => Promise<unknown>) => { setIsOcupado(true); await f(); setIsOcupado(false); setConfirmar(false); router.refresh() }
@@ -429,6 +440,7 @@ export function ProspectoFicha({ slug, sala, perfil, firma, datos, etiquetas }: 
         </aside>
 
         <div style={{ display: 'grid', gap: 20, alignContent: 'start', minWidth: 0 }}>
+          {reunion && <TarjetaReunion r={reunion} onCambio={() => router.refresh()} />}
           <section style={{ ...card, padding: '18px 20px' }}>
             <h2 style={{ fontSize: 15, fontWeight: 500, margin: '0 0 14px' }}>Envío</h2>
             <EnvioProspecto slug={slug} l={l} perfil={perfil} firma={firma} />
@@ -469,5 +481,37 @@ export function ProspectoFicha({ slug, sala, perfil, firma, datos, etiquetas }: 
         />
       )}
     </>
+  )
+}
+
+// ── Reunión pedida desde el dossier ──────────────────────────────────────────
+
+export const cuandoMadrid = (iso: string) => new Intl.DateTimeFormat('es-ES', { timeZone: 'Europe/Madrid', weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
+
+export function TarjetaReunion({ r, onCambio }: { r: ReunionRow; onCambio: () => void }) {
+  const [isOcupado, setIsOcupado] = useState(false)
+  const cambiar = async (estado: 'confirmada' | 'cancelada' | 'pedida') => { setIsOcupado(true); await estadoReunionSala(r.id, estado); setIsOcupado(false); onCambio() }
+  const local = r.inicio && r.zonaLead && r.zonaLead !== 'Europe/Madrid'
+    ? new Intl.DateTimeFormat('es-ES', { timeZone: r.zonaLead, weekday: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(r.inicio))
+    : null
+  return (
+    <section style={{ ...card, padding: '18px 20px', borderColor: '#D85A3055', background: S.accentSoft }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+        <div>
+          <p style={{ ...eyebrow, color: S.accent }}>{r.inicio ? (r.estado === 'confirmada' ? 'Reunión confirmada' : 'Reunión pedida') : 'Quiere hablar · otra fecha'}</p>
+          {r.inicio && <p style={{ fontSize: 20, fontWeight: 300, margin: '8px 0 2px', textTransform: 'capitalize' }}>{cuandoMadrid(r.inicio)}</p>}
+          <p style={{ fontSize: 12.5, color: S.soft, margin: '4px 0 0' }}>
+            {[r.inicio && 'hora de Madrid', r.inicio && `${r.minutos} min`, local && `para el lead: ${local} (${r.zonaLead})`, r.email && `invitación a ${r.email}`].filter(Boolean).join(' · ')}
+          </p>
+          {r.nota && <p style={{ fontSize: 13, margin: '10px 0 0', whiteSpace: 'pre-wrap' }}>«{r.nota}»</p>}
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {r.inicio && r.estado !== 'confirmada' && <button disabled={isOcupado} onClick={() => cambiar('confirmada')} style={btn()}>Marcar confirmada</button>}
+          {r.estado === 'confirmada' && <button disabled={isOcupado} onClick={() => cambiar('pedida')} style={btn('ghost')}>Deshacer</button>}
+          <button disabled={isOcupado} onClick={() => cambiar('cancelada')} style={btn('ghost')}>Cancelar</button>
+        </div>
+      </div>
+      <p style={{ fontSize: 12, color: S.soft, margin: '12px 0 0' }}>Recuerda enviarle el enlace de la videollamada desde tu correo.</p>
+    </section>
   )
 }

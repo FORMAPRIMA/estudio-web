@@ -253,3 +253,10 @@ Dossier del estudio personalizado por empresa para business development: `formap
   equipo no cuentan si se abre desde «Ver su dossier» (`?equipo=<firma>` → cookie `fp_peq_*`).
 - Casa Zurbano va incrustada como ejemplo con `/propuesta/casa-zurbano-xzw9e?demo=1` (no se mide).
 - Mapbox: el token está restringido a los dominios de formaprima.es; en localhost el mapa no pinta.
+- **Agenda viva** (`salas_fase5_agenda.sql`, `lib/para/agenda.ts`): el cierre ofrece las franjas de quien
+  envió el enlace (`sala_miembros.agenda`, se editan en salas → Agenda) en los días laborables 6–10
+  contados desde HOY (sin fines de semana ni festivos de Madrid; la lista de festivos hay que revisarla cada
+  año), en la zona del visitante y solo entre las 8:00 y las 20:00 de su hora. La reserva
+  (`app/actions/para.ts`) se revalida en servidor, guarda `sala_reuniones` y manda .ics al lead y al equipo.
+- Probar correos en local sin enviarlos: `EMAIL_SIMULADO=<fichero>` en `.env.local` (Next la recarga en
+  caliente) → `sendEmail` escribe cada correo en ese fichero en vez de mandarlo.

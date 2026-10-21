@@ -36,6 +36,7 @@ export default async function SalasLayout({ children }: { children: React.ReactN
           </Link>
           <nav style={{ display: 'flex', gap: 18, fontSize: 13 }}>
             <Link href="/" style={{ color: S.ink, textDecoration: 'none' }}>Dossiers</Link>
+            <Link href="/agenda" style={{ color: S.ink, textDecoration: 'none' }}>Agenda</Link>
             {m.rol === 'propietario' && <Link href="/equipo" style={{ color: S.ink, textDecoration: 'none' }}>Equipo</Link>}
           </nav>
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 16, fontSize: 12, color: S.soft }}>

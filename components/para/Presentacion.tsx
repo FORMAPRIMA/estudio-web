@@ -15,6 +15,7 @@ import type { MapaPunto } from '@/lib/web-mapa'
 import { T, mesAnio, type Idioma, type LeadPara, type Textos } from '@/lib/para/textos'
 import { ETIQUETA, PANTALLAS, type PantallaId } from '@/lib/para/pantallas'
 import { useMedicionSala } from '@/components/propuesta/medicionSala'
+import type { EstadoAgendaCliente } from './Agenda'
 import { CSS_PANTALLAS, Colaboracion, Dossier, Ejecucion, Equipo, Estudio, Hablemos, Obra, Portal, Porque, Producto, VR } from './Pantallas'
 
 // Hueco de pantalla completa mientras llega el código: la página no salta.
@@ -60,8 +61,11 @@ export function useBloqueoScroll(activo: boolean) {
   }, [activo])
 }
 
-export default function Presentacion({ lead, puntos, mapboxToken, medicion = null }: {
+export default function Presentacion({ lead, puntos, mapboxToken, medicion = null, agenda, token = null }: {
   lead: LeadPara; puntos: MapaPunto[]; mapboxToken: string | null
+  agenda: EstadoAgendaCliente
+  /** El enlace del lead (para reservar); null en la muestra. */
+  token?: string | null
   /** Clave de medición (`para:<token>`); null = no se mide (muestra, equipo). */
   medicion?: string | null
 }) {
@@ -133,7 +137,7 @@ export default function Presentacion({ lead, puntos, mapboxToken, medicion = nul
       case 'vr': return <VR t={t} num={num} alEvento={alEvento} />
       case 'portal': return <Portal t={t} num={num} alEvento={alEvento} />
       case 'porque': return <Porque t={t} lead={lead} num={num} />
-      case 'hablemos': return <Hablemos t={t} lead={lead} num={num} alEvento={alEvento} />
+      case 'hablemos': return <Hablemos t={t} idioma={idioma} lead={lead} num={num} alEvento={alEvento} agenda={agenda} token={token} />
     }
   }
 

@@ -7,6 +7,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { LeadPara, Textos } from '@/lib/para/textos'
 import { useBloqueoScroll, useEnPantalla, useVisto } from './Presentacion'
+import Agenda, { CSS_AGENDA, type EstadoAgendaCliente } from './Agenda'
+import type { Idioma } from '@/lib/para/textos'
 
 export type AlEvento = (k: string, d?: string) => void
 
@@ -305,8 +307,10 @@ export function Porque({ t, lead, num }: { t: Textos; lead: LeadPara; num: numbe
   )
 }
 
-// ── Cierre. La fase 4 añade aquí la agenda viva (días 6–10 desde la apertura).
-export function Hablemos({ t, lead, num, alEvento }: { t: Textos; lead: LeadPara; num: number; alEvento: AlEvento }) {
+// ── Cierre: la agenda viva (días laborables 6–10 desde hoy) y quien lo firma.
+export function Hablemos({ t, idioma, lead, num, alEvento, agenda, token }: {
+  t: Textos; idioma: Idioma; lead: LeadPara; num: number; alEvento: AlEvento; agenda: EstadoAgendaCliente; token: string | null
+}) {
   const c = lead.contacto
   const asunto = encodeURIComponent(`${lead.empresa} × Forma Prima`)
   return (
@@ -315,20 +319,23 @@ export function Hablemos({ t, lead, num, alEvento }: { t: Textos; lead: LeadPara
         <h2 className="p-h1-cierre"><span className="p-in-h"><span style={D('.1s')}>{t.hablemosTitulo(lead.nombre)}</span></span></h2>
         <span className="p-raya p-in" style={D('.3s')} aria-hidden />
         <p className="p-texto p-in" style={D('.4s')}>{t.hablemosTexto(lead.empresa)}</p>
-      </div>
-      <div className="p-contacto p-in" style={D('.5s')}>
-        {c.foto && <img src={c.foto} alt={c.nombre} loading="lazy" />}
-        <div>
-          <b>{c.nombre}</b><span>{c.cargo}</span>
-          <a href={`mailto:${c.email}?subject=${asunto}`} className="p-boton" onClick={() => alEvento('interes', 'correo')}>{t.escribir} {c.nombre.split(' ')[0]}</a>
-          <a href="https://formaprima.es" target="_blank" rel="noopener" className="p-enlace" onClick={() => alEvento('enlace', 'web')}>{t.web} →</a>
+        <div className="p-contacto p-in" style={D('.5s')}>
+          {c.foto && <img src={c.foto} alt={c.nombre} loading="lazy" />}
+          <div>
+            <b>{c.nombre}</b><span>{c.cargo}</span>
+            <a href={`mailto:${c.email}?subject=${asunto}`} className="p-enlace" onClick={() => alEvento('enlace', 'correo')}>{c.email}</a>
+            <a href="https://formaprima.es" target="_blank" rel="noopener" className="p-enlace" onClick={() => alEvento('enlace', 'web')}>{t.web} →</a>
+          </div>
         </div>
+      </div>
+      <div className="p-in" style={D('.45s')}>
+        <Agenda t={t} idioma={idioma} lead={lead} estado={agenda} token={token} alEvento={alEvento} />
       </div>
     </Pantalla>
   )
 }
 
-export const CSS_PANTALLAS = `
+export const CSS_PANTALLAS = CSS_AGENDA + `
 .p-pant{position:relative;min-height:100svh;padding:calc(env(safe-area-inset-top) + 84px) var(--p-gutter) calc(env(safe-area-inset-bottom) + 56px);
   display:flex;flex-direction:column;gap:22px;overflow:hidden;}
 .p-oscuro{background:var(--p-negro);color:var(--p-blanco);}
@@ -445,14 +452,14 @@ export const CSS_PANTALLAS = `
 .p-hablemos{justify-content:center;gap:40px;}
 .p-hablemos-a{display:flex;flex-direction:column;gap:22px;}
 .p-h1-cierre{font-size:clamp(46px,1.4rem + 6vw,104px);line-height:1;}
-.p-contacto{display:flex;gap:18px;align-items:flex-start;padding-top:26px;border-top:1px solid rgba(251,251,250,.14);}
-.p-contacto img{width:88px;aspect-ratio:3/4;object-fit:cover;filter:grayscale(1);}
+.p-contacto{display:flex;gap:16px;align-items:flex-start;margin-top:8px;}
+.p-contacto img{width:64px;aspect-ratio:3/4;object-fit:cover;filter:grayscale(1);}
 .p-contacto div{display:flex;flex-direction:column;gap:4px;}
 .p-contacto b{font-weight:400;font-size:18px;}
-.p-contacto span{font-size:13px;color:rgba(251,251,250,.6);margin-bottom:12px;}
+.p-contacto span{font-size:13px;color:rgba(251,251,250,.6);margin-bottom:6px;}
 .p-boton{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 22px;background:var(--p-blanco);color:var(--p-negro);
   font-size:12px;letter-spacing:.16em;text-transform:uppercase;font-weight:500;text-decoration:none;align-self:flex-start;}
-.p-enlace{font-size:13px;color:var(--p-salvia);text-decoration:none;margin-top:10px;}
+.p-enlace{font-size:13px;color:var(--p-salvia);text-decoration:none;margin-top:4px;}
 
 @media (min-width:1024px){
   .p-pant{padding:clamp(96px,12vh,140px) var(--p-gutter) clamp(56px,9vh,104px);gap:28px;}
@@ -481,10 +488,10 @@ export const CSS_PANTALLAS = `
   .p-porque .p-puntos{grid-template-columns:repeat(3,1fr);column-gap:40px;}
   .p-porque .p-puntos li{grid-template-columns:1fr;row-gap:10px;padding-top:24px;}
   .p-porque .p-puntos-n{grid-row:auto;}
-  .p-hablemos{display:grid;grid-template-columns:1.3fr 1fr;column-gap:80px;align-content:center;align-items:end;}
+  .p-hablemos{display:grid;grid-template-columns:1fr 1fr;column-gap:clamp(48px,6vw,112px);align-content:center;align-items:start;}
   .p-hablemos .p-pant-rotulo{grid-column:1 / -1;}
-  .p-contacto{border-top:0;border-left:1px solid rgba(251,251,250,.14);padding:0 0 0 40px;}
-  .p-contacto img{width:120px;}
+  .p-hablemos .p-agenda{border-top:0;border-left:1px solid rgba(251,251,250,.14);padding:4px 0 0 clamp(32px,3vw,56px);}
+  .p-agenda-dias{margin:0;padding:0;flex-wrap:wrap;}
   .p-vr{padding:0;}
   .p-vr-txt{max-width:780px;padding-bottom:clamp(56px,9vh,104px);}
   .p-vr .p-pant-rotulo{top:clamp(96px,12vh,140px);}

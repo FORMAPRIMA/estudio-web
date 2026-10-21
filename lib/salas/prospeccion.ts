@@ -7,6 +7,7 @@ import { createHmac, randomInt, timingSafeEqual } from 'crypto'
 import sharp from 'sharp'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { FOTO_EQUIPO, type Idioma, type LeadPara, type Perfil } from '@/lib/para/textos'
+import { agendaDe, type Agenda } from '@/lib/para/agenda'
 
 export const BUCKET_LOGOS = 'salas-logos'
 const SECRET = process.env.PORTAL_SECRET ?? 'dev-only-secret-not-for-production'
@@ -39,6 +40,7 @@ export async function tokenNuevo(empresa: string | null, nombre: string): Promis
 }
 
 export interface Prospecto {
+  miembroId: string | null
   leadId: string
   salaId: string
   salaSlug: string
@@ -63,6 +65,7 @@ export async function prospectoPorToken(token: string): Promise<Prospecto | null
     : { data: null }
   const email = c?.activo && c.email ? String(c.email).toLowerCase() : 'contacto@formaprima.es'
   return {
+    miembroId: c?.activo ? l.creado_por : null,
     leadId: l.id, salaId: s.id, salaSlug: s.slug, token,
     logoModo: l.logo_modo === 'original' ? 'original' : 'blanco',
     logoPath: l.logo_path,
@@ -137,4 +140,30 @@ export async function leerLogo(carpeta: string, modo: 'blanco' | 'original'): Pr
 
 export async function borrarLogo(carpeta: string): Promise<void> {
   await createAdminClient().storage.from(BUCKET_LOGOS).remove([`${carpeta}/original.png`, `${carpeta}/blanco.png`]).catch(() => {})
+}
+
+// ── Agenda ───────────────────────────────────────────────────────────────────
+
+export interface EstadoAgenda {
+  agenda: Agenda
+  /** Instantes ya cogidos por otros leads de la misma persona. */
+  ocupadas: string[]
+  /** La reunión vigente de este lead, si ya pidió una. */
+  reunion: { inicio: string | null; minutos: number; estado: string } | null
+}
+
+export async function estadoAgenda(p: Prospecto): Promise<EstadoAgenda> {
+  const admin = createAdminClient()
+  const [{ data: m }, { data: rs }] = await Promise.all([
+    p.miembroId ? admin.from('sala_miembros').select('agenda').eq('id', p.miembroId).maybeSingle() : Promise.resolve({ data: null }),
+    admin.from('sala_reuniones').select('lead_id, inicio, minutos, estado, created_at')
+      .or(`lead_id.eq.${p.leadId}${p.miembroId ? `,miembro_id.eq.${p.miembroId}` : ''}`)
+      .neq('estado', 'cancelada').gte('created_at', new Date(Date.now() - 60 * 864e5).toISOString()).order('created_at', { ascending: false }),
+  ])
+  const propia = (rs ?? []).find((r) => r.lead_id === p.leadId) ?? null
+  return {
+    agenda: agendaDe(m?.agenda),
+    ocupadas: (rs ?? []).filter((r) => r.lead_id !== p.leadId && r.inicio).map((r) => r.inicio as string),
+    reunion: propia ? { inicio: propia.inicio, minutos: propia.minutos, estado: propia.estado } : null,
+  }
 }

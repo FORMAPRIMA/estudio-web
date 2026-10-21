@@ -378,3 +378,36 @@ export async function marcarProspecto(leadId: string, campo: 'enviado' | 'descar
     return {}
   })
 }
+
+// ── Agenda (reuniones del dossier de prospección) ───────────────────────────
+
+/** Las franjas fijas de la persona del panel que firma sus enlaces. */
+export async function guardarAgendaMiembro(a: { zona: string; franjas: string[]; minutos: number }): Promise<R> {
+  return envolver(async () => {
+    const m = await requireMiembro()
+    const { agendaDe } = await import('@/lib/para/agenda')
+    const agenda = agendaDe(a)
+    if (!a.franjas?.length) throw new Error('Elige al menos una franja.')
+    const { error } = await createAdminClient().from('sala_miembros').update({ agenda }).eq('id', m.id)
+    if (error) throw new Error(error.message)
+    await auditar(m.id, 'agenda', null, agenda.franjas.join(' '))
+    revalidatePath('/salas/agenda')
+    return {}
+  })
+}
+
+export async function estadoReunionSala(id: string, estado: 'confirmada' | 'cancelada' | 'pedida'): Promise<R> {
+  return envolver(async () => {
+    const m = await requireMiembro()
+    const admin = createAdminClient()
+    const { data: r } = await admin.from('sala_reuniones').select('id, lead_id').eq('id', id).maybeSingle()
+    if (!r) throw new Error('Reunión no encontrada.')
+    const { sala, lead } = await leadConPermiso(m, r.lead_id)
+    const { error } = await admin.from('sala_reuniones').update({ estado }).eq('id', id)
+    if (error) throw new Error(error.message)
+    await auditar(m.id, `reunion_${estado}`, sala.id, lead.nombre)
+    revalidatePath(`/salas/${sala.slug}`)
+    revalidatePath('/salas/agenda')
+    return {}
+  })
+}

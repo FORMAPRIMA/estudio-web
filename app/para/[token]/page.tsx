@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { getMapaPuntosPublic } from '@/app/actions/web-mapa'
 import { cookies } from 'next/headers'
-import { cookieEquipo, esFirmaEquipo, prospectoPorToken } from '@/lib/salas/prospeccion'
+import { cookieEquipo, esFirmaEquipo, estadoAgenda, prospectoPorToken } from '@/lib/salas/prospeccion'
 import MarcaEquipo from '@/components/para/MarcaEquipo'
 import Presentacion from '@/components/para/Presentacion'
 
@@ -59,12 +59,12 @@ export default async function ParaPage({ params, searchParams }: { params: { tok
   // Quien llega desde el panel (?equipo=<firma>) o ya trae la marca no se mide.
   const marca = esFirmaEquipo(p.token, searchParams.equipo) ? searchParams.equipo! : null
   const equipo = !!marca || esFirmaEquipo(p.token, cookies().get(cookieEquipo(p.token))?.value)
-  const puntos = await getMapaPuntosPublic()
+  const [puntos, agenda] = await Promise.all([getMapaPuntosPublic(), estadoAgenda(p)])
   return (
     <>
       {fuente}
       {marca && <MarcaEquipo nombre={cookieEquipo(p.token)} valor={marca} />}
-      <Presentacion lead={p.lead} puntos={puntos} mapboxToken={process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? null} medicion={equipo ? null : `para:${p.token}`} />
+      <Presentacion lead={p.lead} puntos={puntos} mapboxToken={process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? null} medicion={equipo ? null : `para:${p.token}`} agenda={agenda} token={p.token} />
     </>
   )
 }

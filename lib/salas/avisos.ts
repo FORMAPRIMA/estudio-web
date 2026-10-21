@@ -104,7 +104,7 @@ async function avisar(c: Contexto, tipo: TipoAviso, extra?: string): Promise<voi
     final: ss.some((s) => s.final),
     interes: !!lead.lead_captacion_id || tipo === 'interes',
   })
-  const nombre = lead.nombre as string
+  const nombre = `${lead.nombre as string}${lead.empresa ? ` (${lead.empresa})` : ''}`
   const titulo: Record<TipoAviso, string> = {
     abierto: `${nombre} ha abierto el dossier de ${c.salaNombre}`,
     vuelto: `${nombre} ha vuelto al dossier de ${c.salaNombre}`,

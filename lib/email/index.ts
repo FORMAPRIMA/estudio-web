@@ -50,6 +50,18 @@ export interface SendEmailError {
 export async function sendEmail(
   opts: SendEmailOptions
 ): Promise<SendEmailResult | SendEmailError> {
+  // Simulación para pruebas en local: EMAIL_SIMULADO=<fichero> en .env.local hace
+  // que nada salga por Resend y cada correo se añada a ese fichero (JSON por línea).
+  // Se lee en cada envío porque Next recarga .env.local en caliente y el SDK de
+  // Resend fija su dirección al arrancar. En producción la variable no existe.
+  if (process.env.EMAIL_SIMULADO && process.env.NODE_ENV !== 'production') {
+    const { appendFile } = await import('fs/promises')
+    await appendFile(process.env.EMAIL_SIMULADO, JSON.stringify({
+      to: opts.to, cc: opts.cc, subject: opts.subject, replyTo: opts.replyTo,
+      adjuntos: opts.attachments?.map((a) => a.filename), html: opts.html.slice(0, 4000),
+    }) + '\n')
+    return { id: 'simulado', error: null }
+  }
   try {
     const { data, error } = await resend.emails.send({
       from:        FROM,

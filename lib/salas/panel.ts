@@ -171,7 +171,13 @@ export interface SesionRow {
 export interface VistaRow { sesionId: string; slide: number; etiqueta: string | null; ms: number; entradas: number }
 export interface EventoRow { sesionId: string; tipo: string; slide: number | null; detalle: string | null; at: string }
 
+export interface ReunionRow {
+  id: string; leadId: string; miembroId: string | null; inicio: string | null; minutos: number
+  estado: 'pedida' | 'propuesta' | 'confirmada' | 'cancelada'; email: string | null; nota: string | null; zonaLead: string | null; createdAt: string
+}
+
 export interface DatosSala {
+  reuniones: ReunionRow[]
   leads: LeadRow[]
   sesiones: SesionRow[]
   vistas: VistaRow[]
@@ -185,8 +191,10 @@ export async function datosSala(salaId: string, opts: { leadId?: string } = {}):
   if (opts.leadId) qs = qs.eq('lead_id', opts.leadId)
   let ql = admin.from('sala_leads').select('*').eq('sala_id', salaId).order('created_at', { ascending: false })
   if (opts.leadId) ql = ql.eq('id', opts.leadId)
-  const [{ data: leads }, { data: ses }, { data: miembros }] = await Promise.all([
-    ql, qs, admin.from('sala_miembros').select('id, nombre'),
+  let qr = admin.from('sala_reuniones').select('*').eq('sala_id', salaId).order('created_at', { ascending: false })
+  if (opts.leadId) qr = qr.eq('lead_id', opts.leadId)
+  const [{ data: leads }, { data: ses }, { data: miembros }, { data: reus }] = await Promise.all([
+    ql, qs, admin.from('sala_miembros').select('id, nombre'), qr,
   ])
   const ids = (ses ?? []).map((s) => s.id)
   const trozos = <T,>(xs: T[], n: number) => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n))
@@ -201,6 +209,10 @@ export async function datosSala(salaId: string, opts: { leadId?: string } = {}):
     for (const x of e ?? []) eventos.push({ sesionId: x.sesion_id, tipo: x.tipo, slide: x.slide, detalle: x.detalle, at: x.at })
   }
   return {
+    reuniones: (reus ?? []).map((r) => ({
+      id: r.id, leadId: r.lead_id, miembroId: r.miembro_id, inicio: r.inicio, minutos: r.minutos, estado: r.estado,
+      email: r.email, nota: r.nota, zonaLead: r.zona_lead, createdAt: r.created_at,
+    })),
     leads: (leads ?? []).map((l) => ({
       id: l.id, pin: l.pin, nombre: l.nombre, empresa: l.empresa, email: l.email, telefono: l.telefono, canal: l.canal,
       notas: l.notas, estado: l.estado, caducaEn: l.caduca_en, creadoPor: l.creado_por, leadCaptacionId: l.lead_captacion_id, createdAt: l.created_at,

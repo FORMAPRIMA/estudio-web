@@ -3,6 +3,7 @@ import { getMapaPuntosPublic } from '@/app/actions/web-mapa'
 import { requireFP } from '@/lib/visual-lab/guard'
 import Presentacion from '@/components/para/Presentacion'
 import type { LeadPara, Idioma } from '@/lib/para/textos'
+import { AGENDA_BASE } from '@/lib/para/agenda'
 
 // Muestra del dossier de prospección (portada, mapa y maqueta) con un lead de
 // ejemplo, para dar el visto bueno al listón antes de construir el resto.
@@ -32,7 +33,7 @@ export default async function MuestraPage({ searchParams }: { searchParams: { la
       <link rel="preconnect" href="https://fonts.googleapis.com" />
       <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
       <link rel="stylesheet" href={FUENTE} />
-      <Presentacion lead={lead} puntos={puntos} mapboxToken={process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? null} />
+      <Presentacion lead={lead} puntos={puntos} mapboxToken={process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? null} agenda={{ agenda: AGENDA_BASE, ocupadas: [], reunion: null }} />
     </>
   )
 }
