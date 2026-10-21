@@ -110,6 +110,10 @@ export const VARIABLES: Variable[] = [
   { codigo: 'ml_vestidor_proy', nombre: 'Vestidor', unidad: 'ml', tipo: 'numero', nivel: 'tecnico',
     pregunta: 'Metros de frente del vestidor, si ya se conocen', ayuda: 'Opcional. Si no, 5 ml por cada 100 m² útiles (mínimo 4).' },
 
+  { codigo: 'n_huecos_estructurales', nombre: 'Huecos en muros estructurales', unidad: 'ud', tipo: 'numero', nivel: 'express',
+    pregunta: '¿Cuántos huecos se abrirán en muros estructurales?',
+    ayuda: 'Solo intervenciones puntuales (cargaderos). Los refuerzos grandes se presupuestan aparte.', defecto: 0 },
+
   // ── Técnico: el arquitecto lo mide en poco tiempo ──────────────────────────
   { codigo: 'altura_libre', nombre: 'Altura libre', unidad: 'm', tipo: 'numero', nivel: 'tecnico',
     pregunta: 'Altura de suelo acabado a cara inferior del forjado',
