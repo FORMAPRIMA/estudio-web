@@ -64,19 +64,37 @@ export function esHostSalas(): boolean {
   return host.startsWith('salas.')
 }
 
-export interface SalaResumen { id: string; slug: string; nombre: string; accesoAnonimo: boolean }
+export interface SalaResumen {
+  id: string; slug: string; nombre: string; accesoAnonimo: boolean
+  /** No se puede asignar a comerciales (propuestas de honorarios). */
+  confidencial: boolean
+  creadoPor: string | null
+}
 
+/** Una sala se puede asignar a un comercial si no es confidencial. */
+export const asignable = (s: { confidencial: boolean }) => !s.confidencial
+
+// Es el único filtro de visibilidad del panel: páginas, CSV, acciones, avisos y el
+// resumen diario pasan por aquí. Un comercial ve las salas que le han asignado y
+// no son confidenciales, más las que ha creado él (esas siempre).
 export async function salasDe(m: Miembro): Promise<SalaResumen[]> {
   const admin = createAdminClient()
-  let q = admin.from('sala_salas').select('id, slug, nombre, acceso_anonimo, activa').eq('activa', true).order('created_at')
-  if (m.rol !== 'propietario') {
-    const { data: asig } = await admin.from('sala_miembro_salas').select('sala_id').eq('miembro_id', m.id)
-    const ids = (asig ?? []).map((a) => a.sala_id)
-    if (!ids.length) return []
-    q = q.in('id', ids)
+  const { data, error } = await admin.from('sala_salas')
+    .select('id, slug, nombre, acceso_anonimo, confidencial, creado_por').eq('activa', true).order('created_at')
+  // Sin la migración salas_fase3_permisos.sql un comercial no ve nada: mejor
+  // cerrado que enseñar una propuesta de honorarios por error.
+  if (error) {
+    if (m.rol !== 'propietario') return []
+    const { data: viejas } = await admin.from('sala_salas').select('id, slug, nombre, acceso_anonimo').eq('activa', true).order('created_at')
+    return (viejas ?? []).map((s) => ({ id: s.id, slug: s.slug, nombre: s.nombre, accesoAnonimo: !!s.acceso_anonimo, confidencial: true, creadoPor: null }))
   }
-  const { data } = await q
-  return (data ?? []).map((s) => ({ id: s.id, slug: s.slug, nombre: s.nombre, accesoAnonimo: !!s.acceso_anonimo }))
+  const todas: SalaResumen[] = (data ?? []).map((s) => ({
+    id: s.id, slug: s.slug, nombre: s.nombre, accesoAnonimo: !!s.acceso_anonimo, confidencial: s.confidencial !== false, creadoPor: s.creado_por ?? null,
+  }))
+  if (m.rol === 'propietario') return todas
+  const { data: asig } = await admin.from('sala_miembro_salas').select('sala_id').eq('miembro_id', m.id)
+  const ids = new Set((asig ?? []).map((a) => a.sala_id))
+  return todas.filter((s) => s.creadoPor === m.id || (ids.has(s.id) && asignable(s)))
 }
 
 export async function salaDe(m: Miembro, slug: string): Promise<SalaResumen | null> {

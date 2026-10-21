@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { actualizarMiembroSala, crearMiembroSala, regenerarCodigoSala, type MiembroInput } from '@/app/actions/salas'
+import { actualizarConfidencialSala, actualizarMiembroSala, crearMiembroSala, regenerarCodigoSala, type MiembroInput } from '@/app/actions/salas'
 import { fecha, hace } from '@/lib/salas/metricas'
 import { Modal } from './LeadForm'
 import { Etiqueta } from './SalaPanel'
@@ -12,21 +12,22 @@ export interface MiembroFila {
   id: string; nombre: string; email: string | null; empresa: string | null
   rol: 'propietario' | 'comercial'; activo: boolean; ultimoAcceso: string | null; salas: string[]
 }
+export interface SalaFila { id: string; nombre: string; confidencial: boolean; creadoPor: string | null }
 export interface Registro { quien: string; sala: string | null; accion: string; detalle: string | null; at: string }
 
 const ACCIONES: Record<string, string> = {
   entrar: 'entró al panel', crear_lead: 'creó el lead', editar_lead: 'editó el lead', revocar_lead: 'revocó el PIN de',
   reactivar_lead: 'reactivó el PIN de', renovar_pin: 'generó un PIN nuevo para', exportar_csv: 'exportó el CSV',
   crear_miembro: 'dio acceso a', editar_miembro: 'editó a', desactivar_miembro: 'desactivó a', regenerar_codigo: 'generó un código nuevo para',
+  sala_confidencial: 'marcó como confidencial', sala_compartible: 'abrió al equipo',
 }
 
 export default function EquipoPanel({ yo, miembros, salas, registro }: {
-  yo: string; miembros: MiembroFila[]; salas: { id: string; nombre: string }[]; registro: Registro[]
+  yo: string; miembros: MiembroFila[]; salas: SalaFila[]; registro: Registro[]
 }) {
   const router = useRouter()
   const [form, setForm] = useState<MiembroFila | 'nuevo' | null>(null)
   const [codigo, setCodigo] = useState<{ nombre: string; codigo: string } | null>(null)
-  const salasN = new Map(salas.map((s) => [s.id, s.nombre]))
 
   return (
     <>
@@ -34,7 +35,7 @@ export default function EquipoPanel({ yo, miembros, salas, registro }: {
         <div>
           <p style={eyebrow}>Equipo</p>
           <h1 style={{ fontSize: 30, fontWeight: 300, letterSpacing: '-0.02em', margin: '6px 0 0' }}>Quién entra al panel</h1>
-          <p style={{ fontSize: 13, color: S.soft, margin: '6px 0 0' }}>Cada persona tiene su propio código. Los perfiles comerciales ven todos los leads de las salas que les asignes.</p>
+          <p style={{ fontSize: 13, color: S.soft, margin: '6px 0 0' }}>Cada persona tiene su propio código. Los perfiles comerciales ven las salas que les asignes y las que crean ellos.</p>
         </div>
         <button onClick={() => setForm('nuevo')} style={btn()}>+ Dar acceso</button>
       </div>
@@ -57,7 +58,7 @@ export default function EquipoPanel({ yo, miembros, salas, registro }: {
                   {!x.activo ? <Etiqueta tono="rojo">sin acceso</Etiqueta> : x.rol === 'propietario' ? <Etiqueta tono="acento">propiedad</Etiqueta> : <Etiqueta>comercial</Etiqueta>}
                 </td>
                 <td style={{ padding: '12px 16px', color: S.soft, fontSize: 12.5 }}>
-                  {x.rol === 'propietario' ? 'Todas' : x.salas.map((s) => salasN.get(s)).filter(Boolean).join(', ') || 'Ninguna'}
+                  {x.rol === 'propietario' ? 'Todas' : salasVistas(x.id, x.salas, salas).map((s) => s.nombre).join(', ') || 'Ninguna'}
                 </td>
                 <td style={{ padding: '12px 16px', color: S.soft, fontSize: 12.5 }}>{hace(x.ultimoAcceso)}</td>
                 <td style={{ padding: '12px 16px', textAlign: 'right' }}>
@@ -68,6 +69,8 @@ export default function EquipoPanel({ yo, miembros, salas, registro }: {
           </tbody>
         </table>
       </div>
+
+      <SalasConfidenciales salas={salas} miembros={miembros} onCambio={() => router.refresh()} />
 
       <h2 style={{ fontSize: 15, fontWeight: 500, margin: '0 0 10px' }}>Registro</h2>
       <div style={{ ...card, padding: '6px 0' }}>
@@ -109,12 +112,12 @@ export default function EquipoPanel({ yo, miembros, salas, registro }: {
 }
 
 function MiembroForm({ inicial, esYo, salas, onCerrar, onCodigo, onHecho }: {
-  inicial: MiembroFila | null; esYo: boolean; salas: { id: string; nombre: string }[]
+  inicial: MiembroFila | null; esYo: boolean; salas: SalaFila[]
   onCerrar: () => void; onCodigo: (c: { nombre: string; codigo: string }) => void; onHecho: () => void
 }) {
   const [d, setD] = useState<MiembroInput & { activo: boolean }>({
     nombre: inicial?.nombre ?? '', email: inicial?.email ?? '', empresa: inicial?.empresa ?? '',
-    rol: inicial?.rol ?? 'comercial', salas: inicial?.salas ?? salas.map((s) => s.id), activo: inicial?.activo ?? true,
+    rol: inicial?.rol ?? 'comercial', salas: (inicial?.salas ?? []).filter((id) => salas.some((s) => s.id === id && !s.confidencial)), activo: inicial?.activo ?? true,
   })
   const [error, setError] = useState('')
   const [isGuardando, setIsGuardando] = useState(false)
@@ -157,14 +160,21 @@ function MiembroForm({ inicial, esYo, salas, onCerrar, onCodigo, onHecho }: {
         </fieldset>
         {d.rol === 'comercial' && (
           <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
-            <legend style={lab}>Salas</legend>
+            <legend style={lab}>Salas que ve</legend>
             <div style={{ display: 'grid', gap: 6 }}>
-              {salas.map((s) => (
-                <label key={s.id} style={{ display: 'flex', gap: 8, fontSize: 13.5, alignItems: 'center', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={d.salas.includes(s.id)} onChange={(e) => setD({ ...d, salas: e.target.checked ? [...d.salas, s.id] : d.salas.filter((x) => x !== s.id) })} style={{ accentColor: S.ink }} />
-                  {s.nombre}
-                </label>
-              ))}
+              {salas.map((s) => {
+                const suya = !!inicial && s.creadoPor === inicial.id
+                const bloqueada = s.confidencial && !suya
+                return (
+                  <label key={s.id} title={bloqueada ? 'Confidencial: ábrela al equipo más abajo para poder asignarla.' : undefined}
+                    style={{ display: 'flex', gap: 8, fontSize: 13.5, alignItems: 'center', cursor: bloqueada || suya ? 'default' : 'pointer', color: bloqueada ? S.faint : S.ink }}>
+                    <input type="checkbox" disabled={bloqueada || suya} checked={suya || (!bloqueada && d.salas.includes(s.id))}
+                      onChange={(e) => setD({ ...d, salas: e.target.checked ? [...d.salas, s.id] : d.salas.filter((x) => x !== s.id) })} style={{ accentColor: S.ink }} />
+                    {s.nombre}
+                    {suya ? <Etiqueta>la creó</Etiqueta> : s.confidencial ? <Etiqueta>confidencial</Etiqueta> : null}
+                  </label>
+                )
+              })}
             </div>
           </fieldset>
         )}
@@ -188,3 +198,51 @@ function MiembroForm({ inicial, esYo, salas, onCerrar, onCodigo, onHecho }: {
 }
 
 const lab = { display: 'block', fontSize: 12, color: S.soft, marginBottom: 5 } as const
+
+/** Lo mismo que filtra el servidor (salasDe): asignadas y no confidenciales, más las suyas. */
+function salasVistas(miembroId: string, asignadas: string[], salas: SalaFila[]) {
+  return salas.filter((s) => s.creadoPor === miembroId || (asignadas.includes(s.id) && !s.confidencial))
+}
+
+function SalasConfidenciales({ salas, miembros, onCambio }: { salas: SalaFila[]; miembros: MiembroFila[]; onCambio: () => void }) {
+  const [enCurso, setEnCurso] = useState<string | null>(null)
+  const [error, setError] = useState('')
+  const comerciales = miembros.filter((x) => x.rol === 'comercial' && x.activo)
+  const cambiar = async (s: SalaFila) => {
+    setError(''); setEnCurso(s.id)
+    const r = await actualizarConfidencialSala(s.id, !s.confidencial)
+    setEnCurso(null)
+    if (!r.ok) { setError(r.error); return }
+    onCambio()
+  }
+  return (
+    <>
+      <h2 style={{ fontSize: 15, fontWeight: 500, margin: '0 0 4px' }}>Salas</h2>
+      <p style={{ fontSize: 12.5, color: S.soft, margin: '0 0 10px' }}>
+        Una sala confidencial no se puede asignar a ningún comercial; quien la creó la sigue viendo. Toda sala nueva nace confidencial.
+      </p>
+      <div style={{ ...card, overflowX: 'auto', marginBottom: 28 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 560 }}>
+          <tbody>
+            {salas.map((s, i) => {
+              const ven = comerciales.filter((x) => salasVistas(x.id, x.salas, [s]).length).map((x) => x.nombre)
+              return (
+                <tr key={s.id} style={{ borderTop: i ? `1px solid ${S.lineSoft}` : 0 }}>
+                  <td style={{ padding: '12px 16px', fontWeight: 500 }}>{s.nombre}</td>
+                  <td style={{ padding: '12px 16px', color: S.soft, fontSize: 12.5 }}>{ven.length ? `También la ve: ${ven.join(', ')}` : 'Solo propiedad'}</td>
+                  <td style={{ padding: '12px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {s.confidencial ? <Etiqueta tono="acento">confidencial</Etiqueta> : <Etiqueta>abierta al equipo</Etiqueta>}
+                    <button onClick={() => cambiar(s)} disabled={enCurso === s.id} style={{ ...btn('ghost'), padding: '6px 12px', marginLeft: 10, opacity: enCurso === s.id ? 0.6 : 1 }}>
+                      {s.confidencial ? 'Abrir al equipo' : 'Marcar confidencial'}
+                    </button>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+        {error && <p role="alert" style={{ color: S.red, fontSize: 13, margin: 0, padding: '0 16px 12px' }}>{error}</p>}
+      </div>
+    </>
+  )
+}

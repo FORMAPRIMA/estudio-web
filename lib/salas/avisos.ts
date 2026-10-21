@@ -16,6 +16,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { sendEmail, wrapEmail } from '@/lib/email'
 import { repartirDestinatarios } from '@/lib/email/destinatarios'
 import { reenvio, temperatura, NOMBRE_TEMPERATURA } from './metricas'
+import { salasDe, type Miembro } from './panel'
 
 export type TipoAviso = 'abierto' | 'vuelto' | 'final' | 'interes' | 'reenvio'
 const UNA_VEZ: TipoAviso[] = ['abierto', 'final', 'interes', 'reenvio']
@@ -81,10 +82,13 @@ async function avisar(c: Contexto, tipo: TipoAviso, extra?: string): Promise<voi
   ])
   if (!lead) return
   const { data: creador } = lead.creado_por
-    ? await admin.from('sala_miembros').select('email, activo').eq('id', lead.creado_por).maybeSingle()
+    ? await admin.from('sala_miembros').select('id, nombre, email, empresa, rol, activo').eq('id', lead.creado_por).maybeSingle()
     : { data: null }
+  // El aviso solo llega a quien creó el lead si todavía puede ver la sala (una
+  // sala que pasa a confidencial deja de avisar a los comerciales).
+  const creadorVe = !!creador?.activo && (creador.rol === 'propietario' || (await salasDe(creador as Miembro)).some((s) => s.id === c.salaId))
   const dest = repartirDestinatarios({
-    to: [creador?.activo ? creador.email : null],
+    to: [creadorVe ? creador!.email : null],
     cc: (propietarios ?? []).map((p) => p.email),
   })
   if (!dest.to.length && dest.cc.length) { dest.to = [dest.cc[0]]; dest.cc = dest.cc.slice(1) }

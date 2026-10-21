@@ -183,10 +183,17 @@ async function codigoLibre(): Promise<{ codigo: string; hmac: string }> {
   throw new Error('No se pudo generar un código.')
 }
 
+// Solo se asignan salas no confidenciales, lo pida quien lo pida: la casilla
+// deshabilitada del formulario no basta como cerrojo.
 async function asignarSalas(miembroId: string, salas: string[]) {
   const admin = createAdminClient()
   await admin.from('sala_miembro_salas').delete().eq('miembro_id', miembroId)
-  const ids = Array.from(new Set(salas)).slice(0, 100)
+  const pedidas = Array.from(new Set(salas)).slice(0, 100)
+  const { data: abiertas, error: e0 } = pedidas.length
+    ? await admin.from('sala_salas').select('id').in('id', pedidas).eq('confidencial', false)
+    : { data: [], error: null }
+  if (e0) throw new Error('Falta aplicar la migración salas_fase3_permisos.sql.')
+  const ids = (abiertas ?? []).map((x) => x.id as string)
   if (ids.length) {
     const { error } = await admin.from('sala_miembro_salas').insert(ids.map((sala_id) => ({ miembro_id: miembroId, sala_id })))
     if (error) throw new Error(error.message)
@@ -237,5 +244,23 @@ export async function regenerarCodigoSala(id: string): Promise<R<{ codigo: strin
     if (error || !data) throw new Error(error?.message ?? 'No encontrado.')
     await auditar(m.id, 'regenerar_codigo', null, data.nombre)
     return { codigo }
+  })
+}
+
+/**
+ * Confidencial = ningún comercial puede verla por asignación (quien la creó la
+ * sigue viendo). Al cerrarla se retiran las asignaciones que tuviera.
+ */
+export async function actualizarConfidencialSala(salaId: string, confidencial: boolean): Promise<R> {
+  return envolver(async () => {
+    const m = await requirePropietario()
+    const admin = createAdminClient()
+    const { data, error } = await admin.from('sala_salas').update({ confidencial: !!confidencial }).eq('id', salaId).select('id, nombre').single()
+    if (error || !data) throw new Error(error?.message ?? 'Sala no encontrada.')
+    if (confidencial) await admin.from('sala_miembro_salas').delete().eq('sala_id', salaId)
+    await auditar(m.id, confidencial ? 'sala_confidencial' : 'sala_compartible', salaId)
+    revalidatePath('/salas/equipo')
+    revalidatePath('/salas')
+    return {}
   })
 }

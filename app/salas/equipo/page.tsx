@@ -23,5 +23,5 @@ export default async function EquipoPage() {
   const registro: Registro[] = (audit ?? []).map((a) => ({
     quien: nombres[a.miembro_id ?? ''] ?? '—', sala: salasN[a.sala_id ?? ''] ?? null, accion: a.accion, detalle: a.detalle, at: a.at,
   }))
-  return <EquipoPanel yo={m.id} miembros={filas} salas={salas.map((s) => ({ id: s.id, nombre: s.nombre }))} registro={registro} />
+  return <EquipoPanel yo={m.id} miembros={filas} salas={salas.map((s) => ({ id: s.id, nombre: s.nombre, confidencial: s.confidencial, creadoPor: s.creadoPor }))} registro={registro} />
 }

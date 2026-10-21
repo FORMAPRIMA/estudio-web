@@ -189,6 +189,13 @@ web no existen ahí; y `/salas` en cualquier otro host da 404.
 - Acceso con **código personal de 8 cifras** (se guarda su HMAC con `PORTAL_SECRET`, no el
   código). Sesión: cookie firmada 30 días, revalidada contra la BD en cada petición.
   Roles: `propietario` (todas las salas + Equipo) y `comercial` (sus salas, todos los leads).
+- **Qué ve un comercial** (21 oct 2026, `salas_fase3_permisos.sql`): las salas asignadas que
+  **no son confidenciales** + las que ha **creado él** (`sala_salas.creado_por`), siempre. Una
+  sala `confidencial` (propuestas de honorarios) no se puede asignar a comerciales (lo impide
+  `asignarSalas` en servidor, no solo la casilla) y al marcarla se retiran sus asignaciones.
+  **Toda sala nueva nace confidencial**; se abre en `/equipo` → Salas o con
+  `scripts/salas/sala.mjs … --compartible`. El filtro único es `salasDe()` (páginas, CSV,
+  acciones, resumen diario y avisos: el creador de un lead solo recibe el aviso si aún ve la sala).
 - Páginas: dossiers · sala (KPIs, leads, mapa de calor tiempo/alcance, actividad, CSV) ·
   ficha de lead (PIN, datos, su mapa de calor, visitas; editar, nuevo PIN, revocar) ·
   `/equipo` (dar acceso, salas, desactivar, nuevo código; registro de auditoría).
