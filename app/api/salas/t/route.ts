@@ -7,6 +7,7 @@ import { propuestaAdminCookieName, propuestaAdminCookieValue } from '@/lib/propu
 import { dispositivo } from '@/lib/propuestas/visitas'
 import { accesoDossier, geo, getSala, ipTruncada, leadCookieName, leadDeCookie, leadVigente, sesionCookieName } from '@/lib/salas/servidor'
 import { avisoDe, avisosAlAbrir } from '@/lib/salas/avisos'
+import { cookieEquipo, esFirmaEquipo, prospectoPorToken } from '@/lib/salas/prospeccion'
 
 // Baliza de medición de las Salas: tiempo por diapositiva e interacciones.
 // La llama PropuestaDossier con fetch keepalive y, al cerrar, con sendBeacon
@@ -56,7 +57,7 @@ const vacio = () => new Response(null, { status: 204, headers: { 'Cache-Control'
 const json = (b: object) => Response.json(b, { headers: { 'Cache-Control': 'no-store' } })
 const ent = (v: unknown, max: number) => Math.max(0, Math.min(max, Math.floor(Number(v) || 0)))
 const txt = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : null)
-const TIPOS = new Set(['video', 'idioma', 'interes', 'final', '3d', 'enlace'])
+const TIPOS = new Set(['video', 'idioma', 'interes', 'final', '3d', 'enlace', 'version', 'agenda'])
 
 interface Lote {
   slug?: string
@@ -82,22 +83,43 @@ export async function POST(req: Request) {
   } catch {
     return vacio()
   }
-  const p = typeof b.slug === 'string' ? getPropuestaWeb(b.slug) : null
-  if (!p) return vacio()
-  const sala = await getSala(p.slug)
-  if (!sala || !(await accesoDossier(p, cookies()))) return vacio()
+  // Dos orígenes: un dossier de /propuesta/<slug> (el lead sale de su cookie de
+  // PIN) o un enlace de prospección /para/<token> (el enlace ES el lead).
+  let sala: Awaited<ReturnType<typeof getSala>> = null
+  let clave = ''                      // nombre de la cookie de sesión
+  let leadFijo: string | null = null
+  let esDelEquipo = async () => esEquipo()
+  let leadDePin = async () => null as string | null
+  if (typeof b.slug === 'string' && b.slug.startsWith('para:')) {
+    const token = b.slug.slice(5)
+    const pr = await prospectoPorToken(token)
+    if (!pr) return vacio()
+    sala = await getSala(pr.salaSlug)
+    clave = `para-${token}`
+    leadFijo = pr.leadId
+    esDelEquipo = async () => esFirmaEquipo(token, cookies().get(cookieEquipo(token))?.value) || await esEquipo()
+  } else {
+    const p = typeof b.slug === 'string' ? getPropuestaWeb(b.slug) : null
+    if (!p) return vacio()
+    sala = await getSala(p.slug)
+    if (!sala || !(await accesoDossier(p, cookies()))) return vacio()
+    clave = p.slug
+    esDelEquipo = async () => cookies().get(propuestaAdminCookieName(p.slug))?.value === propuestaAdminCookieValue(p.slug) || await esEquipo()
+    leadDePin = async () => {
+      const c = leadDeCookie(p.slug, cookies().get(leadCookieName(p.slug))?.value)
+      return c && await leadVigente(c) ? c : null
+    }
+  }
+  if (!sala) return vacio()
 
   const admin = createAdminClient()
 
   // ── Inicio: reutiliza la sesión viva de este navegador o abre otra ──────
   if (b.t === 'ini') {
-    if (cookies().get(propuestaAdminCookieName(p.slug))?.value === propuestaAdminCookieValue(p.slug) || await esEquipo()) {
-      return json({ tok: null })
-    }
-    const leadCookie = leadDeCookie(p.slug, cookies().get(leadCookieName(p.slug))?.value)
-    const lead = leadCookie && await leadVigente(leadCookie) ? leadCookie : null
+    if (await esDelEquipo()) return json({ tok: null })
+    const lead = leadFijo ?? await leadDePin()
 
-    const previa = verificar(cookies().get(sesionCookieName(p.slug))?.value)
+    const previa = verificar(cookies().get(sesionCookieName(clave))?.value)
     let id: string | null = null
     if (previa) {
       const { data } = await admin.from('sala_sesiones').select('id, lead_id, ultima, sala_id').eq('id', previa).maybeSingle()
@@ -117,7 +139,7 @@ export async function POST(req: Request) {
       if (lead) await avisosAlAbrir({ salaId: sala.id, salaSlug: sala.slug, salaNombre: sala.nombre, leadId: lead, sesionId: id })
     }
     const tok = firmar(id)
-    cookies().set(sesionCookieName(p.slug), tok, {
+    cookies().set(sesionCookieName(clave), tok, {
       httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge: SESION_MIN * 60,
     })
     return json({ tok })
@@ -156,7 +178,7 @@ export async function POST(req: Request) {
     if (eventos.some((e) => e.tipo === 'interes')) await avisoDe(ctx, 'interes')
   }
   // Mantiene viva la sesión mientras siga leyendo.
-  cookies().set(sesionCookieName(p.slug), b.tok as string, {
+  cookies().set(sesionCookieName(clave), b.tok as string, {
     httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge: SESION_MIN * 60,
   })
   return vacio()

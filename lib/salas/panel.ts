@@ -11,6 +11,7 @@ import { createHmac, randomInt, timingSafeEqual } from 'crypto'
 import { cookies, headers } from 'next/headers'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { cargarDossier } from '@/lib/propuestas/registro'
+import { firmaEquipo } from '@/lib/salas/prospeccion'
 
 const SECRET = process.env.PORTAL_SECRET ?? 'dev-only-secret-not-for-production'
 export const COOKIE_PANEL = 'fp_salas'
@@ -147,6 +148,8 @@ export interface LeadRow {
   logoModo: 'blanco' | 'original'
   enviadoEn: string | null
   descartadoEn: string | null
+  /** Para «Ver su dossier» desde el panel sin que cuente como visita. */
+  firmaEquipo: string | null
 }
 
 export interface SesionRow {
@@ -204,6 +207,7 @@ export async function datosSala(salaId: string, opts: { leadId?: string } = {}):
       token: l.token ?? null, cargo: l.cargo ?? null, pais: l.pais ?? null, idioma: l.idioma === 'en' ? 'en' : 'es',
       tratamiento: l.tratamiento === 'usted' ? 'usted' : 'tu', mensaje: l.mensaje ?? null, logoPath: l.logo_path ?? null,
       logoModo: l.logo_modo === 'original' ? 'original' : 'blanco', enviadoEn: l.enviado_en ?? null, descartadoEn: l.descartado_en ?? null,
+      firmaEquipo: l.token ? firmaEquipo(l.token) : null,
     })),
     sesiones: (ses ?? []).map((s) => ({
       id: s.id, leadId: s.lead_id, inicio: s.inicio, ultima: s.ultima, activoMs: s.activo_ms, dispositivo: s.dispositivo,

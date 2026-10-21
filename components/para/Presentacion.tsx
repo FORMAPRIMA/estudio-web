@@ -10,12 +10,17 @@
 // curva cubic-bezier(.16,1,.3,1). Nada por debajo de 12 px.
 
 import dynamic from 'next/dynamic'
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import type { MapaPunto } from '@/lib/web-mapa'
 import { T, mesAnio, type Idioma, type LeadPara, type Textos } from '@/lib/para/textos'
+import { ETIQUETA, PANTALLAS, type PantallaId } from '@/lib/para/pantallas'
+import { useMedicionSala } from '@/components/propuesta/medicionSala'
+import { CSS_PANTALLAS, Colaboracion, Dossier, Ejecucion, Equipo, Estudio, Hablemos, Obra, Portal, Porque, Producto, VR } from './Pantallas'
 
-const MapaObras = dynamic(() => import('./MapaObras'), { ssr: false })
-const MaquetaTorre = dynamic(() => import('./MaquetaTorre'), { ssr: false })
+// Hueco de pantalla completa mientras llega el código: la página no salta.
+const Hueco = ({ claro }: { claro?: boolean }) => <section className="p-escena" style={{ background: claro ? '#f4f3f0' : '#0d0d0d' }} />
+const MapaObras = dynamic(() => import('./MapaObras'), { ssr: false, loading: () => <Hueco /> })
+const MaquetaTorre = dynamic(() => import('./MaquetaTorre'), { ssr: false, loading: () => <Hueco claro /> })
 
 /** true en cuanto el elemento entra en pantalla al menos `umbral` (y se queda en true). */
 export function useVisto<T extends HTMLElement>(umbral = 0.35) {
@@ -55,9 +60,34 @@ export function useBloqueoScroll(activo: boolean) {
   }, [activo])
 }
 
-export default function Presentacion({ lead, puntos, mapboxToken }: { lead: LeadPara; puntos: MapaPunto[]; mapboxToken: string | null }) {
+export default function Presentacion({ lead, puntos, mapboxToken, medicion = null }: {
+  lead: LeadPara; puntos: MapaPunto[]; mapboxToken: string | null
+  /** Clave de medición (`para:<token>`); null = no se mide (muestra, equipo). */
+  medicion?: string | null
+}) {
   const [idioma, setIdioma] = useState<Idioma>(lead.idioma)
   const t = T[idioma]
+  const orden = PANTALLAS[lead.perfil]
+  const { alSlide, alEvento } = useMedicionSala(medicion ?? '', !!medicion)
+
+  // Qué pantalla se está viendo: la que ocupa el centro de la ventana.
+  useEffect(() => {
+    const vistas = new Map<Element, number>()
+    const io = new IntersectionObserver((es) => {
+      es.forEach((e) => vistas.set(e.target, e.intersectionRatio))
+      let mejor: Element | null = null, r = 0
+      vistas.forEach((v, el) => { if (v > r) { r = v; mejor = el } })
+      const id = (mejor as HTMLElement | null)?.dataset.pantalla as PantallaId | undefined
+      if (id && r > 0.35) alSlide(orden.indexOf(id), orden.length, ETIQUETA[id])
+    }, { threshold: [0, 0.2, 0.35, 0.5, 0.7, 0.9] })
+    const observar = () => document.querySelectorAll('[data-pantalla]').forEach((el) => io.observe(el))
+    observar()
+    // el mapa y la maqueta llegan después (import dinámico): se observan al aparecer
+    const mo = new MutationObserver(observar)
+    mo.observe(document.body, { childList: true, subtree: true })
+    return () => { io.disconnect(); mo.disconnect() }
+  }, [orden, alSlide])
+
   const [progreso, setProgreso] = useState(0)
   const [pasada, setPasada] = useState(false)
   const [claro, setClaro] = useState(false)
@@ -88,20 +118,38 @@ export default function Presentacion({ lead, puntos, mapboxToken }: { lead: Lead
     return () => { window.removeEventListener('scroll', onScroll); window.removeEventListener('resize', onScroll); cancelAnimationFrame(raf) }
   }, [])
 
+  function pantalla(id: PantallaId, num: number) {
+    switch (id) {
+      case 'portada': return <Portada lead={lead} t={t} idioma={idioma} />
+      case 'estudio': return <Estudio t={t} lead={lead} num={num} />
+      case 'mapa': return <MapaObras puntos={puntos} t={t} idioma={idioma} token={mapboxToken} num={num} alEvento={alEvento} />
+      case 'obra': return <Obra t={t} num={num} />
+      case 'equipo': return <Equipo t={t} lead={lead} num={num} />
+      case 'producto': return <Producto t={t} num={num} />
+      case 'ejecucion': return <Ejecucion t={t} num={num} />
+      case 'colaboracion': return <Colaboracion t={t} num={num} />
+      case 'maqueta': return <MaquetaTorre t={t} num={num} alEvento={alEvento} />
+      case 'dossier': return <Dossier t={t} num={num} alEvento={alEvento} />
+      case 'vr': return <VR t={t} num={num} alEvento={alEvento} />
+      case 'portal': return <Portal t={t} num={num} alEvento={alEvento} />
+      case 'porque': return <Porque t={t} lead={lead} num={num} />
+      case 'hablemos': return <Hablemos t={t} lead={lead} num={num} alEvento={alEvento} />
+    }
+  }
+
   return (
     <div className="para">
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
       <div className={`p-progreso${claro ? ' claro' : ''}`} style={{ transform: `scaleX(${progreso})` }} aria-hidden />
       <header className={`p-barra${pasada ? ' on' : ''}${claro ? ' claro' : ''}`}>
         <img src="/para/logo-h-white.png" alt="Forma Prima" className="p-barra-logo" />
-        <button type="button" className="p-idioma" onClick={() => setIdioma(idioma === 'es' ? 'en' : 'es')} lang={idioma === 'es' ? 'en' : 'es'}>
+        <button type="button" className="p-idioma" onClick={() => { const n = idioma === 'es' ? 'en' : 'es'; setIdioma(n); alEvento('idioma', n) }} lang={idioma === 'es' ? 'en' : 'es'}>
           {t.idioma}
         </button>
       </header>
 
-      <Portada lead={lead} t={t} idioma={idioma} />
-      <MapaObras puntos={puntos} t={t} idioma={idioma} token={mapboxToken} />
-      <MaquetaTorre t={t} />
+      {orden.map((id, i) => <Fragment key={id}>{pantalla(id, i)}</Fragment>)}
+      <style dangerouslySetInnerHTML={{ __html: CSS_PANTALLAS }} />
     </div>
   )
 }
@@ -111,7 +159,7 @@ function Portada({ lead, t, idioma }: { lead: LeadPara; t: Textos; idioma: Idiom
   useEffect(() => { const r = requestAnimationFrame(() => setListo(true)); return () => cancelAnimationFrame(r) }, [])
   const fecha = mesAnio(new Date(), idioma)
   return (
-    <section className={`p-portada${listo ? ' in' : ''}`} aria-label="Forma Prima">
+    <section data-pantalla="portada" className={`p-portada${listo ? ' in' : ''}`} aria-label="Forma Prima">
       <div className="p-portada-img">
         <img
           src="/para/portada-1400.webp"
@@ -137,7 +185,7 @@ function Portada({ lead, t, idioma }: { lead: LeadPara; t: Textos; idioma: Idiom
             <span className="p-linea"><span style={{ ['--d' as string]: '.84s' }}>{t.marca}</span></span>
           </h1>
           <span className="p-raya p-a" style={{ ['--d' as string]: '1.15s' }} aria-hidden />
-          <p className="p-lema p-a" style={{ ['--d' as string]: '1.25s' }}>{t.lema}</p>
+          <p className="p-lema p-a" style={{ ['--d' as string]: '1.25s' }}>{t.lema[lead.perfil]}</p>
         </div>
 
         <div className="p-bajar p-a" style={{ ['--d' as string]: '1.6s' }} aria-hidden>

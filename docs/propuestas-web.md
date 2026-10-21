@@ -237,3 +237,19 @@ web no existen ahí; y `/salas` en cualquier otro host da 404.
 - Correo de confirmación con .ics al reservar; recordatorio el 7 oct a las 10:00
   (cron `open-house-recordatorio`); aviso en /team por cada reserva o cancelación.
 - Importar de nuevo el diseño: `node scripts/open-house/importar.mjs ~/Downloads/PROPUESTAS/open-house-cc38`.
+
+## Salas · prospección (21 oct 2026)
+
+Dossier del estudio personalizado por empresa para business development: `formaprima.es/para/<token>`.
+- Salas de tipo `prospeccion` (`sala_salas.tipo/perfil`, migración `salas_fase4_prospeccion.sql`):
+  «Estudio · Developers» y «Estudio · Constructoras». El lead es la empresa; su enlace (`sala_leads.token`)
+  es la llave, sin PIN, revocable y con caducidad. Logo en el bucket privado `salas-logos` (original + blanco).
+- Panel: `components/salas/Prospeccion.tsx` (embudo preparado/enviado/abierto/interesado/descartado,
+  alta, logo, correo ES/EN tú/usted de `lib/para/correo.ts`). Acciones en `app/actions/salas.ts`.
+- Dossier: `app/para/[token]` + `components/para/*`. Orden de pantallas por perfil en
+  `lib/para/pantallas.ts` (también son las etiquetas del mapa de calor). Textos en `lib/para/textos.ts`.
+  Muestra para el equipo: `/para/muestra?perfil=developer|constructora&lang=en`.
+- Medición: la baliza `/api/salas/t` acepta `slug: "para:<token>"` (el enlace es el lead). Las visitas del
+  equipo no cuentan si se abre desde «Ver su dossier» (`?equipo=<firma>` → cookie `fp_peq_*`).
+- Casa Zurbano va incrustada como ejemplo con `/propuesta/casa-zurbano-xzw9e?demo=1` (no se mide).
+- Mapbox: el token está restringido a los dominios de formaprima.es; en localhost el mapa no pinta.

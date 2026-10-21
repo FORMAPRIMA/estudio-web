@@ -19,7 +19,7 @@ const MODOS: ModoId[] = ['disponibilidad', 'plantas', 'asoleamiento', 'vista']
 const COLOR: Record<string, string> = { disponible: '#3D8B5F', negociacion: '#5B7FA6', reservada: '#8A6220', vendida: '#9C9C96', piloto: '#8A5A72' }
 const sinMovimiento = () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
-export default function MaquetaTorre({ t }: { t: Textos }) {
+export default function MaquetaTorre({ t, num, alEvento }: { t: Textos; num: number; alEvento: (k: string, d?: string) => void }) {
   const conj = useMemo(() => buildConjunto(), [])
   const { units, byId } = conj
   const disponibles = units.filter((u) => u.estado === 'disponible').length
@@ -115,14 +115,18 @@ export default function MaquetaTorre({ t }: { t: Textos }) {
     })
   }
 
+  useEffect(() => { if (explorando) alEvento('3d', 'maqueta') }, [explorando, alEvento])
+  useEffect(() => { if (lista && modo !== 'disponibilidad') alEvento('3d', `modo:${modo}`) }, [modo, lista, alEvento])
+  useEffect(() => { if (sel) alEvento('3d', `vivienda:${sel}`) }, [sel, alEvento])
+
   const u: Vivienda | null = sel ? byId[sel] : null
   const h: Vivienda | null = hover ? byId[hover] : null
 
   return (
-    <section ref={refCerca} data-tema="claro" className={`p-escena p-maqueta${explorando ? ' explorando' : ''}`} aria-label={t.maquetaTitulo}>
+    <section ref={refCerca} data-pantalla="maqueta" data-tema="claro" className={`p-escena p-maqueta${explorando ? ' explorando' : ''}`} aria-label={t.maquetaTitulo}>
       <div ref={refActiva} className="p-maqueta-grid">
         <div ref={refVisto} className={`p-maqueta-txt${visto ? ' visto' : ''}`}>
-          <p className="p-it p-in">03 · {t.maquetaRotulo}</p>
+          <p className="p-it p-in">{String(num).padStart(2, '0')} · {t.maquetaRotulo}</p>
           <h2 className="p-h2"><span className="p-in-h"><span style={{ ['--d' as string]: '.12s' }}>{t.maquetaTitulo}</span></span></h2>
           <p className="p-texto p-in p-maqueta-texto" style={{ ['--d' as string]: '.3s' }}>{t.maquetaTexto}</p>
           <div className="p-maqueta-dato p-in" style={{ ['--d' as string]: '.42s' }}>

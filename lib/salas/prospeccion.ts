@@ -3,12 +3,24 @@
 // se adivina, revocable desde el panel y con caducidad opcional.
 // Solo servidor (service_role). NO es 'use server'.
 
-import { randomInt } from 'crypto'
+import { createHmac, randomInt, timingSafeEqual } from 'crypto'
 import sharp from 'sharp'
 import { createAdminClient } from '@/lib/supabase/admin'
-import type { Idioma, LeadPara, Perfil } from '@/lib/para/textos'
+import { FOTO_EQUIPO, type Idioma, type LeadPara, type Perfil } from '@/lib/para/textos'
 
 export const BUCKET_LOGOS = 'salas-logos'
+const SECRET = process.env.PORTAL_SECRET ?? 'dev-only-secret-not-for-production'
+
+// Visitas del equipo. La sesión de internal no llega a formaprima.es (otro
+// subdominio), así que el botón «Ver su dossier» del panel lleva ?equipo=<firma>:
+// el dossier la guarda en una cookie de ese navegador y desde entonces no se mide.
+export const firmaEquipo = (token: string) => createHmac('sha256', SECRET).update(`para-equipo:${token}`).digest('hex').slice(0, 24)
+export const cookieEquipo = (token: string) => `fp_peq_${token.replace(/[^a-z0-9]/g, '').slice(-12)}`
+export function esFirmaEquipo(token: string, v: string | null | undefined): boolean {
+  if (!v) return false
+  const e = firmaEquipo(token)
+  return v.length === e.length && timingSafeEqual(Buffer.from(v), Buffer.from(e))
+}
 const ALFABETO = 'abcdefghjkmnpqrstuvwxyz23456789'   // sin 0/o, 1/l/i: se dicta por teléfono
 
 /** «Be Grand México» → «begrand-k7x2p». El nombre ayuda a reconocerlo; el sufijo lo hace inadivinable. */
@@ -41,11 +53,15 @@ export async function prospectoPorToken(token: string): Promise<Prospecto | null
   if (!/^[a-z0-9]{1,18}-[a-z0-9]{6}$/.test(token)) return null
   const admin = createAdminClient()
   const { data: l } = await admin.from('sala_leads')
-    .select('id, sala_id, nombre, empresa, idioma, tratamiento, logo_path, logo_modo, estado, caduca_en, descartado_en')
+    .select('id, sala_id, nombre, empresa, idioma, tratamiento, logo_path, logo_modo, estado, caduca_en, descartado_en, creado_por')
     .eq('token', token).maybeSingle()
   if (!l || l.estado !== 'activo' || (l.caduca_en && Date.parse(l.caduca_en) < Date.now())) return null
   const { data: s } = await admin.from('sala_salas').select('id, slug, activa, tipo, perfil').eq('id', l.sala_id).maybeSingle()
   if (!s || !s.activa || s.tipo !== 'prospeccion') return null
+  const { data: c } = l.creado_por
+    ? await admin.from('sala_miembros').select('nombre, email, activo').eq('id', l.creado_por).maybeSingle()
+    : { data: null }
+  const email = c?.activo && c.email ? String(c.email).toLowerCase() : 'contacto@formaprima.es'
   return {
     leadId: l.id, salaId: s.id, salaSlug: s.slug, token,
     logoModo: l.logo_modo === 'original' ? 'original' : 'blanco',
@@ -56,6 +72,12 @@ export async function prospectoPorToken(token: string): Promise<Prospecto | null
       perfil: (s.perfil === 'constructora' ? 'constructora' : 'developer') as Perfil,
       idioma: (l.idioma === 'en' ? 'en' : 'es') as Idioma,
       logo: l.logo_path ? `/para/${token}/logo` : null,
+      contacto: {
+        nombre: c?.activo ? c.nombre : 'Forma Prima',
+        cargo: email === 'aalban@formaprima.es' ? 'Desarrollo de negocio' : 'Forma Prima',
+        email,
+        foto: FOTO_EQUIPO[email] ?? null,
+      },
     },
   }
 }

@@ -334,6 +334,9 @@ export function EnvioProspecto({ slug, l, perfil, firma }: { slug: string; l: Le
   const enlace = enlacePara(l.token ?? '')
   const c = correoDe(l, perfil, firma)
   const [isMarcando, setIsMarcando] = useState(false)
+  // en local, el dossier se abre en el propio servidor de desarrollo
+  const [base, setBase] = useState('https://formaprima.es')
+  useEffect(() => { if (window.location.host.includes('localhost')) setBase(`http://localhost:${window.location.port || '3000'}`) }, [])
   return (
     <div style={{ display: 'grid', gap: 14 }}>
       <LogoProspecto slug={slug} l={l} />
@@ -341,7 +344,7 @@ export function EnvioProspecto({ slug, l, perfil, firma }: { slug: string; l: Le
       <Copiable titulo="Asunto" texto={c.asunto} />
       <Copiable titulo="Correo" texto={c.cuerpo} />
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        <a href={`https://formaprima.es/para/${l.token}`} target="_blank" rel="noopener" style={{ ...btn('ghost'), textDecoration: 'none' }}>Ver su dossier ↗</a>
+        <a href={`${base}/para/${l.token}?equipo=${l.firmaEquipo ?? ''}`} target="_blank" rel="noopener" style={{ ...btn('ghost'), textDecoration: 'none' }}>Ver su dossier ↗</a>
         {l.email && <a href={`mailto:${l.email}?subject=${encodeURIComponent(c.asunto)}&body=${encodeURIComponent(c.cuerpo)}`} style={{ ...btn('ghost'), textDecoration: 'none' }}>Abrir en mi correo</a>}
         <button type="button" disabled={isMarcando} onClick={async () => { setIsMarcando(true); await marcarProspecto(l.id, 'enviado', !l.enviadoEn); setIsMarcando(false); router.refresh() }}
           style={{ ...btn(l.enviadoEn ? 'ghost' : 'primary'), marginLeft: 'auto' }}>
@@ -349,7 +352,7 @@ export function EnvioProspecto({ slug, l, perfil, firma }: { slug: string; l: Le
         </button>
       </div>
       <p style={{ fontSize: 12, color: S.faint, margin: 0, lineHeight: 1.5 }}>
-        Envíalo desde tu correo: llega de una persona, no de una plataforma. Las visitas del equipo no cuentan.
+        Envíalo desde tu correo: llega de una persona, no de una plataforma. Ábrelo con «Ver su dossier»: así tus visitas no cuentan como suyas.
       </p>
     </div>
   )

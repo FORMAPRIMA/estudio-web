@@ -19,10 +19,13 @@ export const metadata: Metadata = {
 
 const FUENTE = 'https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@200;300;400;500;600&family=Newsreader:ital,opsz,wght@1,6..72,400&display=swap'
 
-export default async function MuestraPage({ searchParams }: { searchParams: { lang?: string } }) {
+export default async function MuestraPage({ searchParams }: { searchParams: { lang?: string; perfil?: string } }) {
   if (process.env.NODE_ENV === 'production') await requireFP()
   const idioma: Idioma = searchParams.lang === 'en' ? 'en' : 'es'
-  const lead: LeadPara = { nombre: 'Juan', empresa: 'Be Grand', perfil: 'developer', idioma, logo: null }
+  const lead: LeadPara = {
+    nombre: 'Juan', empresa: 'Be Grand', perfil: searchParams.perfil === 'constructora' ? 'constructora' : 'developer', idioma, logo: null,
+    contacto: { nombre: 'Ana Cristina', cargo: 'Desarrollo de negocio', email: 'aalban@formaprima.es', foto: '/para/equipo/team-ana-cristina.webp' },
+  }
   const puntos = await getMapaPuntosPublic()
   return (
     <>

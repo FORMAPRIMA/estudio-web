@@ -34,7 +34,9 @@ const MS_POR_GRADO = 320
 const tactil = () => typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
 const sinMovimiento = () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
-export default function MapaObras({ puntos, t, idioma, token: tokenServidor }: { puntos: MapaPunto[]; t: Textos; idioma: Idioma; token: string | null }) {
+export default function MapaObras({ puntos, t, idioma, token: tokenServidor, num, alEvento }: {
+  puntos: MapaPunto[]; t: Textos; idioma: Idioma; token: string | null; num: number; alEvento: (k: string, d?: string) => void
+}) {
   const obras = useMemo(() => puntos.filter(tieneCoordenadas), [puntos])
   const [refCerca, cerca] = useEnPantalla<HTMLElement>('60% 0px')
   const [refVisto, visto] = useVisto<HTMLDivElement>(0.55)
@@ -193,11 +195,14 @@ export default function MapaObras({ puntos, t, idioma, token: tokenServidor }: {
     })
   }
 
+  useEffect(() => { if (explorando) alEvento('3d', 'mapa') }, [explorando, alEvento])
+  useEffect(() => { if (sel != null && obras[sel]) alEvento('3d', `obra:${obras[sel].nombre}`) }, [sel, obras, alEvento])
+
   const obra = sel != null ? obras[sel] : null
   const tarjeta = obra ? datosDeTarjeta(obra, idioma) : null
 
   return (
-    <section ref={refCerca} data-tema={claro ? 'claro' : undefined} className={`p-escena p-mapa${claro ? ' ciudad' : ''}${explorando ? ' explorando' : ''}`} aria-label={t.mapaTitulo}>
+    <section ref={refCerca} data-pantalla="mapa" data-tema={claro ? 'claro' : undefined} className={`p-escena p-mapa${claro ? ' ciudad' : ''}${explorando ? ' explorando' : ''}`} aria-label={t.mapaTitulo}>
       <div ref={lienzo} className="p-lienzo" />
       {fallo && <img className="p-lienzo p-mapa-fallo" src="/para/portada-1400.webp" alt="" />}
       <div className="p-mapa-velo" aria-hidden />
@@ -206,7 +211,7 @@ export default function MapaObras({ puntos, t, idioma, token: tokenServidor }: {
       {!explorando && <button type="button" className="p-mapa-toque" aria-label={t.explorarMapa} onClick={() => setExplorando(true)} />}
 
       <div ref={refVisto} className={`p-mapa-txt${visto ? ' visto' : ''}${explorando ? ' oculto' : ''}`}>
-        <p className="p-it p-in">02 · {t.mapaRotulo}</p>
+        <p className="p-it p-in">{String(num).padStart(2, '0')} · {t.mapaRotulo}</p>
         <h2 className="p-h2"><span className="p-in-h"><span key={aterrizado ? 'b' : 'a'} className={aterrizado ? 'p-cambio' : ''} style={{ ['--d' as string]: '.12s' }}>{aterrizado ? t.mapaAterriza : t.mapaTitulo}</span></span></h2>
         <div className="p-mapa-pie p-in" style={{ ['--d' as string]: '.4s' }}>
           <span className={`p-cifra${aterrizado ? ' on' : ''}`}><b>{obras.length}</b> {t.obrasEnMadrid}</span>

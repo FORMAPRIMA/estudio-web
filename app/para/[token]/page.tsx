@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from 'next'
 import { getMapaPuntosPublic } from '@/app/actions/web-mapa'
-import { prospectoPorToken } from '@/lib/salas/prospeccion'
+import { cookies } from 'next/headers'
+import { cookieEquipo, esFirmaEquipo, prospectoPorToken } from '@/lib/salas/prospeccion'
+import MarcaEquipo from '@/components/para/MarcaEquipo'
 import Presentacion from '@/components/para/Presentacion'
 
 // Dossier del estudio personalizado para un lead: formaprima.es/para/<token>.
@@ -30,7 +32,7 @@ export async function generateMetadata({ params }: { params: { token: string } }
 
 const FUENTE = 'https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@200;300;400;500;600&family=Newsreader:ital,opsz,wght@1,6..72,400&display=swap'
 
-export default async function ParaPage({ params }: { params: { token: string } }) {
+export default async function ParaPage({ params, searchParams }: { params: { token: string }; searchParams: { equipo?: string } }) {
   const p = await prospectoPorToken(params.token)
   const fuente = (
     <>
@@ -54,11 +56,15 @@ export default async function ParaPage({ params }: { params: { token: string } }
       </main>
     )
   }
+  // Quien llega desde el panel (?equipo=<firma>) o ya trae la marca no se mide.
+  const marca = esFirmaEquipo(p.token, searchParams.equipo) ? searchParams.equipo! : null
+  const equipo = !!marca || esFirmaEquipo(p.token, cookies().get(cookieEquipo(p.token))?.value)
   const puntos = await getMapaPuntosPublic()
   return (
     <>
       {fuente}
-      <Presentacion lead={p.lead} puntos={puntos} mapboxToken={process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? null} />
+      {marca && <MarcaEquipo nombre={cookieEquipo(p.token)} valor={marca} />}
+      <Presentacion lead={p.lead} puntos={puntos} mapboxToken={process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? null} medicion={equipo ? null : `para:${p.token}`} />
     </>
   )
 }

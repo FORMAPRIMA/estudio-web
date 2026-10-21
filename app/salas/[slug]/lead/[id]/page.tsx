@@ -3,6 +3,7 @@ import { datosSala, etiquetasDossier, miembroActual, salaDe } from '@/lib/salas/
 import { getPropuestaWeb } from '@/lib/propuestas/registro'
 import LeadFicha from '@/components/salas/LeadFicha'
 import { ProspectoFicha } from '@/components/salas/Prospeccion'
+import { etiquetasPara } from '@/lib/para/pantallas'
 
 export default async function LeadPage({ params }: { params: { slug: string; id: string } }) {
   const m = await miembroActual()
@@ -12,7 +13,7 @@ export default async function LeadPage({ params }: { params: { slug: string; id:
   const [datos, etiquetas] = await Promise.all([datosSala(sala.id, { leadId: params.id }), etiquetasDossier(sala.slug)])
   if (!datos.leads.length) notFound()
   if (sala.tipo === 'prospeccion') {
-    return <ProspectoFicha slug={sala.slug} sala={sala.nombre} perfil={sala.perfil ?? 'developer'} firma={m.nombre} datos={datos} etiquetas={etiquetas} />
+    return <ProspectoFicha slug={sala.slug} sala={sala.nombre} perfil={sala.perfil ?? 'developer'} firma={m.nombre} datos={datos} etiquetas={etiquetasPara(sala.perfil ?? 'developer')} />
   }
   const p = getPropuestaWeb(sala.slug)
   return <LeadFicha slug={sala.slug} sala={sala.nombre} proyecto={p?.proyecto ?? sala.nombre} datos={datos} etiquetas={etiquetas} />

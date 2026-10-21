@@ -50,7 +50,9 @@ function NoDisponible() {
 
 const FUENTE = 'https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@200;300;400;500;600&family=Cormorant+Garamond:wght@400;500;600&family=Newsreader:ital,opsz,wght@1,6..72,400&display=swap'
 
-export default async function PropuestaPage({ params }: { params: { slug: string } }) {
+export default async function PropuestaPage({ params, searchParams }: { params: { slug: string }; searchParams?: { demo?: string } }) {
+  // ?demo=1: incrustado como ejemplo en otro dossier (formaprima.es/para/…): se ve igual pero no se mide
+  const demo = searchParams?.demo === '1'
   const p = getPropuestaWeb(params.slug)
   if (!p) return <NoDisponible />
 
@@ -104,7 +106,7 @@ export default async function PropuestaPage({ params }: { params: { slug: string
           logo={tema.claro ? '/propuestas/logo-fp-negro.png' : '/propuestas/logo-fp.png'}
           formato={p.formato}
           apaisado={!!escritorioDe(p.slug)}
-          medir={!!sala}
+          medir={!!sala && !demo}
           versionAnterior={p.versionAnterior}
           versionMovil={!!p.versionMovil}
         />
