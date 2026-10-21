@@ -15,7 +15,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
-import { CAMARA, datosDeTarjeta, tieneCoordenadas, type MapaPunto } from '@/lib/web-mapa'
+import { CAMARA, datosDeTarjeta, obraDeEntrada, tieneCoordenadas, type MapaPunto } from '@/lib/web-mapa'
 import type { Idioma, Textos } from '@/lib/para/textos'
 import { useBloqueoScroll, useEnPantalla, useVisto } from './Presentacion'
 
@@ -28,8 +28,6 @@ const SEDES: [number, number][] = [
 ]
 const GLOBO = { center: [-46, 22] as [number, number], zoom: 1.35, pitch: 0, bearing: 0 }
 const VUELO_MS = 7200
-const GRADOS_ORBITA = 60
-const MS_POR_GRADO = 320
 
 const tactil = () => typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
 const sinMovimiento = () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -87,7 +85,13 @@ export default function MapaObras({ puntos, t, idioma, token: tokenServidor, num
     })
     m.addControl(new mapboxgl.AttributionControl({ compact: true }), 'bottom-left')
     mapa.current = m
-    m.on('load', () => setListo(true))
+    // El vuelo no espera a que llegue la última tesela: basta con el estilo (y, si la
+    // red va lenta, como mucho 3,5 s). Con «load» a secas, una tesela que no llega
+    // dejaba el mapa en el globo para siempre.
+    const listoYa = () => setListo(true)
+    m.once('style.load', listoYa)
+    m.once('load', listoYa)
+    setTimeout(listoYa, 3500)
     m.on('error', () => { /* teselas sueltas que fallan: no tumban la pantalla */ })
     // el primer gesto del visitante corta la órbita y ya no vuelve
     const cortar = () => { orbitando.current = false }
@@ -136,16 +140,15 @@ export default function MapaObras({ puntos, t, idioma, token: tokenServidor, num
         el.type = 'button'
         el.className = 'p-obra'
         el.setAttribute('aria-label', p.nombre)
-        el.innerHTML = `<span class="p-obra-in" style="--d:${0.15 + i * 0.06}s"><span></span></span>`
+        el.innerHTML = `<span class="p-obra-in" style="--d:${0.15 + i * 0.06}s"><i class="p-obra-onda"></i><span></span><em>${p.nombre.replace(/[<>&"]/g, '')}</em></span>`
         el.addEventListener('click', (e) => { e.stopPropagation(); setSel(i) })
         marcasObra.current.push(new mapboxgl.Marker({ element: el }).setLngLat([p.lng, p.lat]).addTo(m))
       })
-      if (!sinMovimiento()) { orbitando.current = true; orbitar() }
-    }
-    const orbitar = () => {
-      if (!orbitando.current || !mapa.current) return
-      m.easeTo({ bearing: m.getBearing() + GRADOS_ORBITA, duration: GRADOS_ORBITA * MS_POR_GRADO, easing: (x) => x })
-      m.once('moveend', () => { if (orbitando.current) orbitar() })
+      // La primera obra (la de entrada del mapa de la web) se abre sola: así se ve qué
+      // hay detrás de cada punto sin tener que adivinarlo.
+      const primera = obraDeEntrada(obras)
+      const k = primera ? obras.findIndex((o) => o.id === primera.id) : 0
+      setTimeout(() => setSel(k >= 0 ? k : 0), 1600 + obras.length * 60)
     }
     setTimeout(() => {
       if (sinMovimiento()) { m.jumpTo(destino); aterrizar(); return }
@@ -219,7 +222,8 @@ export default function MapaObras({ puntos, t, idioma, token: tokenServidor, num
 
       <div ref={refVisto} className={`p-mapa-txt${visto ? ' visto' : ''}${explorando ? ' oculto' : ''}`}>
         <p className="p-it p-in">{String(num).padStart(2, '0')} · {t.mapaRotulo}</p>
-        <h2 className="p-h2"><span className="p-in-h"><span key={aterrizado ? 'b' : 'a'} className={aterrizado ? 'p-cambio' : ''} style={{ ['--d' as string]: '.12s' }}>{aterrizado ? t.mapaAterriza : t.mapaTitulo}</span></span></h2>
+        <h2 className="p-h2"><span className="p-in-h"><span style={{ ['--d' as string]: '.12s' }}>{t.mapaTitulo}</span></span></h2>
+        <p className="p-mapa-sub p-in" style={{ ['--d' as string]: '.3s' }}><span key={aterrizado ? 'b' : 'a'} className={aterrizado ? 'p-cambio-sub' : ''}>{aterrizado ? t.mapaAterriza : t.mapaSub}</span></p>
         <div className="p-mapa-pie p-in" style={{ ['--d' as string]: '.4s' }}>
           <span className={`p-cifra${aterrizado ? ' on' : ''}`}><b>{obras.length}</b> {t.obrasEnMadrid}</span>
           <button type="button" className="p-explorar" onClick={() => setExplorando(true)}>
@@ -269,7 +273,9 @@ const CSS = `
   display:flex;flex-direction:column;gap:16px;transition:opacity .5s;}
 .p-mapa-txt.oculto{opacity:0;}
 .p-mapa-txt .p-h2{max-width:15ch;}
-.p-cambio{animation:p-cambio 1.4s var(--p-curva) both;}
+.p-cambio,.p-cambio-sub{display:inline-block;animation:p-cambio 1.2s var(--p-curva) both;}
+.p-mapa-sub{font-size:clamp(16px,.9rem + .4vw,20px);line-height:1.4;overflow:hidden;color:rgba(251,251,250,.8);}
+.p-mapa.ciudad .p-mapa-sub{color:rgba(20,20,20,.7);}
 @keyframes p-cambio{from{transform:translateY(105%)}to{transform:none}}
 .p-mapa-txt .p-h2,.p-mapa-txt .p-it,.p-cifra{text-shadow:0 2px 24px rgba(13,13,13,.55);transition:color 1.2s,text-shadow 1.2s;}
 /* Ya en la ciudad: el estilo del estudio es claro, así que la pantalla pasa a tinta sobre papel */
@@ -282,7 +288,8 @@ const CSS = `
 .p-mapa.ciudad .p-cifra{color:rgba(20,20,20,.62);text-shadow:none;}
 .p-mapa.ciudad .p-explorar{color:#141414;border-color:rgba(20,20,20,.22);background:rgba(244,243,240,.72);}
 .p-mapa.ciudad .p-mapa-ayuda{color:rgba(20,20,20,.7);}
-.p-mapa.ciudad .p-obra-in span{background:#141414;box-shadow:0 0 0 3px rgba(244,243,240,.85),0 6px 16px rgba(0,0,0,.25);}
+.p-mapa.ciudad .p-obra-in span{background:#2f4238;box-shadow:0 0 0 3px rgba(244,243,240,.9),0 6px 16px rgba(0,0,0,.25);}
+.p-mapa.ciudad .p-obra-onda{color:#2f4238;}
 .p-mapa.ciudad .p-obra.sel .p-obra-in span{background:#2f4238;}
 .p-mapa.ciudad .mapboxgl-ctrl-attrib{background:rgba(244,243,240,.6)!important;}
 .p-mapa.ciudad .mapboxgl-ctrl-attrib a{color:rgba(20,20,20,.6)!important;}
@@ -309,7 +316,15 @@ const CSS = `
 /* Obras */
 .p-obra{width:30px;height:30px;padding:0;border:0;background:transparent;}
 .p-obra-in{width:30px;height:30px;display:grid;place-items:center;opacity:0;transform:translateY(-14px);animation:p-entra .9s var(--p-curva) forwards;animation-delay:var(--d);}
-.p-obra-in span{width:11px;height:11px;border-radius:50%;background:#fbfbfa;box-shadow:0 0 0 3px rgba(13,13,13,.35),0 6px 16px rgba(0,0,0,.4);transition:transform .35s var(--p-curva),background .35s;}
+.p-obra-in{position:relative;}
+.p-obra-in span{position:relative;z-index:1;width:13px;height:13px;border-radius:50%;background:#fbfbfa;box-shadow:0 0 0 3px rgba(13,13,13,.35),0 6px 16px rgba(0,0,0,.4);transition:transform .35s var(--p-curva),background .35s;}
+/* onda que invita a tocar: cada punto late a su ritmo */
+.p-obra-onda{position:absolute;left:50%;top:50%;width:13px;height:13px;margin:-6.5px 0 0 -6.5px;border-radius:50%;border:1.5px solid currentColor;color:#fbfbfa;
+  animation:p-onda 2.6s cubic-bezier(.2,.6,.3,1) infinite;animation-delay:calc(var(--d) * 3);pointer-events:none;}
+@keyframes p-onda{0%{transform:scale(1);opacity:.9}100%{transform:scale(3.4);opacity:0}}
+.p-obra-in em{position:absolute;left:50%;bottom:calc(100% + 4px);transform:translate(-50%,4px);white-space:nowrap;font-style:normal;font-size:12px;font-weight:500;
+  padding:4px 8px;background:#141414;color:#fbfbfa;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;}
+.p-obra:hover .p-obra-in em,.p-obra.sel .p-obra-in em{opacity:1;transform:translate(-50%,0);}
 .p-obra:hover .p-obra-in span{transform:scale(1.35);}
 .p-obra.sel .p-obra-in span{background:var(--p-salvia);transform:scale(1.6);box-shadow:0 0 0 5px rgba(143,165,150,.3),0 6px 18px rgba(0,0,0,.45);}
 @media (pointer:coarse){.p-mapa:not(.explorando) .p-obra{pointer-events:none;}}

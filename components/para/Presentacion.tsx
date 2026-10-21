@@ -16,7 +16,7 @@ import { T, mesAnio, type Idioma, type LeadPara, type Textos } from '@/lib/para/
 import { ETIQUETA, PANTALLAS, type PantallaId } from '@/lib/para/pantallas'
 import { useMedicionSala } from '@/components/propuesta/medicionSala'
 import type { EstadoAgendaCliente } from './Agenda'
-import { CSS_PANTALLAS, Colaboracion, Dossier, Ejecucion, Equipo, Estudio, Hablemos, Obra, Portal, PortalVideo, Porque, Producto, VR } from './Pantallas'
+import { CSS_PANTALLAS, Colaboracion, Dossier, Ejecucion, Equipo, Estudio, Hablemos, Obra, Portal, PortalVideo, Porque, Producto, VisualLab, VR } from './Pantallas'
 
 // Hueco de pantalla completa mientras llega el código: la página no salta.
 const Hueco = ({ claro }: { claro?: boolean }) => <section className="p-escena" style={{ background: claro ? '#f4f3f0' : '#0d0d0d' }} />
@@ -177,6 +177,7 @@ export default function Presentacion({ lead, puntos, mapboxToken, medicion = nul
       case 'producto': return <Producto t={t} num={num} />
       case 'ejecucion': return <Ejecucion t={t} num={num} />
       case 'colaboracion': return <Colaboracion t={t} num={num} />
+      case 'visuallab': return <VisualLab t={t} num={num} />
       case 'maqueta': return <MaquetaTorre t={t} num={num} alEvento={alEvento} />
       case 'dossier': return <Dossier t={t} num={num} alEvento={alEvento} />
       case 'vr': return <VR t={t} num={num} alEvento={alEvento} />

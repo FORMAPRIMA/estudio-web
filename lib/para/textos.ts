@@ -40,8 +40,9 @@ export const T = {
     idioma: 'English',
 
     mapaRotulo: 'Obra',
-    mapaTitulo: 'Más de 60 proyectos en cuatro países.',
-    mapaAterriza: 'Y la mayoría, a pocas calles de nuestro estudio en Madrid.',
+    mapaTitulo: 'Proyectos en cuatro países.',
+    mapaSub: 'Este es el mapa de nuestra obra.',
+    mapaAterriza: 'Toca un punto para ver cada proyecto.',
     paises: [
       { pais: 'España', ciudad: 'Madrid' },
       { pais: 'Estados Unidos', ciudad: 'Miami' },
@@ -54,8 +55,8 @@ export const T = {
     verProyecto: 'Ver proyecto',
 
     maquetaRotulo: 'Visual Lab · Maqueta digital',
-    maquetaTitulo: 'Una torre que se vende antes de construirse.',
-    maquetaTexto: 'Cada vivienda con su estado, su precio y su luz, en una maqueta que el comprador recorre desde el móvil y el equipo comercial actualiza en directo.',
+    maquetaTitulo: 'Así es una maqueta digital comercial.',
+    maquetaTexto: 'Un ejemplo de las que preparamos para cada promoción: el comprador ve el estado, el precio y la luz de cada vivienda, y el equipo comercial la actualiza en directo.',
     sello: 'Demostración · datos de ejemplo',
     proyectoMaqueta: 'Méndez Álvaro 32 · Madrid',
     modos: { disponibilidad: 'Disponibilidad', plantas: 'Plantas', asoleamiento: 'Luz', vista: 'Vista' } as Record<string, string>,
@@ -86,7 +87,7 @@ export const T = {
     obraRotulo: 'Obra seleccionada',
     obraTitulo: 'Lo que dibujamos, construido.',
     obras: [
-      { img: '/para/obra/cc38-salon.webp', nombre: 'Claudio Coello 38', lugar: 'Madrid', tipo: 'Residencial · 320 m²' },
+      { img: '/para/obra/cc38-real.webp', nombre: 'Claudio Coello 38', lugar: 'Madrid', tipo: 'Residencial · 320 m²' },
       { img: '/para/obra/airapi-sala.webp', nombre: 'Airapi Memorial Park', lugar: 'Monterrey', tipo: 'Terciario · 2.300 m²' },
       { img: '/para/obra/mia-322-lounge.webp', nombre: '322 SW 18th Rd', lugar: 'Miami', tipo: 'Residencial · 260 m²' },
       { img: '/para/obra/nwl-fachada.webp', nombre: 'Colegio NWL', lugar: 'Querétaro', tipo: 'Educativo · 3.200 m²' },
@@ -110,6 +111,20 @@ export const T = {
 
     productoRotulo: 'Producto residencial',
     productoTitulo: 'Diseñamos producto que se vende.',
+    acompanamos: {
+      developer: 'Acompañamos a cada promotor a mejorar su proceso de venta.',
+      constructora: 'Acompañamos a cada constructora a mejorar su proceso de construcción.',
+    },
+    vlRotulo: 'FP Visual Lab',
+    vlTitulo: 'Nuestro laboratorio digital y comercial.',
+    vlTexto: 'Un área del estudio que desarrolla las herramientas con las que nuestros clientes venden y siguen sus proyectos. A continuación, un ejemplo de cada una.',
+    vlHerramientas: [
+      { t: 'Maquetas digitales comerciales', d: 'Cada vivienda con su estado, su precio y su luz, en 3D.' },
+      { t: 'Dossieres digitales', d: 'El proyecto explicado en una aplicación para cada comprador.' },
+      { t: 'Realidad virtual', d: 'Recorrer el proyecto antes de construirlo.' },
+      { t: 'Portal de cliente', d: 'El seguimiento de la obra, en un solo acceso.' },
+      { t: 'Salas de seguimiento', d: 'Saber qué le interesa a cada comprador.' },
+    ],
     productoPuntos: [
       { t: 'Tipologías y mix', d: 'El programa de viviendas que pide el mercado, con la superficie vendible optimizada desde el primer trazo.' },
       { t: 'Coste bajo control', d: 'Criterio constructivo y coste por metro cuadrado desde el anteproyecto, no al final.' },
@@ -123,8 +138,8 @@ export const T = {
     ejecucionPie: 'Claudio Coello 38 · Madrid · Proyecto de ejecución',
 
     portalRotulo: 'Portal de cliente',
-    portalTitulo: 'Toda la obra, en un solo acceso.',
-    portalTexto: 'Cronograma, actas de visita, documentación, decisiones y pagos, siempre al día y en el mismo sitio para el promotor, la constructora y el estudio.',
+    portalTitulo: 'Un portal único para cada cliente.',
+    portalTexto: 'Nuestra aplicación de seguimiento: cada cliente ve su obra al día, con el cronograma, las actas de visita, los documentos, las decisiones y los pagos.',
     portalVideoTitulo: 'El portal, por dentro.',
     portalVideoTexto: 'Así siguen la obra el promotor y la constructora, de la primera acta a la entrega.',
     verVideo: 'Ver el vídeo', conSonido: 'con sonido', pausa: 'Pausa', seguirVideo: 'Seguir',
@@ -140,13 +155,13 @@ export const T = {
     ],
 
     dossierRotulo: 'Visual Lab · Dossier digital',
-    dossierTitulo: 'Un dossier que el comprador recorre desde el móvil.',
-    dossierTexto: 'Distribuciones, calidades, presupuesto y plazos en una presentación navegable. Cada comprador recibe su enlace y el equipo comercial sabe qué le interesa.',
+    dossierTitulo: 'Dossieres digitales: el proyecto, en una aplicación.',
+    dossierTexto: 'Para cada proyecto preparamos una presentación navegable —distribuciones, calidades, presupuesto y plazos— que el comprador abre en su móvil. Cada uno recibe su enlace y el equipo comercial sabe qué le interesa.',
     dossierPie: 'Ejemplo real · Casa Zurbano, Madrid',
-    abrirDossier: 'Recorrerlo',
+    abrirDossier: 'Abrir el ejemplo',
 
     vrRotulo: 'Visual Lab · Realidad virtual',
-    vrTitulo: 'Decidir sobre el proyecto, no sobre la obra.',
+    vrTitulo: 'Realidad virtual aplicada a nuestros proyectos.',
     vrTexto: 'Recorridos en realidad virtual, estudios de soleamiento y renders para validar proporciones, vistas y materiales antes de construir.',
     sonido: 'Sonido',
     silencio: 'Silenciar',
@@ -201,8 +216,9 @@ export const T = {
     idioma: 'Español',
 
     mapaRotulo: 'Work',
-    mapaTitulo: 'Over 60 projects in four countries.',
-    mapaAterriza: 'Most of them a few streets from our studio in Madrid.',
+    mapaTitulo: 'Projects in four countries.',
+    mapaSub: 'This is the map of our work.',
+    mapaAterriza: 'Tap a point to see each project.',
     paises: [
       { pais: 'Spain', ciudad: 'Madrid' },
       { pais: 'United States', ciudad: 'Miami' },
@@ -215,8 +231,8 @@ export const T = {
     verProyecto: 'View project',
 
     maquetaRotulo: 'Visual Lab · Digital model',
-    maquetaTitulo: 'A tower that sells before it is built.',
-    maquetaTexto: 'Every home with its status, price and light, in a model buyers explore from their phone and the sales team updates live.',
+    maquetaTitulo: 'This is a commercial digital model.',
+    maquetaTexto: 'An example of the ones we build for each development: buyers see the status, price and light of every home, and the sales team updates it live.',
     sello: 'Demo · sample data',
     proyectoMaqueta: 'Méndez Álvaro 32 · Madrid',
     modos: { disponibilidad: 'Availability', plantas: 'Floors', asoleamiento: 'Light', vista: 'View' } as Record<string, string>,
@@ -247,7 +263,7 @@ export const T = {
     obraRotulo: 'Selected work',
     obraTitulo: 'What we draw, built.',
     obras: [
-      { img: '/para/obra/cc38-salon.webp', nombre: 'Claudio Coello 38', lugar: 'Madrid', tipo: 'Residential · 320 m²' },
+      { img: '/para/obra/cc38-real.webp', nombre: 'Claudio Coello 38', lugar: 'Madrid', tipo: 'Residential · 320 m²' },
       { img: '/para/obra/airapi-sala.webp', nombre: 'Airapi Memorial Park', lugar: 'Monterrey', tipo: 'Commercial · 2,300 m²' },
       { img: '/para/obra/mia-322-lounge.webp', nombre: '322 SW 18th Rd', lugar: 'Miami', tipo: 'Residential · 260 m²' },
       { img: '/para/obra/nwl-fachada.webp', nombre: 'NWL School', lugar: 'Querétaro', tipo: 'Education · 3,200 m²' },
@@ -271,6 +287,20 @@ export const T = {
 
     productoRotulo: 'Residential product',
     productoTitulo: 'We design product that sells.',
+    acompanamos: {
+      developer: 'We help every developer improve how they sell.',
+      constructora: 'We help every contractor improve how they build.',
+    },
+    vlRotulo: 'FP Visual Lab',
+    vlTitulo: 'Our digital and sales lab.',
+    vlTexto: 'A part of the studio that builds the tools our clients use to sell and follow their projects. An example of each follows.',
+    vlHerramientas: [
+      { t: 'Commercial digital models', d: 'Every home with its status, price and light, in 3D.' },
+      { t: 'Digital brochures', d: 'The project explained in an app for each buyer.' },
+      { t: 'Virtual reality', d: 'Walk the project before it is built.' },
+      { t: 'Client portal', d: 'Following the build, in one place.' },
+      { t: 'Buyer rooms', d: 'Knowing what each buyer cares about.' },
+    ],
     productoPuntos: [
       { t: 'Unit types and mix', d: 'The programme the market asks for, with saleable area optimised from the first sketch.' },
       { t: 'Cost under control', d: 'Construction logic and cost per square metre from concept design, not at the end.' },
@@ -284,8 +314,8 @@ export const T = {
     ejecucionPie: 'Claudio Coello 38 · Madrid · Construction documents',
 
     portalRotulo: 'Client portal',
-    portalTitulo: 'The whole build, in one place.',
-    portalTexto: 'Schedule, site reports, documents, decisions and payments, always up to date and in one place for the developer, the contractor and the studio.',
+    portalTitulo: 'A dedicated portal for every client.',
+    portalTexto: 'Our tracking app: every client follows their build up to date, with the schedule, site reports, documents, decisions and payments.',
     portalVideoTitulo: 'The portal, from the inside.',
     portalVideoTexto: 'How developer and contractor follow the build, from the first site report to handover.',
     verVideo: 'Watch the video', conSonido: 'with sound', pausa: 'Pause', seguirVideo: 'Resume',
@@ -301,13 +331,13 @@ export const T = {
     ],
 
     dossierRotulo: 'Visual Lab · Digital brochure',
-    dossierTitulo: 'A brochure buyers explore from their phone.',
-    dossierTexto: 'Layouts, finishes, budget and timeline in a presentation buyers navigate. Each buyer gets their own link and the sales team knows what they care about.',
+    dossierTitulo: 'Digital brochures: the project, as an app.',
+    dossierTexto: 'For each project we build a presentation buyers navigate on their phone — layouts, finishes, budget and timeline. Each one gets their own link and the sales team knows what they care about.',
     dossierPie: 'Real example · Casa Zurbano, Madrid',
-    abrirDossier: 'Explore it',
+    abrirDossier: 'Open the example',
 
     vrRotulo: 'Visual Lab · Virtual reality',
-    vrTitulo: 'Decide on the design, not on site.',
+    vrTitulo: 'Virtual reality applied to our projects.',
     vrTexto: 'Virtual reality walkthroughs, sunlight studies and renders to validate proportions, views and materials before building.',
     sonido: 'Sound',
     silencio: 'Mute',

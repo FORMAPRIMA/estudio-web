@@ -87,12 +87,34 @@ export function VideoFP({ base, segundos, className = '', nombre, alEvento, t }:
   )
 }
 
+/** Bucle de fondo: mudo, tenue, solo mientras la pantalla está a la vista. */
+function FondoVideo({ base }: { base: string }) {
+  const [ref, dentro] = useEnPantalla<HTMLDivElement>('0px')
+  const v = useRef<HTMLVideoElement>(null)
+  useEffect(() => {
+    const el = v.current
+    if (!el || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    if (dentro) el.play().catch(() => {}); else el.pause()
+  }, [dentro])
+  return (
+    <div ref={ref} className="p-fondo-video" aria-hidden>
+      <video ref={v} muted loop playsInline preload="none">
+        <source src={`${base}.av1.mp4`} type='video/mp4; codecs="av01.0.08M.10"' />
+        <source src={`${base}.hevc.mp4`} type='video/mp4; codecs="hvc1"' />
+      </video>
+    </div>
+  )
+}
+
 /** Pantalla de vídeo: titular arriba y el vídeo enmarcado en 16:9 (nunca recortado). */
-function PantallaVideo({ id, t, num, rotulo, titulo, texto, base, segundos, alEvento }: {
+function PantallaVideo({ id, t, num, rotulo, titulo, texto, base, segundos, alEvento, fondo }: {
   id: string; t: Textos; num: number; rotulo: string; titulo: string; texto: string; base: string; segundos: number; alEvento: AlEvento
+  /** Bucle mudo y tenue de fondo (no es «el» vídeo: ese sigue esperando su play). */
+  fondo?: string
 }) {
   return (
     <Pantalla id={id} tema="oscuro" num={num} rotulo={rotulo} className="p-pvideo">
+      {fondo && <FondoVideo base={fondo} />}
       <div className="p-pvideo-txt">
         <H>{titulo}</H>
         <p className="p-texto p-in" style={D('.3s')}>{texto}</p>
@@ -148,16 +170,43 @@ export function Equipo({ t, lead, num }: { t: Textos; lead: LeadPara; num: numbe
       </div>
       <div className="p-cab"><H>{t.equipoTitulo}</H></div>
       <p className="p-texto p-in" style={D('.3s')}>{t.equipoTexto}</p>
-      <ul className="p-personas">
+      <CarruselSolo className="p-personas">
         {t.personas.map((p, i) => (
           <li key={p.nombre} className={`p-in${p.nombre === lead.contacto.nombre ? ' contacto' : ''}`} style={D(`${0.3 + i * 0.06}s`)}>
             <img src={p.foto} alt={p.nombre} loading="lazy" decoding="async" />
             <b>{p.nombre}</b><span>{p.cargo}</span>
           </li>
         ))}
-      </ul>
+      </CarruselSolo>
     </Pantalla>
   )
+}
+
+/** Lista horizontal que, si no cabe, se desplaza sola y despacio (ida y vuelta);
+ *  se detiene unos segundos cuando el visitante la toca o la arrastra. */
+function CarruselSolo({ className, children }: { className: string; children: ReactNode }) {
+  const [ref, dentro] = useEnPantalla<HTMLUListElement>('0px')
+  const quieto = useRef(0)
+  useEffect(() => {
+    const el = ref.current
+    if (!el || !dentro || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    let raf = 0, sentido = 1, x = el.scrollLeft, previo = performance.now()
+    const paso = (now: number) => {
+      const dt = Math.min(64, now - previo); previo = now
+      const max = el.scrollWidth - el.clientWidth
+      if (max > 4 && now > quieto.current) {
+        x += sentido * dt * 0.028
+        if (x >= max) { x = max; sentido = -1; quieto.current = now + 1800 }
+        if (x <= 0) { x = 0; sentido = 1; quieto.current = now + 1800 }
+        el.scrollLeft = x
+      } else x = el.scrollLeft
+      raf = requestAnimationFrame(paso)
+    }
+    raf = requestAnimationFrame(paso)
+    return () => cancelAnimationFrame(raf)
+  }, [dentro, ref])
+  const parar = () => { quieto.current = performance.now() + 5000 }
+  return <ul ref={ref} className={className} onPointerDown={parar} onTouchStart={parar} onWheel={parar}>{children}</ul>
 }
 
 function Puntos({ puntos, base = 0.3 }: { puntos: { t: string; d: string }[]; base?: number }) {
@@ -176,12 +225,33 @@ function Puntos({ puntos, base = 0.3 }: { puntos: { t: string; d: string }[]; ba
 // ── Developer · producto ─────────────────────────────────────────────────────
 export function Producto({ t, num }: { t: Textos; num: number }) {
   return (
-    <Pantalla id="producto" tema="claro" num={num} rotulo={t.productoRotulo} className="p-dos">
+    <Pantalla id="producto" tema="claro" num={num} rotulo={t.productoRotulo} className="p-dos p-producto">
       <div className="p-dos-img p-in"><img src="/para/obra/cv-producto.webp" alt="" loading="lazy" decoding="async" /></div>
       <div className="p-dos-txt">
         <H>{t.productoTitulo}</H>
+        <p className="p-acompana p-in" style={D('.25s')}>{t.acompanamos.developer}</p>
         <Puntos puntos={t.productoPuntos} />
       </div>
+    </Pantalla>
+  )
+}
+
+// ── FP Visual Lab: qué es y qué herramientas hace (antes de los ejemplos)
+export function VisualLab({ t, num }: { t: Textos; num: number }) {
+  return (
+    <Pantalla id="visuallab" tema="oscuro" num={num} rotulo={t.vlRotulo} className="p-vl">
+      <div className="p-vl-fondo" aria-hidden><img src="/para/obra/cv-visuallab.webp" alt="" loading="lazy" /></div>
+      <div className="p-vl-txt">
+        <H>{t.vlTitulo}</H>
+        <p className="p-texto p-in" style={D('.3s')}>{t.vlTexto}</p>
+      </div>
+      <ol className="p-vl-lista">
+        {t.vlHerramientas.map((h, i) => (
+          <li key={h.t} className="p-in" style={D(`${0.35 + i * 0.09}s`)}>
+            <span>{String(i + 1).padStart(2, '0')}</span><b>{h.t}</b><p>{h.d}</p>
+          </li>
+        ))}
+      </ol>
     </Pantalla>
   )
 }
@@ -285,48 +355,39 @@ export function Colaboracion({ t, num }: { t: Textos; num: number }) {
       <div className="p-dos-img p-in"><img src="/para/obra/cv-arquitectura.webp" alt="" loading="lazy" decoding="async" /></div>
       <div className="p-dos-txt">
         <H>{t.colaboracionTitulo}</H>
+        <p className="p-acompana p-in" style={D('.25s')}>{t.acompanamos.constructora}</p>
         <Puntos puntos={t.colaboracionPuntos} />
       </div>
     </Pantalla>
   )
 }
 
-// ── Dossier digital: Casa Zurbano de verdad, dentro de un móvil. En reposo, su
-//    portada; al tocar, el dossier vivo (?demo=1: se ve igual, no se mide).
+// ── Dossier digital: Casa Zurbano como ejemplo, en un móvil. El ejemplo se abre en
+//    su propia pestaña (dentro de este dossier pesaba demasiado). ?demo=1: no se mide.
 export function Dossier({ t, num, alEvento }: { t: Textos; num: number; alEvento: AlEvento }) {
-  const [vivo, setVivo] = useState(false)
-  const [amplio, setAmplio] = useState(false)
-  useBloqueoScroll(amplio)
-  const abrir = () => {
-    setVivo(true); alEvento('3d', 'dossier')
-    if (window.matchMedia('(max-width: 700px)').matches) setAmplio(true)
-  }
   return (
-    <Pantalla id="dossier" tema="oscuro" num={num} rotulo={t.dossierRotulo} className={`p-dos p-dossier${amplio ? ' amplio' : ''}`}>
+    <Pantalla id="dossier" tema="oscuro" num={num} rotulo={t.dossierRotulo} className="p-dos p-dossier">
       <div className="p-dossier-fondo" aria-hidden><img src="/para/obra/zurbano-salon.webp" alt="" loading="lazy" /></div>
       <div className="p-dos-txt">
         <H>{t.dossierTitulo}</H>
         <p className="p-texto p-in" style={D('.3s')}>{t.dossierTexto}</p>
         <p className="p-pie p-in" style={D('.45s')}>{t.dossierPie}</p>
+        <a className="p-explorar p-explorar-grande p-in" style={D('.55s')} href="/propuesta/casa-zurbano-xzw9e?demo=1" target="_blank" rel="noopener" onClick={() => alEvento('enlace', 'dossier-zurbano')}>
+          {t.abrirDossier} <span aria-hidden>↗</span>
+        </a>
       </div>
       <div className="p-dos-img p-in" style={D('.2s')}>
-        <div className="p-movil">
-          {vivo
-            ? <iframe src="/propuesta/casa-zurbano-xzw9e?demo=1" title="Casa Zurbano" loading="lazy" allow="autoplay; fullscreen" />
-            : <button type="button" className="p-movil-portada" onClick={abrir}>
-                <img src="/para/obra/zurbano-portada.webp" alt="Casa Zurbano" loading="lazy" />
-                <span className="p-explorar p-movil-boton"><span aria-hidden>↗</span>{t.abrirDossier}</span>
-              </button>}
-        </div>
+        <a className="p-movil" href="/propuesta/casa-zurbano-xzw9e?demo=1" target="_blank" rel="noopener" onClick={() => alEvento('enlace', 'dossier-zurbano')} aria-label={t.abrirDossier}>
+          <span className="p-movil-portada"><img src="/para/obra/zurbano-portada.webp" alt="Casa Zurbano" loading="lazy" /></span>
+        </a>
       </div>
-      {amplio && <button type="button" className="p-explorar p-seguir" onClick={() => setAmplio(false)}>{t.cerrar} ↓</button>}
     </Pantalla>
   )
 }
 
 // ── Realidad virtual y portal en vídeo ──────────────────────────────────────
 export function VR({ t, num, alEvento }: { t: Textos; num: number; alEvento: AlEvento }) {
-  return <PantallaVideo id="vr" t={t} num={num} rotulo={t.vrRotulo} titulo={t.vrTitulo} texto={t.vrTexto} base="/para/video/visual-lab" segundos={36} alEvento={alEvento} />
+  return <PantallaVideo id="vr" t={t} num={num} rotulo={t.vrRotulo} titulo={t.vrTitulo} texto={t.vrTexto} base="/para/video/visual-lab" segundos={36} alEvento={alEvento} fondo="/para/video/vr-fondo" />
 }
 export function PortalVideo({ t, num, alEvento }: { t: Textos; num: number; alEvento: AlEvento }) {
   return <PantallaVideo id="portalvideo" t={t} num={num} rotulo={t.portalRotulo} titulo={t.portalVideoTitulo} texto={t.portalVideoTexto} base="/para/video/portal-clientes" segundos={42} alEvento={alEvento} />
@@ -471,7 +532,31 @@ export const CSS_PANTALLAS = CSS_AGENDA + CSS_PORTAL_DEMO + `
 
 /* Pantalla de vídeo */
 .p-pvideo{justify-content:center;}
-.p-pvideo-txt{display:flex;flex-direction:column;gap:14px;}
+.p-pvideo-txt{display:flex;flex-direction:column;gap:14px;position:relative;z-index:1;}
+.p-pvideo>.p-in{position:relative;z-index:1;}
+.p-fondo-video{position:absolute;inset:0;overflow:hidden;}
+.p-fondo-video video{width:100%;height:100%;object-fit:cover;opacity:.32;filter:saturate(.8);transform:scale(1.04);}
+.p-fondo-video::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(13,13,13,.7) 0%,rgba(13,13,13,.35) 45%,rgba(13,13,13,.85) 100%);}
+
+/* Frase de acompañamiento (producto / colaboración) */
+.p-acompana{font-family:'Newsreader',serif;font-style:italic;font-size:clamp(18px,1rem + .6vw,24px);line-height:1.4;color:#2f4238;border-left:1px solid #2f4238;padding-left:16px;max-width:34ch;}
+
+/* FP Visual Lab */
+.p-vl{justify-content:center;}
+.p-vl-fondo{position:absolute;inset:0;overflow:hidden;}
+.p-vl-fondo img{width:100%;height:100%;object-fit:cover;object-position:70% 30%;opacity:.28;filter:grayscale(.3);}
+.p-vl-fondo::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,rgba(13,13,13,.92) 0%,rgba(13,13,13,.6) 55%,rgba(13,13,13,.35) 100%);}
+.p-vl-txt{position:relative;z-index:1;display:flex;flex-direction:column;gap:14px;}
+.p-vl-lista{position:relative;z-index:1;list-style:none;margin:6px 0 0;padding:0;display:grid;}
+.p-vl-lista li{display:grid;grid-template-columns:34px 1fr;column-gap:12px;padding:11px 0;border-top:1px solid rgba(251,251,250,.14);}
+.p-vl-lista span{grid-row:span 2;font-size:12px;font-weight:500;letter-spacing:.1em;color:var(--p-salvia);padding-top:4px;}
+.p-vl-lista b{font-weight:400;font-size:clamp(17px,1rem + .35vw,21px);}
+.p-vl-lista p{font-size:13.5px;color:rgba(251,251,250,.62);margin-top:2px;}
+
+/* Botón de exploración grande, que late para invitar */
+.p-explorar-grande{min-height:54px;padding:0 26px;font-size:13px;align-self:flex-start;text-decoration:none;position:relative;}
+.p-explorar-grande::after{content:'';position:absolute;inset:-1px;border-radius:999px;border:1px solid currentColor;opacity:0;animation:p-late 2.4s ease-out infinite 1.5s;pointer-events:none;}
+@keyframes p-late{0%{transform:scale(1);opacity:.55}100%{transform:scale(1.18,1.5);opacity:0}}
 
 /* Dossier digital */
 .p-dossier-fondo{position:absolute;inset:0;overflow:hidden;}
@@ -480,7 +565,10 @@ export const CSS_PANTALLAS = CSS_AGENDA + CSS_PORTAL_DEMO + `
   box-shadow:0 0 0 1px rgba(251,251,250,.16),0 50px 100px -30px rgba(0,0,0,.8);}
 .p-movil::before{content:'';position:absolute;top:18px;left:50%;transform:translateX(-50%);width:84px;height:22px;border-radius:12px;background:#0b0b0b;z-index:2;}
 .p-movil iframe,.p-movil-portada{display:block;width:100%;height:100%;border:0;border-radius:34px;overflow:hidden;background:#f6f1ea;}
-.p-movil-portada{position:relative;padding:0;cursor:pointer;}
+.p-movil-portada{position:relative;padding:0;cursor:pointer;display:block;}
+.p-movil-portada img{animation:p-desliza-movil 16s ease-in-out infinite alternate;}
+@keyframes p-desliza-movil{from{transform:scale(1.02) translateY(0)}to{transform:scale(1.12) translateY(-4%)}}
+.p-movil{display:block;}
 .p-movil-portada img{width:100%;height:100%;object-fit:cover;}
 .p-movil-portada .p-explorar{position:absolute;left:10px;right:10px;bottom:22px;justify-content:center;white-space:nowrap;padding:0 10px;min-height:40px;font-size:11px;letter-spacing:.12em;color:#2b2622;background:rgba(246,241,234,.88);border-color:rgba(43,38,34,.25);}
 .p-dossier.amplio{position:fixed;inset:0;z-index:80;min-height:0;height:100%;padding:0;}
@@ -509,6 +597,8 @@ export const CSS_PANTALLAS = CSS_AGENDA + CSS_PORTAL_DEMO + `
 
 /* Pantallas bajas: menos aire para que todo quepa en una pantalla */
 @media (max-height:760px){
+  .p-puntos li{padding:10px 0;}
+  .p-acompana{font-size:17px;}
   .p-pant{padding-top:calc(env(safe-area-inset-top) + 66px);padding-bottom:calc(env(safe-area-inset-bottom) + 28px);gap:14px;}
   .p-h2{font-size:clamp(28px,1.2rem + 2.2vw,46px);}
   .p-cifras li{padding:10px 0;}
@@ -518,7 +608,11 @@ export const CSS_PANTALLAS = CSS_AGENDA + CSS_PORTAL_DEMO + `
   .p-h1-cierre{font-size:clamp(38px,1.2rem + 4.4vw,80px);}
 }
 @media (max-width:1023px){
+  .p-movil{height:min(44svh,520px);}
   .p-dos-img>img{max-height:28svh;}
+  .p-producto .p-dos-img{margin:0 calc(var(--p-gutter) * -1);}
+  .p-producto .p-dos-img>img{width:100%;height:34svh;max-height:none;object-fit:cover;object-position:50% 18%;}
+  .p-producto .p-puntos p{display:none;}
   .p-puntos li{padding:12px 0;}
   .p-puntos p{font-size:14px;margin-top:2px;}
   .p-portal .p-lista{display:none;}
@@ -526,6 +620,8 @@ export const CSS_PANTALLAS = CSS_AGENDA + CSS_PORTAL_DEMO + `
   .p-portal .p-pd-cuerpo{overflow-y:auto;}
 }
 @media (max-width:700px){
+  .p-movil{height:min(38svh,460px);}
+  .p-dossier .p-explorar-grande{min-height:46px;}
   .p-cinta-pista img{height:clamp(120px,20svh,200px);}
   .p-equipo-foto{aspect-ratio:2/1;}
   .p-personas img{aspect-ratio:4/5;}
@@ -536,6 +632,10 @@ export const CSS_PANTALLAS = CSS_AGENDA + CSS_PORTAL_DEMO + `
   .p-hablemos .p-contacto{margin-top:0;}
 }
 @media (max-width:700px) and (max-height:760px){
+  .p-movil{height:30svh;}
+  .p-dossier .p-texto{font-size:14px;}
+  .p-vl-lista p{display:none;}
+  .p-vl-lista li{padding:8px 0;}
   .p-dos-img>img{max-height:20svh;}
   .p-puntos li{padding:9px 0;}
   .p-puntos p{display:none;}
@@ -560,6 +660,8 @@ export const CSS_PANTALLAS = CSS_AGENDA + CSS_PORTAL_DEMO + `
   .p-personas{grid-column:1 / -1;grid-auto-flow:row;grid-template-columns:repeat(7,1fr);grid-auto-columns:auto;overflow:visible;margin:12px 0 0;padding:0;}
   .p-dos{display:grid;grid-template-columns:1fr 1fr;column-gap:clamp(40px,6vw,112px);align-content:center;align-items:center;}
   .p-dos .p-pant-rotulo{grid-column:1 / -1;}
+  .p-vl{display:grid;grid-template-columns:1fr 1fr;column-gap:clamp(48px,6vw,112px);align-content:center;align-items:center;}
+  .p-vl .p-pant-rotulo{grid-column:1 / -1;}
   .p-dos-img>img{max-height:66svh;}
   .p-portal .p-dos-txt{order:0;}
   .p-ejecucion{display:grid;grid-template-columns:minmax(340px,.8fr) 1.6fr;column-gap:48px;align-content:center;align-items:center;}
