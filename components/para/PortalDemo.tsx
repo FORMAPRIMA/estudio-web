@@ -8,6 +8,7 @@
 import { useEffect, useState } from 'react'
 import type { Idioma } from '@/lib/para/textos'
 import { useEnPantalla } from './Presentacion'
+import Cifra from './Cifra'
 
 type Pestana = 'obra' | 'cronograma' | 'documentos' | 'visitas'
 
@@ -67,7 +68,7 @@ export default function PortalDemo({ idioma, alEvento }: { idioma: Idioma; alEve
           <div className="p-pd-obra">
             <div className="p-pd-avance">
               <span>{t.avance}</span>
-              <b>62 %</b>
+              <b><Cifra texto="62 %" activa={vista} retraso={0.3} /></b>
               <span className="p-pd-barra-av"><i style={{ width: vista ? '62%' : '0%' }} /></span>
               <span className="p-pd-sub">{t.proximo}: {t.hito}</span>
             </div>

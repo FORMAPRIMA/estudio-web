@@ -91,6 +91,7 @@ export class Escena {
   private sol = 790
   private selId: string | null = null
   private hoverId: string | null = null
+  private resaltadoId: string | null = null
   private filtro: (u: Vivienda) => boolean = () => true
   private pausada = false
   private muerta = false
@@ -498,6 +499,22 @@ export class Escena {
   setFiltro(fn: (u: Vivienda) => boolean) { this.filtro = fn }
   refrescar() { this.applyModo(this.modo) }
 
+  /** La vivienda que mejor vende el edificio (para invitar a tocarla). */
+  viviendaDestacada(): string { return this.destacada().id }
+
+  /** Dónde cae una vivienda en el lienzo (px desde su esquina), o null si queda detrás de la cámara. */
+  proyectar(id: string): { x: number; y: number } | null {
+    const u = this.byId[id]
+    if (!u) return null
+    this.v3.set(u.x, u.wy + (this.floorOff[u.planta] ?? 0) + u.alto * 0.5, u.z).project(this.camera)
+    if (this.v3.z > 1) return null
+    const r = this.wrap.getBoundingClientRect()
+    return { x: (this.v3.x * 0.5 + 0.5) * r.width, y: (-this.v3.y * 0.5 + 0.5) * r.height }
+  }
+
+  /** Enciende una vivienda como si tuviera el ratón encima (sin seleccionarla). */
+  resaltar(id: string | null) { this.resaltadoId = id }
+
   setSel(id: string | null) {
     this.selId = id
     if (!id || this.modo === 'vista') return
@@ -674,7 +691,7 @@ export class Escena {
       if (!this.filtro(u)) { f = 0.012; ed = 0.08; em = 0 }
       else if (u.id === this.selId) { f = 0.7; ed = 1; em = 0.82 + pulso * 0.5 }
       else if (this.selId) { f *= 0.3; ed *= 0.28; em = 0.08 }
-      if (u.id === this.hoverId && u.id !== this.selId) { f = 0.62; ed = 1; em = 0.95 }
+      if ((u.id === this.hoverId || u.id === this.resaltadoId) && u.id !== this.selId) { f = 0.62; ed = 1; em = 0.95 + (u.id === this.resaltadoId ? pulso * 0.6 : 0) }
       v.oFill += (f - v.oFill) * 0.16
       v.oEdge += (ed - v.oEdge) * 0.16
       v.oEm += (em - v.oEm) * 0.18

@@ -19,6 +19,7 @@ import { CAMARA, datosDeTarjeta, obraDeEntrada, tieneCoordenadas, type MapaPunto
 import type { Idioma, Textos } from '@/lib/para/textos'
 import { contenedor, useBloqueoScroll, useEnPantalla, useVisto } from './Presentacion'
 import { Rotulo } from './Pantallas'
+import Cifra from './Cifra'
 
 /** Las cuatro sedes, para la vista de globo (mismo orden que T.paises). */
 const SEDES: [number, number][] = [
@@ -231,7 +232,7 @@ export default function MapaObras({ puntos, t, idioma, token: tokenServidor, num
         <h2 className="p-h2"><span className="p-in-h"><span style={{ ['--d' as string]: '.12s' }}>{t.mapaTitulo}</span></span></h2>
         <p className="p-mapa-sub p-in" style={{ ['--d' as string]: '.3s' }}><span key={aterrizado ? 'b' : 'a'} className={aterrizado ? 'p-cambio-sub' : ''}>{aterrizado ? t.mapaAterriza : t.mapaSub}</span></p>
         <div className="p-mapa-pie p-in" style={{ ['--d' as string]: '.4s' }}>
-          <span className={`p-cifra${aterrizado ? ' on' : ''}`}><b>{obras.length}</b> {t.obrasEnMadrid}</span>
+          <span className={`p-cifra${aterrizado ? ' on' : ''}`}><b><Cifra texto={obras.length} activa={aterrizado} retraso={0.3} /></b> {t.obrasEnMadrid}</span>
           <button type="button" className="p-explorar" onClick={() => setExplorando(true)}>
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3"><path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4" /></svg>
             {t.explorarMapa}

@@ -9,6 +9,7 @@ import type { LeadPara, Textos } from '@/lib/para/textos'
 import { useBloqueoScroll, useEnPantalla, useVisto } from './Presentacion'
 import Agenda, { CSS_AGENDA, type EstadoAgendaCliente } from './Agenda'
 import PortalDemo, { CSS_PORTAL_DEMO } from './PortalDemo'
+import Cifra from './Cifra'
 import type { Idioma } from '@/lib/para/textos'
 
 export type AlEvento = (k: string, d?: string) => void
@@ -133,6 +134,7 @@ function PantallaVideo({ id, t, num, rotulo, titulo, texto, base, segundos, alEv
 
 // ── 02 · El estudio ──────────────────────────────────────────────────────────
 export function Estudio({ t, lead, num }: { t: Textos; lead: LeadPara; num: number }) {
+  const [ref, dentro] = useEnPantalla<HTMLUListElement>('0px')
   return (
     <Pantalla id="estudio" tema="oscuro" num={num} rotulo={t.estudioRotulo} className="p-estudio">
       <div className="p-estudio-a">
@@ -140,9 +142,9 @@ export function Estudio({ t, lead, num }: { t: Textos; lead: LeadPara; num: numb
         <p className="p-texto p-in" style={D('.3s')}>{t.estudioTexto}</p>
         <p className="p-nucleo p-in" style={D('.45s')}>{t.nucleo[lead.perfil]}</p>
       </div>
-      <ul className="p-cifras">
+      <ul ref={ref} className="p-cifras">
         {t.estudioCifras.map((c, i) => (
-          <li key={c.l} className="p-in" style={D(`${0.35 + i * 0.12}s`)}><b>{c.v}</b><span>{c.l}</span></li>
+          <li key={c.l} className="p-in" style={D(`${0.35 + i * 0.12}s`)}><b><Cifra texto={c.v} activa={dentro} retraso={0.45 + i * 0.12} /></b><span>{c.l}</span></li>
         ))}
       </ul>
     </Pantalla>
@@ -280,23 +282,6 @@ function Cinta({ laminas, sentido, activa }: { laminas: string[]; sentido: 1 | -
   )
 }
 
-function Cuenta({ hasta, activa }: { hasta: number; activa: boolean }) {
-  const [n, setN] = useState(0)
-  useEffect(() => {
-    if (!activa) return
-    let raf = 0
-    const t0 = performance.now()
-    const paso = (now: number) => {
-      const k = Math.min(1, (now - t0) / 1300)
-      setN(Math.round(hasta * (1 - Math.pow(1 - k, 3))))
-      if (k < 1) raf = requestAnimationFrame(paso)
-    }
-    raf = requestAnimationFrame(paso)
-    return () => cancelAnimationFrame(raf)
-  }, [activa, hasta])
-  return <>{n}</>
-}
-
 export function Ejecucion({ t, num }: { t: Textos; num: number }) {
   const [ref, dentro] = useEnPantalla<HTMLDivElement>('0px')
   const mitad = Math.ceil(LAMINAS.length / 2)
@@ -304,7 +289,7 @@ export function Ejecucion({ t, num }: { t: Textos; num: number }) {
     <Pantalla id="ejecucion" tema="claro" num={num} rotulo={t.ejecucionRotulo} className="p-ejecucion">
       <div className="p-ejecucion-txt">
         <H>{t.ejecucionTitulo}</H>
-        <p className="p-ejecucion-cifra p-in" style={D('.3s')}><b><Cuenta hasta={LAMINAS.length} activa={dentro} /></b>{t.ejecucionCifra}</p>
+        <p className="p-ejecucion-cifra p-in" style={D('.3s')}><b><Cifra texto={LAMINAS.length} activa={dentro} retraso={0.3} /></b>{t.ejecucionCifra}</p>
         <p className="p-texto p-in" style={D('.42s')}>{t.ejecucionTexto}</p>
       </div>
       <div ref={ref} className="p-cintas p-in" style={D('.2s')}>

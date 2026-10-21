@@ -15,6 +15,7 @@ import type { Escena } from '@/components/team/visual-lab/escena-mendez'
 import type { Textos } from '@/lib/para/textos'
 import { contenedor, useBloqueoScroll, useEnPantalla, useVisto } from './Presentacion'
 import { Rotulo } from './Pantallas'
+import Cifra from './Cifra'
 
 const MODOS: ModoId[] = ['disponibilidad', 'plantas', 'asoleamiento', 'vista']
 const COLOR: Record<string, string> = { disponible: '#3D8B5F', negociacion: '#5B7FA6', reservada: '#8A6220', vendida: '#9C9C96', piloto: '#8A5A72' }
@@ -41,6 +42,12 @@ export default function MaquetaTorre({ t, num, alEvento }: { t: Textos; num: num
   const [hover, setHover] = useState<string | null>(null)
   const [explorando, setExplorando] = useState(false)
   const [tocada, setTocada] = useState(false)
+  // Invitación a tocar una vivienda: una disponible de planta alta se ilumina, con una
+  // onda y «Toca una vivienda» encima; si nadie toca nada, su ficha se abre sola una vez.
+  const [destacada, setDestacada] = useState<string | null>(null)
+  const pista = useRef<HTMLDivElement>(null)
+  const demoHecha = useRef(false)
+  const invitando = lista && visto && !placa && !sel && !tocada && !explorando && modo === 'disponibilidad'
   // Móviles con poca memoria o pocos núcleos: no se arranca three.js solo; la foto
   // de firma hace de maqueta hasta que se pide.
   const [ligero, setLigero] = useState(false)
@@ -108,6 +115,30 @@ export default function MaquetaTorre({ t, num, alEvento }: { t: Textos; num: num
 
   useEffect(() => { escena.current?.setSel(sel) }, [sel])
 
+  useEffect(() => { if (lista && escena.current) setDestacada(escena.current.viviendaDestacada()) }, [lista])
+
+  // La señal sigue a la vivienda en pantalla mientras la cámara se mueve.
+  useEffect(() => {
+    const e = escena.current
+    if (!invitando || !e || !destacada) { e?.resaltar(null); return }
+    let raf = 0
+    const paso = () => {
+      const p = e.proyectar(destacada), el = pista.current
+      if (el && p) { el.style.transform = `translate3d(${p.x}px,${p.y}px,0)`; el.style.opacity = '1' }
+      e.resaltar(destacada)
+      raf = requestAnimationFrame(paso)
+    }
+    raf = requestAnimationFrame(paso)
+    return () => { cancelAnimationFrame(raf); e.resaltar(null) }
+  }, [invitando, destacada])
+
+  // Demostración: si en 5 s no se ha tocado nada, se abre la ficha de esa vivienda (una vez).
+  useEffect(() => {
+    if (!invitando || demoHecha.current || !destacada) return
+    const k = setTimeout(() => { demoHecha.current = true; setSel(destacada); alEvento('3d', 'maqueta:demo-ficha') }, 5000)
+    return () => clearTimeout(k)
+  }, [invitando, destacada, alEvento])
+
   useEffect(() => {
     if (!explorando) return
     const k = (e: KeyboardEvent) => { if (e.key === 'Escape') setExplorando(false) }
@@ -141,7 +172,7 @@ export default function MaquetaTorre({ t, num, alEvento }: { t: Textos; num: num
           <h2 className="p-h2"><span className="p-in-h"><span style={{ ['--d' as string]: '.12s' }}>{t.maquetaTitulo}</span></span></h2>
           <p className="p-texto p-in p-maqueta-texto" style={{ ['--d' as string]: '.3s' }}>{t.maquetaTexto}</p>
           <div className="p-maqueta-dato p-in" style={{ ['--d' as string]: '.42s' }}>
-            <b>{disponibles}</b><span>/ {units.length} {t.viviendas} {t.disponibles}</span>
+            <b><Cifra texto={disponibles} activa={visto} retraso={0.5} /></b><span>/ {units.length} {t.viviendas} {t.disponibles}</span>
           </div>
         </div>
 
@@ -160,10 +191,17 @@ export default function MaquetaTorre({ t, num, alEvento }: { t: Textos; num: num
           </div>
           <span className="p-sello">{t.sello}</span>
           {lista && !tocada && !explorando && <span className={`p-gesto${tocada ? ' fuera' : ''}`} aria-hidden>↔ {t.arrastra}</span>}
+          <div ref={pista} className={`p-pista-unidad${invitando ? ' on' : ''}`} aria-hidden>
+            <i /><i /><span className="p-pista-punto" /><span className="p-pista-txt">{t.tocaVivienda}</span>
+          </div>
           {ligero && !pedida && (
             <button type="button" className="p-explorar p-explorar-claro p-cargar3d" onClick={() => { setPedida(true); setPlaca(true) }}>{t.cargar3d}</button>
           )}
-          {!explorando && <button type="button" className="p-maqueta-toque" aria-label={t.explorarMaqueta} onClick={() => setExplorando(true)} />}
+          {!explorando && <button type="button" className="p-maqueta-toque" aria-label={t.explorarMaqueta} onClick={(ev) => {
+            setExplorando(true)
+            const r = ev.currentTarget.getBoundingClientRect(), pt = destacada ? escena.current?.proyectar(destacada) : null
+            if (destacada && pt && Math.hypot(ev.clientX - r.left - pt.x, ev.clientY - r.top - pt.y) < 70) setSel(destacada)
+          }} />}
         </div>
 
         <div className={`p-maqueta-mandos${visto ? ' visto' : ''}`}>
@@ -233,6 +271,17 @@ const CSS = `
   color:#8A6220;font-size:12px;letter-spacing:.14em;text-transform:uppercase;font-weight:500;pointer-events:none;}
 .p-maqueta-toque{position:absolute;inset:0;z-index:2;background:transparent;border:0;padding:0;display:none;}
 .p-cargar3d{position:absolute;z-index:4;left:50%;top:50%;transform:translate(-50%,-50%);}
+/* Invitación a tocar una vivienda */
+.p-pista-unidad{position:absolute;left:0;top:0;z-index:3;width:0;height:0;pointer-events:none;opacity:0;transition:opacity .6s;}
+.p-pista-unidad:not(.on){opacity:0!important;}
+.p-pista-unidad i{position:absolute;left:-14px;top:-14px;width:28px;height:28px;border-radius:50%;border:2px solid #2f7d55;animation:p-pista 2s cubic-bezier(.2,.6,.3,1) infinite;}
+.p-pista-unidad i+i{animation-delay:1s;}
+@keyframes p-pista{0%{transform:scale(.5);opacity:1}100%{transform:scale(2.6);opacity:0}}
+.p-pista-punto{position:absolute;left:-7px;top:-7px;width:14px;height:14px;border-radius:50%;background:#fbfbfa;border:3px solid #2f7d55;box-shadow:0 4px 14px rgba(0,0,0,.35);
+  animation:p-toque 2s ease-in-out infinite;}
+@keyframes p-toque{0%,100%{transform:scale(1)}12%{transform:scale(.7)}24%{transform:scale(1)}}
+.p-pista-txt{position:absolute;left:22px;top:-15px;white-space:nowrap;padding:7px 12px;background:#141414;color:#fbfbfa;font-size:12px;letter-spacing:.12em;
+  text-transform:uppercase;font-weight:500;box-shadow:0 10px 26px -10px rgba(0,0,0,.5);}
 .p-maqueta .p-gesto{background:rgba(20,20,20,.72);}
 @media (pointer:coarse){
   .p-maqueta-toque{display:block;}
