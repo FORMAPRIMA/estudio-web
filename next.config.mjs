@@ -10,6 +10,8 @@ const nextConfig = {
     },
     outputFileTracingIncludes: {
       '**': ['./public/FORMA_PRIMA_BLANCO.png', './assets/privado/**/*'],
+      // vista previa de los enlaces /para/<token> (opengraph-image lee del disco)
+      '/para/**': ['./public/para/og-foto.jpg', './public/para/logo-h-white.png'],
     },
   },
   images: {

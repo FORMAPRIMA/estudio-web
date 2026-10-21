@@ -69,6 +69,9 @@ export interface SalaResumen {
   /** No se puede asignar a comerciales (propuestas de honorarios). */
   confidencial: boolean
   creadoPor: string | null
+  /** 'propuesta' = un dossier de /propuesta/<slug>; 'prospeccion' = el dossier del estudio en /para/<token>. */
+  tipo: 'propuesta' | 'prospeccion'
+  perfil: 'developer' | 'constructora' | null
 }
 
 /** Una sala se puede asignar a un comercial si no es confidencial. */
@@ -80,16 +83,17 @@ export const asignable = (s: { confidencial: boolean }) => !s.confidencial
 export async function salasDe(m: Miembro): Promise<SalaResumen[]> {
   const admin = createAdminClient()
   const { data, error } = await admin.from('sala_salas')
-    .select('id, slug, nombre, acceso_anonimo, confidencial, creado_por').eq('activa', true).order('created_at')
+    .select('id, slug, nombre, acceso_anonimo, confidencial, creado_por, tipo, perfil').eq('activa', true).order('created_at')
   // Sin la migración salas_fase3_permisos.sql un comercial no ve nada: mejor
   // cerrado que enseñar una propuesta de honorarios por error.
   if (error) {
     if (m.rol !== 'propietario') return []
     const { data: viejas } = await admin.from('sala_salas').select('id, slug, nombre, acceso_anonimo').eq('activa', true).order('created_at')
-    return (viejas ?? []).map((s) => ({ id: s.id, slug: s.slug, nombre: s.nombre, accesoAnonimo: !!s.acceso_anonimo, confidencial: true, creadoPor: null }))
+    return (viejas ?? []).map((s) => ({ id: s.id, slug: s.slug, nombre: s.nombre, accesoAnonimo: !!s.acceso_anonimo, confidencial: true, creadoPor: null, tipo: 'propuesta' as const, perfil: null }))
   }
   const todas: SalaResumen[] = (data ?? []).map((s) => ({
     id: s.id, slug: s.slug, nombre: s.nombre, accesoAnonimo: !!s.acceso_anonimo, confidencial: s.confidencial !== false, creadoPor: s.creado_por ?? null,
+    tipo: s.tipo === 'prospeccion' ? 'prospeccion' : 'propuesta', perfil: s.perfil === 'constructora' ? 'constructora' : s.perfil === 'developer' ? 'developer' : null,
   }))
   if (m.rol === 'propietario') return todas
   const { data: asig } = await admin.from('sala_miembro_salas').select('sala_id').eq('miembro_id', m.id)
@@ -132,6 +136,17 @@ export interface LeadRow {
   creadoPor: string | null
   leadCaptacionId: string | null
   createdAt: string
+  // prospección (/para/<token>)
+  token: string | null
+  cargo: string | null
+  pais: string | null
+  idioma: 'es' | 'en'
+  tratamiento: 'tu' | 'usted'
+  mensaje: string | null
+  logoPath: string | null
+  logoModo: 'blanco' | 'original'
+  enviadoEn: string | null
+  descartadoEn: string | null
 }
 
 export interface SesionRow {
@@ -186,6 +201,9 @@ export async function datosSala(salaId: string, opts: { leadId?: string } = {}):
     leads: (leads ?? []).map((l) => ({
       id: l.id, pin: l.pin, nombre: l.nombre, empresa: l.empresa, email: l.email, telefono: l.telefono, canal: l.canal,
       notas: l.notas, estado: l.estado, caducaEn: l.caduca_en, creadoPor: l.creado_por, leadCaptacionId: l.lead_captacion_id, createdAt: l.created_at,
+      token: l.token ?? null, cargo: l.cargo ?? null, pais: l.pais ?? null, idioma: l.idioma === 'en' ? 'en' : 'es',
+      tratamiento: l.tratamiento === 'usted' ? 'usted' : 'tu', mensaje: l.mensaje ?? null, logoPath: l.logo_path ?? null,
+      logoModo: l.logo_modo === 'original' ? 'original' : 'blanco', enviadoEn: l.enviado_en ?? null, descartadoEn: l.descartado_en ?? null,
     })),
     sesiones: (ses ?? []).map((s) => ({
       id: s.id, leadId: s.lead_id, inicio: s.inicio, ultima: s.ultima, activoMs: s.activo_ms, dispositivo: s.dispositivo,

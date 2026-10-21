@@ -24,9 +24,9 @@ export default async function SalasInicio() {
         {filas.map(({ s, k, p }) => (
           <Link key={s.id} href={`/${s.slug}`} className="salas-tarjeta" style={{ ...card, textDecoration: 'none', color: S.ink, overflow: 'hidden', display: 'block' }}>
             <div style={{ position: 'relative', aspectRatio: '16 / 8', background: S.lineSoft }}>
-              {p?.portada && (
+              {(p?.portada || s.tipo === 'prospeccion') && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={p.portada} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+                <img src={p?.portada ?? '/propuestas/para-portada-800.webp'} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
               )}
               {k.viendoAhora > 0 && (
                 <span style={{ position: 'absolute', top: 12, left: 12, display: 'inline-flex', alignItems: 'center', gap: 6, background: '#fff', borderRadius: 999, padding: '4px 10px', fontSize: 11, fontWeight: 500 }}>
@@ -36,7 +36,7 @@ export default async function SalasInicio() {
             </div>
             <div style={{ padding: '16px 18px 18px' }}>
               <div style={{ fontSize: 17, fontWeight: 500, letterSpacing: '-0.01em' }}>{s.nombre}</div>
-              {p?.descripcion && <div style={{ fontSize: 12, color: S.soft, marginTop: 4, lineHeight: 1.45 }}>{p.descripcion}</div>}
+              {(p?.descripcion || s.tipo === 'prospeccion') && <div style={{ fontSize: 12, color: S.soft, marginTop: 4, lineHeight: 1.45 }}>{p?.descripcion ?? `Prospección · presentación del estudio para ${s.perfil === 'constructora' ? 'constructoras' : 'developers'}`}</div>}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 16, paddingTop: 14, borderTop: `1px solid ${S.lineSoft}` }}>
                 <Mini v={String(k.leads)} l="Leads" />
                 <Mini v={String(k.sesiones)} l="Visitas" />

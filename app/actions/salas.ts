@@ -12,6 +12,7 @@ import {
   type Miembro,
 } from '@/lib/salas/panel'
 import { pinNuevo } from '@/lib/salas/servidor'
+import { LOGO_MAX_BYTES, borrarLogo, guardarLogo, tokenNuevo } from '@/lib/salas/prospeccion'
 
 type R<T = object> = ({ ok: true } & T) | { ok: false; error: string }
 
@@ -261,6 +262,119 @@ export async function actualizarConfidencialSala(salaId: string, confidencial: b
     await auditar(m.id, confidencial ? 'sala_confidencial' : 'sala_compartible', salaId)
     revalidatePath('/salas/equipo')
     revalidatePath('/salas')
+    return {}
+  })
+}
+
+// ── Prospección (/para/<token>) ─────────────────────────────────────────────
+
+export interface ProspectoInput extends LeadInput {
+  cargo?: string
+  pais?: string
+  idioma: 'es' | 'en'
+  tratamiento: 'tu' | 'usted'
+  mensaje?: string
+}
+
+function filaProspecto(d: ProspectoInput) {
+  if (!limpio(d.empresa, 120)) throw new Error('Falta la empresa.')
+  return {
+    ...filaLead(d),
+    cargo: limpio(d.cargo, 120), pais: limpio(d.pais, 60), mensaje: limpio(d.mensaje, 600),
+    idioma: d.idioma === 'en' ? 'en' : 'es', tratamiento: d.tratamiento === 'usted' ? 'usted' : 'tu',
+  }
+}
+
+async function salaProspeccion(m: Miembro, slug: string) {
+  const sala = await salaDe(m, slug)
+  if (!sala) throw new Error('Sin acceso a esta sala.')
+  if (sala.tipo !== 'prospeccion') throw new Error('Esta sala no es de prospección.')
+  return sala
+}
+
+export async function crearProspecto(slug: string, d: ProspectoInput): Promise<R<{ id: string; token: string }>> {
+  return envolver(async () => {
+    const m = await requireMiembro()
+    const sala = await salaProspeccion(m, slug)
+    const fila = filaProspecto(d)
+    // el PIN no se usa en prospección (la llave es el enlace), pero la tabla lo exige
+    const [pin, token] = await Promise.all([pinNuevo(sala.id), tokenNuevo(fila.empresa, fila.nombre)])
+    const { data, error } = await createAdminClient().from('sala_leads')
+      .insert({ ...fila, sala_id: sala.id, pin, token, creado_por: m.id }).select('id').single()
+    if (error || !data) throw new Error(error?.message ?? 'No se pudo crear.')
+    await auditar(m.id, 'crear_lead', sala.id, `${fila.nombre} · ${fila.empresa}`)
+    revalidatePath(`/salas/${slug}`)
+    return { id: data.id as string, token }
+  })
+}
+
+export async function actualizarProspecto(leadId: string, d: ProspectoInput): Promise<R> {
+  return envolver(async () => {
+    const m = await requireMiembro()
+    const { sala } = await leadConPermiso(m, leadId)
+    const fila = filaProspecto(d)
+    const { error } = await createAdminClient().from('sala_leads').update(fila).eq('id', leadId)
+    if (error) throw new Error(error.message)
+    await auditar(m.id, 'editar_lead', sala.id, fila.nombre)
+    revalidatePath(`/salas/${sala.slug}`)
+    return {}
+  })
+}
+
+/** Sube el logo del lead (PNG, JPG, WebP o SVG): se recorta y se guarda en versión original y en blanco. */
+export async function subirLogoProspecto(leadId: string, form: FormData): Promise<R> {
+  return envolver(async () => {
+    const m = await requireMiembro()
+    const { sala } = await leadConPermiso(m, leadId)
+    const f = form.get('logo')
+    if (!(f instanceof File) || !f.size) throw new Error('Elige un archivo.')
+    if (f.size > LOGO_MAX_BYTES) throw new Error('El logo pesa demasiado (máximo 3 MB).')
+    if (!/^image\/(png|jpeg|webp|svg\+xml)$/.test(f.type)) throw new Error('Sube el logo en PNG, JPG, WebP o SVG.')
+    const admin = createAdminClient()
+    const { data: previo } = await admin.from('sala_leads').select('logo_path').eq('id', leadId).single()
+    const carpeta = await guardarLogo(leadId, Buffer.from(await f.arrayBuffer()))
+    const { error } = await admin.from('sala_leads').update({ logo_path: carpeta }).eq('id', leadId)
+    if (error) throw new Error(error.message)
+    if (previo?.logo_path) await borrarLogo(previo.logo_path)
+    await auditar(m.id, 'logo_lead', sala.id)
+    revalidatePath(`/salas/${sala.slug}`)
+    return {}
+  })
+}
+
+export async function quitarLogoProspecto(leadId: string): Promise<R> {
+  return envolver(async () => {
+    const m = await requireMiembro()
+    const { sala } = await leadConPermiso(m, leadId)
+    const admin = createAdminClient()
+    const { data: previo } = await admin.from('sala_leads').select('logo_path').eq('id', leadId).single()
+    await admin.from('sala_leads').update({ logo_path: null }).eq('id', leadId)
+    if (previo?.logo_path) await borrarLogo(previo.logo_path)
+    revalidatePath(`/salas/${sala.slug}`)
+    return {}
+  })
+}
+
+export async function modoLogoProspecto(leadId: string, modo: 'blanco' | 'original'): Promise<R> {
+  return envolver(async () => {
+    const m = await requireMiembro()
+    const { sala } = await leadConPermiso(m, leadId)
+    await createAdminClient().from('sala_leads').update({ logo_modo: modo === 'original' ? 'original' : 'blanco' }).eq('id', leadId)
+    revalidatePath(`/salas/${sala.slug}`)
+    return {}
+  })
+}
+
+/** Seguimiento comercial: enviado (o no) y descartado (o recuperado). */
+export async function marcarProspecto(leadId: string, campo: 'enviado' | 'descartado', valor: boolean): Promise<R> {
+  return envolver(async () => {
+    const m = await requireMiembro()
+    const { lead, sala } = await leadConPermiso(m, leadId)
+    const col = campo === 'enviado' ? 'enviado_en' : 'descartado_en'
+    const { error } = await createAdminClient().from('sala_leads').update({ [col]: valor ? new Date().toISOString() : null }).eq('id', leadId)
+    if (error) throw new Error(error.message)
+    await auditar(m.id, `${campo}_${valor ? 'si' : 'no'}`, sala.id, lead.nombre)
+    revalidatePath(`/salas/${sala.slug}`)
     return {}
   })
 }

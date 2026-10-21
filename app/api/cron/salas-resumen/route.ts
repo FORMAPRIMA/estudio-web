@@ -31,7 +31,16 @@ export async function GET(req: NextRequest) {
       const d = cache.get(s.id)!
       const recientes = d.sesiones.filter((x) => Date.parse(x.inicio) > desde && x.totalSlides > 0)
       const nuevos = d.leads.filter((l) => Date.parse(l.createdAt) > desde)
-      if (!recientes.length && !nuevos.length) continue
+      // Prospección: enviados hace más de 5 días que no se han abierto (un recordatorio
+      // para quien los creó; los propietarios lo ven en todas).
+      const conAlguna = new Set(d.sesiones.map((x) => x.leadId).filter(Boolean))
+      const sinAbrir = s.tipo !== 'prospeccion' ? [] : d.leads.filter((l) =>
+        l.estado === 'activo' && !l.descartadoEn && l.enviadoEn && Date.now() - Date.parse(l.enviadoEn) > 5 * 864e5 &&
+        !conAlguna.has(l.id) && (m.rol === 'propietario' || l.creadoPor === m.id))
+      const seguimiento = sinAbrir.length ? `
+        <p style="margin:10px 0 4px;color:#B03A2E;font-size:13px;">Sin abrir tras 5 días: buen momento para un seguimiento.</p>
+        <p style="margin:0;font-size:13px;">${sinAbrir.map((l) => `<a href="https://salas.formaprima.es/${s.slug}/lead/${l.id}" style="color:#1A1A1A;">${esc(l.empresa || l.nombre)}</a>`).join(' · ')}</p>` : ''
+      if (!recientes.length && !nuevos.length && !seguimiento) continue
       const conVisita = new Set(recientes.map((x) => x.leadId).filter(Boolean))
       const leads = resumenLeads(d).filter((r) => conVisita.has(r.lead.id)).sort((a, b) => b.temperatura.puntos - a.temperatura.puntos)
       const anon = recientes.filter((x) => !x.leadId).length
@@ -45,7 +54,7 @@ export async function GET(req: NextRequest) {
       bloques.push(`
         <h3 style="margin:22px 0 6px;font-size:15px;">${esc(s.nombre)}</h3>
         <p style="margin:0 0 8px;color:#555;font-size:13px;">${leads.length} ${leads.length === 1 ? 'lead ha entrado' : 'leads han entrado'} · ${anon} ${anon === 1 ? 'visita anónima' : 'visitas anónimas'}${nuevos.length ? ` · ${nuevos.length} ${nuevos.length === 1 ? 'lead nuevo' : 'leads nuevos'}` : ''}</p>
-        ${filas ? `<table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:13px;">${filas}</table>` : ''}`)
+        ${filas ? `<table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:13px;">${filas}</table>` : ''}${seguimiento}`)
     }
     if (!bloques.length || !m.email) continue
     const r = await sendEmail({
