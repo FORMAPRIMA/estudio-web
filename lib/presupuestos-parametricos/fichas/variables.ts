@@ -95,6 +95,21 @@ export const VARIABLES: Variable[] = [
   { codigo: 'n_electro_extra', nombre: 'Electrodomésticos extra', unidad: 'ud', tipo: 'numero', nivel: 'express',
     pregunta: '¿Cuántos electrodomésticos extra? (vinoteca, segundo horno, cafetera integrada…)', defecto: 0 },
 
+  { codigo: 'cambiar_puerta_entrada', nombre: 'Puerta de entrada nueva', unidad: '', tipo: 'si_no', nivel: 'express',
+    pregunta: '¿Se cambia la puerta de entrada?', defecto: 'si' },
+  { codigo: 'n_puertas_correderas', nombre: 'Puertas correderas', unidad: 'ud', tipo: 'numero', nivel: 'express',
+    pregunta: '¿Cuántas puertas de paso serán correderas?', defecto: 0 },
+  { codigo: 'vestidor_proy', nombre: 'Vestidor', unidad: '', tipo: 'si_no', nivel: 'express',
+    pregunta: '¿El dormitorio principal tendrá vestidor?', defecto: 'no' },
+  { codigo: 'ml_muebles_medida', nombre: 'Muebles a medida', unidad: 'ml', tipo: 'numero', nivel: 'express',
+    pregunta: '¿Cuántos metros de muebles a medida? (librerías, mueble de TV, bancos…)', defecto: 0 },
+  { codigo: 'm2_panelados', nombre: 'Panelados y frisos', unidad: 'm²', tipo: 'numero', nivel: 'express',
+    pregunta: '¿Cuántos m² de panelados o frisos de madera?', defecto: 0 },
+  { codigo: 'ml_armarios_proy', nombre: 'Armarios empotrados', unidad: 'ml', tipo: 'numero', nivel: 'tecnico',
+    pregunta: 'Metros de frente de armario empotrado, si ya se conocen', ayuda: 'Opcional. Si no, se estiman por dormitorio y crecen con la superficie.' },
+  { codigo: 'ml_vestidor_proy', nombre: 'Vestidor', unidad: 'ml', tipo: 'numero', nivel: 'tecnico',
+    pregunta: 'Metros de frente del vestidor, si ya se conocen', ayuda: 'Opcional. Si no, 5 ml por cada 100 m² útiles (mínimo 4).' },
+
   // ── Técnico: el arquitecto lo mide en poco tiempo ──────────────────────────
   { codigo: 'altura_libre', nombre: 'Altura libre', unidad: 'm', tipo: 'numero', nivel: 'tecnico',
     pregunta: 'Altura de suelo acabado a cara inferior del forjado',
