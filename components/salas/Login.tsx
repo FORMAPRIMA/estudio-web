@@ -1,8 +1,9 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { entrarSalas } from '@/app/actions/salas'
+import { urlInternal } from '@/lib/salas/puente-url'
 import { S } from './theme'
 
 export default function Login() {
@@ -11,6 +12,12 @@ export default function Login() {
   const [estado, setEstado] = useState<'idle' | 'comprobando' | 'error'>('idle')
   const [msg, setMsg] = useState('')
   const ref = useRef<HTMLInputElement>(null)
+  const [internal, setInternal] = useState('https://internal.formaprima.es')
+  const [paseCaducado, setPaseCaducado] = useState(false)
+  useEffect(() => {
+    setInternal(urlInternal(window.location.host))
+    setPaseCaducado(new URLSearchParams(window.location.search).get('pase') === 'caducado')
+  }, [])
 
   const enviar = async (v: string) => {
     if (v.length !== 8 || estado === 'comprobando') return
@@ -49,9 +56,19 @@ export default function Login() {
             }}
           />
         </form>
-        <p role="status" style={{ minHeight: 20, fontSize: 13, margin: '12px 0 0', color: estado === 'error' ? S.red : S.soft }}>
-          {estado === 'comprobando' ? 'Comprobando…' : estado === 'error' ? msg : ''}
+        <p role="status" style={{ minHeight: 20, fontSize: 13, margin: '12px 0 0', color: estado === 'error' || paseCaducado ? S.red : S.soft }}>
+          {estado === 'comprobando' ? 'Comprobando…' : estado === 'error' ? msg : paseCaducado ? 'El acceso con tu cuenta ha caducado. Vuelve a intentarlo.' : ''}
         </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '22px 0 18px', color: S.faint, fontSize: 12 }}>
+          <span style={{ flex: 1, height: 1, background: S.line }} />o<span style={{ flex: 1, height: 1, background: S.line }} />
+        </div>
+        <a href={`${internal}/team/salas`} style={{
+          display: 'block', textAlign: 'center', padding: '13px 16px', border: `1px solid ${S.line}`, borderRadius: 8, background: S.panel,
+          color: S.ink, fontSize: 14, textDecoration: 'none', fontWeight: 500,
+        }}>
+          Entrar con mi cuenta de Forma Prima
+        </a>
+        <p style={{ fontSize: 12, color: S.soft, margin: '8px 0 0', lineHeight: 1.5, textAlign: 'center' }}>Para el equipo del estudio: usa tu acceso de internal.</p>
         <p style={{ fontSize: 12, color: S.faint, marginTop: 40, lineHeight: 1.6 }}>
           ¿No tienes código? Pídeselo a Forma Prima en <a href="mailto:contacto@formaprima.es" style={{ color: 'inherit' }}>contacto@formaprima.es</a>.
         </p>

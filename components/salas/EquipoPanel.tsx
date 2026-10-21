@@ -19,7 +19,7 @@ const ACCIONES: Record<string, string> = {
   entrar: 'entró al panel', crear_lead: 'creó el lead', editar_lead: 'editó el lead', revocar_lead: 'revocó el PIN de',
   reactivar_lead: 'reactivó el PIN de', renovar_pin: 'generó un PIN nuevo para', exportar_csv: 'exportó el CSV',
   crear_miembro: 'dio acceso a', editar_miembro: 'editó a', desactivar_miembro: 'desactivó a', regenerar_codigo: 'generó un código nuevo para',
-  sala_confidencial: 'marcó como confidencial', sala_compartible: 'abrió al equipo',
+  sala_confidencial: 'marcó como confidencial', sala_compartible: 'abrió al equipo', entrar_cuenta_fp: 'entró con su cuenta de Forma Prima',
 }
 
 export default function EquipoPanel({ yo, miembros, salas, registro }: {
@@ -97,6 +97,7 @@ export default function EquipoPanel({ yo, miembros, salas, registro }: {
         <Modal titulo={`Código de ${codigo.nombre}`} onCerrar={() => setCodigo(null)}>
           <p style={{ fontSize: 13, color: S.soft, margin: '0 0 14px', lineHeight: 1.5 }}>
             Es la única vez que se muestra: no se guarda en ningún sitio. Envíaselo junto con la dirección <b style={{ color: S.ink }}>salas.formaprima.es</b>.
+            {' '}Si es del equipo del estudio no hace falta: entra con su cuenta de internal («Entrar con mi cuenta de Forma Prima»), siempre que su email aquí sea el mismo.
           </p>
           <div style={{ fontSize: 34, fontWeight: 300, letterSpacing: '0.2em', textAlign: 'center', padding: '18px 0', background: S.bg, borderRadius: 8, fontVariantNumeric: 'tabular-nums' }}>
             {codigo.codigo.replace(/(\d{4})/, '$1 ')}
