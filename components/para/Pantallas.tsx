@@ -14,18 +14,23 @@ import type { Idioma } from '@/lib/para/textos'
 export type AlEvento = (k: string, d?: string) => void
 
 /** Marco común: tema, rótulo numerado y la clase «visto» que dispara las entradas. */
-export function Pantalla({ id, tema, num, rotulo, className = '', children, umbral = 0.3 }: {
+export function Pantalla({ id, tema, num, rotulo, className = '', children, umbral = 0.6 }: {
   id: string; tema: 'oscuro' | 'claro'; num: number; rotulo: string; className?: string; children: ReactNode; umbral?: number
 }) {
   const [ref, visto] = useVisto<HTMLElement>(umbral)
   return (
     <section ref={ref} data-pantalla={id} data-tema={tema === 'claro' ? 'claro' : undefined}
       className={`p-pant p-${tema} ${className}${visto ? ' visto' : ''}`}>
-      <p className="p-it p-in p-pant-rotulo">{String(num).padStart(2, '0')} · {rotulo}</p>
+      <Rotulo num={num} texto={rotulo} />
       {children}
     </section>
   )
 }
+
+/** Rótulo de sección: el número pequeño y el nombre de la sección bien visible. */
+export const Rotulo = ({ num, texto, className = '' }: { num: number; texto: string; className?: string }) => (
+  <p className={`p-rotulo-sec p-in p-pant-rotulo ${className}`}><span className="p-rotulo-n">{String(num).padStart(2, '0')}</span>{texto}</p>
+)
 
 const H = ({ children, d = '.1s' }: { children: ReactNode; d?: string }) => (
   <h2 className="p-h2"><span className="p-in-h"><span style={{ ['--d' as string]: d }}>{children}</span></span></h2>
@@ -170,43 +175,18 @@ export function Equipo({ t, lead, num }: { t: Textos; lead: LeadPara; num: numbe
       </div>
       <div className="p-cab"><H>{t.equipoTitulo}</H></div>
       <p className="p-texto p-in" style={D('.3s')}>{t.equipoTexto}</p>
-      <CarruselSolo className="p-personas">
-        {t.personas.map((p, i) => (
-          <li key={p.nombre} className={`p-in${p.nombre === lead.contacto.nombre ? ' contacto' : ''}`} style={D(`${0.3 + i * 0.06}s`)}>
-            <img src={p.foto} alt={p.nombre} loading="lazy" decoding="async" />
-            <b>{p.nombre}</b><span>{p.cargo}</span>
-          </li>
-        ))}
-      </CarruselSolo>
+      <div className="p-personas p-in" style={D('.3s')}>
+        <ul className="p-personas-pista">
+          {[...t.personas, ...t.personas].map((p, i) => (
+            <li key={i} className={`${p.nombre === lead.contacto.nombre ? 'contacto' : ''}${i >= t.personas.length ? ' p-copia' : ''}`} aria-hidden={i >= t.personas.length || undefined}>
+              <img src={p.foto} alt={p.nombre} loading="lazy" decoding="async" />
+              <b>{p.nombre}</b><span>{p.cargo}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
     </Pantalla>
   )
-}
-
-/** Lista horizontal que, si no cabe, se desplaza sola y despacio (ida y vuelta);
- *  se detiene unos segundos cuando el visitante la toca o la arrastra. */
-function CarruselSolo({ className, children }: { className: string; children: ReactNode }) {
-  const [ref, dentro] = useEnPantalla<HTMLUListElement>('0px')
-  const quieto = useRef(0)
-  useEffect(() => {
-    const el = ref.current
-    if (!el || !dentro || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-    let raf = 0, sentido = 1, x = el.scrollLeft, previo = performance.now()
-    const paso = (now: number) => {
-      const dt = Math.min(64, now - previo); previo = now
-      const max = el.scrollWidth - el.clientWidth
-      if (max > 4 && now > quieto.current) {
-        x += sentido * dt * 0.028
-        if (x >= max) { x = max; sentido = -1; quieto.current = now + 1800 }
-        if (x <= 0) { x = 0; sentido = 1; quieto.current = now + 1800 }
-        el.scrollLeft = x
-      } else x = el.scrollLeft
-      raf = requestAnimationFrame(paso)
-    }
-    raf = requestAnimationFrame(paso)
-    return () => cancelAnimationFrame(raf)
-  }, [dentro, ref])
-  const parar = () => { quieto.current = performance.now() + 5000 }
-  return <ul ref={ref} className={className} onPointerDown={parar} onTouchStart={parar} onWheel={parar}>{children}</ul>
 }
 
 function Puntos({ puntos, base = 0.3 }: { puntos: { t: string; d: string }[]; base?: number }) {
@@ -226,7 +206,12 @@ function Puntos({ puntos, base = 0.3 }: { puntos: { t: string; d: string }[]; ba
 export function Producto({ t, num }: { t: Textos; num: number }) {
   return (
     <Pantalla id="producto" tema="claro" num={num} rotulo={t.productoRotulo} className="p-dos p-producto">
-      <div className="p-dos-img p-in"><img src="/para/obra/cv-producto.webp" alt="" loading="lazy" decoding="async" /></div>
+      <div className="p-dos-img p-in">
+        <img className="p-solo-ancho" src="/para/obra/cv-producto.webp" alt="" loading="lazy" decoding="async" />
+        <div className="p-tipologias" aria-hidden>
+          {['a', 'b', 'c', 'd'].map((x, i) => <img key={x} src={`/para/obra/producto-${x}.webp`} alt="" loading="lazy" decoding="async" style={{ animationDelay: `${i * 2.6}s` }} />)}
+        </div>
+      </div>
       <div className="p-dos-txt">
         <H>{t.productoTitulo}</H>
         <p className="p-acompana p-in" style={D('.25s')}>{t.acompanamos.developer}</p>
@@ -432,13 +417,19 @@ export function Hablemos({ t, idioma, lead, num, alEvento, agenda, token }: {
 }
 
 export const CSS_PANTALLAS = CSS_AGENDA + CSS_PORTAL_DEMO + `
-.p-pant{position:relative;min-height:100svh;padding:calc(env(safe-area-inset-top) + 84px) var(--p-gutter) calc(env(safe-area-inset-bottom) + 56px);
+.p-sensor{position:absolute;inset:0;pointer-events:none;}
+.p-pant{position:relative;padding:calc(env(safe-area-inset-top) + 84px) var(--p-gutter) calc(env(safe-area-inset-bottom) + 56px);
   display:flex;flex-direction:column;gap:22px;overflow:hidden;}
 .p-oscuro{background:var(--p-negro);color:var(--p-blanco);}
 .p-claro{background:var(--p-papel);color:var(--p-tinta);}
 .p-claro .p-it{color:#4f6556;}
 .p-claro .p-texto{color:rgba(20,20,20,.68);}
 .p-pant-rotulo{margin-bottom:-4px!important;position:relative;z-index:2;}
+.p-rotulo-sec{display:flex;align-items:baseline;gap:12px;font-family:'Newsreader',serif;font-style:italic;font-weight:400;
+  font-size:clamp(20px,1rem + .9vw,30px);line-height:1.15;color:var(--p-salvia);}
+.p-claro .p-rotulo-sec{color:#4f6556;}
+.p-rotulo-n{font-family:'Hanken Grotesk',sans-serif;font-style:normal;font-size:12px;font-weight:500;letter-spacing:.14em;opacity:.8;
+  padding:3px 7px;border:1px solid currentColor;border-radius:999px;transform:translateY(-3px);}
 .p-cab{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;}
 .p-desliza{font-size:12px;letter-spacing:.16em;text-transform:uppercase;font-weight:500;color:rgba(20,20,20,.55);white-space:nowrap;}
 .p-pie{font-size:12px;letter-spacing:.14em;text-transform:uppercase;font-weight:500;color:rgba(20,20,20,.5);}
@@ -472,12 +463,18 @@ export const CSS_PANTALLAS = CSS_AGENDA + CSS_PORTAL_DEMO + `
 /* Equipo */
 .p-equipo-foto{margin:0 calc(var(--p-gutter) * -1) 4px;aspect-ratio:16/10;overflow:hidden;}
 .p-equipo-foto img{width:100%;height:100%;object-fit:cover;filter:grayscale(1);}
-.p-personas{list-style:none;margin:6px calc(var(--p-gutter) * -1) 0;padding:0 var(--p-gutter);scroll-padding-inline:var(--p-gutter);display:grid;grid-auto-flow:column;grid-auto-columns:40%;gap:12px;
-  overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;}
-.p-personas::-webkit-scrollbar{display:none;}
-.p-personas li{scroll-snap-align:start;display:flex;flex-direction:column;gap:3px;}
+.p-personas{margin:6px calc(var(--p-gutter) * -1) 0;overflow:hidden;}
+.p-personas-pista{list-style:none;margin:0;padding:0 0 0 var(--p-gutter);display:flex;gap:12px;width:max-content;animation:p-cinta-equipo 46s linear infinite;}
+.p-personas:active .p-personas-pista,.p-personas:hover .p-personas-pista{animation-play-state:paused;}
+@keyframes p-cinta-equipo{from{transform:translate3d(0,0,0)}to{transform:translate3d(calc(-50% - 6px),0,0)}}
+.p-personas li{flex:none;width:38vw;max-width:220px;display:flex;flex-direction:column;gap:3px;}
 .p-personas img{aspect-ratio:3/4;width:100%;object-fit:cover;filter:grayscale(1);margin-bottom:8px;transform:scale(1.03);transform-origin:50% 0;}
 .p-personas li{overflow:hidden;}
+@media (prefers-reduced-motion:reduce){.p-personas{overflow-x:auto;}.p-personas-pista{animation:none;}.p-copia{display:none!important;}}
+/* Producto en móvil: una tipología cada vez */
+.p-tipologias{display:none;position:relative;height:36svh;}
+.p-tipologias img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:0;animation:p-tipologia 10.4s ease-in-out infinite;}
+@keyframes p-tipologia{0%{opacity:0;transform:scale(.97)}6%,25%{opacity:1;transform:none}31%,100%{opacity:0;transform:scale(1.02)}}
 .p-personas b{font-weight:400;font-size:14px;}
 .p-personas span{font-size:12px;color:rgba(251,251,250,.6);line-height:1.35;}
 .p-personas li.contacto b::after{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--p-salvia);margin-left:8px;vertical-align:2px;}
@@ -610,8 +607,8 @@ export const CSS_PANTALLAS = CSS_AGENDA + CSS_PORTAL_DEMO + `
 @media (max-width:1023px){
   .p-movil{height:min(44svh,520px);}
   .p-dos-img>img{max-height:28svh;}
-  .p-producto .p-dos-img{margin:0 calc(var(--p-gutter) * -1);}
-  .p-producto .p-dos-img>img{width:100%;height:34svh;max-height:none;object-fit:cover;object-position:50% 18%;}
+  .p-producto .p-solo-ancho{display:none;}
+  .p-producto .p-tipologias{display:block;}
   .p-producto .p-puntos p{display:none;}
   .p-puntos li{padding:12px 0;}
   .p-puntos p{font-size:14px;margin-top:2px;}
@@ -632,6 +629,8 @@ export const CSS_PANTALLAS = CSS_AGENDA + CSS_PORTAL_DEMO + `
   .p-hablemos .p-contacto{margin-top:0;}
 }
 @media (max-width:700px) and (max-height:760px){
+  .p-tipologias{height:26svh;}
+  .p-personas li{width:31vw;}
   .p-movil{height:30svh;}
   .p-dossier .p-texto{font-size:14px;}
   .p-vl-lista p{display:none;}
@@ -650,14 +649,17 @@ export const CSS_PANTALLAS = CSS_AGENDA + CSS_PORTAL_DEMO + `
   .p-estudio .p-pant-rotulo{grid-column:1 / -1;}
   .p-cifras{margin:0;align-self:center;}
   .p-obra-pista{grid-auto-flow:row;grid-template-columns:repeat(3,1fr);grid-auto-columns:auto;overflow:visible;margin:8px 0 0;padding:0;gap:22px;}
-  .p-obra-img{aspect-ratio:auto;height:calc((100svh - 470px) / 2);max-height:260px;min-height:110px;}
+  .p-obra-img{aspect-ratio:auto;height:calc((100svh - 500px) / 2);max-height:250px;min-height:110px;}
   .p-desliza{display:none;}
   .p-equipo{display:grid;grid-template-columns:1fr 1fr;column-gap:56px;align-content:center;}
   .p-equipo .p-pant-rotulo{grid-column:1 / -1;}
   .p-equipo-foto{grid-row:2 / span 2;grid-column:2;margin:0;aspect-ratio:4/3;}
   .p-equipo .p-cab{grid-column:1;align-self:end;}
   .p-equipo .p-texto{grid-column:1;align-self:start;}
-  .p-personas{grid-column:1 / -1;grid-auto-flow:row;grid-template-columns:repeat(7,1fr);grid-auto-columns:auto;overflow:visible;margin:12px 0 0;padding:0;}
+  .p-personas{grid-column:1 / -1;margin:12px 0 0;overflow:visible;}
+  .p-personas-pista{display:grid;grid-template-columns:repeat(7,1fr);width:auto;padding:0;animation:none;}
+  .p-personas li{width:auto;max-width:none;}
+  .p-copia{display:none!important;}
   .p-dos{display:grid;grid-template-columns:1fr 1fr;column-gap:clamp(40px,6vw,112px);align-content:center;align-items:center;}
   .p-dos .p-pant-rotulo{grid-column:1 / -1;}
   .p-vl{display:grid;grid-template-columns:1fr 1fr;column-gap:clamp(48px,6vw,112px);align-content:center;align-items:center;}

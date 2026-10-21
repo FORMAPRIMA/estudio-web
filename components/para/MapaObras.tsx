@@ -17,7 +17,8 @@ import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { CAMARA, datosDeTarjeta, obraDeEntrada, tieneCoordenadas, type MapaPunto } from '@/lib/web-mapa'
 import type { Idioma, Textos } from '@/lib/para/textos'
-import { useBloqueoScroll, useEnPantalla, useVisto } from './Presentacion'
+import { contenedor, useBloqueoScroll, useEnPantalla, useVisto } from './Presentacion'
+import { Rotulo } from './Pantallas'
 
 /** Las cuatro sedes, para la vista de globo (mismo orden que T.paises). */
 const SEDES: [number, number][] = [
@@ -37,7 +38,7 @@ export default function MapaObras({ puntos, t, idioma, token: tokenServidor, num
 }) {
   const obras = useMemo(() => puntos.filter(tieneCoordenadas), [puntos])
   const [refCerca, cerca] = useEnPantalla<HTMLElement>('60% 0px')
-  const [refVisto, visto] = useVisto<HTMLDivElement>(0.55)
+  const [refVisto, visto] = useVisto<HTMLDivElement>(0.8)
   const lienzo = useRef<HTMLDivElement>(null)
   const mapa = useRef<mapboxgl.Map | null>(null)
   const marcasObra = useRef<mapboxgl.Marker[]>([])
@@ -133,7 +134,7 @@ export default function MapaObras({ puntos, t, idioma, token: tokenServidor, num
       setAterrizado(true)
       setClaro(true)
       // la barra superior relee el tema de la pantalla (oscura → clara)
-      requestAnimationFrame(() => window.dispatchEvent(new Event('scroll')))
+      requestAnimationFrame(() => contenedor()?.dispatchEvent(new Event('scroll')))
       marcasSede.current.forEach((mk) => mk.getElement().classList.add('fuera'))
       obras.forEach((p, i) => {
         const el = document.createElement('button')
@@ -153,7 +154,7 @@ export default function MapaObras({ puntos, t, idioma, token: tokenServidor, num
     setTimeout(() => {
       if (sinMovimiento()) { m.jumpTo(destino); aterrizar(); return }
       m.flyTo({ ...destino, duration: VUELO_MS, curve: 1.42, essential: true })
-      setTimeout(() => { setClaro(true); requestAnimationFrame(() => window.dispatchEvent(new Event('scroll'))) }, 1700)
+      setTimeout(() => { setClaro(true); requestAnimationFrame(() => contenedor()?.dispatchEvent(new Event('scroll'))) }, 1700)
       m.once('moveend', aterrizar)
     }, 1400)
   }, [listo, visto, obras])
@@ -220,8 +221,10 @@ export default function MapaObras({ puntos, t, idioma, token: tokenServidor, num
       {/* En móvil, en reposo, un toque abre el mapa; el deslizamiento sigue siendo de la página. */}
       {!explorando && <button type="button" className="p-mapa-toque" aria-label={t.explorarMapa} onClick={() => setExplorando(true)} />}
 
-      <div ref={refVisto} className={`p-mapa-txt${visto ? ' visto' : ''}${explorando ? ' oculto' : ''}`}>
-        <p className="p-it p-in">{String(num).padStart(2, '0')} · {t.mapaRotulo}</p>
+      {/* sensor de pantalla completa: el vuelo arranca con la pantalla ya en su sitio */}
+      <div ref={refVisto} className="p-sensor" aria-hidden />
+      <div className={`p-mapa-txt${visto ? ' visto' : ''}${explorando ? ' oculto' : ''}`}>
+        <Rotulo num={num} texto={t.mapaRotulo} />
         <h2 className="p-h2"><span className="p-in-h"><span style={{ ['--d' as string]: '.12s' }}>{t.mapaTitulo}</span></span></h2>
         <p className="p-mapa-sub p-in" style={{ ['--d' as string]: '.3s' }}><span key={aterrizado ? 'b' : 'a'} className={aterrizado ? 'p-cambio-sub' : ''}>{aterrizado ? t.mapaAterriza : t.mapaSub}</span></p>
         <div className="p-mapa-pie p-in" style={{ ['--d' as string]: '.4s' }}>
@@ -284,7 +287,7 @@ const CSS = `
 .p-mapa.ciudad .p-mapa-velo{background:none;}
 .p-mapa.ciudad .p-mapa-velo::after{opacity:1;}
 .p-mapa.ciudad .p-mapa-txt .p-h2,.p-mapa.ciudad .p-cifra b{color:#141414;text-shadow:none;}
-.p-mapa.ciudad .p-mapa-txt .p-it{color:#4f6556;text-shadow:none;}
+.p-mapa.ciudad .p-mapa-txt .p-it,.p-mapa.ciudad .p-rotulo-sec{color:#4f6556;text-shadow:none;}
 .p-mapa.ciudad .p-cifra{color:rgba(20,20,20,.62);text-shadow:none;}
 .p-mapa.ciudad .p-explorar{color:#141414;border-color:rgba(20,20,20,.22);background:rgba(244,243,240,.72);}
 .p-mapa.ciudad .p-mapa-ayuda{color:rgba(20,20,20,.7);}

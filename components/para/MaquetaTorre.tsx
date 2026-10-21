@@ -13,7 +13,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { buildConjunto, eur, type ModoId, type Vivienda } from '@/lib/visual-lab/mendez'
 import type { Escena } from '@/components/team/visual-lab/escena-mendez'
 import type { Textos } from '@/lib/para/textos'
-import { useBloqueoScroll, useEnPantalla, useVisto } from './Presentacion'
+import { contenedor, useBloqueoScroll, useEnPantalla, useVisto } from './Presentacion'
+import { Rotulo } from './Pantallas'
 
 const MODOS: ModoId[] = ['disponibilidad', 'plantas', 'asoleamiento', 'vista']
 const COLOR: Record<string, string> = { disponible: '#3D8B5F', negociacion: '#5B7FA6', reservada: '#8A6220', vendida: '#9C9C96', piloto: '#8A5A72' }
@@ -26,7 +27,7 @@ export default function MaquetaTorre({ t, num, alEvento }: { t: Textos; num: num
 
   const [refCerca, cerca] = useEnPantalla<HTMLElement>('70% 0px')
   const [refActiva, activa] = useEnPantalla<HTMLDivElement>('0px')
-  const [refVisto, visto] = useVisto<HTMLDivElement>(0.5)
+  const [refVisto, visto] = useVisto<HTMLDivElement>(0.8)
   const wrap = useRef<HTMLDivElement>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
   const etiqueta = useRef<HTMLDivElement>(null)
@@ -120,7 +121,7 @@ export default function MaquetaTorre({ t, num, alEvento }: { t: Textos; num: num
     requestAnimationFrame(() => {
       const sec = refCerca.current?.nextElementSibling as HTMLElement | null
       if (sec) sec.scrollIntoView({ behavior: sinMovimiento() ? 'auto' : 'smooth' })
-      else window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' })
+      else { const c = contenedor(); c?.scrollTo({ top: c.scrollHeight, behavior: 'smooth' }) }
     })
   }
 
@@ -133,9 +134,10 @@ export default function MaquetaTorre({ t, num, alEvento }: { t: Textos; num: num
 
   return (
     <section ref={refCerca} data-pantalla="maqueta" data-tema="claro" className={`p-escena p-maqueta${explorando ? ' explorando' : ''}`} aria-label={t.maquetaTitulo}>
+      <div ref={refVisto} className="p-sensor" aria-hidden />
       <div ref={refActiva} className="p-maqueta-grid">
-        <div ref={refVisto} className={`p-maqueta-txt${visto ? ' visto' : ''}`}>
-          <p className="p-it p-in">{String(num).padStart(2, '0')} · {t.maquetaRotulo}</p>
+        <div className={`p-maqueta-txt${visto ? ' visto' : ''}`}>
+          <Rotulo num={num} texto={t.maquetaRotulo} />
           <h2 className="p-h2"><span className="p-in-h"><span style={{ ['--d' as string]: '.12s' }}>{t.maquetaTitulo}</span></span></h2>
           <p className="p-texto p-in p-maqueta-texto" style={{ ['--d' as string]: '.3s' }}>{t.maquetaTexto}</p>
           <div className="p-maqueta-dato p-in" style={{ ['--d' as string]: '.42s' }}>
@@ -213,7 +215,7 @@ const CSS = `
 .p-maqueta{background:#f4f3f0;color:#141414;}
 .p-maqueta-grid{position:absolute;inset:0;display:grid;grid-template-rows:auto 1fr auto;}
 .p-maqueta-txt{position:relative;z-index:2;padding:calc(env(safe-area-inset-top) + 76px) var(--p-gutter) 0;display:flex;flex-direction:column;gap:14px;pointer-events:none;}
-.p-maqueta .p-it{color:#4f6556;}
+.p-maqueta .p-it,.p-maqueta .p-rotulo-sec{color:#4f6556;}
 .p-maqueta .p-h2{max-width:14ch;}
 .p-maqueta-texto{display:none;color:rgba(20,20,20,.68);}
 .p-maqueta-dato{display:flex;align-items:baseline;gap:8px;font-size:13px;color:rgba(20,20,20,.62);}

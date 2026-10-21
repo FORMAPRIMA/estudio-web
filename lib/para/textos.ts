@@ -33,6 +33,7 @@ export const mesAnio = (d: Date, l: Idioma) => `${MESES[l][d.getMonth()]} ${d.ge
 export const T = {
   es: {
     preparado: (empresa: string, fecha: string) => `Preparado para ${empresa} · ${fecha}`,
+    preparadoPara: 'Preparado para',
     hola: (nombre: string) => `${nombre}, esto es`,
     marca: 'Forma Prima.',
     lema: { developer: 'Arquitectura y diseño. Y las herramientas para venderlo.', constructora: 'Arquitectura y diseño. Y planos que se construyen sin dudas.' },
@@ -209,6 +210,7 @@ export const T = {
   },
   en: {
     preparado: (empresa: string, fecha: string) => `Prepared for ${empresa} · ${fecha}`,
+    preparadoPara: 'Prepared for',
     hola: (nombre: string) => `${nombre}, this is`,
     marca: 'Forma Prima.',
     lema: { developer: 'Architecture and design. And the tools to sell it.', constructora: 'Architecture and design. And drawings that build without guesswork.' },

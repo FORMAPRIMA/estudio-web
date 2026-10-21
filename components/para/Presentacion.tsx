@@ -51,13 +51,22 @@ export function useEnPantalla<T extends HTMLElement>(margen = '0px') {
   return [ref, dentro] as const
 }
 
-/** Bloquea el scroll de la página mientras se explora un interactivo a pantalla completa. */
+/**
+ * El dossier se desplaza dentro de un contenedor fijo del tamaño exacto de la
+ * ventana (.para), no el documento: así Safari en iPhone nunca esconde sus barras
+ * a mitad de recorrido y cada pantalla mide justo lo visible (con el documento
+ * desplazándose, al ocultarse la barra asomaba la pantalla siguiente).
+ */
+export const contenedor = () => document.querySelector<HTMLElement>('.para')
+
+/** Bloquea el scroll del dossier mientras se explora un interactivo a pantalla completa. */
 export function useBloqueoScroll(activo: boolean) {
   useEffect(() => {
-    if (!activo) return
-    const h = document.documentElement, prev = h.style.overflow
-    h.style.overflow = 'hidden'
-    return () => { h.style.overflow = prev }
+    const c = contenedor()
+    if (!activo || !c) return
+    const prev = c.style.overflowY
+    c.style.overflowY = 'hidden'
+    return () => { c.style.overflowY = prev }
   }, [activo])
 }
 
@@ -86,7 +95,7 @@ export default function Presentacion({ lead, puntos, mapboxToken, medicion = nul
       ss.forEach((el, k) => { const d = Math.abs(el.getBoundingClientRect().top); if (d < mejor) { mejor = d; i = k } })
       return i
     }
-    const bloqueada = () => document.documentElement.style.overflow === 'hidden'
+    const bloqueada = () => contenedor()?.style.overflowY === 'hidden'
     const ir = (paso: number) => {
       const ss = secciones(), i = actual(), j = Math.max(0, Math.min(ss.length - 1, i + paso))
       if (j !== i) ss[j].scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
@@ -147,12 +156,13 @@ export default function Presentacion({ lead, puntos, mapboxToken, medicion = nul
 
   useEffect(() => {
     let raf = 0
+    const c = contenedor()
+    if (!c) return
     const medir = () => {
       raf = 0
-      const h = document.documentElement
-      const max = h.scrollHeight - h.clientHeight
-      setProgreso(max > 0 ? h.scrollTop / max : 0)
-      setPasada(h.scrollTop > window.innerHeight * 0.6)
+      const max = c.scrollHeight - c.clientHeight
+      setProgreso(max > 0 ? c.scrollTop / max : 0)
+      setPasada(c.scrollTop > c.clientHeight * 0.6)
       // la barra cambia de tinta sobre las pantallas claras (la maqueta)
       const y = 36
       setClaro(Array.from(document.querySelectorAll<HTMLElement>('[data-tema="claro"]')).some((el) => {
@@ -162,9 +172,9 @@ export default function Presentacion({ lead, puntos, mapboxToken, medicion = nul
     }
     const onScroll = () => { if (!raf) raf = requestAnimationFrame(medir) }
     medir()
-    window.addEventListener('scroll', onScroll, { passive: true })
+    c.addEventListener('scroll', onScroll, { passive: true })
     window.addEventListener('resize', onScroll)
-    return () => { window.removeEventListener('scroll', onScroll); window.removeEventListener('resize', onScroll); cancelAnimationFrame(raf) }
+    return () => { c.removeEventListener('scroll', onScroll); window.removeEventListener('resize', onScroll); cancelAnimationFrame(raf) }
   }, [])
 
   function pantalla(id: PantallaId, num: number) {
@@ -223,16 +233,17 @@ function Portada({ lead, t, idioma }: { lead: LeadPara; t: Textos; idioma: Idiom
       <div className="p-portada-txt">
         <div className="p-marcas">
           <img src="/para/logo-h-white.png" alt="Forma Prima" className="p-marca-fp" />
-          <span className="p-marcas-lead">
-            <span className="p-marcas-x" aria-hidden>×</span>
-            {lead.logo
-              ? <img src={lead.logo} alt={lead.empresa} className="p-marca-lead" />
-              : <span className="p-marca-texto">{lead.empresa}</span>}
-          </span>
         </div>
 
         <div className="p-portada-centro">
-          <p className="p-it p-a" style={{ ['--d' as string]: '.55s' }}>{t.preparado(lead.empresa, fecha)}</p>
+          {/* para quién es: lo primero que se lee, en grande */}
+          <div className="p-para-quien p-a" style={{ ['--d' as string]: '.5s' }}>
+            <span className="p-para-et">{t.preparadoPara}</span>
+            {lead.logo
+              ? <img src={lead.logo} alt={lead.empresa} className="p-para-logo" />
+              : <span className="p-para-empresa">{lead.empresa}</span>}
+            <span className="p-para-fecha">{fecha}</span>
+          </div>
           <h1 className="p-portada-h1">
             <span className="p-linea"><span style={{ ['--d' as string]: '.7s' }}>{t.hola(lead.nombre)}</span></span>
             <span className="p-linea"><span style={{ ['--d' as string]: '.84s' }}>{t.marca}</span></span>
@@ -253,11 +264,12 @@ function Portada({ lead, t, idioma }: { lead: LeadPara; t: Textos; idioma: Idiom
 const CSS = `
 :root{--p-negro:#0d0d0d;--p-grafito:#141414;--p-blanco:#fbfbfa;--p-papel:#f4f3f0;--p-tinta:#141414;--p-salvia:#8fa596;--p-verde:#2f4238;
   --p-curva:cubic-bezier(.16,1,.3,1);--p-gutter:clamp(20px,5.4vw,104px);}
-html{background:#0d0d0d;scroll-behavior:auto;scroll-snap-type:y mandatory;overscroll-behavior-y:none;}
-/* Cada pantalla mide exactamente lo que la ventana y es un punto de parada obligatorio. */
-[data-pantalla]{scroll-snap-align:start;scroll-snap-stop:always;height:100svh!important;min-height:0!important;overflow:hidden;}
-[data-pantalla].explorando,[data-pantalla].amplio{height:100%!important;}
-body{background:#0d0d0d!important;margin:0;}
+html,body{background:#0d0d0d!important;margin:0;height:100%;overflow:hidden;overscroll-behavior:none;}
+/* El dossier desplaza dentro de este contenedor fijo (ver contenedor() arriba). */
+.para{position:fixed;inset:0;overflow-x:hidden;overflow-y:auto;scroll-snap-type:y mandatory;overscroll-behavior:none;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+.para::-webkit-scrollbar{display:none;}
+/* Cada pantalla mide exactamente lo visible y es un punto de parada obligatorio. */
+[data-pantalla]{scroll-snap-align:start;scroll-snap-stop:always;height:100%!important;min-height:0!important;overflow:hidden;}
 .para{font-family:'Hanken Grotesk',system-ui,sans-serif;color:var(--p-blanco);background:var(--p-negro);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;font-weight:300;}
 .para *{box-sizing:border-box;}
 .para img{display:block;max-width:100%;}
@@ -286,14 +298,14 @@ body{background:#0d0d0d!important;margin:0;}
 .p-progreso.claro{background:#2f4238;}
 
 /* ── Portada ─────────────────────────────────────────────────────────── */
-.p-portada{position:relative;height:100svh;display:grid;overflow:hidden;background:var(--p-negro);}
+.p-portada{position:relative;height:100%;display:grid;overflow:hidden;background:var(--p-negro);}
 .p-portada-img{position:absolute;inset:0;overflow:hidden;}
 .p-portada-img img{width:100%;height:100%;object-fit:cover;object-position:50% 40%;transform:scale(1.12);opacity:0;
   transition:transform 2.8s cubic-bezier(.22,1,.36,1),opacity 1.6s cubic-bezier(.33,0,.2,1);}
 .p-portada.in .p-portada-img img{transform:scale(1);opacity:1;}
 .p-portada-img::after{content:'';position:absolute;inset:0;
-  background:linear-gradient(180deg,rgba(13,13,13,.55) 0%,rgba(13,13,13,.05) 26%,rgba(13,13,13,.25) 52%,rgba(13,13,13,.92) 82%,#0d0d0d 100%);}
-.p-portada-txt{position:relative;z-index:1;display:flex;flex-direction:column;justify-content:space-between;height:100svh;
+  background:linear-gradient(180deg,rgba(13,13,13,.55) 0%,rgba(13,13,13,.1) 22%,rgba(13,13,13,.55) 44%,rgba(13,13,13,.9) 66%,#0d0d0d 100%);}
+.p-portada-txt{position:relative;z-index:1;display:flex;flex-direction:column;justify-content:space-between;height:100%;
   padding:calc(env(safe-area-inset-top) + 22px) var(--p-gutter) calc(env(safe-area-inset-bottom) + 26px);}
 .p-marcas{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;min-height:40px;padding-right:112px;opacity:0;transition:opacity 1.2s .35s var(--p-curva);}
 .p-portada.in .p-marcas{opacity:1;}
@@ -301,6 +313,11 @@ body{background:#0d0d0d!important;margin:0;}
 .p-marcas-lead{display:inline-flex;align-items:center;gap:12px;white-space:nowrap;}
 .p-marcas-x{font-weight:200;font-size:18px;color:rgba(251,251,250,.5);line-height:1;}
 .p-marca-lead{max-height:clamp(22px,1rem + .8vw,32px);max-width:150px;width:auto;object-fit:contain;}
+.p-para-quien{display:flex;flex-direction:column;align-items:flex-start;gap:10px;margin-bottom:22px;padding-left:16px;border-left:2px solid var(--p-salvia);}
+.p-para-et{font-size:12px;letter-spacing:.2em;text-transform:uppercase;font-weight:500;color:rgba(251,251,250,.8);}
+.p-para-empresa{font-size:clamp(26px,1rem + 3vw,46px);font-weight:400;letter-spacing:.08em;text-transform:uppercase;line-height:1.05;color:#fff;text-shadow:0 2px 24px rgba(0,0,0,.55);}
+.p-para-logo{max-height:clamp(40px,1.6rem + 2vw,64px);max-width:min(260px,70vw);width:auto;object-fit:contain;filter:drop-shadow(0 2px 14px rgba(0,0,0,.5));}
+.p-para-fecha{font-family:'Newsreader',serif;font-style:italic;font-size:16px;color:rgba(251,251,250,.75);}
 .p-marca-texto{font-size:13px;letter-spacing:.22em;text-transform:uppercase;font-weight:500;white-space:nowrap;}
 .p-portada-centro{margin-top:auto;padding-bottom:clamp(28px,6vh,72px);}
 .p-portada-h1{font-size:clamp(46px,1.4rem + 7.2vw,104px);line-height:.98;margin-top:18px !important;}
@@ -318,7 +335,7 @@ body{background:#0d0d0d!important;margin:0;}
 
 @media (min-width:1024px){
   .p-portada{grid-template-columns:1fr 1fr;}
-  .p-portada-img{position:relative;inset:auto;height:100svh;}
+  .p-portada-img{position:relative;inset:auto;height:100%;}
   .p-portada-img::after{background:linear-gradient(90deg,rgba(13,13,13,0) 70%,rgba(13,13,13,.35) 100%);}
   .p-portada-txt{padding-top:calc(env(safe-area-inset-top) + 40px);padding-bottom:44px;}
   .p-portada-centro{margin-top:auto;margin-bottom:auto;padding-bottom:0;}
@@ -328,7 +345,7 @@ body{background:#0d0d0d!important;margin:0;}
 }
 
 /* ── Pantallas interactivas (mapa, maqueta): patrón común ─────────────── */
-.p-escena{position:relative;height:100svh;overflow:hidden;}
+.p-escena{position:relative;height:100%;overflow:hidden;}
 .p-escena.explorando{position:fixed;inset:0;height:100%;min-height:0;z-index:80;}
 .p-lienzo{position:absolute;inset:0;}
 .p-explorar{display:inline-flex;align-items:center;gap:10px;min-height:46px;padding:0 20px;border-radius:999px;border:1px solid rgba(251,251,250,.3);
