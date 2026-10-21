@@ -154,7 +154,7 @@ function Cinta({ laminas, sentido, activa }: { laminas: string[]; sentido: 1 | -
     if (!el || anim.current) return
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
     const de = sentido === 1 ? '0%' : '-50%', a = sentido === 1 ? '-50%' : '0%'
-    anim.current = el.animate([{ transform: `translate3d(${de},0,0)` }, { transform: `translate3d(${a},0,0)` }], { duration: 52_000, iterations: Infinity })
+    anim.current = el.animate([{ transform: `translate3d(${de},0,0)` }, { transform: `translate3d(${a},0,0)` }], { duration: 20_000, iterations: Infinity })
     anim.current.pause()
   }, [sentido])
   // Entra deprisa y se calma a velocidad de crucero; fuera de pantalla, quieta.
