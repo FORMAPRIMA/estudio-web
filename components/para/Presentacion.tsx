@@ -96,22 +96,34 @@ export default function Presentacion({ lead, puntos, mapboxToken, medicion = nul
       return i
     }
     const bloqueada = () => contenedor()?.style.overflowY === 'hidden'
+    // Si ya hay un desplazamiento en marcha, el siguiente cuenta desde su destino (no
+    // desde la posición a medio camino): dos gestos rápidos = dos pantallas, sin repetir.
+    let objetivo = -1, tObjetivo = 0
     const ir = (paso: number) => {
-      const ss = secciones(), i = actual(), j = Math.max(0, Math.min(ss.length - 1, i + paso))
-      if (j !== i) ss[j].scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
+      const ss = secciones()
+      const i = objetivo >= 0 && Date.now() - tObjetivo < 900 ? objetivo : actual()
+      const j = Math.max(0, Math.min(ss.length - 1, i + paso))
+      if (j === i) return
+      objetivo = j; tObjetivo = Date.now()
+      ss[j].scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
     }
-    let armado = true, t0 = 0, ultimo = 0, acum = 0
+    // La inercia del trackpad decae; un deslizamiento nuevo vuelve a crecer. Así se
+    // distingue «sigue el gesto anterior» (se ignora) de «otro gesto» (se atiende al
+    // momento, aunque la inercia del anterior no haya terminado).
+    let armado = true, t0 = 0, ultimo = 0, acum = 0, previo = 0, sentidoUltimo = 0
     const rueda = (e: WheelEvent) => {
       if (bloqueada() || e.ctrlKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return
       if ((e.target as HTMLElement).closest?.('textarea, .p-agenda-dias, [data-scroll-propio]')) return
       e.preventDefault()
-      const ahora = Date.now(), pausa = ahora - ultimo
+      const ahora = Date.now(), pausa = ahora - ultimo, d = Math.abs(e.deltaY), sentido = Math.sign(e.deltaY)
       ultimo = ahora
-      if (!armado && pausa > 200 && ahora - t0 > 650) armado = true
+      if (!armado && ahora - t0 > 280 && (pausa > 180 || (d > 12 && d > previo * 1.7) || sentido !== sentidoUltimo)) armado = true
+      previo = d
       if (!armado) return
       acum += e.deltaY
       if (Math.abs(acum) < 18) return
-      ir(acum > 0 ? 1 : -1)
+      sentidoUltimo = acum > 0 ? 1 : -1
+      ir(sentidoUltimo)
       armado = false; t0 = ahora; acum = 0
     }
     const teclas = (e: KeyboardEvent) => {
@@ -146,7 +158,7 @@ export default function Presentacion({ lead, puntos, mapboxToken, medicion = nul
     return () => { io.disconnect(); mo.disconnect() }
   }, [orden, alSlide])
 
-  const [progreso, setProgreso] = useState(0)
+  const barraProgreso = useRef<HTMLDivElement>(null)
   const [pasada, setPasada] = useState(false)
   const [claro, setClaro] = useState(false)
 
@@ -161,7 +173,8 @@ export default function Presentacion({ lead, puntos, mapboxToken, medicion = nul
     const medir = () => {
       raf = 0
       const max = c.scrollHeight - c.clientHeight
-      setProgreso(max > 0 ? c.scrollTop / max : 0)
+      // directo al estilo: un setState aquí re-dibujaba el dossier entero en cada fotograma
+      if (barraProgreso.current) barraProgreso.current.style.transform = `scaleX(${max > 0 ? c.scrollTop / max : 0})`
       setPasada(c.scrollTop > c.clientHeight * 0.6)
       // la barra cambia de tinta sobre las pantallas claras (la maqueta)
       const y = 36
@@ -201,7 +214,7 @@ export default function Presentacion({ lead, puntos, mapboxToken, medicion = nul
   return (
     <div className="para">
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
-      <div className={`p-progreso${claro ? ' claro' : ''}`} style={{ transform: `scaleX(${progreso})` }} aria-hidden />
+      <div ref={barraProgreso} className={`p-progreso${claro ? ' claro' : ''}`} style={{ transform: 'scaleX(0)' }} aria-hidden />
       <header className={`p-barra${pasada ? ' on' : ''}${claro ? ' claro' : ''}`}>
         <img src="/para/logo-h-white.png" alt="Forma Prima" className="p-barra-logo" />
         <button type="button" className="p-idioma" onClick={() => { const n = idioma === 'es' ? 'en' : 'es'; setIdioma(n); alEvento('idioma', n) }} lang={idioma === 'es' ? 'en' : 'es'}>

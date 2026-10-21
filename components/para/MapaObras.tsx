@@ -45,6 +45,7 @@ export default function MapaObras({ puntos, t, idioma, token: tokenServidor, num
   const marcasSede = useRef<mapboxgl.Marker[]>([])
   const orbitando = useRef(false)
   const volado = useRef(false)
+  const entrada = useRef(false)   // la obra seleccionada es la de entrada: la cámara no se mueve
   const [listo, setListo] = useState(false)
   const [aterrizado, setAterrizado] = useState(false)
   // La ciudad del estudio es clara: el texto pasa a tinta en cuanto la cámara deja el espacio.
@@ -127,9 +128,11 @@ export default function MapaObras({ puntos, t, idioma, token: tokenServidor, num
     const m = mapa.current
     if (!m || !listo || !visto || volado.current) return
     volado.current = true
-    const lng = obras.reduce((a, p) => a + p.lng, 0) / (obras.length || 1)
-    const lat = obras.reduce((a, p) => a + p.lat, 0) / (obras.length || 1)
-    const destino = { center: [lng || CAMARA.centro[0], lat || CAMARA.centro[1]] as [number, number], zoom: CAMARA.zoomEdificios, pitch: CAMARA.cabeceo, bearing: CAMARA.rumbo }
+    // Destino: la primera obra del mapa de la web, directamente (sin un segundo
+    // movimiento al abrir su ficha, que daba un tirón al aterrizar).
+    const primera = obraDeEntrada(obras) ?? obras[0]
+    const kPrimera = primera ? Math.max(0, obras.findIndex((o) => o.id === primera.id)) : 0
+    const destino = { center: (primera ? [primera.lng, primera.lat] : CAMARA.centro) as [number, number], zoom: CAMARA.zoomEdificios + 0.25, pitch: CAMARA.cabeceo, bearing: CAMARA.rumbo }
     const aterrizar = () => {
       setAterrizado(true)
       setClaro(true)
@@ -145,11 +148,10 @@ export default function MapaObras({ puntos, t, idioma, token: tokenServidor, num
         el.addEventListener('click', (e) => { e.stopPropagation(); setSel(i) })
         marcasObra.current.push(new mapboxgl.Marker({ element: el }).setLngLat([p.lng, p.lat]).addTo(m))
       })
-      // La primera obra (la de entrada del mapa de la web) se abre sola: así se ve qué
-      // hay detrás de cada punto sin tener que adivinarlo.
-      const primera = obraDeEntrada(obras)
-      const k = primera ? obras.findIndex((o) => o.id === primera.id) : 0
-      setTimeout(() => setSel(k >= 0 ? k : 0), 1600 + obras.length * 60)
+      // La primera obra se abre sola (la cámara ya está sobre ella): así se ve qué hay
+      // detrás de cada punto sin tener que adivinarlo.
+      entrada.current = true
+      setTimeout(() => setSel(kPrimera), 900)
     }
     setTimeout(() => {
       if (sinMovimiento()) { m.jumpTo(destino); aterrizar(); return }
@@ -190,6 +192,7 @@ export default function MapaObras({ puntos, t, idioma, token: tokenServidor, num
   useEffect(() => {
     marcasObra.current.forEach((mk, i) => mk.getElement().classList.toggle('sel', i === sel))
     const m = mapa.current
+    if (entrada.current) { entrada.current = false; return }
     if (m && sel != null && obras[sel]) {
       orbitando.current = false
       m.easeTo({ center: [obras[sel].lng, obras[sel].lat], zoom: Math.max(m.getZoom(), 15.6), duration: 1200, essential: true })

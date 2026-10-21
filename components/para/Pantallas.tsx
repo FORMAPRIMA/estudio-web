@@ -207,7 +207,6 @@ export function Producto({ t, num }: { t: Textos; num: number }) {
   return (
     <Pantalla id="producto" tema="claro" num={num} rotulo={t.productoRotulo} className="p-dos p-producto">
       <div className="p-dos-img p-in">
-        <img className="p-solo-ancho" src="/para/obra/cv-producto.webp" alt="" loading="lazy" decoding="async" />
         <div className="p-tipologias" aria-hidden>
           {['a', 'b', 'c', 'd'].map((x, i) => <img key={x} src={`/para/obra/producto-${x}.webp`} alt="" loading="lazy" decoding="async" style={{ animationDelay: `${i * 2.6}s` }} />)}
         </div>
@@ -473,7 +472,7 @@ export const CSS_PANTALLAS = CSS_AGENDA + CSS_PORTAL_DEMO + `
 @media (prefers-reduced-motion:reduce){.p-personas{overflow-x:auto;}.p-personas-pista{animation:none;}.p-copia{display:none!important;}}
 /* Producto en móvil: una tipología cada vez */
 .p-tipologias{display:none;position:relative;height:36svh;}
-.p-tipologias img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:0;animation:p-tipologia 10.4s ease-in-out infinite;}
+.p-tipologias img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;mix-blend-mode:multiply;opacity:0;animation:p-tipologia 10.4s ease-in-out infinite;}
 @keyframes p-tipologia{0%{opacity:0;transform:scale(.97)}6%,25%{opacity:1;transform:none}31%,100%{opacity:0;transform:scale(1.02)}}
 .p-personas b{font-weight:400;font-size:14px;}
 .p-personas span{font-size:12px;color:rgba(251,251,250,.6);line-height:1.35;}
@@ -607,7 +606,6 @@ export const CSS_PANTALLAS = CSS_AGENDA + CSS_PORTAL_DEMO + `
 @media (max-width:1023px){
   .p-movil{height:min(44svh,520px);}
   .p-dos-img>img{max-height:28svh;}
-  .p-producto .p-solo-ancho{display:none;}
   .p-producto .p-tipologias{display:block;}
   .p-producto .p-puntos p{display:none;}
   .p-puntos li{padding:12px 0;}
@@ -653,18 +651,22 @@ export const CSS_PANTALLAS = CSS_AGENDA + CSS_PORTAL_DEMO + `
   .p-desliza{display:none;}
   .p-equipo{display:grid;grid-template-columns:1fr 1fr;column-gap:56px;align-content:center;}
   .p-equipo .p-pant-rotulo{grid-column:1 / -1;}
-  .p-equipo-foto{grid-row:2 / span 2;grid-column:2;margin:0;aspect-ratio:4/3;}
+  .p-equipo-foto{grid-row:2 / span 2;grid-column:2;margin:0;aspect-ratio:auto;height:min(28svh,340px);align-self:center;}
   .p-equipo .p-cab{grid-column:1;align-self:end;}
   .p-equipo .p-texto{grid-column:1;align-self:start;}
   .p-personas{grid-column:1 / -1;margin:12px 0 0;overflow:visible;}
   .p-personas-pista{display:grid;grid-template-columns:repeat(7,1fr);width:auto;padding:0;animation:none;}
   .p-personas li{width:auto;max-width:none;}
+  .p-personas img{aspect-ratio:auto;height:min(28svh,320px);}
   .p-copia{display:none!important;}
   .p-dos{display:grid;grid-template-columns:1fr 1fr;column-gap:clamp(40px,6vw,112px);align-content:center;align-items:center;}
   .p-dos .p-pant-rotulo{grid-column:1 / -1;}
   .p-vl{display:grid;grid-template-columns:1fr 1fr;column-gap:clamp(48px,6vw,112px);align-content:center;align-items:center;}
   .p-vl .p-pant-rotulo{grid-column:1 / -1;}
   .p-dos-img>img{max-height:66svh;}
+  /* en escritorio, las cuatro tipologías a la vez y grandes (recortadas, sin el blanco del original) */
+  .p-producto .p-tipologias{display:grid;grid-template-columns:1fr 1fr;gap:clamp(16px,2vw,32px);height:auto;}
+  .p-producto .p-tipologias img{position:static;opacity:1;animation:none;width:100%;height:calc((100svh - 330px) / 2);max-height:360px;object-fit:contain;}
   .p-portal .p-dos-txt{order:0;}
   .p-ejecucion{display:grid;grid-template-columns:minmax(340px,.8fr) 1.6fr;column-gap:48px;align-content:center;align-items:center;}
   .p-ejecucion .p-pant-rotulo{grid-column:1 / -1;}
