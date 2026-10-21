@@ -90,6 +90,11 @@ export const VARIABLES: Variable[] = [
   { codigo: 'm2_bano_principal_proy', nombre: 'Superficie del baño principal', unidad: 'm²', tipo: 'numero', nivel: 'tecnico',
     pregunta: 'Superficie del baño principal, si ya se conoce', ayuda: 'Opcional. Si no, se estima como el 5,5 % de la útil (mínimo 4 m²).' },
 
+  { codigo: 'isla_cocina', nombre: 'Isla o península', unidad: '', tipo: 'si_no', nivel: 'express',
+    pregunta: '¿La cocina tendrá isla o península?', defecto: 'no' },
+  { codigo: 'n_electro_extra', nombre: 'Electrodomésticos extra', unidad: 'ud', tipo: 'numero', nivel: 'express',
+    pregunta: '¿Cuántos electrodomésticos extra? (vinoteca, segundo horno, cafetera integrada…)', defecto: 0 },
+
   // ── Técnico: el arquitecto lo mide en poco tiempo ──────────────────────────
   { codigo: 'altura_libre', nombre: 'Altura libre', unidad: 'm', tipo: 'numero', nivel: 'tecnico',
     pregunta: 'Altura de suelo acabado a cara inferior del forjado',

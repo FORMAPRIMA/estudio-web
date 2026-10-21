@@ -26,9 +26,9 @@ const K = {
   falso_techo_bano:      { valor: 0.25,  provisional: true, nota: 'el alicatado completo llega al falso techo: altura libre − 0,25 m' },
   alicatado_humedas:     { valor: 0.45,  provisional: true, nota: 'solo ducha y lavabo ≈ 45 % del alicatado completo' },
   puerta_m2:             { valor: 1.6,   provisional: true, nota: 'puerta de baño que se descuenta del alicatado completo' },
-  frente_cocina_alto:    { valor: 0.6,   provisional: true, nota: 'altura del frente alicatado entre encimera y muebles altos' },
-  frente_cocina_frac:    { valor: 0.5,   provisional: true, nota: 'fracción del perímetro de la cocina con encimera' },
   rodapie_coef:          { valor: 0.85,  provisional: true, nota: 'descuenta cuartos húmedos (sin rodapié) y puertas' },
+  mueble_frac:           { valor: 0.5,   provisional: false, nota: 'fracción del perímetro de la cocina con mueble (validado por José)' },
+  frente_alto:           { valor: 0.6,   provisional: false, nota: 'altura del frente aplacado entre encimera y muebles altos (validado por José)' },
 }
 const k = (c: keyof typeof K) => K[c].valor
 
@@ -50,6 +50,11 @@ export function zonasHumedas(v: Valores): Humedas | null {
   }
 }
 
+/** ml de mueble a lo largo de las paredes de una cocina de superficie a (sin isla). */
+export function mlCocina(a: number): number {
+  return k('perimetro_por_raiz') * Math.sqrt(a) * k('mueble_frac')
+}
+
 function esMicrocemento(v: Valores) { return texto(v, 'pavimento_secas') === 'microcemento' }
 
 /** m² de alicatado de un recinto húmedo de superficie a. */
@@ -66,11 +71,11 @@ function alicatado(v: Valores): Cantidad {
   if (modo == null) return SIN_DATO('alicatado de baños')
   const H = altura(v)
   const completo = modo === 'techo'
+  // El frente de la cocina no va aquí: es aplacado y se presupuesta con la encimera (ficha de Cocina).
   const banos = alicatadoRecinto(z.banoPpal, H, completo) + z.nBanosResto * alicatadoRecinto(k('bano_m2'), H, completo) + z.nAseos * alicatadoRecinto(k('aseo_m2'), H, completo)
-  const frente = k('perimetro_por_raiz') * Math.sqrt(z.cocina) * k('frente_cocina_frac') * k('frente_cocina_alto')
   return {
-    cantidad: banos + frente, fuente: 'express',
-    formula: `baños ${n2(banos)} m² (${completo ? 'hasta el techo' : 'solo zonas húmedas'}, perímetro 4,4·√sup) + frente de cocina ${n2(frente)} m²`,
+    cantidad: banos, fuente: 'express',
+    formula: `baños ${n2(banos)} m² (${completo ? 'hasta el techo' : 'solo zonas húmedas'}, perímetro 4,4·√sup)`,
   }
 }
 
@@ -80,7 +85,9 @@ function pintura(v: Valores): Cantidad {
   const u = num(v, 'sup_util')
   if (!f || t.fuente === 'sin_dato' || u == null) return SIN_DATO('paramentos, tabique nuevo y superficie útil')
   const al = alicatado(v)
-  const alic = al.fuente === 'sin_dato' ? 0 : al.cantidad
+  const z = zonasHumedas(v)
+  const aplacado = z ? mlCocina(z.cocina) * k('frente_alto') : 0
+  const alic = (al.fuente === 'sin_dato' ? 0 : al.cantidad) + aplacado
   const paredes = Math.max(0, f.m2 + 2 * t.cantidad - alic)
   return {
     cantidad: paredes + u, fuente: 'express',
@@ -143,7 +150,7 @@ export const FICHA_PINTURAS: Ficha = {
     { codigo: 'pyr_microcemento', nombre: 'Pavimento · microcemento', unidad: 'm²', criterio: 'Microcemento continuo en toda la vivienda.', subcapitulos: ['7_PYV_02'], variables: [...BASE, 'pavimento_secas'], cantidad: pavimentoSecas('microcemento') },
     { codigo: 'pyr_piedra', nombre: 'Pavimento · piedra o terrazo', unidad: 'm²', criterio: 'Piedra natural o terrazo en zonas secas.', subcapitulos: ['7_PYV_06'], variables: [...BASE, 'pavimento_secas'], cantidad: pavimentoSecas('piedra') },
     { codigo: 'pyr_pav_humedas', nombre: 'Pavimento de baños y cocina', unidad: 'm²', criterio: 'Solado de baños, aseos, cocina y lavadero.', subcapitulos: ['7_PYV_02'], variables: [...BASE, 'pavimento_secas'], cantidad: pavimentoHumedas },
-    { codigo: 'pyr_alicatado', nombre: 'Alicatados', unidad: 'm²', criterio: 'Alicatado de baños y aseos y frente de cocina.', subcapitulos: ['7_PYV_02'], variables: [...BASE, 'alicatado_banos', 'altura_libre', 'pavimento_secas'], cantidad: alicatado },
+    { codigo: 'pyr_alicatado', nombre: 'Alicatados', unidad: 'm²', criterio: 'Alicatado de baños y aseos. El frente de cocina es aplacado y va en Cocina.', subcapitulos: ['7_PYV_02'], variables: [...BASE, 'alicatado_banos', 'altura_libre', 'pavimento_secas'], cantidad: alicatado },
     { codigo: 'pyr_rodapie', nombre: 'Rodapié', unidad: 'ml', criterio: 'Rodapié de madera, metálico o enrasado en zonas secas.', subcapitulos: ['7_PYV_04'], variables: ['ml_muro_exterior', 'ml_muro_estructural', 'ml_tabique_demoler', 'n_estancias_actual', 'altura_libre'], cantidad: rodapieMl },
     { codigo: 'pyr_molduras', nombre: 'Molduras y cornisas', unidad: 'ml', criterio: 'Molduras de techo y cornisas.', subcapitulos: ['7_PYV_05'], variables: ['molduras', 'ml_muro_exterior', 'ml_muro_estructural'], cantidad: molduras },
   ],
