@@ -45,6 +45,8 @@ export default function MapaObras({ puntos, t, idioma, token: tokenServidor }: {
   const orbitando = useRef(false)
   const [listo, setListo] = useState(false)
   const [aterrizado, setAterrizado] = useState(false)
+  // La ciudad del estudio es clara: el texto pasa a tinta en cuanto la cámara deja el espacio.
+  const [claro, setClaro] = useState(false)
   const [explorando, setExplorando] = useState(false)
   const [sel, setSel] = useState<number | null>(null)
   const [fallo, setFallo] = useState(false)
@@ -115,6 +117,7 @@ export default function MapaObras({ puntos, t, idioma, token: tokenServidor }: {
     const destino = { center: [lng || CAMARA.centro[0], lat || CAMARA.centro[1]] as [number, number], zoom: CAMARA.zoomEdificios, pitch: CAMARA.cabeceo, bearing: CAMARA.rumbo }
     const aterrizar = () => {
       setAterrizado(true)
+      setClaro(true)
       // la barra superior relee el tema de la pantalla (oscura → clara)
       requestAnimationFrame(() => window.dispatchEvent(new Event('scroll')))
       marcasSede.current.forEach((mk) => mk.getElement().classList.add('fuera'))
@@ -137,6 +140,7 @@ export default function MapaObras({ puntos, t, idioma, token: tokenServidor }: {
     const arranque = setTimeout(() => {
       if (sinMovimiento()) { m.jumpTo(destino); aterrizar(); return }
       m.flyTo({ ...destino, duration: VUELO_MS, curve: 1.42, essential: true })
+      setTimeout(() => { setClaro(true); requestAnimationFrame(() => window.dispatchEvent(new Event('scroll'))) }, 1700)
       m.once('moveend', aterrizar)
     }, 1400)
     return () => clearTimeout(arranque)
@@ -192,7 +196,7 @@ export default function MapaObras({ puntos, t, idioma, token: tokenServidor }: {
   const tarjeta = obra ? datosDeTarjeta(obra, idioma) : null
 
   return (
-    <section ref={refCerca} data-tema={aterrizado ? 'claro' : undefined} className={`p-escena p-mapa${aterrizado ? ' ciudad' : ''}${explorando ? ' explorando' : ''}`} aria-label={t.mapaTitulo}>
+    <section ref={refCerca} data-tema={claro ? 'claro' : undefined} className={`p-escena p-mapa${claro ? ' ciudad' : ''}${explorando ? ' explorando' : ''}`} aria-label={t.mapaTitulo}>
       <div ref={lienzo} className="p-lienzo" />
       {fallo && <img className="p-lienzo p-mapa-fallo" src="/para/portada-1400.webp" alt="" />}
       <div className="p-mapa-velo" aria-hidden />
@@ -256,7 +260,7 @@ const CSS = `
 .p-mapa-txt .p-h2,.p-mapa-txt .p-it,.p-cifra{text-shadow:0 2px 24px rgba(13,13,13,.55);transition:color 1.2s,text-shadow 1.2s;}
 /* Ya en la ciudad: el estilo del estudio es claro, así que la pantalla pasa a tinta sobre papel */
 .p-mapa-velo::after{content:'';position:absolute;inset:0;opacity:0;transition:opacity 1.6s;
-  background:linear-gradient(180deg,rgba(244,243,240,.92) 0%,rgba(244,243,240,.35) 30%,rgba(244,243,240,0) 52%,rgba(244,243,240,.55) 78%,rgba(244,243,240,.95) 100%);}
+  background:linear-gradient(180deg,rgba(244,243,240,.8) 0%,rgba(244,243,240,.25) 28%,rgba(244,243,240,0) 52%,rgba(244,243,240,.55) 78%,rgba(244,243,240,.95) 100%);}
 .p-mapa.ciudad .p-mapa-velo{background:none;}
 .p-mapa.ciudad .p-mapa-velo::after{opacity:1;}
 .p-mapa.ciudad .p-mapa-txt .p-h2,.p-mapa.ciudad .p-cifra b{color:#141414;text-shadow:none;}

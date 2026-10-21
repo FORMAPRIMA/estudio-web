@@ -10,7 +10,7 @@
 // «Explorar la maqueta» la abre a pantalla completa con todos los gestos.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { buildConjunto, eur, plantaLabel, type ModoId, type Vivienda } from '@/lib/visual-lab/mendez'
+import { buildConjunto, eur, type ModoId, type Vivienda } from '@/lib/visual-lab/mendez'
 import type { Escena } from '@/components/team/visual-lab/escena-mendez'
 import type { Textos } from '@/lib/para/textos'
 import { useBloqueoScroll, useEnPantalla, useVisto } from './Presentacion'
@@ -179,10 +179,10 @@ export default function MaquetaTorre({ t }: { t: Textos }) {
             <button type="button" className="p-ficha-x" aria-label="×" onClick={() => setSel(null)}>×</button>
           </div>
           <dl className="p-ficha-datos">
-            <div><dt>{plantaLabel(u.planta)}</dt><dd>{u.util} m²</dd></div>
-            <div><dt>{t.dorm}</dt><dd>{u.dorm}</dd></div>
-            <div><dt>{u.vista}</dt><dd>{u.orient}</dd></div>
-            <div><dt>€</dt><dd>{eur(u.precio)}</dd></div>
+            <div><dt>{t.ficha.planta}</dt><dd>{u.planta}</dd></div>
+            <div><dt>{t.ficha.superficie}</dt><dd>{u.util} m²</dd></div>
+            <div><dt>{t.ficha.dorm}</dt><dd>{u.dorm}</dd></div>
+            <div><dt>{t.ficha.precio}</dt><dd>{eur(u.precio)}</dd></div>
           </dl>
           <p className="p-ficha-nota">{t.sello}</p>
         </article>

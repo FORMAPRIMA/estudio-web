@@ -56,6 +56,7 @@ export const T = {
     disponibles: 'disponibles',
     viviendas: 'viviendas',
     dorm: 'dorm.',
+    ficha: { planta: 'Planta', superficie: 'Útiles', dorm: 'Dormitorios', orientacion: 'Orientación', precio: 'Precio' },
     estados: { disponible: 'Disponible', negociacion: 'En negociación', reservada: 'Reservada', vendida: 'Vendida', piloto: 'Piso piloto' } as Record<string, string>,
 
     cerrar: 'Seguir',
@@ -94,6 +95,7 @@ export const T = {
     disponibles: 'available',
     viviendas: 'homes',
     dorm: 'bed',
+    ficha: { planta: 'Floor', superficie: 'Interior', dorm: 'Bedrooms', orientacion: 'Facing', precio: 'Price' },
     estados: { disponible: 'Available', negociacion: 'In negotiation', reservada: 'Reserved', vendida: 'Sold', piloto: 'Show flat' } as Record<string, string>,
 
     cerrar: 'Continue',
