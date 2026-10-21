@@ -4,12 +4,13 @@ import { FICHA_ALBANILERIA } from './albanileria'
 import { FICHA_INSTALACIONES } from './instalaciones'
 import { FICHA_PINTURAS } from './pinturas'
 import { FICHA_COCINA } from './cocina'
+import { FICHA_EQUIPAMIENTO } from './equipamiento'
 
 export * from './tipos'
 export { VARIABLES, variable } from './variables'
 
 /** Fichas cerradas, en orden de capítulo. Se irán añadiendo una a una (Fase 1). */
-export const FICHAS: Ficha[] = [FICHA_DEMOLICIONES, FICHA_ALBANILERIA, FICHA_INSTALACIONES, FICHA_PINTURAS, FICHA_COCINA]
+export const FICHAS: Ficha[] = [FICHA_DEMOLICIONES, FICHA_ALBANILERIA, FICHA_INSTALACIONES, FICHA_PINTURAS, FICHA_EQUIPAMIENTO, FICHA_COCINA]
 
 export function fichaDeCapitulo(numero: number): Ficha | undefined {
   return FICHAS.find(f => f.capitulo === numero)
