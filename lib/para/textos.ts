@@ -125,8 +125,9 @@ export const T = {
     portalRotulo: 'Portal de cliente',
     portalTitulo: 'Toda la obra, en un solo acceso.',
     portalTexto: 'Cronograma, actas de visita, documentación, decisiones y pagos, siempre al día y en el mismo sitio para el promotor, la constructora y el estudio.',
-    portalVideo: 'Ver el vídeo del portal',
-    portalDemo: 'Volver a la demo',
+    portalVideoTitulo: 'El portal, por dentro.',
+    portalVideoTexto: 'Así siguen la obra el promotor y la constructora, de la primera acta a la entrega.',
+    verVideo: 'Ver el vídeo', conSonido: 'con sonido', pausa: 'Pausa', seguirVideo: 'Seguir',
     cargar3d: 'Cargar la maqueta 3D',
     portalPuntos: ['Cronograma y avance de obra', 'Actas, fotos y visitas', 'Planos y presupuestos, siempre la última versión', 'Aprobaciones registradas'],
 
@@ -142,12 +143,12 @@ export const T = {
     dossierTitulo: 'Un dossier que el comprador recorre desde el móvil.',
     dossierTexto: 'Distribuciones, calidades, presupuesto y plazos en una presentación navegable. Cada comprador recibe su enlace y el equipo comercial sabe qué le interesa.',
     dossierPie: 'Ejemplo real · Casa Zurbano, Madrid',
-    abrirDossier: 'Tocar para recorrerlo',
+    abrirDossier: 'Recorrerlo',
 
     vrRotulo: 'Visual Lab · Realidad virtual',
     vrTitulo: 'Decidir sobre el proyecto, no sobre la obra.',
     vrTexto: 'Recorridos en realidad virtual, estudios de soleamiento y renders para validar proporciones, vistas y materiales antes de construir.',
-    sonido: 'Activar sonido',
+    sonido: 'Sonido',
     silencio: 'Silenciar',
 
     porqueRotulo: 'Por qué Forma Prima',
@@ -285,8 +286,9 @@ export const T = {
     portalRotulo: 'Client portal',
     portalTitulo: 'The whole build, in one place.',
     portalTexto: 'Schedule, site reports, documents, decisions and payments, always up to date and in one place for the developer, the contractor and the studio.',
-    portalVideo: 'Watch the portal video',
-    portalDemo: 'Back to the demo',
+    portalVideoTitulo: 'The portal, from the inside.',
+    portalVideoTexto: 'How developer and contractor follow the build, from the first site report to handover.',
+    verVideo: 'Watch the video', conSonido: 'with sound', pausa: 'Pause', seguirVideo: 'Resume',
     cargar3d: 'Load the 3D model',
     portalPuntos: ['Schedule and progress', 'Site reports, photos and visits', 'Drawings and budgets, always the latest version', 'Logged approvals'],
 
@@ -302,12 +304,12 @@ export const T = {
     dossierTitulo: 'A brochure buyers explore from their phone.',
     dossierTexto: 'Layouts, finishes, budget and timeline in a presentation buyers navigate. Each buyer gets their own link and the sales team knows what they care about.',
     dossierPie: 'Real example · Casa Zurbano, Madrid',
-    abrirDossier: 'Tap to explore it',
+    abrirDossier: 'Explore it',
 
     vrRotulo: 'Visual Lab · Virtual reality',
     vrTitulo: 'Decide on the design, not on site.',
     vrTexto: 'Virtual reality walkthroughs, sunlight studies and renders to validate proportions, views and materials before building.',
-    sonido: 'Sound on',
+    sonido: 'Sound',
     silencio: 'Mute',
 
     porqueRotulo: 'Why Forma Prima',

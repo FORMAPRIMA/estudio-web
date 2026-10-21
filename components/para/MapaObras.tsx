@@ -72,6 +72,8 @@ export default function MapaObras({ puntos, t, idioma, token: tokenServidor, num
       style: CAMARA.estilo,
       projection: 'globe',
       ...GLOBO,
+      // en vertical el globo se ve más lejos: caben las cuatro sedes
+      ...(window.innerWidth < 700 ? { zoom: 0.72, center: [-56, 14] as [number, number] } : {}),
       attributionControl: false,
       cooperativeGestures: false,
       scrollZoom: false,
@@ -97,7 +99,10 @@ export default function MapaObras({ puntos, t, idioma, token: tokenServidor, num
       // animación va en el hijo, o la pisaría y todas caerían en la esquina.
       el.className = 'p-sede'
       el.innerHTML = `<span class="p-sede-in" style="--d:${0.25 + i * 0.12}s"><span class="p-sede-punto"></span><span class="p-sede-txt"><b>${t.paises[i].pais}</b>${t.paises[i].ciudad}</span></span>`
-      marcasSede.current.push(new mapboxgl.Marker({ element: el, anchor: 'left' }).setLngLat(c).addTo(m))
+      // Miami y Monterrey quedan cerca en el globo: Monterrey (y Ecuador) llevan la etiqueta a la izquierda
+      const izquierda = i === 2 || i === 3
+      if (izquierda) el.classList.add('izq')
+      marcasSede.current.push(new mapboxgl.Marker({ element: el, anchor: izquierda ? 'right' : 'left' }).setLngLat(c).addTo(m))
     })
     return undefined
   }, [cerca, t.paises, tokenServidor])
@@ -296,6 +301,8 @@ const CSS = `
 .p-sede-punto::after{content:'';position:absolute;inset:-4px;border-radius:50%;border:1px solid rgba(251,251,250,.7);animation:p-pulso 2.4s ease-out infinite;}
 .p-sede-txt{font-size:12px;line-height:1.35;color:rgba(251,251,250,.8);text-shadow:0 1px 10px rgba(0,0,0,.6);white-space:nowrap;}
 .p-sede-txt b{display:block;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:#fbfbfa;}
+.p-sede.izq .p-sede-in{flex-direction:row-reverse;text-align:right;}
+@media (max-width:700px){.p-sede-txt{font-size:11px;}.p-sede-txt b{letter-spacing:.1em;}.p-sede-txt{max-width:120px;white-space:normal;}}
 @keyframes p-entra{to{opacity:1;transform:none;}}
 @keyframes p-pulso{0%{transform:scale(.6);opacity:1}100%{transform:scale(2.6);opacity:0}}
 

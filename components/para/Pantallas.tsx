@@ -32,34 +32,75 @@ const H = ({ children, d = '.1s' }: { children: ReactNode; d?: string }) => (
 )
 const D = (s: string) => ({ ['--d' as string]: s })
 
-// ── Vídeo: AV1 + HEVC (la mayoría de iPhone no decodifica AV1), en silencio y en
-//    bucle mientras está en pantalla; el sonido, a petición.
-export function VideoFP({ base, poster, className = '', nombre, alEvento, t }: {
-  base: string; poster?: string; className?: string; nombre: string; alEvento?: AlEvento; t: Textos
+// ── Vídeo: AV1 + HEVC (la mayoría de iPhone no decodifica AV1). Nunca arranca
+//    solo: se ve su fotograma de portada con un botón de play; al pulsarlo empieza
+//    DESDE EL PRINCIPIO y con sonido. Al salir de la pantalla se para y vuelve a la
+//    portada, así que al volver se puede ver entero otra vez.
+export function VideoFP({ base, segundos, className = '', nombre, alEvento, t }: {
+  base: string; segundos: number; className?: string; nombre: string; alEvento?: AlEvento; t: Textos
 }) {
   const [ref, dentro] = useEnPantalla<HTMLDivElement>('0px')
   const v = useRef<HTMLVideoElement>(null)
-  const [sonido, setSonido] = useState(false)
+  const [fase, setFase] = useState<'portada' | 'play' | 'pausa'>('portada')
+  const [mudo, setMudo] = useState(false)
+  const [avance, setAvance] = useState(0)
   useEffect(() => {
+    if (dentro || fase === 'portada') return
+    const el = v.current
+    if (el) { el.pause(); el.currentTime = 0 }
+    setFase('portada'); setAvance(0)
+  }, [dentro, fase])
+  const empezar = () => {
     const el = v.current
     if (!el) return
-    if (dentro) el.play().catch(() => {})
-    else el.pause()
-  }, [dentro])
+    el.currentTime = 0; el.muted = false; setMudo(false)
+    el.play().then(() => setFase('play')).catch(() => { el.muted = true; setMudo(true); el.play().then(() => setFase('play')).catch(() => {}) })
+    alEvento?.('video', nombre)
+  }
+  const alternar = () => {
+    const el = v.current
+    if (!el) return
+    if (el.paused) { el.play().catch(() => {}); setFase('play') } else { el.pause(); setFase('pausa') }
+  }
   return (
-    <div ref={ref} className={`p-video ${className}`}>
-      <video ref={v} muted={!sonido} loop playsInline preload="none" poster={poster}>
+    <div ref={ref} className={`p-video ${className}`} data-fase={fase}>
+      <video ref={v} playsInline preload="none" poster={`${base}-portada.webp`}
+        onTimeUpdate={(e) => { const el = e.currentTarget; if (el.duration) setAvance(el.currentTime / el.duration) }}
+        onEnded={() => { setFase('portada'); setAvance(0) }} onClick={fase !== 'portada' ? alternar : undefined}>
         <source src={`${base}.av1.mp4`} type='video/mp4; codecs="av01.0.08M.10"' />
         <source src={`${base}.hevc.mp4`} type='video/mp4; codecs="hvc1"' />
       </video>
-      <button type="button" className="p-sonido" onClick={() => {
-        const n = !sonido; setSonido(n)
-        if (v.current) { v.current.muted = !n; if (n) v.current.play().catch(() => {}) }
-        if (n) alEvento?.('video', nombre)
-      }}>
-        <span aria-hidden>{sonido ? '■' : '♪'}</span>{sonido ? t.silencio : t.sonido}
-      </button>
+      {fase === 'portada' && (
+        <button type="button" className="p-play" onClick={empezar} aria-label={t.verVideo}>
+          <span className="p-play-boton" aria-hidden><svg viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z" fill="currentColor" /></svg></span>
+          <span className="p-play-txt">{t.verVideo}<small>{segundos} s · {t.conSonido}</small></span>
+        </button>
+      )}
+      {fase !== 'portada' && (
+        <div className="p-video-mandos">
+          <button type="button" onClick={alternar} aria-label={fase === 'play' ? t.pausa : t.seguirVideo}>{fase === 'play' ? '❚❚' : '▶'}</button>
+          <span className="p-video-barra"><i style={{ width: `${avance * 100}%` }} /></span>
+          <button type="button" onClick={() => { const el = v.current; if (!el) return; el.muted = !el.muted; setMudo(el.muted) }}>{mudo ? t.sonido : t.silencio}</button>
+        </div>
+      )}
     </div>
+  )
+}
+
+/** Pantalla de vídeo: titular arriba y el vídeo enmarcado en 16:9 (nunca recortado). */
+function PantallaVideo({ id, t, num, rotulo, titulo, texto, base, segundos, alEvento }: {
+  id: string; t: Textos; num: number; rotulo: string; titulo: string; texto: string; base: string; segundos: number; alEvento: AlEvento
+}) {
+  return (
+    <Pantalla id={id} tema="oscuro" num={num} rotulo={rotulo} className="p-pvideo">
+      <div className="p-pvideo-txt">
+        <H>{titulo}</H>
+        <p className="p-texto p-in" style={D('.3s')}>{texto}</p>
+      </div>
+      <div className="p-in" style={D('.2s')}>
+        <VideoFP base={base} segundos={segundos} nombre={id} alEvento={alEvento} t={t} className="p-marco" />
+      </div>
+    </Pantalla>
   )
 }
 
@@ -221,9 +262,8 @@ export function Ejecucion({ t, num }: { t: Textos; num: number }) {
   )
 }
 
-// ── Portal de cliente: una obra de ejemplo que se puede tocar (y el vídeo, si se quiere).
+// ── Portal de cliente: una obra de ejemplo que se puede tocar (el vídeo, en la pantalla siguiente).
 export function Portal({ t, idioma, num, alEvento }: { t: Textos; idioma: Idioma; num: number; alEvento: AlEvento }) {
-  const [video, setVideo] = useState(false)
   return (
     <Pantalla id="portal" tema="oscuro" num={num} rotulo={t.portalRotulo} className="p-dos p-portal">
       <div className="p-dos-txt">
@@ -232,15 +272,8 @@ export function Portal({ t, idioma, num, alEvento }: { t: Textos; idioma: Idioma
         <ul className="p-lista">
           {t.portalPuntos.map((x, i) => <li key={x} className="p-in" style={D(`${0.4 + i * 0.08}s`)}>{x}</li>)}
         </ul>
-        <button type="button" className="p-agenda-enlace p-in" style={D('.7s')} onClick={() => { setVideo(!video); if (!video) alEvento('video', 'portal') }}>
-          {video ? t.portalDemo : t.portalVideo}
-        </button>
       </div>
-      <div className="p-dos-img p-in" style={D('.2s')}>
-        {video
-          ? <VideoFP base="/para/video/portal-clientes" nombre="portal" alEvento={alEvento} t={t} className="p-marco" />
-          : <PortalDemo idioma={idioma} alEvento={alEvento} />}
-      </div>
+      <div className="p-dos-img p-in" style={D('.2s')}><PortalDemo idioma={idioma} alEvento={alEvento} /></div>
     </Pantalla>
   )
 }
@@ -282,7 +315,7 @@ export function Dossier({ t, num, alEvento }: { t: Textos; num: number; alEvento
             ? <iframe src="/propuesta/casa-zurbano-xzw9e?demo=1" title="Casa Zurbano" loading="lazy" allow="autoplay; fullscreen" />
             : <button type="button" className="p-movil-portada" onClick={abrir}>
                 <img src="/para/obra/zurbano-portada.webp" alt="Casa Zurbano" loading="lazy" />
-                <span className="p-explorar"><span aria-hidden>↗</span>{t.abrirDossier}</span>
+                <span className="p-explorar p-movil-boton"><span aria-hidden>↗</span>{t.abrirDossier}</span>
               </button>}
         </div>
       </div>
@@ -291,17 +324,12 @@ export function Dossier({ t, num, alEvento }: { t: Textos; num: number; alEvento
   )
 }
 
-// ── Realidad virtual ─────────────────────────────────────────────────────────
+// ── Realidad virtual y portal en vídeo ──────────────────────────────────────
 export function VR({ t, num, alEvento }: { t: Textos; num: number; alEvento: AlEvento }) {
-  return (
-    <Pantalla id="vr" tema="oscuro" num={num} rotulo={t.vrRotulo} className="p-vr">
-      <VideoFP base="/para/video/visual-lab" nombre="vr" alEvento={alEvento} t={t} className="p-vr-video" />
-      <div className="p-vr-txt">
-        <H>{t.vrTitulo}</H>
-        <p className="p-texto p-in" style={D('.3s')}>{t.vrTexto}</p>
-      </div>
-    </Pantalla>
-  )
+  return <PantallaVideo id="vr" t={t} num={num} rotulo={t.vrRotulo} titulo={t.vrTitulo} texto={t.vrTexto} base="/para/video/visual-lab" segundos={36} alEvento={alEvento} />
+}
+export function PortalVideo({ t, num, alEvento }: { t: Textos; num: number; alEvento: AlEvento }) {
+  return <PantallaVideo id="portalvideo" t={t} num={num} rotulo={t.portalRotulo} titulo={t.portalVideoTitulo} texto={t.portalVideoTexto} base="/para/video/portal-clientes" segundos={42} alEvento={alEvento} />
 }
 
 // ── Por qué Forma Prima ──────────────────────────────────────────────────────
@@ -387,7 +415,8 @@ export const CSS_PANTALLAS = CSS_AGENDA + CSS_PORTAL_DEMO + `
   overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;}
 .p-personas::-webkit-scrollbar{display:none;}
 .p-personas li{scroll-snap-align:start;display:flex;flex-direction:column;gap:3px;}
-.p-personas img{aspect-ratio:3/4;width:100%;object-fit:cover;filter:grayscale(1);margin-bottom:8px;}
+.p-personas img{aspect-ratio:3/4;width:100%;object-fit:cover;filter:grayscale(1);margin-bottom:8px;transform:scale(1.03);transform-origin:50% 0;}
+.p-personas li{overflow:hidden;}
 .p-personas b{font-weight:400;font-size:14px;}
 .p-personas span{font-size:12px;color:rgba(251,251,250,.6);line-height:1.35;}
 .p-personas li.contacto b::after{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--p-salvia);margin-left:8px;vertical-align:2px;}
@@ -418,24 +447,42 @@ export const CSS_PANTALLAS = CSS_AGENDA + CSS_PORTAL_DEMO + `
 .p-cinta-pista{display:flex;gap:12px;width:max-content;will-change:transform;}
 .p-cinta-pista img{height:clamp(150px,24svh,250px);width:auto;aspect-ratio:1400/1151;background:#fff;box-shadow:0 14px 34px -18px rgba(20,20,20,.35);}
 
-/* Vídeo */
-.p-video{position:relative;}
+/* Vídeo: portada con play; nunca arranca solo */
+.p-video{position:relative;background:#141414;}
 .p-video video{display:block;width:100%;height:100%;object-fit:cover;background:#141414;}
-.p-sonido{position:absolute;left:14px;bottom:14px;z-index:2;display:inline-flex;align-items:center;gap:8px;min-height:38px;padding:0 14px;border-radius:999px;
-  border:1px solid rgba(251,251,250,.3);background:rgba(13,13,13,.5);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);color:#fbfbfa;
-  font-size:12px;letter-spacing:.14em;text-transform:uppercase;font-weight:500;}
-.p-marco{aspect-ratio:16/10;border-radius:10px;overflow:hidden;box-shadow:0 40px 80px -30px rgba(0,0,0,.7);border:1px solid rgba(251,251,250,.1);}
+.p-marco{aspect-ratio:16/9;border-radius:10px;overflow:hidden;box-shadow:0 40px 80px -30px rgba(0,0,0,.7);border:1px solid rgba(251,251,250,.1);}
+.p-play{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;border:0;padding:0;
+  background:radial-gradient(ellipse at center,rgba(13,13,13,.55) 0%,rgba(13,13,13,.25) 60%,rgba(13,13,13,.4) 100%);color:#fbfbfa;cursor:pointer;}
+@media (max-width:700px){.p-play-txt small{display:none;}.p-play{gap:10px;}}
+.p-play-boton{width:clamp(64px,7vw,92px);height:clamp(64px,7vw,92px);border-radius:50%;display:grid;place-items:center;background:rgba(251,251,250,.92);color:#0d0d0d;
+  box-shadow:0 18px 40px -12px rgba(0,0,0,.6);transition:transform .5s var(--p-curva),background .3s;}
+.p-play-boton svg{width:40%;height:40%;margin-left:6%;}
+.p-play:hover .p-play-boton{transform:scale(1.07);background:#fff;}
+.p-play-txt{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:13px;letter-spacing:.16em;text-transform:uppercase;font-weight:500;text-shadow:0 2px 12px rgba(0,0,0,.5);}
+.p-play-txt small{font-size:12px;letter-spacing:.08em;text-transform:none;font-weight:400;opacity:.8;}
+.p-video-mandos{position:absolute;left:0;right:0;bottom:0;z-index:2;display:flex;align-items:center;gap:12px;padding:12px 14px;
+  background:linear-gradient(0deg,rgba(13,13,13,.75),rgba(13,13,13,0));opacity:0;transition:opacity .4s;}
+.p-video:hover .p-video-mandos,.p-video[data-fase="pausa"] .p-video-mandos{opacity:1;}
+@media (pointer:coarse){.p-video-mandos{opacity:1;}}
+.p-video-mandos button{flex:none;min-height:36px;min-width:36px;padding:0 12px;border-radius:999px;border:1px solid rgba(251,251,250,.3);background:rgba(13,13,13,.5);
+  color:#fbfbfa;font-size:12px;letter-spacing:.1em;text-transform:uppercase;font-weight:500;}
+.p-video-barra{flex:1;height:3px;background:rgba(251,251,250,.25);border-radius:2px;overflow:hidden;}
+.p-video-barra i{display:block;height:100%;background:#fbfbfa;}
+
+/* Pantalla de vídeo */
+.p-pvideo{justify-content:center;}
+.p-pvideo-txt{display:flex;flex-direction:column;gap:14px;}
 
 /* Dossier digital */
-.p-dossier-fondo{position:absolute;inset:0;}
+.p-dossier-fondo{position:absolute;inset:0;overflow:hidden;}
 .p-dossier-fondo img{width:100%;height:100%;object-fit:cover;filter:blur(24px) brightness(.32) saturate(1.1);transform:scale(1.15);}
-.p-movil{position:relative;margin:0 auto;width:min(300px,72vw);aspect-ratio:9/19.3;border-radius:44px;padding:10px;background:#0b0b0b;
+.p-movil{position:relative;margin:0 auto;height:min(48svh,600px);width:auto;aspect-ratio:9/19.3;max-width:80vw;border-radius:40px;padding:9px;background:#0b0b0b;
   box-shadow:0 0 0 1px rgba(251,251,250,.16),0 50px 100px -30px rgba(0,0,0,.8);}
 .p-movil::before{content:'';position:absolute;top:18px;left:50%;transform:translateX(-50%);width:84px;height:22px;border-radius:12px;background:#0b0b0b;z-index:2;}
 .p-movil iframe,.p-movil-portada{display:block;width:100%;height:100%;border:0;border-radius:34px;overflow:hidden;background:#f6f1ea;}
 .p-movil-portada{position:relative;padding:0;cursor:pointer;}
 .p-movil-portada img{width:100%;height:100%;object-fit:cover;}
-.p-movil-portada .p-explorar{position:absolute;left:50%;bottom:28px;transform:translateX(-50%);white-space:nowrap;color:#2b2622;background:rgba(246,241,234,.85);border-color:rgba(43,38,34,.25);}
+.p-movil-portada .p-explorar{position:absolute;left:10px;right:10px;bottom:22px;justify-content:center;white-space:nowrap;padding:0 10px;min-height:40px;font-size:11px;letter-spacing:.12em;color:#2b2622;background:rgba(246,241,234,.88);border-color:rgba(43,38,34,.25);}
 .p-dossier.amplio{position:fixed;inset:0;z-index:80;min-height:0;height:100%;padding:0;}
 .p-dossier.amplio .p-dos-txt{display:none;}
 .p-dossier.amplio .p-dos-img{flex:1;display:flex;}
@@ -443,14 +490,6 @@ export const CSS_PANTALLAS = CSS_AGENDA + CSS_PORTAL_DEMO + `
 .p-dossier.amplio .p-movil::before{display:none;}
 .p-dossier.amplio .p-movil iframe{border-radius:0;}
 .p-dossier.amplio .p-seguir{position:fixed;}
-
-/* Realidad virtual */
-.p-vr{padding:0;justify-content:flex-end;}
-.p-vr .p-pant-rotulo{position:absolute;top:calc(env(safe-area-inset-top) + 84px);left:var(--p-gutter);right:calc(var(--p-gutter) + 170px);z-index:2;}
-.p-vr-video{position:absolute;inset:0;}
-.p-vr-video::after{content:'';position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(13,13,13,.55) 0%,rgba(13,13,13,0) 30%,rgba(13,13,13,0) 45%,rgba(13,13,13,.92) 100%);}
-.p-vr-video .p-sonido{left:auto;right:var(--p-gutter);bottom:auto;top:calc(env(safe-area-inset-top) + 74px);}
-.p-vr-txt{position:relative;z-index:2;display:flex;flex-direction:column;gap:16px;padding:0 var(--p-gutter) calc(env(safe-area-inset-bottom) + 56px);}
 
 /* Por qué */
 .p-porque{justify-content:center;}
@@ -468,13 +507,50 @@ export const CSS_PANTALLAS = CSS_AGENDA + CSS_PORTAL_DEMO + `
   font-size:12px;letter-spacing:.16em;text-transform:uppercase;font-weight:500;text-decoration:none;align-self:flex-start;}
 .p-enlace{font-size:13px;color:var(--p-salvia);text-decoration:none;margin-top:4px;}
 
+/* Pantallas bajas: menos aire para que todo quepa en una pantalla */
+@media (max-height:760px){
+  .p-pant{padding-top:calc(env(safe-area-inset-top) + 66px);padding-bottom:calc(env(safe-area-inset-bottom) + 28px);gap:14px;}
+  .p-h2{font-size:clamp(28px,1.2rem + 2.2vw,46px);}
+  .p-cifras li{padding:10px 0;}
+  .p-cifras b{font-size:clamp(34px,1.4rem + 2.4vw,56px);}
+  .p-cinta-pista img{height:clamp(120px,19svh,210px);}
+  .p-ejecucion-cifra b{font-size:clamp(48px,1.6rem + 3vw,80px);}
+  .p-h1-cierre{font-size:clamp(38px,1.2rem + 4.4vw,80px);}
+}
+@media (max-width:1023px){
+  .p-dos-img>img{max-height:28svh;}
+  .p-puntos li{padding:12px 0;}
+  .p-puntos p{font-size:14px;margin-top:2px;}
+  .p-portal .p-lista{display:none;}
+  .p-portal .p-pd{min-height:0;height:min(54svh,480px);}
+  .p-portal .p-pd-cuerpo{overflow-y:auto;}
+}
+@media (max-width:700px){
+  .p-cinta-pista img{height:clamp(120px,20svh,200px);}
+  .p-equipo-foto{aspect-ratio:2/1;}
+  .p-personas img{aspect-ratio:4/5;}
+  .p-dossier .p-pie{display:none;}
+  .p-hablemos{gap:18px;}
+  .p-hablemos .p-raya{display:none;}
+  .p-hablemos .p-contacto img{display:none;}
+  .p-hablemos .p-contacto{margin-top:0;}
+}
+@media (max-width:700px) and (max-height:760px){
+  .p-dos-img>img{max-height:20svh;}
+  .p-puntos li{padding:9px 0;}
+  .p-puntos p{display:none;}
+  .p-equipo-foto{aspect-ratio:16/7;}
+  .p-personas{grid-auto-columns:34%;}
+  .p-hablemos .p-hablemos-a>.p-texto{display:none;}
+  .p-estudio .p-nucleo{font-size:16px;}
+}
 @media (min-width:1024px){
   .p-pant{padding:clamp(96px,12vh,140px) var(--p-gutter) clamp(56px,9vh,104px);gap:28px;}
   .p-estudio{display:grid;grid-template-columns:1.2fr 1fr;column-gap:clamp(40px,6vw,120px);align-content:center;}
   .p-estudio .p-pant-rotulo{grid-column:1 / -1;}
   .p-cifras{margin:0;align-self:center;}
   .p-obra-pista{grid-auto-flow:row;grid-template-columns:repeat(3,1fr);grid-auto-columns:auto;overflow:visible;margin:8px 0 0;padding:0;gap:22px;}
-  .p-obra-img{aspect-ratio:16/11;}
+  .p-obra-img{aspect-ratio:auto;height:calc((100svh - 470px) / 2);max-height:260px;min-height:110px;}
   .p-desliza{display:none;}
   .p-equipo{display:grid;grid-template-columns:1fr 1fr;column-gap:56px;align-content:center;}
   .p-equipo .p-pant-rotulo{grid-column:1 / -1;}
@@ -491,7 +567,7 @@ export const CSS_PANTALLAS = CSS_AGENDA + CSS_PORTAL_DEMO + `
   .p-cintas{margin:0 calc(var(--p-gutter) * -1) 0 0;}
   .p-ejecucion .p-pie{grid-column:1 / -1;}
   .p-cinta-pista img{height:clamp(200px,27svh,300px);}
-  .p-movil{width:min(330px,24vw);}
+  .p-movil{height:min(68svh,700px);}
   .p-porque .p-puntos{grid-template-columns:repeat(3,1fr);column-gap:40px;}
   .p-porque .p-puntos li{grid-template-columns:1fr;row-gap:10px;padding-top:24px;}
   .p-porque .p-puntos-n{grid-row:auto;}
@@ -499,8 +575,7 @@ export const CSS_PANTALLAS = CSS_AGENDA + CSS_PORTAL_DEMO + `
   .p-hablemos .p-pant-rotulo{grid-column:1 / -1;}
   .p-hablemos .p-agenda{border-top:0;border-left:1px solid rgba(251,251,250,.14);padding:4px 0 0 clamp(32px,3vw,56px);}
   .p-agenda-dias{margin:0;padding:0;flex-wrap:wrap;}
-  .p-vr{padding:0;}
-  .p-vr-txt{max-width:780px;padding-bottom:clamp(56px,9vh,104px);}
-  .p-vr .p-pant-rotulo{top:clamp(96px,12vh,140px);}
+  .p-pvideo{display:grid;grid-template-columns:minmax(300px,.7fr) 1.6fr;column-gap:clamp(40px,5vw,96px);align-content:center;align-items:center;}
+  .p-pvideo .p-pant-rotulo{grid-column:1 / -1;}
 }
 `

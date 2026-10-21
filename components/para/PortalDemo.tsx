@@ -62,7 +62,7 @@ export default function PortalDemo({ idioma, alEvento }: { idioma: Idioma; alEve
         ))}
       </div>
 
-      <div className="p-pd-cuerpo">
+      <div className="p-pd-cuerpo" data-scroll-propio>
         {p === 'obra' && (
           <div className="p-pd-obra">
             <div className="p-pd-avance">

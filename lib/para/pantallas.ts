@@ -8,13 +8,13 @@ import type { Perfil } from './textos'
 export type PantallaId =
   | 'portada' | 'estudio' | 'mapa' | 'obra' | 'equipo'
   | 'producto' | 'ejecucion' | 'colaboracion'
-  | 'maqueta' | 'dossier' | 'vr' | 'portal'
+  | 'maqueta' | 'dossier' | 'vr' | 'portal' | 'portalvideo'
   | 'porque' | 'hablemos'
 
 export const ETIQUETA: Record<PantallaId, string> = {
   portada: 'Portada', estudio: 'El estudio', mapa: 'Mapa de obra', obra: 'Obra seleccionada', equipo: 'Equipo',
   producto: 'Producto residencial', ejecucion: 'Proyecto de ejecución', colaboracion: 'Colaboración en obra',
-  maqueta: 'Maqueta digital', dossier: 'Dossier digital', vr: 'Realidad virtual', portal: 'Portal de cliente',
+  maqueta: 'Maqueta digital', dossier: 'Dossier digital', vr: 'Realidad virtual', portal: 'Portal de cliente', portalvideo: 'Portal · vídeo',
   porque: 'Por qué Forma Prima', hablemos: 'Hablemos',
 }
 
@@ -23,9 +23,9 @@ const CIERRE: PantallaId[] = ['porque', 'hablemos']
 
 export const PANTALLAS: Record<Perfil, PantallaId[]> = {
   // Al developer le interesa vender: producto primero y después las herramientas comerciales.
-  developer: [...TRONCO, 'producto', 'maqueta', 'dossier', 'vr', 'portal', ...CIERRE],
+  developer: [...TRONCO, 'producto', 'maqueta', 'dossier', 'vr', 'portal', 'portalvideo', ...CIERRE],
   // A la constructora, que la obra se construya sin dudas: ejecución, portal y obra; lo comercial, como valor añadido.
-  constructora: [...TRONCO, 'ejecucion', 'portal', 'colaboracion', 'maqueta', 'dossier', 'vr', ...CIERRE],
+  constructora: [...TRONCO, 'ejecucion', 'portal', 'portalvideo', 'colaboracion', 'maqueta', 'dossier', 'vr', ...CIERRE],
 }
 
 export const etiquetasPara = (perfil: Perfil) => PANTALLAS[perfil].map((p) => ETIQUETA[p])
