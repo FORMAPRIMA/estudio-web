@@ -12,7 +12,7 @@
 // Mismo estilo de Mapbox y mismos datos que el mapa de la web pública
 // (lib/web-mapa.ts); es mapbox-gl v3 porque el estilo usa Mapbox Standard.
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { CAMARA, datosDeTarjeta, tieneCoordenadas, type MapaPunto } from '@/lib/web-mapa'
@@ -35,7 +35,7 @@ const tactil = () => typeof window !== 'undefined' && window.matchMedia('(pointe
 const sinMovimiento = () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
 export default function MapaObras({ puntos, t, idioma, token: tokenServidor }: { puntos: MapaPunto[]; t: Textos; idioma: Idioma; token: string | null }) {
-  const obras = puntos.filter(tieneCoordenadas)
+  const obras = useMemo(() => puntos.filter(tieneCoordenadas), [puntos])
   const [refCerca, cerca] = useEnPantalla<HTMLElement>('60% 0px')
   const [refVisto, visto] = useVisto<HTMLDivElement>(0.55)
   const lienzo = useRef<HTMLDivElement>(null)
@@ -43,6 +43,7 @@ export default function MapaObras({ puntos, t, idioma, token: tokenServidor }: {
   const marcasObra = useRef<mapboxgl.Marker[]>([])
   const marcasSede = useRef<mapboxgl.Marker[]>([])
   const orbitando = useRef(false)
+  const volado = useRef(false)
   const [listo, setListo] = useState(false)
   const [aterrizado, setAterrizado] = useState(false)
   // La ciudad del estudio es clara: el texto pasa a tinta en cuanto la cámara deja el espacio.
@@ -111,7 +112,8 @@ export default function MapaObras({ puntos, t, idioma, token: tokenServidor }: {
   // El vuelo: globo → Madrid, cuando la pantalla está a la vista y el estilo cargado.
   useEffect(() => {
     const m = mapa.current
-    if (!m || !listo || !visto || aterrizado) return
+    if (!m || !listo || !visto || volado.current) return
+    volado.current = true
     const lng = obras.reduce((a, p) => a + p.lng, 0) / (obras.length || 1)
     const lat = obras.reduce((a, p) => a + p.lat, 0) / (obras.length || 1)
     const destino = { center: [lng || CAMARA.centro[0], lat || CAMARA.centro[1]] as [number, number], zoom: CAMARA.zoomEdificios, pitch: CAMARA.cabeceo, bearing: CAMARA.rumbo }
@@ -137,14 +139,13 @@ export default function MapaObras({ puntos, t, idioma, token: tokenServidor }: {
       m.easeTo({ bearing: m.getBearing() + GRADOS_ORBITA, duration: GRADOS_ORBITA * MS_POR_GRADO, easing: (x) => x })
       m.once('moveend', () => { if (orbitando.current) orbitar() })
     }
-    const arranque = setTimeout(() => {
+    setTimeout(() => {
       if (sinMovimiento()) { m.jumpTo(destino); aterrizar(); return }
       m.flyTo({ ...destino, duration: VUELO_MS, curve: 1.42, essential: true })
       setTimeout(() => { setClaro(true); requestAnimationFrame(() => window.dispatchEvent(new Event('scroll'))) }, 1700)
       m.once('moveend', aterrizar)
     }, 1400)
-    return () => clearTimeout(arranque)
-  }, [listo, visto, aterrizado, obras])
+  }, [listo, visto, obras])
 
   // Explorar: todos los gestos y pantalla completa. En reposo: solo arrastrar en escritorio.
   useEffect(() => {
