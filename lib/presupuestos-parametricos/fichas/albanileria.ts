@@ -19,7 +19,7 @@
 
 import { type Ficha, type Valores, type Cantidad, num, siNo, n2, SIN_DATO } from './tipos'
 
-function altura(v: Valores): number {
+export function altura(v: Valores): number {
   return num(v, 'altura_libre') ?? K.altura_defecto.valor
 }
 
@@ -40,7 +40,7 @@ export function estanciasProyectadas(v: Valores): number | null {
   return dorm + banos + aseos + cocina + dia
 }
 
-function tabiqueriaNueva(v: Valores): Cantidad {
+export function tabiqueriaNueva(v: Valores): Cantidad {
   const demolido = num(v, 'ml_tabique_demoler')
   if (demolido == null) return SIN_DATO('tabique demolido (maqueta del estado actual)')
   const n0 = num(v, 'n_estancias_actual')
@@ -56,7 +56,7 @@ function tabiqueriaNueva(v: Valores): Cantidad {
 }
 
 /** Paramentos que se quedan y hay que revestir: fachadas y medianeras (una cara, sin huecos) + estructurales (dos caras). */
-function paramentosFijos(v: Valores): { m2: number; formula: string } | null {
+export function paramentosFijos(v: Valores): { m2: number; formula: string } | null {
   const ext = num(v, 'ml_muro_exterior')
   if (ext == null) return null
   const est = num(v, 'ml_muro_estructural') ?? 0

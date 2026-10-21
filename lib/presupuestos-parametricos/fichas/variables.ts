@@ -76,6 +76,20 @@ export const VARIABLES: Variable[] = [
   { codigo: 'n_zonas_sonido', nombre: 'Zonas de sonido', unidad: 'ud', tipo: 'numero', nivel: 'express',
     pregunta: '¿En cuántas estancias habrá sonido integrado?', defecto: 0 },
 
+  { codigo: 'pavimento_secas', nombre: 'Pavimento de zonas secas', unidad: '', tipo: 'opcion', nivel: 'express',
+    pregunta: '¿Qué pavimento llevarán salón, dormitorios y pasillos?',
+    ayuda: 'El microcemento se supone continuo en toda la vivienda, baños y cocina incluidos.',
+    opciones: [{ value: 'tarima', label: 'Tarima de madera' }, { value: 'porcelanico', label: 'Porcelánico' }, { value: 'microcemento', label: 'Microcemento continuo' }, { value: 'piedra', label: 'Piedra o terrazo' }] },
+  { codigo: 'alicatado_banos', nombre: 'Alicatado de baños', unidad: '', tipo: 'opcion', nivel: 'express',
+    pregunta: '¿Hasta dónde se alicatan los baños?',
+    opciones: [{ value: 'techo', label: 'Hasta el techo' }, { value: 'humedas', label: 'Solo ducha y lavabo' }] },
+  { codigo: 'molduras', nombre: 'Molduras y cornisas', unidad: '', tipo: 'si_no', nivel: 'express',
+    pregunta: '¿Llevará molduras o cornisas?', defecto: 'no' },
+  { codigo: 'm2_cocina_proy', nombre: 'Superficie de cocina', unidad: 'm²', tipo: 'numero', nivel: 'tecnico',
+    pregunta: 'Superficie de la cocina, si ya se conoce', ayuda: 'Opcional. Si no, se estima como el 9,5 % de la útil (mínimo 6 m²).' },
+  { codigo: 'm2_bano_principal_proy', nombre: 'Superficie del baño principal', unidad: 'm²', tipo: 'numero', nivel: 'tecnico',
+    pregunta: 'Superficie del baño principal, si ya se conoce', ayuda: 'Opcional. Si no, se estima como el 5,5 % de la útil (mínimo 4 m²).' },
+
   // ── Técnico: el arquitecto lo mide en poco tiempo ──────────────────────────
   { codigo: 'altura_libre', nombre: 'Altura libre', unidad: 'm', tipo: 'numero', nivel: 'tecnico',
     pregunta: 'Altura de suelo acabado a cara inferior del forjado',
