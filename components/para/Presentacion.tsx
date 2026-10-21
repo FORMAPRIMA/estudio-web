@@ -1,0 +1,245 @@
+'use client'
+
+// Dossier de prospección: formaprima.es/para/<token>. Una sola página fluida
+// (mobile first, de 360 px a pantallas ultraanchas) que se recorre con scroll.
+// Cada pantalla es una «diapositiva» de 100svh; las interactivas (mapa, maqueta)
+// no atrapan el scroll: se exploran a pantalla completa con un gesto explícito.
+//
+// Escala y lenguaje de Torre del Mangle: Hanken Grotesk 200/300, Newsreader
+// cursiva en los antetítulos, negro #0d0d0d, papel #f4f3f0, salvia #8fa596,
+// curva cubic-bezier(.16,1,.3,1). Nada por debajo de 12 px.
+
+import dynamic from 'next/dynamic'
+import { useEffect, useRef, useState } from 'react'
+import type { MapaPunto } from '@/lib/web-mapa'
+import { T, mesAnio, type Idioma, type LeadPara, type Textos } from '@/lib/para/textos'
+
+const MapaObras = dynamic(() => import('./MapaObras'), { ssr: false })
+const MaquetaTorre = dynamic(() => import('./MaquetaTorre'), { ssr: false })
+
+/** true en cuanto el elemento entra en pantalla al menos `umbral` (y se queda en true). */
+export function useVisto<T extends HTMLElement>(umbral = 0.35) {
+  const ref = useRef<T>(null)
+  const [visto, setVisto] = useState(false)
+  useEffect(() => {
+    const el = ref.current
+    if (!el || visto) return
+    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setVisto(true); io.disconnect() } }, { threshold: umbral })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [umbral, visto])
+  return [ref, visto] as const
+}
+
+/** true mientras el elemento está en pantalla (para pausar 3D y mapa fuera de ella). */
+export function useEnPantalla<T extends HTMLElement>(margen = '0px') {
+  const ref = useRef<T>(null)
+  const [dentro, setDentro] = useState(false)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const io = new IntersectionObserver(([e]) => setDentro(e.isIntersecting), { rootMargin: margen })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [margen])
+  return [ref, dentro] as const
+}
+
+/** Bloquea el scroll de la página mientras se explora un interactivo a pantalla completa. */
+export function useBloqueoScroll(activo: boolean) {
+  useEffect(() => {
+    if (!activo) return
+    const h = document.documentElement, prev = h.style.overflow
+    h.style.overflow = 'hidden'
+    return () => { h.style.overflow = prev }
+  }, [activo])
+}
+
+export default function Presentacion({ lead, puntos, mapboxToken }: { lead: LeadPara; puntos: MapaPunto[]; mapboxToken: string | null }) {
+  const [idioma, setIdioma] = useState<Idioma>(lead.idioma)
+  const t = T[idioma]
+  const [progreso, setProgreso] = useState(0)
+  const [pasada, setPasada] = useState(false)
+  const [claro, setClaro] = useState(false)
+
+  useEffect(() => {
+    document.documentElement.lang = idioma
+  }, [idioma])
+
+  useEffect(() => {
+    let raf = 0
+    const medir = () => {
+      raf = 0
+      const h = document.documentElement
+      const max = h.scrollHeight - h.clientHeight
+      setProgreso(max > 0 ? h.scrollTop / max : 0)
+      setPasada(h.scrollTop > window.innerHeight * 0.6)
+      // la barra cambia de tinta sobre las pantallas claras (la maqueta)
+      const y = 36
+      setClaro(Array.from(document.querySelectorAll<HTMLElement>('[data-tema="claro"]')).some((el) => {
+        const r = el.getBoundingClientRect()
+        return r.top <= y && r.bottom > y
+      }))
+    }
+    const onScroll = () => { if (!raf) raf = requestAnimationFrame(medir) }
+    medir()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('resize', onScroll)
+    return () => { window.removeEventListener('scroll', onScroll); window.removeEventListener('resize', onScroll); cancelAnimationFrame(raf) }
+  }, [])
+
+  return (
+    <div className="para">
+      <style dangerouslySetInnerHTML={{ __html: CSS }} />
+      <div className={`p-progreso${claro ? ' claro' : ''}`} style={{ transform: `scaleX(${progreso})` }} aria-hidden />
+      <header className={`p-barra${pasada ? ' on' : ''}${claro ? ' claro' : ''}`}>
+        <img src="/para/logo-h-white.png" alt="Forma Prima" className="p-barra-logo" />
+        <button type="button" className="p-idioma" onClick={() => setIdioma(idioma === 'es' ? 'en' : 'es')} lang={idioma === 'es' ? 'en' : 'es'}>
+          {t.idioma}
+        </button>
+      </header>
+
+      <Portada lead={lead} t={t} idioma={idioma} />
+      <MapaObras puntos={puntos} t={t} idioma={idioma} token={mapboxToken} />
+      <MaquetaTorre t={t} />
+    </div>
+  )
+}
+
+function Portada({ lead, t, idioma }: { lead: LeadPara; t: Textos; idioma: Idioma }) {
+  const [listo, setListo] = useState(false)
+  useEffect(() => { const r = requestAnimationFrame(() => setListo(true)); return () => cancelAnimationFrame(r) }, [])
+  const fecha = mesAnio(new Date(), idioma)
+  return (
+    <section className={`p-portada${listo ? ' in' : ''}`} aria-label="Forma Prima">
+      <div className="p-portada-img">
+        <img
+          src="/para/portada-1400.webp"
+          srcSet="/para/portada-800.webp 800w, /para/portada-1400.webp 1400w"
+          sizes="(min-width: 1024px) 50vw, 100vw"
+          alt=""
+          fetchPriority="high"
+        />
+      </div>
+      <div className="p-portada-txt">
+        <div className="p-marcas">
+          <img src="/para/logo-h-white.png" alt="Forma Prima" className="p-marca-fp" />
+          <span className="p-marcas-x" aria-hidden>×</span>
+          {lead.logo
+            ? <img src={lead.logo} alt={lead.empresa} className="p-marca-lead" />
+            : <span className="p-marca-texto">{lead.empresa}</span>}
+        </div>
+
+        <div className="p-portada-centro">
+          <p className="p-it p-a" style={{ ['--d' as string]: '.55s' }}>{t.preparado(lead.empresa, fecha)}</p>
+          <h1 className="p-portada-h1">
+            <span className="p-linea"><span style={{ ['--d' as string]: '.7s' }}>{t.hola(lead.nombre)}</span></span>
+            <span className="p-linea"><span style={{ ['--d' as string]: '.84s' }}>{t.marca}</span></span>
+          </h1>
+          <span className="p-raya p-a" style={{ ['--d' as string]: '1.15s' }} aria-hidden />
+          <p className="p-lema p-a" style={{ ['--d' as string]: '1.25s' }}>{t.lema}</p>
+        </div>
+
+        <div className="p-bajar p-a" style={{ ['--d' as string]: '1.6s' }} aria-hidden>
+          <span className="p-bajar-linea" />
+          {t.bajar}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+const CSS = `
+:root{--p-negro:#0d0d0d;--p-grafito:#141414;--p-blanco:#fbfbfa;--p-papel:#f4f3f0;--p-tinta:#141414;--p-salvia:#8fa596;--p-verde:#2f4238;
+  --p-curva:cubic-bezier(.16,1,.3,1);--p-gutter:clamp(20px,5.4vw,104px);}
+html{background:#0d0d0d;scroll-behavior:auto;}
+body{background:#0d0d0d!important;margin:0;}
+.para{font-family:'Hanken Grotesk',system-ui,sans-serif;color:var(--p-blanco);background:var(--p-negro);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;font-weight:300;}
+.para *{box-sizing:border-box;}
+.para img{display:block;max-width:100%;}
+.para h1,.para h2,.para h3{margin:0;font-weight:200;letter-spacing:-.03em;text-wrap:balance;}
+.para p{margin:0;text-wrap:pretty;}
+.para button{font-family:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;}
+
+/* Tipografía fluida: el mismo diseño a 390 y a 1920 */
+.p-it{font-family:'Newsreader',serif;font-style:italic;font-weight:400;font-size:clamp(16px,.9rem + .35vw,19px);color:var(--p-salvia);letter-spacing:0;}
+.p-rotulo{font-size:12px;letter-spacing:.2em;text-transform:uppercase;font-weight:500;color:var(--p-salvia);}
+.p-h2{font-size:clamp(32px,1.35rem + 2.6vw,58px);line-height:1.04;}
+.p-texto{font-size:clamp(15px,.88rem + .2vw,17px);line-height:1.6;color:rgba(251,251,250,.72);max-width:44ch;}
+
+/* Barra superior y progreso */
+.p-progreso{position:fixed;top:0;left:0;right:0;height:2px;background:var(--p-salvia);transform-origin:0 50%;z-index:60;pointer-events:none;}
+.p-barra{position:fixed;top:0;left:0;right:0;z-index:50;display:flex;align-items:center;justify-content:space-between;
+  padding:calc(env(safe-area-inset-top) + 14px) var(--p-gutter) 14px;pointer-events:none;}
+.p-barra-logo{height:14px;width:auto;opacity:0;transform:translateY(-6px);transition:opacity .6s var(--p-curva),transform .6s var(--p-curva);}
+.p-barra.on .p-barra-logo{opacity:.9;transform:none;}
+.p-idioma{pointer-events:auto;min-height:40px;padding:0 16px;border-radius:999px;border:1px solid rgba(251,251,250,.22);background:rgba(13,13,13,.38);
+  -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);color:var(--p-blanco);font-size:12px;letter-spacing:.14em;text-transform:uppercase;font-weight:500;
+  transition:background .3s,border-color .3s;}
+.p-idioma:hover{background:rgba(13,13,13,.6);border-color:rgba(251,251,250,.4);}
+.p-barra.claro .p-barra-logo{filter:invert(1);}
+.p-barra.claro .p-idioma{color:#141414;background:rgba(244,243,240,.6);border-color:rgba(20,20,20,.2);}
+.p-progreso.claro{background:#2f4238;}
+
+/* ── Portada ─────────────────────────────────────────────────────────── */
+.p-portada{position:relative;min-height:100svh;display:grid;overflow:hidden;background:var(--p-negro);}
+.p-portada-img{position:absolute;inset:0;overflow:hidden;}
+.p-portada-img img{width:100%;height:100%;object-fit:cover;object-position:50% 40%;transform:scale(1.12);opacity:0;
+  transition:transform 2.8s cubic-bezier(.22,1,.36,1),opacity 1.6s cubic-bezier(.33,0,.2,1);}
+.p-portada.in .p-portada-img img{transform:scale(1);opacity:1;}
+.p-portada-img::after{content:'';position:absolute;inset:0;
+  background:linear-gradient(180deg,rgba(13,13,13,.55) 0%,rgba(13,13,13,.05) 26%,rgba(13,13,13,.25) 52%,rgba(13,13,13,.92) 82%,#0d0d0d 100%);}
+.p-portada-txt{position:relative;z-index:1;display:flex;flex-direction:column;justify-content:space-between;min-height:100svh;
+  padding:calc(env(safe-area-inset-top) + 22px) var(--p-gutter) calc(env(safe-area-inset-bottom) + 26px);}
+.p-marcas{display:flex;align-items:center;gap:12px;min-height:40px;padding-right:96px;opacity:0;transition:opacity 1.2s .35s var(--p-curva);}
+.p-portada.in .p-marcas{opacity:1;}
+.p-marca-fp{height:clamp(15px,.7rem + .5vw,20px);width:auto;}
+.p-marcas-x{font-weight:200;font-size:18px;color:rgba(251,251,250,.5);line-height:1;}
+.p-marca-lead{max-height:clamp(22px,1rem + .8vw,32px);max-width:150px;width:auto;object-fit:contain;}
+.p-marca-texto{font-size:13px;letter-spacing:.22em;text-transform:uppercase;font-weight:500;white-space:nowrap;}
+.p-portada-centro{margin-top:auto;padding-bottom:clamp(28px,6vh,72px);}
+.p-portada-h1{font-size:clamp(46px,1.4rem + 7.2vw,104px);line-height:.98;margin-top:18px !important;}
+.p-linea{display:block;overflow:hidden;padding-bottom:.08em;margin-bottom:-.08em;}
+.p-linea>span{display:block;transform:translateY(105%);transition:transform 1.5s var(--p-curva);transition-delay:var(--d,0s);}
+.p-portada.in .p-linea>span{transform:none;}
+.p-a{opacity:0;transform:translateY(14px);transition:opacity 1.2s var(--p-curva),transform 1.2s var(--p-curva);transition-delay:var(--d,0s);}
+.p-portada.in .p-a{opacity:1;transform:none;}
+.p-raya{display:block;width:44px;height:1px;background:rgba(251,251,250,.45);margin:clamp(22px,3.4vh,34px) 0 clamp(16px,2.4vh,22px);}
+.p-lema{font-size:clamp(16px,.9rem + .45vw,21px);line-height:1.5;color:rgba(251,251,250,.78);max-width:30ch;}
+.p-bajar{display:flex;align-items:center;gap:14px;font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:rgba(251,251,250,.6);font-weight:500;}
+.p-bajar-linea{position:relative;width:1px;height:34px;background:rgba(251,251,250,.18);overflow:hidden;}
+.p-bajar-linea::after{content:'';position:absolute;left:0;top:-40%;width:1px;height:40%;background:var(--p-blanco);animation:p-cae 2.2s cubic-bezier(.65,0,.35,1) infinite 2.2s;}
+@keyframes p-cae{0%{top:-40%}70%,100%{top:100%}}
+
+@media (min-width:1024px){
+  .p-portada{grid-template-columns:1fr 1fr;}
+  .p-portada-img{position:relative;inset:auto;min-height:100svh;}
+  .p-portada-img::after{background:linear-gradient(90deg,rgba(13,13,13,0) 70%,rgba(13,13,13,.35) 100%);}
+  .p-portada-txt{padding-top:calc(env(safe-area-inset-top) + 40px);padding-bottom:44px;}
+  .p-portada-centro{margin-top:auto;margin-bottom:auto;padding-bottom:0;}
+  .p-portada-h1{font-size:clamp(56px,1.6rem + 3.6vw,96px);}
+  .p-barra-logo{display:none;}
+  .p-barra.on .p-barra-logo{display:block;}
+}
+
+/* ── Pantallas interactivas (mapa, maqueta): patrón común ─────────────── */
+.p-escena{position:relative;height:100svh;min-height:560px;overflow:hidden;}
+.p-escena.explorando{position:fixed;inset:0;height:100%;min-height:0;z-index:80;}
+.p-lienzo{position:absolute;inset:0;}
+.p-explorar{display:inline-flex;align-items:center;gap:10px;min-height:46px;padding:0 20px;border-radius:999px;border:1px solid rgba(251,251,250,.3);
+  background:rgba(13,13,13,.42);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);color:var(--p-blanco);font-size:12px;letter-spacing:.16em;
+  text-transform:uppercase;font-weight:500;transition:background .3s,border-color .3s,transform .3s var(--p-curva);}
+.p-explorar:hover{background:rgba(13,13,13,.62);border-color:rgba(251,251,250,.5);}
+.p-explorar:active{transform:scale(.97);}
+.p-explorar svg{width:14px;height:14px;}
+.p-seguir{position:absolute;z-index:5;top:calc(env(safe-area-inset-top) + 14px);right:var(--p-gutter);}
+.p-in{opacity:0;transform:translateY(18px);transition:opacity 1.2s var(--p-curva),transform 1.2s var(--p-curva);transition-delay:var(--d,0s);}
+.visto .p-in{opacity:1;transform:none;}
+.p-in-h{display:block;overflow:hidden;padding-bottom:.1em;margin-bottom:-.1em;}
+.p-in-h>span{display:block;transform:translateY(105%);transition:transform 1.4s var(--p-curva);transition-delay:var(--d,0s);}
+.visto .p-in-h>span{transform:none;}
+
+@media (prefers-reduced-motion:reduce){
+  .para *,.para *::before,.para *::after{transition-duration:.01ms!important;animation:none!important;transition-delay:0s!important;}
+}
+`

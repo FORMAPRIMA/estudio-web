@@ -43,6 +43,12 @@ export interface EscenaOpts {
   units: Vivienda[]
   onHover: (id: string | null) => void
   onPick: (id: string | null) => void
+  /**
+   * ¿Esta rueda es para la maqueta? Por defecto, siempre (Visual Lab ocupa la
+   * pantalla). Incrustada en un dossier que se recorre con scroll, la rueda es de
+   * la página salvo que se esté explorando: si no, la maqueta atrapa al visitante.
+   */
+  rueda?: (e: WheelEvent) => boolean
 }
 
 export class Escena {
@@ -58,6 +64,7 @@ export class Escena {
   private vis: Record<string, Vis> = {}
   private onHover: (id: string | null) => void
   private onPick: (id: string | null) => void
+  private rueda: (e: WheelEvent) => boolean
 
   private unitMeshes: THREE.Mesh[] = []
   private floors: Record<number, THREE.Group> = {}
@@ -95,6 +102,7 @@ export class Escena {
     this.units = opts.units
     this.onHover = opts.onHover
     this.onPick = opts.onPick
+    this.rueda = opts.rueda ?? (() => true)
     this.units.forEach((u) => { this.byId[u.id] = u })
 
     const W = this.wrap.clientWidth || 1200
@@ -606,6 +614,7 @@ export class Escena {
   }
 
   private onWheel = (e: WheelEvent) => {
+    if (!this.rueda(e)) return
     e.preventDefault()
     this.camT.rad = Math.max(52, Math.min(340, this.camT.rad * (1 + e.deltaY * 0.0012)))
     this.tween = null
