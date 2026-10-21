@@ -87,9 +87,10 @@ export default function MapaObras({ puntos, t, idioma, token: tokenServidor }: {
 
     SEDES.forEach((c, i) => {
       const el = document.createElement('div')
+      // Mapbox coloca la marca con un transform en línea sobre este elemento: la
+      // animación va en el hijo, o la pisaría y todas caerían en la esquina.
       el.className = 'p-sede'
-      el.style.setProperty('--d', `${0.25 + i * 0.12}s`)
-      el.innerHTML = `<span class="p-sede-punto"></span><span class="p-sede-txt"><b>${t.paises[i].pais}</b>${t.paises[i].ciudad}</span>`
+      el.innerHTML = `<span class="p-sede-in" style="--d:${0.25 + i * 0.12}s"><span class="p-sede-punto"></span><span class="p-sede-txt"><b>${t.paises[i].pais}</b>${t.paises[i].ciudad}</span></span>`
       marcasSede.current.push(new mapboxgl.Marker({ element: el, anchor: 'left' }).setLngLat(c).addTo(m))
     })
     return undefined
@@ -111,17 +112,18 @@ export default function MapaObras({ puntos, t, idioma, token: tokenServidor }: {
     if (!m || !listo || !visto || aterrizado) return
     const lng = obras.reduce((a, p) => a + p.lng, 0) / (obras.length || 1)
     const lat = obras.reduce((a, p) => a + p.lat, 0) / (obras.length || 1)
-    const destino = { center: [lng || CAMARA.centro[0], lat || CAMARA.centro[1]] as [number, number], zoom: CAMARA.zoomEdificios - 0.35, pitch: CAMARA.cabeceo, bearing: CAMARA.rumbo }
+    const destino = { center: [lng || CAMARA.centro[0], lat || CAMARA.centro[1]] as [number, number], zoom: CAMARA.zoomEdificios, pitch: CAMARA.cabeceo, bearing: CAMARA.rumbo }
     const aterrizar = () => {
       setAterrizado(true)
+      // la barra superior relee el tema de la pantalla (oscura → clara)
+      requestAnimationFrame(() => window.dispatchEvent(new Event('scroll')))
       marcasSede.current.forEach((mk) => mk.getElement().classList.add('fuera'))
       obras.forEach((p, i) => {
         const el = document.createElement('button')
         el.type = 'button'
         el.className = 'p-obra'
-        el.style.setProperty('--d', `${0.15 + i * 0.06}s`)
         el.setAttribute('aria-label', p.nombre)
-        el.innerHTML = '<span></span>'
+        el.innerHTML = `<span class="p-obra-in" style="--d:${0.15 + i * 0.06}s"><span></span></span>`
         el.addEventListener('click', (e) => { e.stopPropagation(); setSel(i) })
         marcasObra.current.push(new mapboxgl.Marker({ element: el }).setLngLat([p.lng, p.lat]).addTo(m))
       })
@@ -190,7 +192,7 @@ export default function MapaObras({ puntos, t, idioma, token: tokenServidor }: {
   const tarjeta = obra ? datosDeTarjeta(obra, idioma) : null
 
   return (
-    <section ref={refCerca} className={`p-escena p-mapa${explorando ? ' explorando' : ''}`} aria-label={t.mapaTitulo}>
+    <section ref={refCerca} data-tema={aterrizado ? 'claro' : undefined} className={`p-escena p-mapa${aterrizado ? ' ciudad' : ''}${explorando ? ' explorando' : ''}`} aria-label={t.mapaTitulo}>
       <div ref={lienzo} className="p-lienzo" />
       {fallo && <img className="p-lienzo p-mapa-fallo" src="/para/portada-1400.webp" alt="" />}
       <div className="p-mapa-velo" aria-hidden />
@@ -251,7 +253,21 @@ const CSS = `
 .p-mapa-txt .p-h2{max-width:15ch;}
 .p-cambio{animation:p-cambio 1.4s var(--p-curva) both;}
 @keyframes p-cambio{from{transform:translateY(105%)}to{transform:none}}
-.p-mapa-txt .p-h2,.p-mapa-txt .p-it,.p-cifra{text-shadow:0 2px 24px rgba(13,13,13,.55);}
+.p-mapa-txt .p-h2,.p-mapa-txt .p-it,.p-cifra{text-shadow:0 2px 24px rgba(13,13,13,.55);transition:color 1.2s,text-shadow 1.2s;}
+/* Ya en la ciudad: el estilo del estudio es claro, así que la pantalla pasa a tinta sobre papel */
+.p-mapa-velo::after{content:'';position:absolute;inset:0;opacity:0;transition:opacity 1.6s;
+  background:linear-gradient(180deg,rgba(244,243,240,.92) 0%,rgba(244,243,240,.35) 30%,rgba(244,243,240,0) 52%,rgba(244,243,240,.55) 78%,rgba(244,243,240,.95) 100%);}
+.p-mapa.ciudad .p-mapa-velo{background:none;}
+.p-mapa.ciudad .p-mapa-velo::after{opacity:1;}
+.p-mapa.ciudad .p-mapa-txt .p-h2,.p-mapa.ciudad .p-cifra b{color:#141414;text-shadow:none;}
+.p-mapa.ciudad .p-mapa-txt .p-it{color:#4f6556;text-shadow:none;}
+.p-mapa.ciudad .p-cifra{color:rgba(20,20,20,.62);text-shadow:none;}
+.p-mapa.ciudad .p-explorar{color:#141414;border-color:rgba(20,20,20,.22);background:rgba(244,243,240,.72);}
+.p-mapa.ciudad .p-mapa-ayuda{color:rgba(20,20,20,.7);}
+.p-mapa.ciudad .p-obra-in span{background:#141414;box-shadow:0 0 0 3px rgba(244,243,240,.85),0 6px 16px rgba(0,0,0,.25);}
+.p-mapa.ciudad .p-obra.sel .p-obra-in span{background:#2f4238;}
+.p-mapa.ciudad .mapboxgl-ctrl-attrib{background:rgba(244,243,240,.6)!important;}
+.p-mapa.ciudad .mapboxgl-ctrl-attrib a{color:rgba(20,20,20,.6)!important;}
 .p-mapa-pie{display:flex;flex-wrap:wrap;align-items:center;gap:14px 22px;margin-top:6px;pointer-events:auto;}
 .p-cifra{font-size:13px;letter-spacing:.04em;color:rgba(251,251,250,.7);opacity:0;transform:translateY(8px);transition:opacity 1s var(--p-curva),transform 1s var(--p-curva);}
 .p-cifra.on{opacity:1;transform:none;}
@@ -260,9 +276,9 @@ const CSS = `
   text-transform:uppercase;color:rgba(251,251,250,.75);font-weight:500;white-space:nowrap;pointer-events:none;}
 
 /* Sedes en el globo */
-.p-sede{display:flex;align-items:center;gap:10px;pointer-events:none;opacity:0;transform:translateY(6px);animation:p-entra 1s var(--p-curva) forwards;animation-delay:var(--d);
-  transition:opacity .9s,transform .9s;}
-.p-sede.fuera{opacity:0!important;transform:scale(.9);animation:none;}
+.p-sede{pointer-events:none;transition:opacity .9s;}
+.p-sede-in{display:flex;align-items:center;gap:10px;opacity:0;transform:translateY(6px);animation:p-entra 1s var(--p-curva) forwards;animation-delay:var(--d);}
+.p-sede.fuera{opacity:0!important;}
 .p-sede-punto{position:relative;width:9px;height:9px;border-radius:50%;background:#fbfbfa;box-shadow:0 0 0 4px rgba(143,165,150,.35);}
 .p-sede-punto::after{content:'';position:absolute;inset:-4px;border-radius:50%;border:1px solid rgba(251,251,250,.7);animation:p-pulso 2.4s ease-out infinite;}
 .p-sede-txt{font-size:12px;line-height:1.35;color:rgba(251,251,250,.8);text-shadow:0 1px 10px rgba(0,0,0,.6);white-space:nowrap;}
@@ -271,11 +287,11 @@ const CSS = `
 @keyframes p-pulso{0%{transform:scale(.6);opacity:1}100%{transform:scale(2.6);opacity:0}}
 
 /* Obras */
-.p-obra{width:30px;height:30px;padding:0;border:0;background:transparent;display:grid;place-items:center;opacity:0;transform:translateY(-14px);
-  animation:p-entra .9s var(--p-curva) forwards;animation-delay:var(--d);}
-.p-obra span{width:11px;height:11px;border-radius:50%;background:#fbfbfa;box-shadow:0 0 0 3px rgba(13,13,13,.35),0 6px 16px rgba(0,0,0,.4);transition:transform .35s var(--p-curva),background .35s;}
-.p-obra:hover span{transform:scale(1.35);}
-.p-obra.sel span{background:var(--p-salvia);transform:scale(1.6);box-shadow:0 0 0 5px rgba(143,165,150,.3),0 6px 18px rgba(0,0,0,.45);}
+.p-obra{width:30px;height:30px;padding:0;border:0;background:transparent;}
+.p-obra-in{width:30px;height:30px;display:grid;place-items:center;opacity:0;transform:translateY(-14px);animation:p-entra .9s var(--p-curva) forwards;animation-delay:var(--d);}
+.p-obra-in span{width:11px;height:11px;border-radius:50%;background:#fbfbfa;box-shadow:0 0 0 3px rgba(13,13,13,.35),0 6px 16px rgba(0,0,0,.4);transition:transform .35s var(--p-curva),background .35s;}
+.p-obra:hover .p-obra-in span{transform:scale(1.35);}
+.p-obra.sel .p-obra-in span{background:var(--p-salvia);transform:scale(1.6);box-shadow:0 0 0 5px rgba(143,165,150,.3),0 6px 18px rgba(0,0,0,.45);}
 @media (pointer:coarse){.p-mapa:not(.explorando) .p-obra{pointer-events:none;}}
 
 /* Tarjeta de obra */
