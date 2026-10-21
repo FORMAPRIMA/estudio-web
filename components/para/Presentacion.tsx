@@ -135,7 +135,7 @@ export default function Presentacion({ lead, puntos, mapboxToken, medicion = nul
       case 'maqueta': return <MaquetaTorre t={t} num={num} alEvento={alEvento} />
       case 'dossier': return <Dossier t={t} num={num} alEvento={alEvento} />
       case 'vr': return <VR t={t} num={num} alEvento={alEvento} />
-      case 'portal': return <Portal t={t} num={num} alEvento={alEvento} />
+      case 'portal': return <Portal t={t} idioma={idioma} num={num} alEvento={alEvento} />
       case 'porque': return <Porque t={t} lead={lead} num={num} />
       case 'hablemos': return <Hablemos t={t} idioma={idioma} lead={lead} num={num} alEvento={alEvento} agenda={agenda} token={token} />
     }
@@ -285,6 +285,12 @@ body{background:#0d0d0d!important;margin:0;}
 .p-explorar:active{transform:scale(.97);}
 .p-explorar svg{width:14px;height:14px;}
 .p-seguir{position:absolute;z-index:5;top:calc(env(safe-area-inset-top) + 14px);right:var(--p-gutter);}
+.p-gesto{position:absolute;z-index:3;left:50%;bottom:clamp(24px,5vh,48px);transform:translateX(-50%);display:none;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;
+  background:rgba(13,13,13,.5);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);color:#fbfbfa;font-size:12px;letter-spacing:.12em;text-transform:uppercase;font-weight:500;
+  pointer-events:none;transition:opacity .6s;animation:p-gesto 2.6s ease-in-out infinite;}
+.p-gesto.fuera{opacity:0;}
+@keyframes p-gesto{0%,100%{transform:translateX(-50%)}50%{transform:translateX(calc(-50% + 8px))}}
+@media (pointer:fine){.p-gesto{display:inline-flex;}}
 .p-in{opacity:0;transform:translateY(18px);transition:opacity 1.2s var(--p-curva),transform 1.2s var(--p-curva);transition-delay:var(--d,0s);}
 .visto .p-in{opacity:1;transform:none;}
 .p-in-h{display:block;overflow:hidden;padding-bottom:.1em;margin-bottom:-.1em;}

@@ -8,6 +8,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { LeadPara, Textos } from '@/lib/para/textos'
 import { useBloqueoScroll, useEnPantalla, useVisto } from './Presentacion'
 import Agenda, { CSS_AGENDA, type EstadoAgendaCliente } from './Agenda'
+import PortalDemo, { CSS_PORTAL_DEMO } from './PortalDemo'
 import type { Idioma } from '@/lib/para/textos'
 
 export type AlEvento = (k: string, d?: string) => void
@@ -220,8 +221,9 @@ export function Ejecucion({ t, num }: { t: Textos; num: number }) {
   )
 }
 
-// ── Portal de cliente ────────────────────────────────────────────────────────
-export function Portal({ t, num, alEvento }: { t: Textos; num: number; alEvento: AlEvento }) {
+// ── Portal de cliente: una obra de ejemplo que se puede tocar (y el vídeo, si se quiere).
+export function Portal({ t, idioma, num, alEvento }: { t: Textos; idioma: Idioma; num: number; alEvento: AlEvento }) {
+  const [video, setVideo] = useState(false)
   return (
     <Pantalla id="portal" tema="oscuro" num={num} rotulo={t.portalRotulo} className="p-dos p-portal">
       <div className="p-dos-txt">
@@ -230,9 +232,14 @@ export function Portal({ t, num, alEvento }: { t: Textos; num: number; alEvento:
         <ul className="p-lista">
           {t.portalPuntos.map((x, i) => <li key={x} className="p-in" style={D(`${0.4 + i * 0.08}s`)}>{x}</li>)}
         </ul>
+        <button type="button" className="p-agenda-enlace p-in" style={D('.7s')} onClick={() => { setVideo(!video); if (!video) alEvento('video', 'portal') }}>
+          {video ? t.portalDemo : t.portalVideo}
+        </button>
       </div>
       <div className="p-dos-img p-in" style={D('.2s')}>
-        <VideoFP base="/para/video/portal-clientes" nombre="portal" alEvento={alEvento} t={t} className="p-marco" />
+        {video
+          ? <VideoFP base="/para/video/portal-clientes" nombre="portal" alEvento={alEvento} t={t} className="p-marco" />
+          : <PortalDemo idioma={idioma} alEvento={alEvento} />}
       </div>
     </Pantalla>
   )
@@ -335,7 +342,7 @@ export function Hablemos({ t, idioma, lead, num, alEvento, agenda, token }: {
   )
 }
 
-export const CSS_PANTALLAS = CSS_AGENDA + `
+export const CSS_PANTALLAS = CSS_AGENDA + CSS_PORTAL_DEMO + `
 .p-pant{position:relative;min-height:100svh;padding:calc(env(safe-area-inset-top) + 84px) var(--p-gutter) calc(env(safe-area-inset-bottom) + 56px);
   display:flex;flex-direction:column;gap:22px;overflow:hidden;}
 .p-oscuro{background:var(--p-negro);color:var(--p-blanco);}

@@ -125,6 +125,9 @@ export const T = {
     portalRotulo: 'Portal de cliente',
     portalTitulo: 'Toda la obra, en un solo acceso.',
     portalTexto: 'Cronograma, actas de visita, documentación, decisiones y pagos, siempre al día y en el mismo sitio para el promotor, la constructora y el estudio.',
+    portalVideo: 'Ver el vídeo del portal',
+    portalDemo: 'Volver a la demo',
+    cargar3d: 'Cargar la maqueta 3D',
     portalPuntos: ['Cronograma y avance de obra', 'Actas, fotos y visitas', 'Planos y presupuestos, siempre la última versión', 'Aprobaciones registradas'],
 
     colaboracionRotulo: 'Colaboración',
@@ -282,6 +285,9 @@ export const T = {
     portalRotulo: 'Client portal',
     portalTitulo: 'The whole build, in one place.',
     portalTexto: 'Schedule, site reports, documents, decisions and payments, always up to date and in one place for the developer, the contractor and the studio.',
+    portalVideo: 'Watch the portal video',
+    portalDemo: 'Back to the demo',
+    cargar3d: 'Load the 3D model',
     portalPuntos: ['Schedule and progress', 'Site reports, photos and visits', 'Drawings and budgets, always the latest version', 'Logged approvals'],
 
     colaboracionRotulo: 'Collaboration',

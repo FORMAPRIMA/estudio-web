@@ -53,6 +53,7 @@ export default function MapaObras({ puntos, t, idioma, token: tokenServidor, num
   const [explorando, setExplorando] = useState(false)
   const [sel, setSel] = useState<number | null>(null)
   const [fallo, setFallo] = useState(false)
+  const [tocado, setTocado] = useState(false)
   useBloqueoScroll(explorando)
 
   // Montaje perezoso: el mapa (≈250 KB + teselas) solo se pide cuando la
@@ -203,7 +204,8 @@ export default function MapaObras({ puntos, t, idioma, token: tokenServidor, num
 
   return (
     <section ref={refCerca} data-pantalla="mapa" data-tema={claro ? 'claro' : undefined} className={`p-escena p-mapa${claro ? ' ciudad' : ''}${explorando ? ' explorando' : ''}`} aria-label={t.mapaTitulo}>
-      <div ref={lienzo} className="p-lienzo" />
+      <div ref={lienzo} className="p-lienzo" onPointerDown={() => setTocado(true)} />
+      {aterrizado && !tocado && !explorando && <span className="p-gesto" aria-hidden>↔ {t.arrastra}</span>}
       {fallo && <img className="p-lienzo p-mapa-fallo" src="/para/portada-1400.webp" alt="" />}
       <div className="p-mapa-velo" aria-hidden />
 
@@ -252,6 +254,7 @@ const CSS = `
 .p-mapa .mapboxgl-ctrl-attrib{background:rgba(13,13,13,.5)!important;}
 .p-mapa .mapboxgl-ctrl-attrib a{color:rgba(251,251,250,.6)!important;}
 .p-mapa-fallo{object-fit:cover;filter:brightness(.45);}
+.p-mapa.ciudad .p-gesto{background:rgba(20,20,20,.72);}
 .p-mapa-velo{position:absolute;inset:0;pointer-events:none;
   background:linear-gradient(180deg,rgba(13,13,13,.86) 0%,rgba(13,13,13,.25) 34%,rgba(13,13,13,0) 55%,rgba(13,13,13,.35) 80%,rgba(13,13,13,.8) 100%);transition:opacity .8s;}
 .p-mapa.explorando .p-mapa-velo{opacity:.35;}

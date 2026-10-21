@@ -39,12 +39,21 @@ export default function MaquetaTorre({ t, num, alEvento }: { t: Textos; num: num
   const [sel, setSel] = useState<string | null>(null)
   const [hover, setHover] = useState<string | null>(null)
   const [explorando, setExplorando] = useState(false)
+  const [tocada, setTocada] = useState(false)
+  // Móviles con poca memoria o pocos núcleos: no se arranca three.js solo; la foto
+  // de firma hace de maqueta hasta que se pide.
+  const [ligero, setLigero] = useState(false)
+  const [pedida, setPedida] = useState(false)
+  useEffect(() => {
+    const n = navigator as Navigator & { deviceMemory?: number }
+    setLigero((n.deviceMemory ?? 8) <= 3 || (n.hardwareConcurrency ?? 8) <= 3)
+  }, [])
   useBloqueoScroll(explorando)
   explorandoRef.current = explorando
 
   // three.js (~190 KB) solo se pide cuando la pantalla se acerca.
   useEffect(() => {
-    if (!cerca || escena.current || !wrap.current || !canvas.current) return
+    if (!cerca || (ligero && !pedida) || escena.current || !wrap.current || !canvas.current) return
     let vivo = true
     import('@/components/team/visual-lab/escena-mendez').then(({ Escena }) => {
       if (!vivo || !wrap.current || !canvas.current) return
@@ -59,7 +68,7 @@ export default function MaquetaTorre({ t, num, alEvento }: { t: Textos; num: num
       setLista(true)
     })
     return () => { vivo = false }
-  }, [cerca, units])
+  }, [cerca, units, ligero, pedida])
 
   useEffect(() => () => { escena.current?.dispose(); escena.current = null }, [])
 
@@ -68,7 +77,7 @@ export default function MaquetaTorre({ t, num, alEvento }: { t: Textos; num: num
 
   // Al llegar: la foto de firma se funde con la maqueta (mismo encuadre) y la cámara deriva.
   useEffect(() => {
-    if (!lista || !visto || !placa) return
+    if (!lista || !visto || !placa) return  // (en modo ligero «lista» llega solo tras «Cargar la maqueta 3D»)
     const k = setTimeout(() => { setPlaca(false); escena.current?.derivar(sinMovimiento() ? 0 : 2600) }, 900)
     return () => clearTimeout(k)
   }, [lista, visto, placa])
@@ -134,7 +143,7 @@ export default function MaquetaTorre({ t, num, alEvento }: { t: Textos; num: num
           </div>
         </div>
 
-        <div ref={wrap} className="p-maqueta-lienzo">
+        <div ref={wrap} className="p-maqueta-lienzo" onPointerDown={() => setTocada(true)}>
           <canvas ref={canvas} />
           <img
             className={`p-maqueta-placa${placa ? '' : ' fuera'}`}
@@ -148,6 +157,10 @@ export default function MaquetaTorre({ t, num, alEvento }: { t: Textos; num: num
             {h && <><b>{h.id}</b>{t.estados[h.estado]}</>}
           </div>
           <span className="p-sello">{t.sello}</span>
+          {lista && !tocada && !explorando && <span className={`p-gesto${tocada ? ' fuera' : ''}`} aria-hidden>↔ {t.arrastra}</span>}
+          {ligero && !pedida && (
+            <button type="button" className="p-explorar p-explorar-claro p-cargar3d" onClick={() => { setPedida(true); setPlaca(true) }}>{t.cargar3d}</button>
+          )}
           {!explorando && <button type="button" className="p-maqueta-toque" aria-label={t.explorarMaqueta} onClick={() => setExplorando(true)} />}
         </div>
 
@@ -217,6 +230,8 @@ const CSS = `
 .p-sello{position:absolute;z-index:3;top:12px;right:var(--p-gutter);padding:7px 11px;border:1px solid rgba(138,98,32,.45);background:rgba(244,243,240,.85);
   color:#8A6220;font-size:12px;letter-spacing:.14em;text-transform:uppercase;font-weight:500;pointer-events:none;}
 .p-maqueta-toque{position:absolute;inset:0;z-index:2;background:transparent;border:0;padding:0;display:none;}
+.p-cargar3d{position:absolute;z-index:4;left:50%;top:50%;transform:translate(-50%,-50%);}
+.p-maqueta .p-gesto{background:rgba(20,20,20,.72);}
 @media (pointer:coarse){
   .p-maqueta-toque{display:block;}
   .p-maqueta:not(.explorando) .p-maqueta-lienzo canvas{pointer-events:none;}
