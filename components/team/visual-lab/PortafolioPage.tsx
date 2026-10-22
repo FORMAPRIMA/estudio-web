@@ -8,6 +8,7 @@ import {
   resumen, mesDe, lecturaMix,
 } from '@/lib/visual-lab/cartera'
 import { C, mm, mUsd, num, dec, pct, quarter, masMeses } from '@/lib/visual-lab/ui'
+import { ASSETS as JJ_ASSETS, VIVIENDAS as JJ_VIVIENDAS, SUP_TOTAL as JJ_SUP } from '@/lib/visual-lab/jorge-juan'
 
 type Vista = 'cartera' | 'pipeline'
 
@@ -84,6 +85,7 @@ export default function PortafolioPage() {
             <div className="vl-port-cards">
               {ACTIVOS.map((p) => <TarjetaActivo key={p.id} p={p} onFicha={() => setFichaId(p.id)} />)}
               <TarjetaUSD p={ISLA_CRETA} onFicha={() => setFichaId(ISLA_CRETA.id)} />
+              <TarjetaJorgeJuan />
             </div>
 
             {/* Hitos */}
@@ -318,6 +320,63 @@ function TarjetaActivo({ p, onFicha }: { p: Activo; onFicha: () => void }) {
           <button className="vl-btn vl-btn-ghost" style={{ flex: '0 0 auto', width: 'auto', padding: '13px 18px' }} onClick={onFicha}>
             Ficha
           </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Tarjeta de Jorge Juan 40: maqueta de ejemplo sobre un edificio real, sin cifras
+ * comerciales. Enseña la herramienta de producto (abrir una planta, ver la distribución).
+ */
+function TarjetaJorgeJuan() {
+  return (
+    <div className="vl-port-card">
+      <div style={{ position: 'relative', aspectRatio: '16 / 9', background: '#E9E7E1', borderBottom: `1px solid ${C.border}` }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={`${JJ_ASSETS}/firma-1280.jpg`}
+          srcSet={`${JJ_ASSETS}/firma-1280.jpg 1280w, ${JJ_ASSETS}/firma-2560.jpg 1672w`}
+          sizes="(min-width: 1024px) 33vw, 100vw"
+          alt="Jorge Juan 40 desde la calle"
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          loading="lazy"
+        />
+        <span style={{
+          position: 'absolute', left: 0, top: 14, padding: '5px 12px 6px',
+          background: 'rgba(26,26,26,.82)', color: '#F2F2F0',
+          fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase',
+        }}>
+          Residencial · edificio existente
+        </span>
+      </div>
+      <div style={{ padding: '18px 20px 20px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ width: 7, height: 7, background: C.blue, flex: '0 0 auto' }} />
+          <span style={{ fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.blue }}>Maqueta digital · ejemplo</span>
+        </div>
+        <p style={{ fontSize: 24, lineHeight: 1.12, letterSpacing: '-0.015em', margin: '9px 0 0', fontWeight: 300 }}>Jorge Juan 40</p>
+        <p style={{ fontSize: 11.5, color: C.muted, margin: '6px 0 0' }}>Salamanca · Madrid</p>
+
+        <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', borderTop: `1px solid ${C.border}` }}>
+          {[{ k: 'Viviendas', v: String(JJ_VIVIENDAS.length) }, { k: 'Plantas', v: 'Bajo + 6' }, { k: 'Catastro', v: `${num(JJ_SUP)} m²` }].map((m) => (
+            <div key={m.k} style={{ padding: '10px 8px 11px 0', borderBottom: `1px solid ${C.borderSoft}` }}>
+              <p className="vl-label" style={{ margin: 0, fontSize: 9.5 }}>{m.k}</p>
+              <p style={{ fontSize: 12.5, margin: '5px 0 0' }}>{m.v}</p>
+            </div>
+          ))}
+        </div>
+
+        <p style={{ fontSize: 11.5, color: C.muted, margin: '16px 0 0', lineHeight: 1.55 }}>
+          Fachada y cubiertas con detalle, interiores en clay y la calle de Jorge Juan. Se toca una vivienda,
+          se abre su planta y se ve la distribución.
+        </p>
+
+        <div style={{ marginTop: 'auto', paddingTop: 18, display: 'flex', gap: 8 }}>
+          <Link href="/team/apps/visual-lab/jorge-juan-40" className="vl-btn vl-btn-primary" style={{ flex: 1, width: 'auto', textDecoration: 'none' }}>
+            Abrir showroom
+          </Link>
         </div>
       </div>
     </div>

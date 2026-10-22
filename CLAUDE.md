@@ -283,6 +283,7 @@ Aplicaciones internas. Acceso: todos los roles FP.
     | `/visual-lab/mendez-alvaro-32` | Torre residencial, 118 viviendas en 24 plantas | `FP Visual Lab Showroom` |
     | `/visual-lab/la-dehesa` | Parque comercial de renta, 35 locales | `FP Plaza Comercial` |
     | `/visual-lab/valdeserra` | Suelo residencial, 35 parcelas en ladera | `FP Urbanizacion` |
+    | `/visual-lab/jorge-juan-40` | **Maqueta digital de ejemplo** de un edificio real de Madrid (14 viviendas, sin precios) | Blender (MCP) |
   - **Nada está en BD y es a propósito**: los tres conjuntos son deterministas (`hash` FNV sobre el id, misma
     geometría en cada carga) y lo único que se persiste son los cambios de estado comercial, los precios
     recalculados, las cotizaciones/propuestas y la bitácora — en `localStorage`, una clave por activo
@@ -321,6 +322,48 @@ Aplicaciones internas. Acceso: todos los roles FP.
     `escena-{valdeserra,dehesa,mendez}.ts` (clases imperativas de three.js) · `Consola{,Dehesa,Mendez}` ·
     `FichaParcela` · `CotizacionModal`
   - Estilos en clases `.vl-*` al final de `app/globals.css` (mobile-first; escritorio en `min-width: 1024px`).
+  - **Jorge Juan 40** (`JorgeJuanPage` + `escena-jorge-juan.ts` + `lib/visual-lab/jorge-juan.ts`): no es un
+    activo comercial sino la **demostración de la herramienta de producto sobre un edificio existente**: tocar
+    una vivienda, abrir su planta y ver la distribución. Sin precios ni estados, a propósito.
+    - El GLB (`public/protegido/visual-lab/jorge-juan-40/jj40.glb`, 0,3 MB con Draco, ~155k triángulos) sale
+      de Blender: la fuente está en `~/JORGE_JUAN_40_MAQUETA` (scripts que regeneran el modelo + `LEEME.md`).
+      Dos viviendas por planta en espejo (bloques instanciados) y el interior en clay con la propuesta de
+      reforma del 5º izq. repetida en todas las plantas.
+    - **Contrato de nodos** (extras de Blender → `userData`): `P{n}_{IZ|DR}`/`PB_*` capa `exterior`,
+      `INT_P{n}_*` capa `interior`, `CUB_*` capa `cubierta`, `VOL_{unitId}` capa `volumen` (`unitId` = `5-IZ`,
+      `BJ-DR`…), y `CTX_*` / `CALLE_*` / `ARBOL_*` para el entorno, la calle y el arbolado.
+    - **Selección por volúmenes**: los `VOL_*` van con material invisible pero el raycaster los ve. **Tocar
+      una vivienda despieza el edificio**: las plantas de encima y la cubierta suben en bloque (`LEVANTE` = 22 m,
+      animado), los vecinos se vuelven translúcidos y se enciende solo el interior en clay de esa planta, con
+      la cámara mirando por el hueco. Cerrar la ficha lo recompone. Los interiores están apagados el resto del
+      tiempo (son media maqueta y desde fuera no se ven).
+    - **Despiece limpio**: las plantas de encima suben y **desaparecen al llegar** (a ¾ del recorrido), así que
+      queda la planta entera a la vista con una cámara casi cenital (calle abajo en pantalla) cuya distancia se
+      calcula para que quepan los 31,8 m de fondo. La gemela de la misma planta va **maciza** (su volumen con
+      material opaco) y sin interior. Con la planta abierta el sol se sube casi a la vertical y se baja de
+      intensidad: sombras cortas y suaves (apagarlas del todo dejaba la planta sin relieve). Se probó a seccionar la vivienda a 1,40 m con `clippingPlanes` y
+      se descartó: los muros quedaban huecos.
+    - **Estética** (constantes al principio de `escena-jorge-juan.ts`): entorno **opaco** (`ENTORNO`, José probó
+      el translúcido y lo descartó) con solo la arista de cornisa marcada (las verticales de 600 piezas de
+      Catastro hacían una cortina), `PALETA` del visor que manda sobre la del GLB (suelo de madera clara, clay
+      blanco, muebles un tono más oscuro, calzada oscura), tone mapping AgX, fondo en degradado y GTAO en
+      escritorio (en móvil, render directo). El sol entra por el **noroeste** a propósito: la fachada a Jorge
+      Juan mira al norte y con sol del sur quedaba plana.
+    - 🔴 **Cámaras**: Jorge Juan tiene 15,2 m entre fachadas. Una cámara baja «enfrente» queda dentro del
+      edificio de la otra acera, y el vecino de la esquina tapa la fachada desde el cruce. El POV maestro
+      (`VISTAS.calle`, el de la placa `firma-*.jpg`) mira desde el noroeste por encima de los tejados.
+    - `?vivienda=5-IZ` abre la ficha con el edificio despiezado.
+    - **Etiquetas de estancia** en la planta abierta: bolita con el número de la leyenda del plano y el nombre
+      en pequeño, que crece al pasar el ratón (`.vl-est*` en `globals.css`). Son HTML proyectado desde la escena
+      (capa `estanciasEl`), no texto 3D. Posiciones en `ESTANCIAS_PLANO` (`lib/visual-lab/jorge-juan.ts`, en
+      coordenadas del plano). Anticolisión cada fotograma: el nombre va a la derecha de su bolita, si no cabe a
+      la izquierda y, si tampoco, se oculta (la bolita queda y el nombre sale con el hover).
+    - **Renders** (pestaña de la ficha): los 10 finales editados del proyecto en
+      `public/protegido/visual-lab/jorge-juan-40/renders/` (`jj40-NN.jpg` de 1800 px y `-min` de 640 para las
+      miniaturas; 4,8 MB en total frente a 42 MB de los PNG). Visor a pantalla completa con flechas, teclado y
+      swipe, montado con `createPortal`: la animación de `.vl-ficha` deja un `transform` que atraparía el
+      `position: fixed`. Los árboles son *Bloodwood tree* de
+      Poly by Google (**CC-BY 3.0, vía Poly Pizza**): si la página sale fuera del equipo, hay que acreditarlo.
   - **Pendiente**: los huecos de documentación gráfica de las fichas (plano/render/recorrido/vídeo, etc.) son
     placeholders. Los otros dos artboards del proyecto de diseño (`Plan Abaco` — el plan de producto de
     ÁBACO — y `Guia 3D Blender MCP`) son **documentos**, no apps, y no se han portado.
@@ -798,6 +841,7 @@ Registro de horas por proyecto y fase. Todos los roles FP.
 /team/apps/visual-lab/mendez-alvaro-32  Showroom torre residencial (?vivienda=14C abre una ficha)
 /team/apps/visual-lab/la-dehesa         Showroom parque comercial (?local=A-05)
 /team/apps/visual-lab/valdeserra        Showroom de suelo (?parcela=II-07)
+/team/apps/visual-lab/jorge-juan-40     Maqueta digital de ejemplo (?vivienda=5-IZ abre el despiece)
 /team/apps/design-hunter    Design Hunter (inspiración/referencias)
 /team/apps/repasos          Repasos de obra — índice de proyectos
 /team/apps/repasos/[id]     Repasos de obra — visor del plano con pins
