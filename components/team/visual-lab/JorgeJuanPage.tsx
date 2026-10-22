@@ -258,7 +258,7 @@ export default function JorgeJuanPage() {
         >
           <img
             src={`${ASSETS}/firma-2560.jpg`}
-            srcSet={`${ASSETS}/firma-1280.jpg 1280w, ${ASSETS}/firma-2560.jpg 2560w`}
+            srcSet={`${ASSETS}/firma-1280.jpg 1280w, ${ASSETS}/firma-2560.jpg 1672w`}
             sizes="100vw"
             alt="Jorge Juan 40 desde la calle: fachada, cuerpos volados curvos y la fila de acacias"
             style={{ transform: listo ? 'scale(1.035)' : 'scale(1)' }}

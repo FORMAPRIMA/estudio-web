@@ -337,7 +337,7 @@ function TarjetaJorgeJuan() {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={`${JJ_ASSETS}/firma-1280.jpg`}
-          srcSet={`${JJ_ASSETS}/firma-1280.jpg 1280w, ${JJ_ASSETS}/firma-2560.jpg 2560w`}
+          srcSet={`${JJ_ASSETS}/firma-1280.jpg 1280w, ${JJ_ASSETS}/firma-2560.jpg 1672w`}
           sizes="(min-width: 1024px) 33vw, 100vw"
           alt="Jorge Juan 40 desde la calle"
           style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
