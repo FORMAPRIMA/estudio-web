@@ -6,9 +6,9 @@
  * del GLB de Blender. Lo que añade la escena:
  *  - luz de maqueta (cielo + sol con sombra horneada una vez por cambio de capas);
  *  - selección por los volúmenes `VOL_*` (invisibles salvo al pasar o seleccionar);
- *  - despiece: al elegir una vivienda, las plantas de encima y la cubierta suben en
- *    bloque (con un hueco de LEVANTE metros) y aparece el interior en clay de su planta;
- *    los edificios vecinos se vuelven translúcidos para que la cámara pueda mirar dentro.
+ *  - despiece: al elegir una vivienda, las plantas de encima y la cubierta suben y, al
+ *    llegar arriba, desaparecen; queda la planta entera a la vista con su interior en clay,
+ *    la gemela maciza, luz uniforme sin sombras de sol y la cámara casi cenital.
  *
  * Los interiores van siempre ocultos fuera de la planta abierta: son la mitad de los
  * triángulos del edificio y desde fuera no se ven.
@@ -63,12 +63,10 @@ const PALETA: Record<string, string> = {
   CTX_acera: '#E3DFD7',
   CTX_granito: '#CFCBC4',
 }
-/** Hueco que se abre sobre la planta elegida al despiezar (m) */
-const LEVANTE = 22
+/** Recorrido de las plantas que suben al despiezar (m); al llegar desaparecen */
+const LEVANTE = 30
 /** Separación extra entre las plantas levantadas, para que se lean como piezas (m) */
 const SEPARACION = 0.6
-/** Altura del corte de planta sobre el suelo acabado (m): muros y armarios quedan seccionados */
-const CORTE = 1.4
 
 /**
  * Encuadres en coordenadas del GLB (Y arriba; la calle queda en Z negativa).
@@ -105,9 +103,7 @@ export class Escena {
   private cubiertas: Nodo[] = []
   private matsEntorno: THREE.MeshStandardMaterial[] = []
   private aristasEntorno: THREE.LineBasicMaterial[] = []
-  /** Mallas de la vivienda abierta con sus materiales originales, para deshacer el corte */
-  private recortadas: { mesh: THREE.Mesh; mat: THREE.Material | THREE.Material[] }[] = []
-  private planoCorte = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0)
+  private hemi: THREE.HemisphereLight
   private composer: EffectComposer | null = null
   private gtao: GTAOPass | null = null
   private velo = 1
@@ -161,7 +157,6 @@ export class Escena {
     renderer.shadowMap.type = THREE.PCFSoftShadowMap
     // las sombras son estáticas: se recalculan solo cuando cambia lo que se ve
     renderer.shadowMap.autoUpdate = false
-    renderer.localClippingEnabled = true
     // AgX conserva los blancos de la fachada sin quemarlos (ACES los vuelve grises)
     renderer.toneMapping = THREE.AgXToneMapping
     renderer.toneMappingExposure = 1.02
@@ -192,7 +187,8 @@ export class Escena {
     scene.environmentIntensity = 0.35
     pmrem.dispose()
 
-    scene.add(new THREE.HemisphereLight('#f6f3ec', '#9a9182', 0.62))
+    this.hemi = new THREE.HemisphereLight('#f6f3ec', '#9a9182', 0.62)
+    scene.add(this.hemi)
     const sun = new THREE.DirectionalLight('#ffe9cf', 3.1)
     // tarde de verano: el sol baja por el noroeste y raspa la fachada a Jorge Juan, que
     // mira al norte; con el sol del sur la fachada quedaba siempre en sombra y plana
@@ -235,7 +231,7 @@ export class Escena {
       hover: vol(ACENTO, 0.22),
       sel: vol(ACENTO, 0.34),
       // la vivienda gemela durante el despiece: un bloque de clay liso
-      macizo: new THREE.MeshStandardMaterial({ color: '#ECE8E0', roughness: 0.95 }),
+      macizo: new THREE.MeshStandardMaterial({ color: '#D9D3C8', roughness: 0.95 }),
     }
 
     this.canvas.style.cursor = 'grab'
@@ -250,36 +246,6 @@ export class Escena {
     this.last = performance.now()
     this.raf()
     this.cargar()
-  }
-
-  /**
-   * Corte de planta: la media planta elegida (exterior e interior) se secciona a CORTE m
-   * del suelo. Los materiales del GLB los comparten todas las plantas, así que se clonan
-   * solo para esta vivienda y se devuelven al cerrar.
-   */
-  private seccionar(c: number | null, mano: string | null) {
-    for (const r of this.recortadas) {
-      const mats = Array.isArray(r.mesh.material) ? r.mesh.material : [r.mesh.material]
-      mats.forEach((m) => m.dispose())
-      r.mesh.material = r.mat
-    }
-    this.recortadas = []
-    if (c == null || !mano) return
-    this.planoCorte.constant = zPlanta(c) + 0.3 + CORTE
-    const nodos = this.exteriores.concat(this.interiores).filter((n) => n.planta === c && n.mano === mano)
-    for (const n of nodos) n.obj.traverse((o) => {
-      const m = o as THREE.Mesh
-      if (!m.isMesh) return
-      const clona = (x: THREE.Material) => {
-        const k = x.clone()
-        k.clippingPlanes = [this.planoCorte]
-        k.clipShadows = true
-        k.side = THREE.DoubleSide
-        return k
-      }
-      this.recortadas.push({ mesh: m, mat: m.material })
-      m.material = Array.isArray(m.material) ? m.material.map(clona) : clona(m.material)
-    })
   }
 
   /**
@@ -438,7 +404,13 @@ export class Escena {
     for (const n of this.exteriores) n.offT = lev(n.planta)
     for (const n of this.cubiertas) n.offT = lev(n.planta)
     const mano = this.selId ? BY_ID[this.selId]?.mano : null
-    this.seccionar(c, mano ?? null)
+    // lo que baja vuelve a verse desde arriba; lo que sube se esconde al llegar (bucle)
+    for (const n of this.exteriores.concat(this.cubiertas)) if (n.offT === 0) n.obj.visible = true
+    // planta abierta: luz de estudio uniforme; las sombras del sol solo metían manchas
+    const abierta = c != null
+    this.sun.castShadow = !abierta
+    this.sun.intensity = abierta ? 1.6 : 3.1
+    this.hemi.intensity = abierta ? 1.35 : 0.62
     // solo el interior de la vivienda elegida: la gemela de la misma planta va maciza
     for (const n of this.interiores) n.obj.visible = c != null && n.planta === c && n.mano === mano
     this.veloT = c != null ? 0.35 : 1
@@ -493,10 +465,15 @@ export class Escena {
     const cx = sx * ANCHO_MEDIO / 2
     const ancho = this.camera.aspect < 1 ? 1.5 : 1
     if (this.modo === 'planta') {
-      // por el hueco del despiece, por debajo de las plantas levantadas y mirando la
-      // planta seccionada casi de arriba
-      const target = new THREE.Vector3(cx, z0 + 0.4, FONDO * 0.5)
-      const pos = new THREE.Vector3(cx + sx * 9 * ancho, z0 + h + 19, -6 * ancho)
+      // casi cenital sobre la media planta, con la calle abajo en pantalla. La distancia
+      // se calcula para que quepan los 31,8 m de fondo y los 11,6 de ancho con margen
+      const tv = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2))
+      const th = tv * this.camera.aspect
+      const libre = this.wrap.clientWidth >= 1024 ? 0.62 : 1        // la ficha tapa la derecha
+      const d = Math.max((FONDO / 2 + 2.5) / tv, (ANCHO_MEDIO / 2 + 2) / (th * libre)) * 1.04
+      const inc = 0.32                                                // inclinación desde la vertical (rad)
+      const target = new THREE.Vector3(cx, z0, FONDO * 0.5)
+      const pos = new THREE.Vector3(cx, z0 + d * Math.cos(inc), FONDO * 0.5 - d * Math.sin(inc))
       this.volar(pos, target, dur)
     } else {
       // dentro de la calle y en enfilada: de frente se metería en el edificio de enfrente
@@ -640,12 +617,14 @@ export class Escena {
 
     // despiece animado (las sombras se recalculan mientras algo se mueve)
     let mueve = false
-    const k = Math.min(1, dt * 4.5)
+    const k = Math.min(1, dt * 3.2)
     for (const n of this.exteriores.concat(this.cubiertas)) {
       if (Math.abs(n.offT - n.off) < 0.01) continue
       n.off += (n.offT - n.off) * k
       if (Math.abs(n.offT - n.off) < 0.01) n.off = n.offT
       n.obj.position.y = n.y0 + n.off
+      // sube y se va: a partir de 3/4 del recorrido desaparece
+      if (n.offT > 0 && n.off > n.offT * 0.75) n.obj.visible = false
       mueve = true
     }
     if (Math.abs(this.veloT - this.velo) > 0.005) {

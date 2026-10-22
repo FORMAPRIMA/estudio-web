@@ -337,10 +337,12 @@ Aplicaciones internas. Acceso: todos los roles FP.
       animado), los vecinos se vuelven translúcidos y se enciende solo el interior en clay de esa planta, con
       la cámara mirando por el hueco. Cerrar la ficha lo recompone. Los interiores están apagados el resto del
       tiempo (son media maqueta y desde fuera no se ven).
-    - **Despiece limpio**: la vivienda gemela de la misma planta se pinta como un **bloque macizo** (su volumen
-      con material opaco) y sin interior, para que solo se lea la distribución elegida; y la vivienda elegida se
-      **secciona a 1,40 m** del suelo con un `clippingPlane` sobre materiales clonados (los del GLB los comparten
-      todas las plantas; se devuelven al cerrar).
+    - **Despiece limpio**: las plantas de encima suben y **desaparecen al llegar** (a ¾ del recorrido), así que
+      queda la planta entera a la vista con una cámara casi cenital (calle abajo en pantalla) cuya distancia se
+      calcula para que quepan los 31,8 m de fondo. La gemela de la misma planta va **maciza** (su volumen con
+      material opaco) y sin interior. Con la planta abierta se apagan las sombras del sol y se sube la luz de
+      cielo: las sombras solo metían manchas. Se probó a seccionar la vivienda a 1,40 m con `clippingPlanes` y
+      se descartó: los muros quedaban huecos.
     - **Estética** (constantes al principio de `escena-jorge-juan.ts`): entorno «fantasma» (volúmenes al 9 % con
       solo las aristas horizontales: las verticales de 600 piezas de Catastro hacían una cortina), `PALETA` del
       visor que manda sobre la del GLB (suelo de madera clara, clay blanco, muebles un tono más oscuro, calzada
