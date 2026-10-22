@@ -137,7 +137,7 @@ export const FICHA_TABS: { id: FichaTab; label: string }[] = [
 
 export const MODOS: { id: ModoId; label: string; nota: string }[] = [
   { id: 'edificio', label: 'Edificio', nota: 'La maqueta completa con su calle' },
-  { id: 'planta', label: 'Planta abierta', nota: 'Se levantan las plantas de encima y se ve la distribución' },
+  { id: 'planta', label: 'Despiece por planta', nota: 'Las plantas de encima suben y se ve la distribución en clay' },
 ]
 
 export const VISTAS: { id: VistaId; label: string }[] = [

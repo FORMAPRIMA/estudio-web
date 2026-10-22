@@ -55,20 +55,15 @@ export default function JorgeJuanPage() {
       const e = new Escena({
         canvas, wrap, labelEl: labelRef.current, compassEl: compassRef.current, glbUrl: GLB_URL,
         onHover: (id) => setHoverId(id),
-        onPick: (id) => { setSelId(id); setTab('distribucion') },
+        // tocar una vivienda despieza el edificio por su planta
+        onPick: (id) => { setSelId(id); setTab('distribucion'); setModo('planta') },
         onProgress: (f) => setFrac(f),
         onReady: (r) => {
           setQa(r)
           setListo(true)
-          // enlace directo: ?vivienda=5-IZ abre la ficha y la planta
-          const p = new URLSearchParams(window.location.search)
-          const pedida = p.get('vivienda')
-          if (pedida && BY_ID[pedida]) {
-            t = setTimeout(() => {
-              setSelId(pedida)
-              if (p.get('planta') === '1') setModo('planta')
-            }, 600)
-          }
+          // enlace directo: ?vivienda=5-IZ abre la ficha con el edificio despiezado
+          const pedida = new URLSearchParams(window.location.search).get('vivienda')
+          if (pedida && BY_ID[pedida]) t = setTimeout(() => { setSelId(pedida); setModo('planta') }, 600)
         },
         onError: (m) => setError(m),
       })
@@ -108,6 +103,7 @@ export default function JorgeJuanPage() {
     setSelId(id)
     setTab('distribucion')
     setInventario(false)
+    setModo('planta')
   }, [])
 
   const pickModo = (m: ModoId) => {
@@ -123,7 +119,7 @@ export default function JorgeJuanPage() {
 
   const enlace = async () => {
     if (!sel) return
-    const url = `${window.location.origin}${window.location.pathname}?vivienda=${sel.id}${modo === 'planta' ? '&planta=1' : ''}`
+    const url = `${window.location.origin}${window.location.pathname}?vivienda=${sel.id}`
     try { await navigator.clipboard.writeText(url); toast('Enlace a la vivienda copiado') }
     catch { toast('No se pudo copiar el enlace') }
   }
@@ -141,7 +137,7 @@ export default function JorgeJuanPage() {
       <p style={{ fontSize: 11, color: C.muted, margin: '8px 0 0', lineHeight: 1.5 }}>
         {num(SUP_TOTAL)} m² según Catastro · ático retranqueado
         <br />
-        Toca una vivienda para abrir su ficha
+        Toca una vivienda: el edificio se abre por su planta
       </p>
     </div>
   )
@@ -157,7 +153,7 @@ export default function JorgeJuanPage() {
       ))}
       {modo === 'planta' && sel && (
         <p style={{ fontSize: 10.5, color: C.faint, margin: 0, padding: '4px 14px 12px', lineHeight: 1.5 }}>
-          Abierta por la planta {plantaLabel(sel.planta)}. Distribución de la propuesta del 5º izquierda.
+          Despiezado por la planta {plantaLabel(sel.planta)}. Distribución de la propuesta del 5º izquierda.
         </p>
       )}
     </div>
@@ -530,7 +526,7 @@ function Ficha({ v, tab, onTab, abierta, onAbrir, onAcercar, onEnlace, onClose }
       </div>
 
       <div style={{ margin: '22px 20px 32px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <button className="vl-btn vl-btn-primary" onClick={onAbrir}>{abierta ? 'Cerrar la planta' : 'Abrir la planta'}</button>
+        <button className="vl-btn vl-btn-primary" onClick={onAbrir}>{abierta ? 'Recomponer el edificio' : 'Despiezar por esta planta'}</button>
         <button className="vl-btn vl-btn-ghost" onClick={onAcercar}>Acercar a esta vivienda</button>
         <button className="vl-btn vl-btn-plain" onClick={onEnlace}>Copiar enlace a la vivienda</button>
       </div>

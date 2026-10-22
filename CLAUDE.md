@@ -332,13 +332,15 @@ Aplicaciones internas. Acceso: todos los roles FP.
     - **Contrato de nodos** (extras de Blender → `userData`): `P{n}_{IZ|DR}`/`PB_*` capa `exterior`,
       `INT_P{n}_*` capa `interior`, `CUB_*` capa `cubierta`, `VOL_{unitId}` capa `volumen` (`unitId` = `5-IZ`,
       `BJ-DR`…), y `CTX_*` / `CALLE_*` / `ARBOL_*` para el entorno, la calle y el arbolado.
-    - **Selección por volúmenes**: los `VOL_*` van con material invisible pero el raycaster los ve. **Planta
-      abierta** esconde los exteriores de encima y la cubierta y enciende solo el interior de esa planta; los
-      interiores están apagados el resto del tiempo (son media maqueta y desde fuera no se ven).
+    - **Selección por volúmenes**: los `VOL_*` van con material invisible pero el raycaster los ve. **Tocar
+      una vivienda despieza el edificio**: las plantas de encima y la cubierta suben en bloque (`LEVANTE` = 22 m,
+      animado), los vecinos se vuelven translúcidos y se enciende solo el interior en clay de esa planta, con
+      la cámara mirando por el hueco. Cerrar la ficha lo recompone. Los interiores están apagados el resto del
+      tiempo (son media maqueta y desde fuera no se ven).
     - 🔴 **Cámaras**: Jorge Juan tiene 15,2 m entre fachadas. Una cámara baja «enfrente» queda dentro del
       edificio de la otra acera, y el vecino de la esquina tapa la fachada desde el cruce. El POV maestro
       (`VISTAS.calle`, el de la placa `firma-*.jpg`) mira desde el noroeste por encima de los tejados.
-    - `?vivienda=5-IZ` abre la ficha y `&planta=1` además abre la planta. Los árboles son *Bloodwood tree* de
+    - `?vivienda=5-IZ` abre la ficha con el edificio despiezado. Los árboles son *Bloodwood tree* de
       Poly by Google (**CC-BY 3.0, vía Poly Pizza**): si la página sale fuera del equipo, hay que acreditarlo.
   - **Pendiente**: los huecos de documentación gráfica de las fichas (plano/render/recorrido/vídeo, etc.) son
     placeholders. Los otros dos artboards del proyecto de diseño (`Plan Abaco` — el plan de producto de
@@ -817,7 +819,7 @@ Registro de horas por proyecto y fase. Todos los roles FP.
 /team/apps/visual-lab/mendez-alvaro-32  Showroom torre residencial (?vivienda=14C abre una ficha)
 /team/apps/visual-lab/la-dehesa         Showroom parque comercial (?local=A-05)
 /team/apps/visual-lab/valdeserra        Showroom de suelo (?parcela=II-07)
-/team/apps/visual-lab/jorge-juan-40     Maqueta digital de ejemplo (?vivienda=5-IZ&planta=1)
+/team/apps/visual-lab/jorge-juan-40     Maqueta digital de ejemplo (?vivienda=5-IZ abre el despiece)
 /team/apps/design-hunter    Design Hunter (inspiración/referencias)
 /team/apps/repasos          Repasos de obra — índice de proyectos
 /team/apps/repasos/[id]     Repasos de obra — visor del plano con pins

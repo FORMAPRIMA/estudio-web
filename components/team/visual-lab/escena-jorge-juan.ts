@@ -6,8 +6,9 @@
  * del GLB de Blender. Lo que añade la escena:
  *  - luz de maqueta (cielo + sol con sombra horneada una vez por cambio de capas);
  *  - selección por los volúmenes `VOL_*` (invisibles salvo al pasar o seleccionar);
- *  - «Planta abierta»: se esconden las plantas de encima y la cubierta, y aparece el
- *    interior en clay de la planta elegida.
+ *  - despiece: al elegir una vivienda, las plantas de encima y la cubierta suben en
+ *    bloque (con un hueco de LEVANTE metros) y aparece el interior en clay de su planta;
+ *    los edificios vecinos se vuelven translúcidos para que la cámara pueda mirar dentro.
  *
  * Los interiores van siempre ocultos fuera de la planta abierta: son la mitad de los
  * triángulos del edificio y desde fuera no se ven.
@@ -20,7 +21,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import {
   type Vivienda, type VistaId, type CapaId, type ModoId,
-  BY_ID, zPlanta, alturaPlanta, ANCHO_MEDIO, FONDO,
+  BY_ID, zPlanta, alturaPlanta, ANCHO_MEDIO, FONDO, PLANTAS,
 } from '@/lib/visual-lab/jorge-juan'
 
 export interface QA { viviendas: number; esperadas: number; ms: number; triangulos: number }
@@ -39,6 +40,10 @@ export interface EscenaOpts {
 }
 
 const ACENTO = '#D85A30'
+/** Hueco que se abre sobre la planta elegida al despiezar (m) */
+const LEVANTE = 22
+/** Separación extra entre las plantas levantadas, para que se lean como piezas (m) */
+const SEPARACION = 0.6
 
 /**
  * Encuadres en coordenadas del GLB (Y arriba; la calle queda en Z negativa).
@@ -54,7 +59,7 @@ const VISTAS: Record<VistaId, { pos: [number, number, number]; target: [number, 
 }
 export const POV_FIRMA = VISTAS.calle
 
-interface Nodo { obj: THREE.Object3D; planta: number; mano: string }
+interface Nodo { obj: THREE.Object3D; planta: number; mano: string; y0: number; off: number; offT: number }
 
 export class Escena {
   private renderer: THREE.WebGLRenderer
@@ -72,7 +77,10 @@ export class Escena {
   private root: THREE.Group | null = null
   private exteriores: Nodo[] = []
   private interiores: Nodo[] = []
-  private cubiertas: THREE.Object3D[] = []
+  private cubiertas: Nodo[] = []
+  private matsEntorno: THREE.MeshStandardMaterial[] = []
+  private velo = 1
+  private veloT = 1
   private entorno: THREE.Object3D[] = []
   private calle: THREE.Object3D[] = []
   private volumenes = new Map<string, THREE.Mesh>()
@@ -236,9 +244,10 @@ export class Escena {
     for (const o of root.children) {
       const x = o.userData as { capa?: string; planta?: number; mano?: string; unitId?: string }
       const n = o.name
-      if (x.capa === 'exterior') this.exteriores.push({ obj: o, planta: x.planta ?? 0, mano: x.mano ?? '' })
-      else if (x.capa === 'interior') this.interiores.push({ obj: o, planta: x.planta ?? 0, mano: x.mano ?? '' })
-      else if (x.capa === 'cubierta') this.cubiertas.push(o)
+      const nodo = (): Nodo => ({ obj: o, planta: x.planta ?? 0, mano: x.mano ?? '', y0: o.position.y, off: 0, offT: 0 })
+      if (x.capa === 'exterior') this.exteriores.push(nodo())
+      else if (x.capa === 'interior') this.interiores.push(nodo())
+      else if (x.capa === 'cubierta') this.cubiertas.push({ ...nodo(), planta: PLANTAS + 1 })
       else if (x.capa === 'volumen' && x.unitId) {
         const m = o as THREE.Mesh
         if (m.isMesh) {
@@ -257,6 +266,14 @@ export class Escena {
       } else if (n.startsWith('CTX')) this.entorno.push(o)
       else if (n.startsWith('CALLE') || n.startsWith('ARBOL')) this.calle.push(o)
     }
+    for (const o of this.entorno) o.traverse((c) => {
+      const m = c as THREE.Mesh
+      if (!m.isMesh || !m.name.startsWith('CTX_edificios')) return
+      const mat = (m.material as THREE.MeshStandardMaterial).clone()
+      mat.transparent = true
+      m.material = mat
+      this.matsEntorno.push(mat)
+    })
     root.traverse((o) => {
       const m = o as THREE.Mesh
       if (!m.isMesh || this.esVolumen(m)) return
@@ -287,9 +304,12 @@ export class Escena {
   private aplicar() {
     if (!this.root) return
     const c = this.corte()
-    for (const n of this.exteriores) n.obj.visible = c == null || n.planta <= c
+    // despiece: lo que está por encima de la planta elegida sube en bloque
+    const lev = (p: number) => (c != null && p > c ? LEVANTE + (p - c - 1) * SEPARACION : 0)
+    for (const n of this.exteriores) n.offT = lev(n.planta)
+    for (const n of this.cubiertas) n.offT = lev(n.planta)
     for (const n of this.interiores) n.obj.visible = c != null && n.planta === c
-    for (const o of this.cubiertas) o.visible = c == null
+    this.veloT = c != null ? 0.16 : 1
     for (const o of this.entorno) o.visible = this.capas.entorno
     for (const o of this.calle) o.visible = this.capas.calle
     this.volumenes.forEach((m, id) => {
@@ -337,8 +357,9 @@ export class Escena {
     const cx = sx * ANCHO_MEDIO / 2
     const ancho = this.camera.aspect < 1 ? 1.5 : 1
     if (this.modo === 'planta') {
-      const target = new THREE.Vector3(cx * 0.6, z0 + 0.5, FONDO / 2)
-      const pos = new THREE.Vector3(sx * 26 * ancho, z0 + 34 * ancho, -14 * ancho)
+      // por el hueco del despiece: la cámara queda por debajo de las plantas levantadas
+      const target = new THREE.Vector3(cx * 0.45, z0 + 0.4, FONDO * 0.45)
+      const pos = new THREE.Vector3(sx * 21 * ancho, z0 + h + 12, -20 * ancho)
       this.volar(pos, target, dur)
     } else {
       // dentro de la calle y en enfilada: de frente se metería en el edificio de enfrente
@@ -476,6 +497,23 @@ export class Escena {
       this.aplicarShift()
     }
     this.controls.update(dt)
+
+    // despiece animado (las sombras se recalculan mientras algo se mueve)
+    let mueve = false
+    const k = Math.min(1, dt * 4.5)
+    for (const n of this.exteriores.concat(this.cubiertas)) {
+      if (Math.abs(n.offT - n.off) < 0.01) continue
+      n.off += (n.offT - n.off) * k
+      if (Math.abs(n.offT - n.off) < 0.01) n.off = n.offT
+      n.obj.position.y = n.y0 + n.off
+      mueve = true
+    }
+    if (Math.abs(this.veloT - this.velo) > 0.005) {
+      this.velo += (this.veloT - this.velo) * k
+      for (const m of this.matsEntorno) { m.opacity = this.velo; m.depthWrite = this.velo > 0.95 }
+      mueve = true
+    }
+    if (mueve) this.renderer.shadowMap.needsUpdate = true
 
     if (this.needHover && this.cargado) {
       this.needHover = false
