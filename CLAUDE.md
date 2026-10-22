@@ -340,14 +340,15 @@ Aplicaciones internas. Acceso: todos los roles FP.
     - **Despiece limpio**: las plantas de encima suben y **desaparecen al llegar** (a ¾ del recorrido), así que
       queda la planta entera a la vista con una cámara casi cenital (calle abajo en pantalla) cuya distancia se
       calcula para que quepan los 31,8 m de fondo. La gemela de la misma planta va **maciza** (su volumen con
-      material opaco) y sin interior. Con la planta abierta se apagan las sombras del sol y se sube la luz de
-      cielo: las sombras solo metían manchas. Se probó a seccionar la vivienda a 1,40 m con `clippingPlanes` y
+      material opaco) y sin interior. Con la planta abierta el sol se sube casi a la vertical y se baja de
+      intensidad: sombras cortas y suaves (apagarlas del todo dejaba la planta sin relieve). Se probó a seccionar la vivienda a 1,40 m con `clippingPlanes` y
       se descartó: los muros quedaban huecos.
-    - **Estética** (constantes al principio de `escena-jorge-juan.ts`): entorno «fantasma» (volúmenes al 9 % con
-      solo las aristas horizontales: las verticales de 600 piezas de Catastro hacían una cortina), `PALETA` del
-      visor que manda sobre la del GLB (suelo de madera clara, clay blanco, muebles un tono más oscuro, calzada
-      oscura), tone mapping AgX, fondo en degradado y GTAO en escritorio (en móvil, render directo). El sol entra
-      por el **noroeste** a propósito: la fachada a Jorge Juan mira al norte y con sol del sur quedaba plana.
+    - **Estética** (constantes al principio de `escena-jorge-juan.ts`): entorno **opaco** (`ENTORNO`, José probó
+      el translúcido y lo descartó) con solo la arista de cornisa marcada (las verticales de 600 piezas de
+      Catastro hacían una cortina), `PALETA` del visor que manda sobre la del GLB (suelo de madera clara, clay
+      blanco, muebles un tono más oscuro, calzada oscura), tone mapping AgX, fondo en degradado y GTAO en
+      escritorio (en móvil, render directo). El sol entra por el **noroeste** a propósito: la fachada a Jorge
+      Juan mira al norte y con sol del sur quedaba plana.
     - 🔴 **Cámaras**: Jorge Juan tiene 15,2 m entre fachadas. Una cámara baja «enfrente» queda dentro del
       edificio de la otra acera, y el vecino de la esquina tapa la fachada desde el cruce. El POV maestro
       (`VISTAS.calle`, el de la placa `firma-*.jpg`) mira desde el noroeste por encima de los tejados.

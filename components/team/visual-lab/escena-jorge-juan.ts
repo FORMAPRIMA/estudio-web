@@ -48,8 +48,8 @@ const ACENTO = '#D85A30'
 const FONDO_ALTO = '#F4F2ED'
 const FONDO_BAJO = '#DCD7CD'
 const NIEBLA = '#E6E2DA'
-/** Entorno «fantasma»: volúmenes translúcidos con arista fina */
-const FANTASMA = { opacidad: 0.09, arista: '#6F6A60', aristaOpacidad: 0.5 }
+/** Entorno: volúmenes opacos de maqueta con la arista de cornisa apenas marcada */
+const ENTORNO = { color: '#E2DED6', arista: '#8A857B', aristaOpacidad: 0.28 }
 /**
  * Paleta del visor (manda sobre los colores del GLB, que son los de Blender): suelo de
  * madera clara bajo un clay blanco y muebles un tono más oscuros, para que la
@@ -101,13 +101,9 @@ export class Escena {
   private exteriores: Nodo[] = []
   private interiores: Nodo[] = []
   private cubiertas: Nodo[] = []
-  private matsEntorno: THREE.MeshStandardMaterial[] = []
-  private aristasEntorno: THREE.LineBasicMaterial[] = []
   private hemi: THREE.HemisphereLight
   private composer: EffectComposer | null = null
   private gtao: GTAOPass | null = null
-  private velo = 1
-  private veloT = 1
   private entorno: THREE.Object3D[] = []
   private calle: THREE.Object3D[] = []
   private volumenes = new Map<string, THREE.Mesh>()
@@ -349,30 +345,19 @@ export class Escena {
       } else if (n.startsWith('CTX')) this.entorno.push(o)
       else if (n.startsWith('CALLE') || n.startsWith('ARBOL')) this.calle.push(o)
     }
-    // entorno fantasma: volúmenes de cristal esmerilado con la arista dibujada
+    // entorno: volúmenes opacos de maqueta con la arista de cornisa apenas marcada
     for (const o of this.entorno) o.traverse((c) => {
       const m = c as THREE.Mesh
-      if (!m.isMesh) return
-      if (m.name.startsWith('CTX_edificios')) {
-        const mat = new THREE.MeshStandardMaterial({
-          color: '#FFFFFF', roughness: 0.9, transparent: true, opacity: FANTASMA.opacidad, depthWrite: false,
-        })
-        m.material = mat
-        m.renderOrder = 2
-        this.matsEntorno.push(mat)
-        const am = new THREE.LineBasicMaterial({ color: FANTASMA.arista, transparent: true, opacity: FANTASMA.aristaOpacidad, depthWrite: false })
-        const e = new THREE.LineSegments(this.contornos(m.geometry), am)
-        e.renderOrder = 3
-        m.add(e)
-        this.aristasEntorno.push(am)
-        m.userData.fantasma = true
-      }
+      if (!m.isMesh || !m.name.startsWith('CTX_edificios')) return
+      ;(m.material as THREE.MeshStandardMaterial).color.set(ENTORNO.color)
+      const am = new THREE.LineBasicMaterial({ color: ENTORNO.arista, transparent: true, opacity: ENTORNO.aristaOpacidad })
+      m.add(new THREE.LineSegments(this.contornos(m.geometry), am))
     })
     root.traverse((o) => {
       const m = o as THREE.Mesh
       if (!m.isMesh || this.esVolumen(m)) return
       const suelo = m.name.startsWith('CTX_calzada') || m.name.startsWith('CTX_aceras')
-      m.castShadow = !suelo && !m.userData.fantasma
+      m.castShadow = !suelo
       m.receiveShadow = true
       const mats = Array.isArray(m.material) ? m.material : [m.material]
       for (const mat of mats) {
@@ -406,14 +391,14 @@ export class Escena {
     const mano = this.selId ? BY_ID[this.selId]?.mano : null
     // lo que baja vuelve a verse desde arriba; lo que sube se esconde al llegar (bucle)
     for (const n of this.exteriores.concat(this.cubiertas)) if (n.offT === 0) n.obj.visible = true
-    // planta abierta: luz de estudio uniforme; las sombras del sol solo metían manchas
+    // planta abierta: sol alto y más cielo, para que las sombras sean cortas y suaves
     const abierta = c != null
-    this.sun.castShadow = !abierta
-    this.sun.intensity = abierta ? 1.6 : 3.1
-    this.hemi.intensity = abierta ? 1.35 : 0.62
+    if (abierta) this.sun.position.set(-38, 120, -26)
+    else this.sun.position.set(-85, 62, -70)
+    this.sun.intensity = abierta ? 1.7 : 3.1
+    this.hemi.intensity = abierta ? 1.2 : 0.62
     // solo el interior de la vivienda elegida: la gemela de la misma planta va maciza
     for (const n of this.interiores) n.obj.visible = c != null && n.planta === c && n.mano === mano
-    this.veloT = c != null ? 0.35 : 1
     for (const o of this.entorno) o.visible = this.capas.entorno
     for (const o of this.calle) o.visible = this.capas.calle
     this.volumenes.forEach((m, id) => {
@@ -625,12 +610,6 @@ export class Escena {
       n.obj.position.y = n.y0 + n.off
       // sube y se va: a partir de 3/4 del recorrido desaparece
       if (n.offT > 0 && n.off > n.offT * 0.75) n.obj.visible = false
-      mueve = true
-    }
-    if (Math.abs(this.veloT - this.velo) > 0.005) {
-      this.velo += (this.veloT - this.velo) * k
-      for (const m of this.matsEntorno) m.opacity = FANTASMA.opacidad * this.velo
-      for (const m of this.aristasEntorno) m.opacity = FANTASMA.aristaOpacidad * this.velo
       mueve = true
     }
     if (mueve) this.renderer.shadowMap.needsUpdate = true
