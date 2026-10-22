@@ -358,7 +358,7 @@ export function VR({ t, num, alEvento }: { t: Textos; num: number; alEvento: AlE
   return <PantallaVideo id="vr" t={t} num={num} rotulo={t.vrRotulo} titulo={t.vrTitulo} texto={t.vrTexto} base="/para/video/visual-lab" segundos={36} alEvento={alEvento} fondo="/para/video/vr-fondo" />
 }
 export function PortalVideo({ t, num, alEvento }: { t: Textos; num: number; alEvento: AlEvento }) {
-  return <PantallaVideo id="portalvideo" t={t} num={num} rotulo={t.portalRotulo} titulo={t.portalVideoTitulo} texto={t.portalVideoTexto} base="/para/video/portal-clientes" segundos={42} alEvento={alEvento} />
+  return <PantallaVideo id="portalvideo" t={t} num={num} rotulo={t.portalRotulo} titulo={t.portalTitulo} texto={t.portalTexto} base="/para/video/portal-clientes" segundos={42} alEvento={alEvento} />
 }
 
 // ── Por qué Forma Prima ──────────────────────────────────────────────────────
