@@ -19,6 +19,10 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
+import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js'
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
 import {
   type Vivienda, type VistaId, type CapaId, type ModoId,
   BY_ID, zPlanta, alturaPlanta, ANCHO_MEDIO, FONDO, PLANTAS,
@@ -40,10 +44,31 @@ export interface EscenaOpts {
 }
 
 const ACENTO = '#D85A30'
+/** Fondo y niebla: el papel crema de una maqueta de estudio */
+const FONDO_ALTO = '#F4F2ED'
+const FONDO_BAJO = '#DCD7CD'
+const NIEBLA = '#E6E2DA'
+/** Entorno «fantasma»: volúmenes translúcidos con arista fina */
+const FANTASMA = { opacidad: 0.09, arista: '#6F6A60', aristaOpacidad: 0.5 }
+/**
+ * Paleta del visor (manda sobre los colores del GLB, que son los de Blender): suelo de
+ * madera clara bajo un clay blanco y muebles un tono más oscuros, para que la
+ * distribución se lea de un vistazo; calzada oscura para asentar la maqueta.
+ */
+const PALETA: Record<string, string> = {
+  JJ_forjado: '#D8C9AF',
+  JJ_clay: '#F4F2ED',
+  JJ_clay_mueble: '#B9B1A4',
+  CTX_calzada: '#8F8B84',
+  CTX_acera: '#E3DFD7',
+  CTX_granito: '#CFCBC4',
+}
 /** Hueco que se abre sobre la planta elegida al despiezar (m) */
 const LEVANTE = 22
 /** Separación extra entre las plantas levantadas, para que se lean como piezas (m) */
 const SEPARACION = 0.6
+/** Altura del corte de planta sobre el suelo acabado (m): muros y armarios quedan seccionados */
+const CORTE = 1.4
 
 /**
  * Encuadres en coordenadas del GLB (Y arriba; la calle queda en Z negativa).
@@ -79,12 +104,18 @@ export class Escena {
   private interiores: Nodo[] = []
   private cubiertas: Nodo[] = []
   private matsEntorno: THREE.MeshStandardMaterial[] = []
+  private aristasEntorno: THREE.LineBasicMaterial[] = []
+  /** Mallas de la vivienda abierta con sus materiales originales, para deshacer el corte */
+  private recortadas: { mesh: THREE.Mesh; mat: THREE.Material | THREE.Material[] }[] = []
+  private planoCorte = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0)
+  private composer: EffectComposer | null = null
+  private gtao: GTAOPass | null = null
   private velo = 1
   private veloT = 1
   private entorno: THREE.Object3D[] = []
   private calle: THREE.Object3D[] = []
   private volumenes = new Map<string, THREE.Mesh>()
-  private matVol: Record<'oculto' | 'capa' | 'hover' | 'sel', THREE.MeshBasicMaterial>
+  private matVol: Record<'oculto' | 'capa' | 'hover' | 'sel', THREE.MeshBasicMaterial> & { macizo: THREE.MeshStandardMaterial }
   private aristas = new Map<string, THREE.LineSegments>()
 
   private ray = new THREE.Raycaster()
@@ -130,13 +161,15 @@ export class Escena {
     renderer.shadowMap.type = THREE.PCFSoftShadowMap
     // las sombras son estáticas: se recalculan solo cuando cambia lo que se ve
     renderer.shadowMap.autoUpdate = false
-    renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 1.05
+    renderer.localClippingEnabled = true
+    // AgX conserva los blancos de la fachada sin quemarlos (ACES los vuelve grises)
+    renderer.toneMapping = THREE.AgXToneMapping
+    renderer.toneMappingExposure = 1.02
     this.renderer = renderer
 
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color('#E9E7E1')
-    scene.fog = new THREE.Fog('#E9E7E1', 170, 360)
+    scene.background = this.degradado()
+    scene.fog = new THREE.Fog(NIEBLA, 150, 340)
     this.scene = scene
 
     const camera = new THREE.PerspectiveCamera(W / H < 1 ? 48 : 36, W / H, 0.5, 1500)
@@ -156,22 +189,41 @@ export class Escena {
     const pmrem = new THREE.PMREMGenerator(renderer)
     this.envTex = pmrem.fromScene(new RoomEnvironment(), 0.04).texture
     scene.environment = this.envTex
-    scene.environmentIntensity = 0.45
+    scene.environmentIntensity = 0.35
     pmrem.dispose()
 
-    scene.add(new THREE.HemisphereLight('#f4f1ea', '#8a8478', 0.9))
-    const sun = new THREE.DirectionalLight('#fff1dc', 2.4)
-    // tarde de Madrid: el sol entra por el oeste-suroeste y raspa la fachada a Jorge Juan
-    sun.position.set(-70, 95, 40)
-    sun.target.position.set(0, 0, 10)
+    scene.add(new THREE.HemisphereLight('#f6f3ec', '#9a9182', 0.62))
+    const sun = new THREE.DirectionalLight('#ffe9cf', 3.1)
+    // tarde de verano: el sol baja por el noroeste y raspa la fachada a Jorge Juan, que
+    // mira al norte; con el sol del sur la fachada quedaba siempre en sombra y plana
+    sun.position.set(-85, 62, -70)
+    sun.target.position.set(0, 4, 12)
     sun.castShadow = true
-    const sm = this.movil ? 1024 : 2048
+    const sm = this.movil ? 2048 : 4096
     sun.shadow.mapSize.set(sm, sm)
-    Object.assign(sun.shadow.camera, { left: -70, right: 70, top: 70, bottom: -70, near: 20, far: 260 })
-    sun.shadow.bias = -0.0004
-    sun.shadow.normalBias = 0.04
+    Object.assign(sun.shadow.camera, { left: -60, right: 60, top: 60, bottom: -60, near: 30, far: 260 })
+    sun.shadow.bias = -0.00025
+    sun.shadow.normalBias = 0.03
+    sun.shadow.radius = 3
     scene.add(sun, sun.target)
     this.sun = sun
+
+    // oclusión ambiental (GTAO) en escritorio: es lo que da peso a cornisas, balcones y al
+    // clay del interior. En móvil se queda el render directo.
+    if (!this.movil) {
+      const composer = new EffectComposer(renderer)
+      composer.setPixelRatio(renderer.getPixelRatio())
+      composer.setSize(W, H)
+      composer.addPass(new RenderPass(scene, camera))
+      const gtao = new GTAOPass(scene, camera, W, H)
+      gtao.updateGtaoMaterial({ radius: 2.4, distanceExponent: 1.6, thickness: 1.6, scale: 1.2, samples: 16 })
+      gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 16 })
+      gtao.blendIntensity = 1
+      composer.addPass(gtao)
+      composer.addPass(new OutputPass())
+      this.composer = composer
+      this.gtao = gtao
+    }
 
     const vol = (color: string, opacity: number) => new THREE.MeshBasicMaterial({
       color, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide,
@@ -182,6 +234,8 @@ export class Escena {
       capa: vol('#5E8A7A', 0.22),
       hover: vol(ACENTO, 0.22),
       sel: vol(ACENTO, 0.34),
+      // la vivienda gemela durante el despiece: un bloque de clay liso
+      macizo: new THREE.MeshStandardMaterial({ color: '#ECE8E0', roughness: 0.95 }),
     }
 
     this.canvas.style.cursor = 'grab'
@@ -196,6 +250,69 @@ export class Escena {
     this.last = performance.now()
     this.raf()
     this.cargar()
+  }
+
+  /**
+   * Corte de planta: la media planta elegida (exterior e interior) se secciona a CORTE m
+   * del suelo. Los materiales del GLB los comparten todas las plantas, así que se clonan
+   * solo para esta vivienda y se devuelven al cerrar.
+   */
+  private seccionar(c: number | null, mano: string | null) {
+    for (const r of this.recortadas) {
+      const mats = Array.isArray(r.mesh.material) ? r.mesh.material : [r.mesh.material]
+      mats.forEach((m) => m.dispose())
+      r.mesh.material = r.mat
+    }
+    this.recortadas = []
+    if (c == null || !mano) return
+    this.planoCorte.constant = zPlanta(c) + 0.3 + CORTE
+    const nodos = this.exteriores.concat(this.interiores).filter((n) => n.planta === c && n.mano === mano)
+    for (const n of nodos) n.obj.traverse((o) => {
+      const m = o as THREE.Mesh
+      if (!m.isMesh) return
+      const clona = (x: THREE.Material) => {
+        const k = x.clone()
+        k.clippingPlanes = [this.planoCorte]
+        k.clipShadows = true
+        k.side = THREE.DoubleSide
+        return k
+      }
+      this.recortadas.push({ mesh: m, mat: m.material })
+      m.material = Array.isArray(m.material) ? m.material.map(clona) : clona(m.material)
+    })
+  }
+
+  /**
+   * Aristas horizontales de los volúmenes del entorno (cornisas y arranques). Las
+   * verticales se quitan: con 600 piezas de Catastro dibujaban una cortina de líneas.
+   */
+  private contornos(g: THREE.BufferGeometry): THREE.BufferGeometry {
+    const e = new THREE.EdgesGeometry(g, 25)
+    const a = e.getAttribute('position')
+    const out: number[] = []
+    for (let i = 0; i < a.count; i += 2) {
+      const y0 = a.getY(i), y1 = a.getY(i + 1)
+      if (Math.abs(y0 - y1) < 0.05 && y0 > 0.5) out.push(a.getX(i), y0, a.getZ(i), a.getX(i + 1), y1, a.getZ(i + 1))
+    }
+    e.dispose()
+    const r = new THREE.BufferGeometry()
+    r.setAttribute('position', new THREE.Float32BufferAttribute(out, 3))
+    return r
+  }
+
+  /** Fondo en degradado vertical (textura de pantalla, no un cielo 3D). */
+  private degradado(): THREE.Texture {
+    const c = document.createElement('canvas')
+    c.width = 2; c.height = 256
+    const g = c.getContext('2d')!
+    const lg = g.createLinearGradient(0, 0, 0, 256)
+    lg.addColorStop(0, FONDO_ALTO)
+    lg.addColorStop(1, FONDO_BAJO)
+    g.fillStyle = lg
+    g.fillRect(0, 0, 2, 256)
+    const t = new THREE.CanvasTexture(c)
+    t.colorSpace = THREE.SRGBColorSpace
+    return t
   }
 
   /* ── Carga ─────────────────────────────────────────────────────────── */
@@ -266,23 +383,35 @@ export class Escena {
       } else if (n.startsWith('CTX')) this.entorno.push(o)
       else if (n.startsWith('CALLE') || n.startsWith('ARBOL')) this.calle.push(o)
     }
+    // entorno fantasma: volúmenes de cristal esmerilado con la arista dibujada
     for (const o of this.entorno) o.traverse((c) => {
       const m = c as THREE.Mesh
-      if (!m.isMesh || !m.name.startsWith('CTX_edificios')) return
-      const mat = (m.material as THREE.MeshStandardMaterial).clone()
-      mat.transparent = true
-      m.material = mat
-      this.matsEntorno.push(mat)
+      if (!m.isMesh) return
+      if (m.name.startsWith('CTX_edificios')) {
+        const mat = new THREE.MeshStandardMaterial({
+          color: '#FFFFFF', roughness: 0.9, transparent: true, opacity: FANTASMA.opacidad, depthWrite: false,
+        })
+        m.material = mat
+        m.renderOrder = 2
+        this.matsEntorno.push(mat)
+        const am = new THREE.LineBasicMaterial({ color: FANTASMA.arista, transparent: true, opacity: FANTASMA.aristaOpacidad, depthWrite: false })
+        const e = new THREE.LineSegments(this.contornos(m.geometry), am)
+        e.renderOrder = 3
+        m.add(e)
+        this.aristasEntorno.push(am)
+        m.userData.fantasma = true
+      }
     })
     root.traverse((o) => {
       const m = o as THREE.Mesh
       if (!m.isMesh || this.esVolumen(m)) return
       const suelo = m.name.startsWith('CTX_calzada') || m.name.startsWith('CTX_aceras')
-      m.castShadow = !suelo
+      m.castShadow = !suelo && !m.userData.fantasma
       m.receiveShadow = true
       const mats = Array.isArray(m.material) ? m.material : [m.material]
       for (const mat of mats) {
         const s = mat as THREE.MeshStandardMaterial
+        if (PALETA[s.name]) s.color.set(PALETA[s.name])
         if (s.name === 'JJ_vidrio') { s.roughness = 0.08; s.metalness = 0.35; s.envMapIntensity = 1.4 }
       }
     })
@@ -308,22 +437,29 @@ export class Escena {
     const lev = (p: number) => (c != null && p > c ? LEVANTE + (p - c - 1) * SEPARACION : 0)
     for (const n of this.exteriores) n.offT = lev(n.planta)
     for (const n of this.cubiertas) n.offT = lev(n.planta)
-    for (const n of this.interiores) n.obj.visible = c != null && n.planta === c
-    this.veloT = c != null ? 0.16 : 1
+    const mano = this.selId ? BY_ID[this.selId]?.mano : null
+    this.seccionar(c, mano ?? null)
+    // solo el interior de la vivienda elegida: la gemela de la misma planta va maciza
+    for (const n of this.interiores) n.obj.visible = c != null && n.planta === c && n.mano === mano
+    this.veloT = c != null ? 0.35 : 1
     for (const o of this.entorno) o.visible = this.capas.entorno
     for (const o of this.calle) o.visible = this.capas.calle
     this.volumenes.forEach((m, id) => {
       const v = BY_ID[id]
       const encima = c != null && v.planta > c
       m.visible = !encima
-      // con la planta abierta, el volumen de la seleccionada no tapa su interior
+      // con la planta abierta, el volumen de la seleccionada no tapa su interior y el de
+      // su gemela se pinta macizo, para que su distribución no meta ruido
       const abierta = c != null && id === this.selId
-      m.material = id === this.selId
+      const gemela = c != null && v.planta === c && v.mano !== mano
+      m.castShadow = gemela
+      m.receiveShadow = gemela
+      m.material = gemela ? this.matVol.macizo : id === this.selId
         ? (abierta ? this.matVol.oculto : this.matVol.sel)
         : id === this.hoverId ? this.matVol.hover
           : this.capas.volumenes ? this.matVol.capa : this.matVol.oculto
       const e = this.aristas.get(id)
-      if (e) e.visible = !encima && (id === this.selId || id === this.hoverId)
+      if (e) e.visible = !encima && !abierta && !gemela && (id === this.selId || id === this.hoverId)
     })
     this.renderer.shadowMap.needsUpdate = true
   }
@@ -357,9 +493,10 @@ export class Escena {
     const cx = sx * ANCHO_MEDIO / 2
     const ancho = this.camera.aspect < 1 ? 1.5 : 1
     if (this.modo === 'planta') {
-      // por el hueco del despiece: la cámara queda por debajo de las plantas levantadas
-      const target = new THREE.Vector3(cx * 0.45, z0 + 0.4, FONDO * 0.45)
-      const pos = new THREE.Vector3(sx * 21 * ancho, z0 + h + 12, -20 * ancho)
+      // por el hueco del despiece, por debajo de las plantas levantadas y mirando la
+      // planta seccionada casi de arriba
+      const target = new THREE.Vector3(cx, z0 + 0.4, FONDO * 0.5)
+      const pos = new THREE.Vector3(cx + sx * 9 * ancho, z0 + h + 19, -6 * ancho)
       this.volar(pos, target, dur)
     } else {
       // dentro de la calle y en enfilada: de frente se metería en el edificio de enfrente
@@ -412,6 +549,7 @@ export class Escena {
     this.camera.fov = W / H < 1 ? 48 : 36
     this.camera.updateProjectionMatrix()
     this.renderer.setSize(W, H, false)
+    this.composer?.setSize(W, H)
     this.aplicarShift()
   }
 
@@ -432,6 +570,8 @@ export class Escena {
       mats.forEach((x) => x.dispose())
     })
     Object.values(this.matVol).forEach((m) => m.dispose())
+    this.composer?.dispose()
+    ;(this.scene.background as THREE.Texture | null)?.dispose?.()
     this.envTex?.dispose()
     this.scene.environment = null
     this.renderer.dispose()
@@ -510,7 +650,8 @@ export class Escena {
     }
     if (Math.abs(this.veloT - this.velo) > 0.005) {
       this.velo += (this.veloT - this.velo) * k
-      for (const m of this.matsEntorno) { m.opacity = this.velo; m.depthWrite = this.velo > 0.95 }
+      for (const m of this.matsEntorno) m.opacity = FANTASMA.opacidad * this.velo
+      for (const m of this.aristasEntorno) m.opacity = FANTASMA.aristaOpacidad * this.velo
       mueve = true
     }
     if (mueve) this.renderer.shadowMap.needsUpdate = true
@@ -534,7 +675,8 @@ export class Escena {
       }
     }
 
-    this.renderer.render(this.scene, this.camera)
+    if (this.composer) this.composer.render(dt)
+    else this.renderer.render(this.scene, this.camera)
 
     if (this.compassEl && this.frame % 2 === 0) {
       const north = this.controls.target.clone().add(new THREE.Vector3(0, 0, -100)).project(this.camera)

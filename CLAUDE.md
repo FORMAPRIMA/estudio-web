@@ -337,6 +337,15 @@ Aplicaciones internas. Acceso: todos los roles FP.
       animado), los vecinos se vuelven translúcidos y se enciende solo el interior en clay de esa planta, con
       la cámara mirando por el hueco. Cerrar la ficha lo recompone. Los interiores están apagados el resto del
       tiempo (son media maqueta y desde fuera no se ven).
+    - **Despiece limpio**: la vivienda gemela de la misma planta se pinta como un **bloque macizo** (su volumen
+      con material opaco) y sin interior, para que solo se lea la distribución elegida; y la vivienda elegida se
+      **secciona a 1,40 m** del suelo con un `clippingPlane` sobre materiales clonados (los del GLB los comparten
+      todas las plantas; se devuelven al cerrar).
+    - **Estética** (constantes al principio de `escena-jorge-juan.ts`): entorno «fantasma» (volúmenes al 9 % con
+      solo las aristas horizontales: las verticales de 600 piezas de Catastro hacían una cortina), `PALETA` del
+      visor que manda sobre la del GLB (suelo de madera clara, clay blanco, muebles un tono más oscuro, calzada
+      oscura), tone mapping AgX, fondo en degradado y GTAO en escritorio (en móvil, render directo). El sol entra
+      por el **noroeste** a propósito: la fachada a Jorge Juan mira al norte y con sol del sur quedaba plana.
     - 🔴 **Cámaras**: Jorge Juan tiene 15,2 m entre fachadas. Una cámara baja «enfrente» queda dentro del
       edificio de la otra acera, y el vecino de la esquina tapa la fachada desde el cruce. El POV maestro
       (`VISTAS.calle`, el de la placa `firma-*.jpg`) mira desde el noroeste por encima de los tejados.
