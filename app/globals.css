@@ -2446,6 +2446,18 @@ div:hover > .tt-avatar-overlay {
   .vl-ic-marca { left: 328px; bottom: 66px; }
 }
 
+/* ── FP Visual Lab · Jorge Juan 40 ─────────────────────────────── */
+/* Fondo claro de maqueta: brújula y marca en tinta, no en blanco */
+.vl-jj .vl-ic-compass { color: #3A3A36; text-shadow: none; }
+.vl-jj .vl-ic-marca { background: rgba(26, 26, 26, .55); color: #F2F1EC; }
+/* Tabla de viviendas (solo escritorio, ver .vl-inv-table) */
+.vl-jj-row {
+  display: grid;
+  grid-template-columns: 1.1fr .8fr .8fr .7fr 1.6fr .4fr;
+  gap: 8px;
+  padding: 0 18px;
+}
+
 /* ── Retribución (/team/marketing/retribucion) ── mobile-first */
 .retrib-form-grid { grid-template-columns: minmax(0, 1fr); }
 .retrib-2col, .retrib-3col { grid-template-columns: minmax(0, 1fr); }
