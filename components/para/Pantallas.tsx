@@ -429,7 +429,7 @@ export const CSS_PANTALLAS = CSS_AGENDA + CSS_PORTAL_DEMO + `
 .p-cifras{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:0;}
 .p-cifras li{display:flex;align-items:baseline;gap:16px;padding:16px 0;border-top:1px solid rgba(251,251,250,.14);}
 .p-cifras b{font-weight:200;font-size:clamp(40px,1.6rem + 3vw,72px);letter-spacing:-.03em;min-width:2.2ch;line-height:1;}
-.p-cifras span{font-size:14px;color:rgba(251,251,250,.66);line-height:1.4;}
+.p-cifras li>span{font-size:14px;color:rgba(251,251,250,.66);line-height:1.4;}
 
 /* Obra (p-obra es el punto del mapa: otro nombre) */
 .p-obrasel{justify-content:center;}
