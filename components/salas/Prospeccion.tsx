@@ -12,10 +12,10 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { DatosSala, LeadRow, ReunionRow } from '@/lib/salas/panel'
 import { NOMBRE_EVENTO, calor, duracion, eventosDe, fecha, hace, lugarDe, resumenLeads, type ResumenLead } from '@/lib/salas/metricas'
 import {
-  actualizarProspecto, crearProspecto, estadoLeadSala, estadoReunionSala, marcarProspecto, modoLogoProspecto, quitarLogoProspecto, subirLogoProspecto,
+  actualizarProspecto, adaptarCorreoProspecto, crearProspecto, estadoLeadSala, estadoReunionSala, guardarCorreoProspecto, marcarProspecto, modoLogoProspecto, quitarLogoProspecto, subirLogoProspecto,
   type ProspectoInput,
 } from '@/app/actions/salas'
-import { correoPresentacion, enlacePara } from '@/lib/para/correo'
+import { correoPresentacion, datosCorreoLead, enlacePara } from '@/lib/para/correo'
 import Calor from './Calor'
 import { Modal } from './LeadForm'
 import { Etiqueta, Termometro } from './SalaPanel'
@@ -59,10 +59,7 @@ const logoUrl = (slug: string, l: Pick<LeadRow, 'id' | 'logoPath'>, modo: 'blanc
   `/${slug}/lead/${l.id}/logo?modo=${modo}&v=${encodeURIComponent(l.logoPath ?? '')}`
 
 function correoDe(l: LeadRow, perfil: 'developer' | 'constructora', firma: string) {
-  return correoPresentacion({
-    nombre: l.nombre.trim().split(/\s+/)[0], empresa: l.empresa || l.nombre, perfil, idioma: l.idioma, tratamiento: l.tratamiento,
-    enlace: enlacePara(l.token ?? ''), mensaje: l.mensaje, firma, espana: !l.pais || /españa|spain/i.test(l.pais),
-  })
+  return correoPresentacion(datosCorreoLead(l, perfil, firma))
 }
 
 // ── Panel de la sala ─────────────────────────────────────────────────────────
@@ -342,7 +339,9 @@ export function LogoProspecto({ slug, l }: { slug: string; l: LeadRow }) {
 export function EnvioProspecto({ slug, l, perfil, firma }: { slug: string; l: LeadRow; perfil: 'developer' | 'constructora'; firma: string }) {
   const router = useRouter()
   const enlace = enlacePara(l.token ?? '')
-  const c = correoDe(l, perfil, firma)
+  const plantilla = correoDe(l, perfil, firma)
+  const [ia, setIa] = useState<Correo | null>(l.correoIa)
+  const c = ia ?? plantilla
   const [isMarcando, setIsMarcando] = useState(false)
   // en local, el dossier se abre en el propio servidor de desarrollo
   const [base, setBase] = useState('https://formaprima.es')
@@ -351,8 +350,7 @@ export function EnvioProspecto({ slug, l, perfil, firma }: { slug: string; l: Le
     <div style={{ display: 'grid', gap: 14 }}>
       <LogoProspecto slug={slug} l={l} />
       <Copiable titulo="Enlace personal" texto={enlace} mono />
-      <Copiable titulo="Asunto" texto={c.asunto} />
-      <Copiable titulo="Correo" texto={c.cuerpo} />
+      <CorreoIA l={l} ia={ia} plantilla={plantilla} onCambio={setIa} />
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         <a href={`${base}/para/${l.token}?equipo=${l.firmaEquipo ?? ''}`} target="_blank" rel="noopener" style={{ ...btn('ghost'), textDecoration: 'none' }}>Ver su dossier ↗</a>
         {l.email && <a href={`mailto:${l.email}?subject=${encodeURIComponent(c.asunto)}&body=${encodeURIComponent(c.cuerpo)}`} style={{ ...btn('ghost'), textDecoration: 'none' }}>Abrir en mi correo</a>}
@@ -365,6 +363,116 @@ export function EnvioProspecto({ slug, l, perfil, firma }: { slug: string; l: Le
         Envíalo desde tu correo: llega de una persona, no de una plataforma. Ábrelo con «Ver su dossier»: así tus visitas no cuentan como suyas.
       </p>
     </div>
+  )
+}
+
+type Correo = { asunto: string; cuerpo: string; en?: string | null }
+
+/** El correo del lead: el de plantilla, o el adaptado con IA a partir del contexto que se le da (editable y guardado en el lead). */
+function CorreoIA({ l, ia, plantilla, onCambio }: { l: LeadRow; ia: Correo | null; plantilla: Correo; onCambio: (c: Correo | null) => void }) {
+  const [contexto, setContexto] = useState(l.correoContexto ?? '')
+  const [abierto, setAbierto] = useState(!!ia || !!l.correoContexto)
+  const [cambio, setCambio] = useState('')
+  const [estado, setEstado] = useState<'' | 'adaptando' | 'ajustando' | 'guardando'>('')
+  const [error, setError] = useState('')
+  const [aviso, setAviso] = useState('')
+  const [guardado, setGuardado] = useState<Correo | null>(ia)
+  const ocupado = estado === 'adaptando' || estado === 'ajustando'
+
+  const pedir = async (modo: 'adaptando' | 'ajustando') => {
+    setError(''); setAviso(''); setEstado(modo)
+    const r = await adaptarCorreoProspecto(l.id, { contexto, ...(modo === 'ajustando' && ia ? { cambio, borrador: { asunto: ia.asunto, cuerpo: ia.cuerpo } } : {}) })
+    setEstado('')
+    if (!r.ok) { setError(r.error); return }
+    const nuevo = { asunto: r.asunto, cuerpo: r.cuerpo, en: new Date().toISOString() }
+    onCambio(nuevo); setGuardado(nuevo); setCambio('')
+    if (r.aviso) setAviso(r.aviso)
+  }
+  const guardar = async () => {
+    if (!ia || (guardado && guardado.asunto === ia.asunto && guardado.cuerpo === ia.cuerpo)) return
+    setEstado('guardando')
+    const r = await guardarCorreoProspecto(l.id, { asunto: ia.asunto, cuerpo: ia.cuerpo })
+    setEstado('')
+    if (!r.ok) setAviso(r.error); else setGuardado(ia)
+  }
+  const plantillaDeNuevo = async () => {
+    onCambio(null); setGuardado(null); setAviso('')
+    const r = await guardarCorreoProspecto(l.id, null)
+    if (!r.ok) setAviso(r.error)
+  }
+
+  const campo = { ...input, fontSize: 13.5, lineHeight: 1.55, background: '#fff' } as const
+  return (
+    <>
+      {ia ? (
+        <div style={{ border: `1px solid ${S.line}`, borderRadius: 8, padding: '12px 14px', background: S.bg, display: 'grid', gap: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <span style={{ fontSize: 11, color: S.soft, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Correo</span>
+              <Etiqueta tono="acento">adaptado con IA</Etiqueta>
+              <span style={{ fontSize: 11, color: S.faint }}>{estado === 'guardando' ? 'Guardando…' : 'Puedes retocarlo aquí mismo'}</span>
+            </span>
+            <span style={{ display: 'flex', gap: 6 }}>
+              <BotonCopiar texto={ia.asunto} etiqueta="Copiar asunto" />
+              <BotonCopiar texto={ia.cuerpo} etiqueta="Copiar correo" />
+            </span>
+          </div>
+          <input aria-label="Asunto" value={ia.asunto} onChange={(e) => onCambio({ ...ia, asunto: e.target.value })} onBlur={guardar} style={campo} />
+          <textarea aria-label="Correo" value={ia.cuerpo} onChange={(e) => onCambio({ ...ia, cuerpo: e.target.value })} onBlur={guardar}
+            rows={Math.min(26, ia.cuerpo.split('\n').length + 4)} style={{ ...campo, resize: 'vertical' }} />
+          <form onSubmit={(e) => { e.preventDefault(); if (cambio.trim()) pedir('ajustando') }} style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <input value={cambio} onChange={(e) => setCambio(e.target.value)} disabled={ocupado} placeholder="Pide un cambio: «más corto», «menciona que estaremos en SIMA», «más formal»…"
+              style={{ ...campo, flex: '1 1 260px' }} />
+            <button type="submit" disabled={ocupado || !cambio.trim()} style={{ ...btn('ghost'), opacity: ocupado || !cambio.trim() ? 0.6 : 1 }}>{estado === 'ajustando' ? 'Ajustando…' : 'Ajustar'}</button>
+          </form>
+        </div>
+      ) : (
+        <>
+          <Copiable titulo="Asunto" texto={plantilla.asunto} />
+          <Copiable titulo="Correo" texto={plantilla.cuerpo} />
+        </>
+      )}
+
+      <div style={{ border: `1px dashed ${S.line}`, borderRadius: 8, padding: abierto ? '12px 14px' : 0 }}>
+        {!abierto ? (
+          <button type="button" onClick={() => setAbierto(true)} style={{ width: '100%', textAlign: 'left', background: 'none', border: 0, padding: '12px 14px', cursor: 'pointer', fontSize: 13, color: S.ink }}>
+            <b style={{ fontWeight: 500 }}>✦ Adaptar el correo con IA</b>
+            <span style={{ color: S.soft }}> · cuéntale qué sabes de {l.empresa || l.nombre} y lo personaliza</span>
+          </button>
+        ) : (
+          <div style={{ display: 'grid', gap: 10 }}>
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span style={{ fontSize: 11, color: S.soft, letterSpacing: '0.08em', textTransform: 'uppercase' }}>✦ Qué sabemos de {l.empresa || l.nombre}</span>
+              <textarea value={contexto} onChange={(e) => setContexto(e.target.value)} rows={3} disabled={ocupado} style={{ ...campo, resize: 'vertical' }}
+                placeholder="Dónde los conocimos, qué están desarrollando, por qué encajamos con ellos… p. ej. «Nos presentó Carlos en SIMA. Tienen 3 promociones en Valdebebas y buscan estudio para el producto de la siguiente.»" />
+            </label>
+            <p style={{ fontSize: 12, color: S.faint, margin: 0, lineHeight: 1.5 }}>
+              Lo reescribe para proponerles buscar sinergias y colaborar, con la presentación como forma de enseñarles cómo trabajamos.
+              Mantiene el enlace, el idioma, el {l.idioma === 'en' ? 'registro' : l.tratamiento === 'usted' ? 'usted' : 'tuteo'} y tu firma, y no inventa nada que no le cuentes. Revísalo siempre antes de enviarlo.
+            </p>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <button type="button" onClick={() => pedir('adaptando')} disabled={ocupado || contexto.trim().length < 10} style={{ ...btn(), opacity: ocupado || contexto.trim().length < 10 ? 0.6 : 1 }}>
+                {estado === 'adaptando' ? 'Escribiendo…' : ia ? 'Volver a escribir' : 'Adaptar correo'}
+              </button>
+              {ia && <button type="button" onClick={plantillaDeNuevo} disabled={ocupado} style={btn('ghost')}>Volver a la plantilla</button>}
+              {!ia && !contexto && <button type="button" onClick={() => setAbierto(false)} style={{ ...btn('ghost'), border: 0 }}>Cerrar</button>}
+            </div>
+          </div>
+        )}
+        {error && <p role="alert" style={{ color: S.red, fontSize: 13, margin: abierto ? '10px 0 0' : '0 14px 12px' }}>{error}</p>}
+        {aviso && <p role="status" style={{ color: S.soft, fontSize: 12.5, margin: abierto ? '10px 0 0' : '0 14px 12px' }}>{aviso}</p>}
+      </div>
+    </>
+  )
+}
+
+function BotonCopiar({ texto, etiqueta }: { texto: string; etiqueta: string }) {
+  const [ok, setOk] = useState(false)
+  return (
+    <button type="button" onClick={async () => { try { await navigator.clipboard.writeText(texto); setOk(true); setTimeout(() => setOk(false), 1600) } catch { /* sin permiso */ } }}
+      style={{ ...btn('ghost'), padding: '5px 10px', fontSize: 11 }}>
+      {ok ? 'Copiado ✓' : etiqueta}
+    </button>
   )
 }
 

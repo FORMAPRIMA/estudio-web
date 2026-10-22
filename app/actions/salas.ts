@@ -17,6 +17,8 @@ import { sendEmail, wrapEmail } from '@/lib/email'
 import { cuerpoAviso } from '@/lib/salas/avisos'
 import { bloquesResumen, enviarResumen } from '@/lib/salas/resumen'
 import { FP_ROLES, type FpRole } from '@/lib/types'
+import { datosCorreoLead } from '@/lib/para/correo'
+import { adaptarCorreo } from '@/lib/para/correo-ia'
 
 type R<T = object> = ({ ok: true } & T) | { ok: false; error: string }
 
@@ -519,5 +521,55 @@ export async function enviarCorreosPrueba(): Promise<R<{ email: string; bloques:
     if (r.error) throw new Error('El aviso ha salido, pero el resumen no.')
     await auditar(m.id, 'correos_prueba', null, m.email)
     return { email: m.email, bloques: bloques.length }
+  })
+}
+
+// ── Correo de presentación adaptado con IA ─────────────────────────────────────
+
+const SIN_COLUMNAS_CORREO = 'Falta aplicar la migración salas_fase6_correo_ia.sql: el correo se ha generado pero no se guarda.'
+
+export async function adaptarCorreoProspecto(leadId: string, d: {
+  contexto: string; cambio?: string; borrador?: { asunto: string; cuerpo: string } | null
+}): Promise<R<{ asunto: string; cuerpo: string; aviso?: string }>> {
+  return envolver(async () => {
+    const m = await requireMiembro()
+    if (!porIp('correo-ia', 40, 3600_000)) throw new Error('Demasiadas peticiones seguidas. Prueba en un rato.')
+    const { sala } = await leadConPermiso(m, leadId)
+    if (sala.tipo !== 'prospeccion') throw new Error('Solo en las salas de prospección.')
+    const contexto = limpio(d.contexto, 2000)
+    if (!contexto) throw new Error('Cuéntale a la IA algo del lead.')
+    const admin = createAdminClient()
+    const { data: l } = await admin.from('sala_leads').select('nombre, empresa, idioma, tratamiento, token, mensaje, pais, cargo').eq('id', leadId).single()
+    if (!l?.token) throw new Error('Este lead no tiene enlace.')
+    const datos = datosCorreoLead({
+      nombre: l.nombre, empresa: l.empresa, idioma: l.idioma === 'en' ? 'en' : 'es', tratamiento: l.tratamiento === 'usted' ? 'usted' : 'tu',
+      token: l.token, mensaje: l.mensaje, pais: l.pais,
+    }, sala.perfil ?? 'developer', m.nombre)
+    const borrador = d.borrador && d.borrador.cuerpo ? { asunto: String(d.borrador.asunto).slice(0, 200), cuerpo: String(d.borrador.cuerpo).slice(0, 6000) } : null
+    let out: { asunto: string; cuerpo: string }
+    try {
+      out = await adaptarCorreo({ datos, cargo: l.cargo, pais: l.pais, contexto, borrador, cambio: limpio(d.cambio, 600) })
+    } catch (e) {
+      console.error('[salas] correo IA', e)
+      throw new Error(e instanceof Error && e.message.startsWith('La IA') ? e.message : 'La IA no ha respondido. Vuelve a intentarlo.')
+    }
+    const { error } = await admin.from('sala_leads').update({
+      correo_contexto: contexto, correo_asunto: out.asunto, correo_cuerpo: out.cuerpo, correo_ia_en: new Date().toISOString(),
+    }).eq('id', leadId)
+    await auditar(m.id, 'correo_ia', sala.id, l.empresa ?? l.nombre)
+    return { ...out, ...(error ? { aviso: SIN_COLUMNAS_CORREO } : {}) }
+  })
+}
+
+/** Guarda la versión retocada a mano; null vuelve al correo de plantilla (el contexto se conserva). */
+export async function guardarCorreoProspecto(leadId: string, c: { asunto: string; cuerpo: string } | null): Promise<R> {
+  return envolver(async () => {
+    const m = await requireMiembro()
+    await leadConPermiso(m, leadId)
+    const { error } = await createAdminClient().from('sala_leads').update(c
+      ? { correo_asunto: limpio(c.asunto, 200), correo_cuerpo: limpio(c.cuerpo, 6000) }
+      : { correo_asunto: null, correo_cuerpo: null, correo_ia_en: null }).eq('id', leadId)
+    if (error) throw new Error('Falta aplicar la migración salas_fase6_correo_ia.sql.')
+    return {}
   })
 }

@@ -54,3 +54,13 @@ export function correoPresentacion(d: DatosCorreo): { asunto: string; cuerpo: st
 }
 
 export const enlacePara = (token: string) => `https://formaprima.es/para/${token}`
+
+/** Datos del correo a partir del lead (el mismo en el panel y en el servidor que lo adapta con IA). */
+export function datosCorreoLead(l: {
+  nombre: string; empresa: string | null; idioma: Idioma; tratamiento: 'tu' | 'usted'; token: string | null; mensaje: string | null; pais: string | null
+}, perfil: Perfil, firma: string): DatosCorreo {
+  return {
+    nombre: l.nombre.trim().split(/\s+/)[0], empresa: l.empresa || l.nombre, perfil, idioma: l.idioma, tratamiento: l.tratamiento,
+    enlace: enlacePara(l.token ?? ''), mensaje: l.mensaje, firma, espana: !l.pais || /españa|spain/i.test(l.pais),
+  }
+}

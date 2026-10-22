@@ -148,6 +148,9 @@ export interface LeadRow {
   logoModo: 'blanco' | 'original'
   enviadoEn: string | null
   descartadoEn: string | null
+  /** Correo adaptado con IA (null = se usa el de plantilla). */
+  correoContexto: string | null
+  correoIa: { asunto: string; cuerpo: string; en: string | null } | null
   /** Para «Ver su dossier» desde el panel sin que cuente como visita. */
   firmaEquipo: string | null
 }
@@ -219,6 +222,8 @@ export async function datosSala(salaId: string, opts: { leadId?: string } = {}):
       token: l.token ?? null, cargo: l.cargo ?? null, pais: l.pais ?? null, idioma: l.idioma === 'en' ? 'en' : 'es',
       tratamiento: l.tratamiento === 'usted' ? 'usted' : 'tu', mensaje: l.mensaje ?? null, logoPath: l.logo_path ?? null,
       logoModo: l.logo_modo === 'original' ? 'original' : 'blanco', enviadoEn: l.enviado_en ?? null, descartadoEn: l.descartado_en ?? null,
+      correoContexto: l.correo_contexto ?? null,
+      correoIa: l.correo_cuerpo ? { asunto: l.correo_asunto ?? '', cuerpo: l.correo_cuerpo, en: l.correo_ia_en ?? null } : null,
       firmaEquipo: l.token ? firmaEquipo(l.token) : null,
     })),
     sesiones: (ses ?? []).map((s) => ({
