@@ -85,7 +85,7 @@ export const T = {
       constructora: 'Nuestro oficio es la arquitectura y el diseño, dibujados para que se construya exactamente lo proyectado.',
     },
 
-    obraRotulo: 'Obra seleccionada',
+    obraRotulo: 'Obra seleccionada / Portfolio',
     obraTitulo: 'Lo que dibujamos, construido.',
     obras: [
       { img: '/para/obra/cc38-real.webp', nombre: 'Claudio Coello 38', lugar: 'Madrid', tipo: 'Residencial · 320 m²' },
@@ -157,7 +157,7 @@ export const T = {
 
     dossierRotulo: 'Visual Lab · Dossier digital',
     dossierTitulo: 'Dossieres digitales: el proyecto, en una aplicación.',
-    dossierTexto: 'Para cada proyecto preparamos una presentación navegable —distribuciones, calidades, presupuesto y plazos— que el comprador abre en su móvil. Cada uno recibe su enlace y el equipo comercial sabe qué le interesa.',
+    dossierTexto: 'Para cada proyecto preparamos una presentación navegable con distribuciones, calidades, presupuesto y plazos, que el comprador abre en su móvil. Cada uno recibe su enlace y el equipo comercial sabe qué le interesa.',
     dossierPie: 'Ejemplo real · Casa Zurbano, Madrid',
     abrirDossier: 'Abrir el ejemplo',
 
@@ -262,7 +262,7 @@ export const T = {
       constructora: 'Our craft is architecture and design, drawn so that what gets built is exactly what was designed.',
     },
 
-    obraRotulo: 'Selected work',
+    obraRotulo: 'Selected work / Portfolio',
     obraTitulo: 'What we draw, built.',
     obras: [
       { img: '/para/obra/cc38-real.webp', nombre: 'Claudio Coello 38', lugar: 'Madrid', tipo: 'Residential · 320 m²' },
@@ -334,7 +334,7 @@ export const T = {
 
     dossierRotulo: 'Visual Lab · Digital brochure',
     dossierTitulo: 'Digital brochures: the project, as an app.',
-    dossierTexto: 'For each project we build a presentation buyers navigate on their phone — layouts, finishes, budget and timeline. Each one gets their own link and the sales team knows what they care about.',
+    dossierTexto: 'For each project we build a presentation buyers navigate on their phone, with layouts, finishes, budget and timeline. Each one gets their own link and the sales team knows what they care about.',
     dossierPie: 'Real example · Casa Zurbano, Madrid',
     abrirDossier: 'Open the example',
 

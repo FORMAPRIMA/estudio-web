@@ -17,7 +17,7 @@ import { contenedor, useBloqueoScroll, useEnPantalla, useVisto } from './Present
 import { Rotulo } from './Pantallas'
 import Cifra from './Cifra'
 
-const MODOS: ModoId[] = ['disponibilidad', 'plantas', 'asoleamiento', 'vista']
+const MODOS: ModoId[] = ['disponibilidad', 'plantas', 'asoleamiento']   // «Vista» (cámara dentro de la vivienda) no funciona bien incrustada: fuera
 const COLOR: Record<string, string> = { disponible: '#3D8B5F', negociacion: '#5B7FA6', reservada: '#8A6220', vendida: '#9C9C96', piloto: '#8A5A72' }
 const sinMovimiento = () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
