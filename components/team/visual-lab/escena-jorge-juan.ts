@@ -25,7 +25,7 @@ import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js'
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
 import {
   type Vivienda, type VistaId, type CapaId, type ModoId,
-  BY_ID, zPlanta, alturaPlanta, ANCHO_MEDIO, FONDO, PLANTAS,
+  BY_ID, zPlanta, alturaPlanta, ANCHO_MEDIO, FONDO, PLANTAS, estanciasDe,
 } from '@/lib/visual-lab/jorge-juan'
 
 export interface QA { viviendas: number; esperadas: number; ms: number; triangulos: number }
@@ -35,6 +35,8 @@ export interface EscenaOpts {
   wrap: HTMLElement
   labelEl: HTMLElement | null
   compassEl: HTMLElement | null
+  /** Capa HTML sobre el canvas donde se pintan las etiquetas de estancia */
+  estanciasEl?: HTMLElement | null
   glbUrl: string
   onHover: (id: string | null) => void
   onPick: (id: string | null) => void
@@ -102,6 +104,9 @@ export class Escena {
   private interiores: Nodo[] = []
   private cubiertas: Nodo[] = []
   private hemi: THREE.HemisphereLight
+  /** Etiquetas de estancia de la vivienda abierta (HTML proyectado, no texto 3D: nítido y accesible) */
+  private estancias: { el: HTMLElement; t: HTMLElement; pos: THREE.Vector3; w: number; x: number; y: number; ok: boolean }[] = []
+  private estOp = 0
   private composer: EffectComposer | null = null
   private gtao: GTAOPass | null = null
   private entorno: THREE.Object3D[] = []
@@ -242,6 +247,33 @@ export class Escena {
     this.last = performance.now()
     this.raf()
     this.cargar()
+  }
+
+  private montarEstancias(c: number | null) {
+    const capa = this.opts.estanciasEl
+    if (!capa) return
+    const v = c != null && this.selId ? BY_ID[this.selId] : null
+    const clave = v ? v.id : ''
+    if (capa.dataset.vivienda === clave) return
+    capa.dataset.vivienda = clave
+    capa.replaceChildren()
+    this.estancias = []
+    this.estOp = 0
+    capa.style.opacity = '0'
+    if (!v) return
+    for (const e of estanciasDe(v)) {
+      const el = document.createElement('div')
+      el.className = 'vl-est'
+      const n = document.createElement('span')
+      n.className = 'vl-est-n'
+      n.textContent = String(e.n)
+      const t = document.createElement('span')
+      t.className = 'vl-est-t'
+      t.textContent = e.nombre
+      el.append(n, t)
+      capa.append(el)
+      this.estancias.push({ el, t, pos: new THREE.Vector3(...e.pos), w: 0, x: 0, y: 0, ok: false })
+    }
   }
 
   /**
@@ -389,6 +421,7 @@ export class Escena {
     for (const n of this.exteriores) n.offT = lev(n.planta)
     for (const n of this.cubiertas) n.offT = lev(n.planta)
     const mano = this.selId ? BY_ID[this.selId]?.mano : null
+    this.montarEstancias(c)
     // lo que baja vuelve a verse desde arriba; lo que sube se esconde al llegar (bucle)
     for (const n of this.exteriores.concat(this.cubiertas)) if (n.offT === 0) n.obj.visible = true
     // planta abierta: sol alto y más cielo, para que las sombras sean cortas y suaves
@@ -523,6 +556,7 @@ export class Escena {
     this.canvas.removeEventListener('pointerup', this.onUp)
     this.canvas.removeEventListener('pointerleave', this.onLeave)
     this.ro?.disconnect()
+    this.opts.estanciasEl?.replaceChildren()
     this.controls.dispose()
     this.scene.traverse((o) => {
       const m = o as THREE.Mesh
@@ -613,6 +647,43 @@ export class Escena {
       mueve = true
     }
     if (mueve) this.renderer.shadowMap.needsUpdate = true
+
+    // etiquetas de estancia: entran cuando el despiece ha terminado y la cámara está quieta
+    if (this.estancias.length && this.opts.estanciasEl) {
+      const t = !mueve && !this.tween ? 1 : 0
+      this.estOp += (t - this.estOp) * Math.min(1, dt * 6)
+      this.opts.estanciasEl.style.opacity = this.estOp.toFixed(3)
+      if (this.estOp > 0.01) {
+        const r = this.wrap.getBoundingClientRect()
+        // anticolisión: la bolita siempre se ve; el nombre solo si no pisa a otro ya
+        // colocado (en orden de numeración). Al pasar el ratón vuelve a aparecer (CSS).
+        const ocupados: [number, number, number, number][] = []
+        const choca = (a: [number, number, number, number]) => ocupados.some((b) => a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1])
+        for (const e of this.estancias) {
+          this.v3.copy(e.pos).project(this.camera)
+          const fuera = this.v3.z > 1 || Math.abs(this.v3.x) > 1.1 || Math.abs(this.v3.y) > 1.1
+          e.el.style.visibility = fuera ? 'hidden' : 'visible'
+          e.ok = !fuera
+          if (fuera) continue
+          const x = (this.v3.x * 0.5 + 0.5) * r.width, y = (-this.v3.y * 0.5 + 0.5) * r.height
+          e.x = x; e.y = y
+          e.el.style.transform = `translate(${x.toFixed(1)}px,${y.toFixed(1)}px)`
+          if (!e.w) e.w = e.t.offsetWidth || 80
+          ocupados.push([x - 12, y - 12, x + 12, y + 12])
+        }
+        for (const e of this.estancias) {
+          if (!e.ok) continue
+          const { x, y } = e
+          // primero a la derecha de la bolita; si choca, a la izquierda; si no, solo la bolita
+          const der: [number, number, number, number] = [x + 14, y - 9, x + 16 + e.w, y + 9]
+          const izq: [number, number, number, number] = [x - 16 - e.w, y - 9, x - 14, y + 9]
+          const sitio = !choca(der) ? der : !choca(izq) ? izq : null
+          e.el.classList.toggle('vl-est-solo', !sitio)
+          e.el.classList.toggle('vl-est-izq', sitio === izq)
+          if (sitio) ocupados.push(sitio)
+        }
+      }
+    }
 
     if (this.needHover && this.cargado) {
       this.needHover = false

@@ -129,6 +129,71 @@ export function datosVivienda(v: Vivienda): { k: string; v: string }[] {
   ]
 }
 
+/** Renders interiores del proyecto (los mismos para todas las viviendas: misma distribución). */
+export const RENDERS: { n: string; t: string }[] = [
+  { n: '02', t: 'Recibidor · puerta de entrada' },
+  { n: '03', t: 'Recibidor hacia el salón' },
+  { n: '01', t: 'Recibidor hacia la cocina' },
+  { n: '04', t: 'Cocina · isla y desayunador' },
+  { n: '05', t: 'Cocina · office y café' },
+  { n: '06', t: 'Salón y comedor' },
+  { n: '07', t: 'Salón · ventanas a Jorge Juan' },
+  { n: '09', t: 'Salón · chimenea y mirador' },
+  { n: '08', t: 'Salón hacia el recibidor' },
+  { n: '10', t: 'Dorm. principal' },
+]
+export const renderUrl = (n: string, min = false) => `${ASSETS}/renders/jj40-${n}${min ? '-min' : ''}.jpg`
+
+/* ── Estancias (numeración de la propuesta de reforma) ───────────────── */
+
+/**
+ * Centro de cada estancia en coordenadas del PLANO de la propuesta (dibujo izquierdo de
+ * `FP_JJ40_3D_Aux CAD.dwg`, m). Paso al marco local: X = y − 5,45 · Y = x − 34,8; y en
+ * three (GLB Y-up): x = X, z = −Y. La numeración es la de la leyenda del plano.
+ */
+const ESTANCIAS_PLANO: { n: number; nombre: string; x: number; y: number }[] = [
+  { n: 1, nombre: 'Recibidor', x: 28.4, y: 10.0 },
+  { n: 2, nombre: 'Salón', x: 32.2, y: 9.3 },
+  { n: 3, nombre: 'Comedor', x: 32.3, y: 14.5 },
+  { n: 4, nombre: 'Cocina', x: 27.4, y: 15.4 },
+  { n: 5, nombre: 'Lavandería', x: 23.9, y: 12.8 },
+  { n: 6, nombre: 'Aseo servicio', x: 22.1, y: 12.9 },
+  { n: 7, nombre: 'Family room', x: 23.0, y: 10.9 },
+  { n: 8, nombre: 'Distribuidor', x: 17.4, y: 8.7 },
+  { n: 9, nombre: 'Gabanero', x: 20.9, y: 9.9 },
+  { n: 10, nombre: 'Aseo cortesía', x: 14.9, y: 7.5 },
+  { n: 11, nombre: 'Estudio', x: 21.3, y: 6.3 },
+  { n: 12, nombre: 'Dormitorio 02', x: 17.0, y: 11.9 },
+  { n: 13, nombre: 'Baño dorm. 02', x: 12.8, y: 10.3 },
+  { n: 14, nombre: 'Despacho', x: 16.2, y: 14.4 },
+  { n: 15, nombre: 'Dormitorio 03', x: 12.0, y: 15.5 },
+  { n: 16, nombre: 'Vestidor dorm. 03', x: 10.7, y: 11.8 },
+  { n: 17, nombre: 'Baño dorm. 03', x: 12.7, y: 12.4 },
+  { n: 18, nombre: 'Dormitorio 04', x: 8.1, y: 6.6 },
+  { n: 19, nombre: 'Vestidor dorm. 04', x: 11.1, y: 7.1 },
+  { n: 20, nombre: 'Baño dorm. 04', x: 12.9, y: 6.6 },
+  { n: 21, nombre: 'Terraza dorm. 04', x: 4.4, y: 7.0 },
+  { n: 22, nombre: 'Dorm. principal', x: 8.4, y: 12.9 },
+  { n: 23, nombre: 'Vestidor ppal.', x: 7.9, y: 15.6 },
+  { n: 24, nombre: 'Baño ppal.', x: 4.2, y: 14.3 },
+  { n: 25, nombre: 'Terraza ppal.', x: 4.4, y: 10.2 },
+]
+
+export interface Estancia { n: number; nombre: string; pos: [number, number, number] }
+
+/** Estancias de una vivienda, en coordenadas del GLB y a 0,9 m sobre su suelo. */
+export function estanciasDe(v: Vivienda): Estancia[] {
+  const sx = v.mano === 'IZ' ? 1 : -1
+  const y = zPlanta(v.planta) + 0.3 + 0.9
+  return ESTANCIAS_PLANO.flatMap((e) => {
+    const X = e.y - 5.45, Y = e.x - 34.8
+    // el ático pierde lo que cae en las terrazas delanteras; el bajo, la galería trasera
+    if (v.tipo === 'atico' && Y > -5 && X > 3.6) return []
+    if (v.tipo === 'baja' && Y < -29.1) return []
+    return [{ n: e.n, nombre: e.nombre, pos: [sx * X, y, -Y] as [number, number, number] }]
+  })
+}
+
 export const FICHA_TABS: { id: FichaTab; label: string }[] = [
   { id: 'distribucion', label: 'Distribución' },
   { id: 'renders', label: 'Renders' },

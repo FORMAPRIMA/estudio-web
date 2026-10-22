@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import { createPortal } from 'react-dom'
 import {
   type ModoId, type VistaId, type CapaId, type FichaTab, type Vivienda,
-  VIVIENDAS, BY_ID, SUP_TOTAL, PLANTAS, MODOS, VISTAS, CAPAS, FICHA_TABS, PROGRAMA, C,
+  VIVIENDAS, BY_ID, SUP_TOTAL, PLANTAS, MODOS, VISTAS, CAPAS, FICHA_TABS, PROGRAMA, RENDERS, C,
+  renderUrl,
   ASSETS, GLB_URL, REVISION, FECHA_REVISION,
   plantaLabel, nombreVivienda, datosVivienda,
 } from '@/lib/visual-lab/jorge-juan'
@@ -19,6 +21,7 @@ export default function JorgeJuanPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const labelRef = useRef<HTMLDivElement>(null)
   const compassRef = useRef<HTMLSpanElement>(null)
+  const estanciasRef = useRef<HTMLDivElement>(null)
   const escenaRef = useRef<Escena | null>(null)
   const toastRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -53,7 +56,7 @@ export default function JorgeJuanPage() {
     import('./escena-jorge-juan').then(({ Escena }) => {
       if (!vivo) return
       const e = new Escena({
-        canvas, wrap, labelEl: labelRef.current, compassEl: compassRef.current, glbUrl: GLB_URL,
+        canvas, wrap, labelEl: labelRef.current, compassEl: compassRef.current, estanciasEl: estanciasRef.current, glbUrl: GLB_URL,
         onHover: (id) => setHoverId(id),
         // tocar una vivienda despieza el edificio por su planta
         onPick: (id) => { setSelId(id); setTab('distribucion'); setModo('planta') },
@@ -244,6 +247,8 @@ export default function JorgeJuanPage() {
       <main className="vl-main">
         <div className="vl-canvas-wrap" ref={wrapRef} style={{ background: '#E9E7E1' }}>
           <canvas ref={canvasRef} />
+          {/* etiquetas de estancia de la vivienda abierta (las posiciona la escena) */}
+          <div className="vl-est-capa" ref={estanciasRef} />
         </div>
 
         {/* Placa: render de la maqueta desde el mismo encuadre; hace de pantalla de carga */}
@@ -485,12 +490,14 @@ function Ficha({ v, tab, onTab, abierta, onAbrir, onAcercar, onEnlace, onClose }
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={`${ASSETS}/distribucion-tipo.jpg`} alt="Distribución de la propuesta de reforma del 5º izquierda" style={{ width: '100%', display: 'block' }} />
           </a>
+        ) : tab === 'renders' ? (
+          <Galeria />
         ) : (
           <div style={{ marginTop: 10, height: 180, borderRadius: 4, border: `1px dashed ${C.border}`, background: '#F4F2EC', display: 'grid', placeItems: 'center', padding: 20, textAlign: 'center' }}>
             <div>
               <p style={{ fontSize: 22, margin: 0, opacity: 0.3 }}>◳</p>
               <p style={{ fontSize: 11, color: C.muted, margin: '8px 0 0', lineHeight: 1.5 }}>
-                {tab === 'renders' ? 'Renders interiores de la distribución' : 'Recorrido virtual por la vivienda'}
+                Recorrido virtual por la vivienda
                 <br />
                 <span style={{ color: C.faint }}>Pendiente de producir</span>
               </p>
@@ -498,7 +505,8 @@ function Ficha({ v, tab, onTab, abierta, onAbrir, onAcercar, onEnlace, onClose }
           </div>
         )}
         <p style={{ fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.faint, margin: '8px 0 0' }}>
-          {tab === 'distribucion' ? 'Propuesta de reforma · 5º izquierda · toca para ampliar' : 'Hueco reservado'}
+          {tab === 'distribucion' ? 'Propuesta de reforma · 5º izquierda · toca para ampliar'
+            : tab === 'renders' ? `${RENDERS.length} renders del proyecto · toca para ampliar` : 'Hueco reservado'}
         </p>
       </div>
 
@@ -531,5 +539,66 @@ function Ficha({ v, tab, onTab, abierta, onAbrir, onAcercar, onEnlace, onClose }
         <button className="vl-btn vl-btn-plain" onClick={onEnlace}>Copiar enlace a la vivienda</button>
       </div>
     </div>
+  )
+}
+
+/** Renders del proyecto: miniaturas ligeras y visor a pantalla completa con flechas y swipe. */
+function Galeria() {
+  const [i, setI] = useState<number | null>(null)
+  const x0 = useRef<number | null>(null)
+  const n = RENDERS.length
+  const mover = useCallback((d: number) => setI((v) => (v == null ? v : (v + d + n) % n)), [n])
+
+  useEffect(() => {
+    if (i == null) return
+    const k = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setI(null)
+      else if (e.key === 'ArrowRight') mover(1)
+      else if (e.key === 'ArrowLeft') mover(-1)
+    }
+    window.addEventListener('keydown', k)
+    // precarga la siguiente para que el paso sea instantáneo
+    const img = new Image()
+    img.src = renderUrl(RENDERS[(i + 1) % n].n)
+    return () => window.removeEventListener('keydown', k)
+  }, [i, mover, n])
+
+  const r = i != null ? RENDERS[i] : null
+  return (
+    <>
+      <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6 }}>
+        {RENDERS.map((x, k) => (
+          <button key={x.n} onClick={() => setI(k)} style={{ padding: 0, border: 'none', borderRadius: 3, overflow: 'hidden', background: '#EEE', aspectRatio: '5 / 4', position: 'relative' }} aria-label={x.t}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={renderUrl(x.n, true)} alt={x.t} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+          </button>
+        ))}
+      </div>
+      {/* portal: la animación de la ficha deja un transform que atraparía el position: fixed */}
+      {r && createPortal(
+        <div
+          onClick={() => setI(null)}
+          onPointerDown={(e) => { x0.current = e.clientX }}
+          onPointerUp={(e) => {
+            const d = x0.current == null ? 0 : e.clientX - x0.current
+            x0.current = null
+            if (Math.abs(d) > 40) { e.stopPropagation(); mover(d < 0 ? 1 : -1) }
+          }}
+          style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(16,15,13,.94)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={renderUrl(r.n)} alt={r.t} onClick={(e) => e.stopPropagation()} style={{ maxWidth: '100%', maxHeight: 'calc(100dvh - 110px)', objectFit: 'contain', display: 'block', userSelect: 'none' }} draggable={false} />
+          <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 18, marginTop: 14, color: '#F2F1EC' }}>
+            <button onClick={() => mover(-1)} aria-label="Anterior" style={{ color: 'inherit', fontSize: 22, padding: '4px 10px' }}>‹</button>
+            <span style={{ fontSize: 12, letterSpacing: '0.06em', minWidth: 220, textAlign: 'center' }}>
+              {r.t} <span style={{ opacity: 0.5 }}>· {i! + 1}/{n}</span>
+            </span>
+            <button onClick={() => mover(1)} aria-label="Siguiente" style={{ color: 'inherit', fontSize: 22, padding: '4px 10px' }}>›</button>
+          </div>
+          <button onClick={() => setI(null)} aria-label="Cerrar" style={{ position: 'absolute', top: 14, right: 16, color: '#F2F1EC', fontSize: 26 }}>×</button>
+        </div>,
+        document.body,
+      )}
+    </>
   )
 }

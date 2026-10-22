@@ -352,7 +352,17 @@ Aplicaciones internas. Acceso: todos los roles FP.
     - 🔴 **Cámaras**: Jorge Juan tiene 15,2 m entre fachadas. Una cámara baja «enfrente» queda dentro del
       edificio de la otra acera, y el vecino de la esquina tapa la fachada desde el cruce. El POV maestro
       (`VISTAS.calle`, el de la placa `firma-*.jpg`) mira desde el noroeste por encima de los tejados.
-    - `?vivienda=5-IZ` abre la ficha con el edificio despiezado. Los árboles son *Bloodwood tree* de
+    - `?vivienda=5-IZ` abre la ficha con el edificio despiezado.
+    - **Etiquetas de estancia** en la planta abierta: bolita con el número de la leyenda del plano y el nombre
+      en pequeño, que crece al pasar el ratón (`.vl-est*` en `globals.css`). Son HTML proyectado desde la escena
+      (capa `estanciasEl`), no texto 3D. Posiciones en `ESTANCIAS_PLANO` (`lib/visual-lab/jorge-juan.ts`, en
+      coordenadas del plano). Anticolisión cada fotograma: el nombre va a la derecha de su bolita, si no cabe a
+      la izquierda y, si tampoco, se oculta (la bolita queda y el nombre sale con el hover).
+    - **Renders** (pestaña de la ficha): los 10 finales editados del proyecto en
+      `public/protegido/visual-lab/jorge-juan-40/renders/` (`jj40-NN.jpg` de 1800 px y `-min` de 640 para las
+      miniaturas; 4,8 MB en total frente a 42 MB de los PNG). Visor a pantalla completa con flechas, teclado y
+      swipe, montado con `createPortal`: la animación de `.vl-ficha` deja un `transform` que atraparía el
+      `position: fixed`. Los árboles son *Bloodwood tree* de
       Poly by Google (**CC-BY 3.0, vía Poly Pizza**): si la página sale fuera del equipo, hay que acreditarlo.
   - **Pendiente**: los huecos de documentación gráfica de las fichas (plano/render/recorrido/vídeo, etc.) son
     placeholders. Los otros dos artboards del proyecto de diseño (`Plan Abaco` — el plan de producto de
