@@ -13,6 +13,10 @@ import {
 } from '@/lib/salas/panel'
 import { pinNuevo } from '@/lib/salas/servidor'
 import { LOGO_MAX_BYTES, borrarLogo, guardarLogo, tokenNuevo } from '@/lib/salas/prospeccion'
+import { sendEmail, wrapEmail } from '@/lib/email'
+import { cuerpoAviso } from '@/lib/salas/avisos'
+import { bloquesResumen, enviarResumen } from '@/lib/salas/resumen'
+import { FP_ROLES, type FpRole } from '@/lib/types'
 
 type R<T = object> = ({ ok: true } & T) | { ok: false; error: string }
 
@@ -409,5 +413,111 @@ export async function estadoReunionSala(id: string, estado: 'confirmada' | 'canc
     revalidatePath(`/salas/${sala.slug}`)
     revalidatePath('/salas/agenda')
     return {}
+  })
+}
+
+// ── Equipo de Forma Prima (solo rol propietario) ──────────────────────────────
+// Las personas con cuenta en internal entran con ella (puente de /team/salas), que
+// las reconoce por el email: darles acceso es crear su fila con ese email y avisarles.
+
+const escHtml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!))
+
+async function perfilFP(perfilId: string) {
+  const { data: p } = await createAdminClient().from('profiles').select('id, nombre, apellido, email, rol, blocked').eq('id', perfilId).maybeSingle()
+  if (!p || p.blocked || !FP_ROLES.includes(p.rol as FpRole)) throw new Error('Esa persona no es del equipo.')
+  const email = (p.email ?? '').trim().toLowerCase()
+  if (!email) throw new Error('Su perfil de internal no tiene email.')
+  return { nombre: [p.nombre, p.apellido].filter(Boolean).join(' ').trim() || email, email, rol: p.rol as FpRole }
+}
+
+export async function invitarEquipoFP(perfilId: string, salas: string[]): Promise<R> {
+  return envolver(async () => {
+    const m = await requirePropietario()
+    const p = await perfilFP(perfilId)
+    const admin = createAdminClient()
+    const { data: existe } = await admin.from('sala_miembros').select('id, activo, rol').eq('email', p.email).maybeSingle()
+    if (existe?.activo) throw new Error('Ya tiene acceso.')
+    let id: string
+    if (existe) {
+      const { error } = await admin.from('sala_miembros').update({ activo: true }).eq('id', existe.id)
+      if (error) throw new Error(error.message)
+      id = existe.id
+    } else {
+      // Entra con su cuenta de internal; el código existe porque la columna lo exige, pero no se le da.
+      const { hmac } = await codigoLibre()
+      const { data, error } = await admin.from('sala_miembros').insert({
+        nombre: p.nombre, email: p.email, empresa: 'Forma Prima', rol: 'comercial', codigo_hmac: hmac, creado_por: m.id,
+      }).select('id').single()
+      if (error || !data) throw new Error(error?.message ?? 'No se pudo crear.')
+      id = data.id
+    }
+    if (existe?.rol !== 'propietario') await asignarSalas(id, salas)
+    const ve = await salasDe({ id, nombre: p.nombre, email: p.email, empresa: 'Forma Prima', rol: existe?.rol === 'propietario' ? 'propietario' : 'comercial' } as Miembro)
+    await auditar(m.id, 'invitar_fp', null, p.nombre)
+
+    const r = await sendEmail({
+      to: p.email, replyTo: m.email ?? undefined,
+      subject: 'Ya tienes acceso a Salas',
+      html: wrapEmail(`
+        <p style="margin:0 0 14px;font-size:16px;">Hola, ${escHtml(p.nombre.split(' ')[0])}:</p>
+        <p style="margin:0 0 14px;font-size:15px;">${escHtml(m.nombre.split(' ')[0])} te ha dado acceso a <b>Salas</b>, el panel donde se preparan los dossiers para clientes y empresas y se ve quién los abre.</p>
+        <p style="margin:0 0 6px;font-size:13px;color:#777;">Puedes ver:</p>
+        <p style="margin:0 0 20px;font-size:14px;">${ve.length ? ve.map((s) => escHtml(s.nombre)).join('<br>') : 'Las salas que crees tú.'}</p>
+        <p style="margin:0 0 20px;"><a href="https://internal.formaprima.es/team/salas" style="display:inline-block;background:#1A1A1A;color:#fff;text-decoration:none;padding:12px 20px;font-size:14px;">Entrar con tu cuenta de Forma Prima</a></p>
+        <p style="margin:0;font-size:13px;color:#777;">Es tu usuario y contraseña de siempre de internal${p.rol === 'fp_team' ? '' : '; también lo tienes en el menú, en Captación → Salas'}.</p>
+      `),
+    })
+    revalidatePath('/salas/equipo')
+    if (r.error) throw new Error('Acceso dado, pero el correo no ha salido. Avísale tú.')
+    return {}
+  })
+}
+
+/** Una persona del panel sin email que es del equipo: se le pone el de internal para que entre con su cuenta. */
+export async function vincularEquipoFP(miembroId: string, perfilId: string): Promise<R> {
+  return envolver(async () => {
+    const m = await requirePropietario()
+    const p = await perfilFP(perfilId)
+    const admin = createAdminClient()
+    const { count } = await admin.from('sala_miembros').select('id', { count: 'exact', head: true }).eq('email', p.email)
+    if (count) throw new Error('Ese email ya está en otra persona del panel.')
+    const { data, error } = await admin.from('sala_miembros').update({ email: p.email }).eq('id', miembroId).is('email', null).select('nombre').maybeSingle()
+    if (error || !data) throw new Error(error?.message ?? 'No se pudo vincular.')
+    await auditar(m.id, 'vincular_fp', null, `${data.nombre} · ${p.email}`)
+    revalidatePath('/salas/equipo')
+    return {}
+  })
+}
+
+// ── Correos de prueba ─────────────────────────────────────────────────────────
+
+/** Manda a quien lo pide un aviso de ejemplo y su resumen real de las últimas 24 h (aunque esté vacío). */
+export async function enviarCorreosPrueba(): Promise<R<{ email: string; bloques: number }>> {
+  return envolver(async () => {
+    const m = await requirePropietario()
+    if (!m.email) throw new Error('No tienes email en el panel: ponlo en Equipo → Editar.')
+    const admin = createAdminClient()
+    const salas = await salasDe(m)
+    const { data: lead } = salas.length
+      ? await admin.from('sala_leads').select('id, sala_id, nombre, empresa, telefono, email').in('sala_id', salas.map((s) => s.id)).order('created_at', { ascending: false }).limit(1).maybeSingle()
+      : { data: null }
+    const sala = salas.find((s) => s.id === lead?.sala_id)
+    const nombre = lead ? `${lead.nombre}${lead.empresa ? ` (${lead.empresa})` : ''}` : 'Lucía Martín (Promotora Ejemplo)'
+    const titulo = `${nombre} ha abierto el dossier de ${sala?.nombre ?? 'tu sala'}`
+    const a = await sendEmail({
+      to: m.email,
+      subject: `[Prueba] ${titulo}`,
+      html: cuerpoAviso({
+        titulo, ficha: lead && sala ? `https://salas.formaprima.es/${sala.slug}/lead/${lead.id}` : 'https://salas.formaprima.es',
+        texto: 'Correo de prueba: así llega el aviso cuando un lead abre su dossier por primera vez (los datos son del último lead de tus salas, no ha pasado de verdad). Es la primera vez que entra. Dale un rato y pregúntale qué le ha parecido.',
+        filas: [['Temperatura', 'Tibio · 35/100'], ['Visitas', '1'], ['Desde', 'Madrid, España · móvil'], ['Empresa', lead?.empresa], ['Teléfono', lead?.telefono], ['Email', lead?.email]],
+      }),
+    })
+    if (a.error) throw new Error('El aviso de prueba no ha salido.')
+    const bloques = await bloquesResumen(m)
+    const r = await enviarResumen(m, bloques, true)
+    if (r.error) throw new Error('El aviso ha salido, pero el resumen no.')
+    await auditar(m.id, 'correos_prueba', null, m.email)
+    return { email: m.email, bloques: bloques.length }
   })
 }

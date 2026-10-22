@@ -121,25 +121,31 @@ async function avisar(c: Contexto, tipo: TipoAviso, extra?: string): Promise<voi
   }
   const donde = [[sesion?.ciudad, sesion?.pais].filter(Boolean).join(', '), sesion?.dispositivo].filter(Boolean).join(' · ')
   const ficha = `https://salas.formaprima.es/${c.salaSlug}/lead/${c.leadId}`
-  const fila = (k: string, v?: string | null) => (v ? `<tr><td style="padding:4px 16px 4px 0;color:#777;">${k}</td><td style="padding:4px 0;">${esc(v)}</td></tr>` : '')
 
   const r = await sendEmail({
     to: dest.to,
     cc: dest.cc.length ? dest.cc : undefined,
     subject: titulo[tipo],
-    html: wrapEmail(`
-      <p style="margin:0 0 6px;font-size:16px;"><strong>${esc(titulo[tipo])}</strong></p>
-      <p style="margin:0 0 18px;color:#555;">${esc(extra ? `${extra} ` : '')}${esc(consejo[tipo])}</p>
-      <table style="font-size:14px;border-collapse:collapse;margin:0 0 18px;">
-        ${fila('Temperatura', `${NOMBRE_TEMPERATURA[t.nivel]} · ${t.puntos}/100`)}
-        ${fila('Visitas', String(ss.length))}
-        ${fila('Desde', donde)}
-        ${fila('Empresa', lead.empresa)}
-        ${fila('Teléfono', lead.telefono)}
-        ${fila('Email', lead.email)}
-      </table>
-      <p style="margin:0;"><a href="${ficha}">Ver su ficha en Salas</a></p>
-    `),
+    html: cuerpoAviso({
+      titulo: titulo[tipo], texto: `${extra ? `${extra} ` : ''}${consejo[tipo]}`, ficha,
+      filas: [
+        ['Temperatura', `${NOMBRE_TEMPERATURA[t.nivel]} · ${t.puntos}/100`], ['Visitas', String(ss.length)], ['Desde', donde],
+        ['Empresa', lead.empresa], ['Teléfono', lead.telefono], ['Email', lead.email],
+      ],
+    }),
   })
   if (r.error) console.error('[salas] email aviso', r.error)
+}
+
+/** Cuerpo del aviso. Exportado para el correo de prueba del panel, que tiene que ser este mismo. */
+export function cuerpoAviso(o: { titulo: string; texto: string; ficha: string; filas: [string, string | null | undefined][] }): string {
+  const fila = ([k, v]: [string, string | null | undefined]) => (v ? `<tr><td style="padding:4px 16px 4px 0;color:#777;">${k}</td><td style="padding:4px 0;">${esc(v)}</td></tr>` : '')
+  return wrapEmail(`
+    <p style="margin:0 0 6px;font-size:16px;"><strong>${esc(o.titulo)}</strong></p>
+    <p style="margin:0 0 18px;color:#555;">${esc(o.texto)}</p>
+    <table style="font-size:14px;border-collapse:collapse;margin:0 0 18px;">
+      ${o.filas.map(fila).join('')}
+    </table>
+    <p style="margin:0;"><a href="${o.ficha}">Ver su ficha en Salas</a></p>
+  `)
 }

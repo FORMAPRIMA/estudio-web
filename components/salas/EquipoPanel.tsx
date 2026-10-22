@@ -2,7 +2,10 @@
 
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { actualizarConfidencialSala, actualizarMiembroSala, crearMiembroSala, regenerarCodigoSala, type MiembroInput } from '@/app/actions/salas'
+import {
+  actualizarConfidencialSala, actualizarMiembroSala, crearMiembroSala, enviarCorreosPrueba, invitarEquipoFP, regenerarCodigoSala, vincularEquipoFP,
+  type MiembroInput,
+} from '@/app/actions/salas'
 import { fecha, hace } from '@/lib/salas/metricas'
 import { Modal } from './LeadForm'
 import { Etiqueta } from './SalaPanel'
@@ -12,7 +15,11 @@ export interface MiembroFila {
   id: string; nombre: string; email: string | null; empresa: string | null
   rol: 'propietario' | 'comercial'; activo: boolean; ultimoAcceso: string | null; salas: string[]
 }
-export interface SalaFila { id: string; nombre: string; confidencial: boolean; creadoPor: string | null }
+export interface SalaFila { id: string; nombre: string; confidencial: boolean; creadoPor: string | null; tipo?: string }
+export interface PersonaFP {
+  perfilId: string; nombre: string; email: string; rol: string
+  miembroId: string | null; activo: boolean; tocayo: { id: string; nombre: string } | null
+}
 export interface Registro { quien: string; sala: string | null; accion: string; detalle: string | null; at: string }
 
 const ACCIONES: Record<string, string> = {
@@ -20,14 +27,25 @@ const ACCIONES: Record<string, string> = {
   reactivar_lead: 'reactivó el PIN de', renovar_pin: 'generó un PIN nuevo para', exportar_csv: 'exportó el CSV',
   crear_miembro: 'dio acceso a', editar_miembro: 'editó a', desactivar_miembro: 'desactivó a', regenerar_codigo: 'generó un código nuevo para',
   sala_confidencial: 'marcó como confidencial', sala_compartible: 'abrió al equipo', entrar_cuenta_fp: 'entró con su cuenta de Forma Prima',
+  invitar_fp: 'invitó a', vincular_fp: 'vinculó la cuenta de', correos_prueba: 'se envió los correos de prueba a',
 }
 
-export default function EquipoPanel({ yo, miembros, salas, registro }: {
-  yo: string; miembros: MiembroFila[]; salas: SalaFila[]; registro: Registro[]
+export default function EquipoPanel({ yo, miembros, salas, registro, equipoFP, yoEmail }: {
+  yo: string; miembros: MiembroFila[]; salas: SalaFila[]; registro: Registro[]; equipoFP: PersonaFP[]; yoEmail: string | null
 }) {
   const router = useRouter()
   const [form, setForm] = useState<MiembroFila | 'nuevo' | null>(null)
   const [codigo, setCodigo] = useState<{ nombre: string; codigo: string } | null>(null)
+  const [invitar, setInvitar] = useState<PersonaFP | null>(null)
+  const [prueba, setPrueba] = useState<{ estado: 'enviando' } | { estado: 'ok' | 'error'; texto: string } | null>(null)
+
+  const correosPrueba = async () => {
+    setPrueba({ estado: 'enviando' })
+    const r = await enviarCorreosPrueba()
+    setPrueba(r.ok
+      ? { estado: 'ok', texto: `Enviados a ${r.email}: un aviso de ejemplo y tu resumen de las últimas 24 h${r.bloques ? '' : ' (sin actividad: en ese caso el diario no se manda)'}.` }
+      : { estado: 'error', texto: r.error })
+  }
 
   return (
     <>
@@ -37,8 +55,19 @@ export default function EquipoPanel({ yo, miembros, salas, registro }: {
           <h1 style={{ fontSize: 30, fontWeight: 300, letterSpacing: '-0.02em', margin: '6px 0 0' }}>Quién entra al panel</h1>
           <p style={{ fontSize: 13, color: S.soft, margin: '6px 0 0' }}>Cada persona tiene su propio código. Los perfiles comerciales ven las salas que les asignes y las que crean ellos.</p>
         </div>
-        <button onClick={() => setForm('nuevo')} style={btn()}>+ Dar acceso</button>
+        <span style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button onClick={correosPrueba} disabled={prueba?.estado === 'enviando' || !yoEmail} title={yoEmail ? `Un aviso de ejemplo y tu resumen diario, a ${yoEmail}` : 'Pon tu email en Editar'}
+            style={{ ...btn('ghost'), opacity: prueba?.estado === 'enviando' || !yoEmail ? 0.6 : 1 }}>
+            {prueba?.estado === 'enviando' ? 'Enviando…' : 'Enviarme correos de prueba'}
+          </button>
+          <button onClick={() => setForm('nuevo')} style={btn()}>+ Dar acceso con código</button>
+        </span>
       </div>
+      {prueba && prueba.estado !== 'enviando' && (
+        <p role="status" style={{ fontSize: 13, margin: '-10px 0 20px', color: prueba.estado === 'ok' ? S.soft : S.red }}>{prueba.texto}</p>
+      )}
+
+      <EquipoFP personas={equipoFP} onInvitar={setInvitar} onCambio={() => router.refresh()} />
 
       <div style={{ ...card, overflowX: 'auto', marginBottom: 28 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 720 }}>
@@ -93,6 +122,7 @@ export default function EquipoPanel({ yo, miembros, salas, registro }: {
           onHecho={() => { setForm(null); router.refresh() }}
         />
       )}
+      {invitar && <InvitarFP persona={invitar} salas={salas} onCerrar={() => setInvitar(null)} onHecho={() => { setInvitar(null); router.refresh() }} />}
       {codigo && (
         <Modal titulo={`Código de ${codigo.nombre}`} onCerrar={() => setCodigo(null)}>
           <p style={{ fontSize: 13, color: S.soft, margin: '0 0 14px', lineHeight: 1.5 }}>
@@ -194,6 +224,84 @@ function MiembroForm({ inicial, esYo, salas, onCerrar, onCodigo, onHecho }: {
           </span>
         </div>
       </form>
+    </Modal>
+  )
+}
+
+function EquipoFP({ personas, onInvitar, onCambio }: { personas: PersonaFP[]; onInvitar: (p: PersonaFP) => void; onCambio: () => void }) {
+  const [error, setError] = useState('')
+  const [vinculando, setVinculando] = useState<string | null>(null)
+  if (!personas.length) return null
+  const vincular = async (p: PersonaFP) => {
+    setError(''); setVinculando(p.perfilId)
+    const r = await vincularEquipoFP(p.tocayo!.id, p.perfilId)
+    setVinculando(null)
+    if (!r.ok) setError(r.error); else onCambio()
+  }
+  return (
+    <>
+      <h2 style={{ fontSize: 15, fontWeight: 500, margin: '0 0 4px' }}>Equipo de Forma Prima</h2>
+      <p style={{ fontSize: 12.5, color: S.soft, margin: '0 0 10px' }}>Entran con su usuario de internal, sin código. Al darles acceso les llega un correo con el enlace.</p>
+      <div style={{ ...card, padding: '4px 0', marginBottom: 28 }}>
+        {personas.map((p, i) => (
+          <div key={p.perfilId} style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', padding: '10px 16px', borderTop: i ? `1px solid ${S.lineSoft}` : 0 }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 500 }}>{p.nombre}</div>
+              <div style={{ fontSize: 11.5, color: S.faint }}>{p.email}</div>
+            </div>
+            {p.miembroId && p.activo ? <Etiqueta tono="vivo">con acceso</Etiqueta>
+              : p.tocayo ? (
+                <button onClick={() => vincular(p)} disabled={vinculando === p.perfilId} title={`${p.tocayo.nombre} ya está en el panel pero sin email: no recibe avisos ni puede entrar con su cuenta.`}
+                  style={{ ...btn('ghost'), padding: '6px 12px' }}>{vinculando === p.perfilId ? 'Vinculando…' : 'Ya está · vincular su correo'}</button>
+              ) : (
+                <button onClick={() => onInvitar(p)} style={{ ...btn(), padding: '6px 14px' }}>{p.miembroId ? 'Devolver acceso' : 'Dar acceso'}</button>
+              )}
+          </div>
+        ))}
+        {error && <p role="alert" style={{ color: S.red, fontSize: 13, margin: 0, padding: '8px 16px' }}>{error}</p>}
+      </div>
+    </>
+  )
+}
+
+function InvitarFP({ persona, salas, onCerrar, onHecho }: { persona: PersonaFP; salas: SalaFila[]; onCerrar: () => void; onHecho: () => void }) {
+  const abiertas = salas.filter((s) => !s.confidencial)
+  const [elegidas, setElegidas] = useState<string[]>(abiertas.filter((s) => s.tipo === 'prospeccion').map((s) => s.id))
+  const [error, setError] = useState('')
+  const [isEnviando, setIsEnviando] = useState(false)
+  const enviar = async () => {
+    setError(''); setIsEnviando(true)
+    const r = await invitarEquipoFP(persona.perfilId, elegidas)
+    setIsEnviando(false)
+    if (!r.ok) { setError(r.error); return }
+    onHecho()
+  }
+  return (
+    <Modal titulo={`Dar acceso · ${persona.nombre}`} onCerrar={onCerrar}>
+      <div style={{ display: 'grid', gap: 14 }}>
+        <p style={{ fontSize: 13, color: S.soft, margin: 0, lineHeight: 1.5 }}>
+          Entrará como comercial con su cuenta de internal. Le llega un correo a <b style={{ color: S.ink }}>{persona.email}</b> con el botón para entrar y las salas que ve.
+        </p>
+        <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
+          <legend style={lab}>Salas que ve</legend>
+          <div style={{ display: 'grid', gap: 6 }}>
+            {abiertas.map((s) => (
+              <label key={s.id} style={{ display: 'flex', gap: 8, fontSize: 13.5, alignItems: 'center', cursor: 'pointer' }}>
+                <input type="checkbox" checked={elegidas.includes(s.id)} style={{ accentColor: S.ink }}
+                  onChange={(e) => setElegidas(e.target.checked ? [...elegidas, s.id] : elegidas.filter((x) => x !== s.id))} />
+                {s.nombre}
+              </label>
+            ))}
+            {!abiertas.length && <p style={{ fontSize: 13, color: S.soft, margin: 0 }}>Todas las salas son confidenciales: verá solo las que cree.</p>}
+          </div>
+          {salas.some((s) => s.confidencial) && <p style={{ fontSize: 12, color: S.faint, margin: '8px 0 0' }}>Las confidenciales no aparecen: ábrelas al equipo más abajo si quieres asignarlas.</p>}
+        </fieldset>
+        {error && <p role="alert" style={{ color: S.red, fontSize: 13, margin: 0 }}>{error}</p>}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+          <button type="button" onClick={onCerrar} style={btn('ghost')}>Cancelar</button>
+          <button type="button" onClick={enviar} disabled={isEnviando} style={{ ...btn(), opacity: isEnviando ? 0.6 : 1 }}>{isEnviando ? 'Enviando…' : 'Dar acceso y avisar'}</button>
+        </div>
+      </div>
     </Modal>
   )
 }
