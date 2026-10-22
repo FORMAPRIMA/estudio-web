@@ -107,6 +107,9 @@ export class Escena {
   /** Etiquetas de estancia de la vivienda abierta (HTML proyectado, no texto 3D: nítido y accesible) */
   private estancias: { el: HTMLElement; t: HTMLElement; pos: THREE.Vector3; w: number; x: number; y: number; ok: boolean }[] = []
   private estOp = 0
+  /** Última pose de cámara vista y cuándo se movió por última vez (para plegar las etiquetas) */
+  private camPrev = new THREE.Matrix4()
+  private camMovida = 0
   private composer: EffectComposer | null = null
   private gtao: GTAOPass | null = null
   private entorno: THREE.Object3D[] = []
@@ -581,7 +584,12 @@ export class Escena {
     const r = this.wrap.getBoundingClientRect()
     this.ndc.set(((this.ptr.x - r.left) / r.width) * 2 - 1, -((this.ptr.y - r.top) / r.height) * 2 + 1)
     this.ray.setFromCamera(this.ndc, this.camera)
-    const objetivos = Array.from(this.volumenes.values()).filter((m) => m.visible)
+    // con la planta abierta solo se puede tocar su gemela: el rayo no ve los forjados y
+    // atravesaría la planta hasta las viviendas de abajo
+    const c = this.corte()
+    const objetivos = Array.from(this.volumenes.entries())
+      .filter(([id, m]) => m.visible && (c == null || (BY_ID[id].planta === c && id !== this.selId)))
+      .map(([, m]) => m)
     const hits = this.ray.intersectObjects(objetivos, false)
     return hits.length ? ((hits[0].object.userData as { unitId?: string }).unitId ?? null) : null
   }
@@ -648,8 +656,18 @@ export class Escena {
     }
     if (mueve) this.renderer.shadowMap.needsUpdate = true
 
-    // etiquetas de estancia: entran cuando el despiece ha terminado y la cámara está quieta
+    // etiquetas de estancia: entran cuando el despiece ha terminado; mientras la cámara
+    // se mueve se pliegan (mitad de tamaño y sin nombre) para no ensuciar la maqueta
     if (this.estancias.length && this.opts.estanciasEl) {
+      // con tolerancia: el amortiguado de OrbitControls deja derivas microscópicas
+      const a = this.camPrev.elements, b = this.camera.matrixWorld.elements
+      let d = 0
+      for (let i = 0; i < 16; i++) d = Math.max(d, Math.abs(a[i] - b[i]))
+      if (d > 2e-4) {
+        this.camPrev.copy(this.camera.matrixWorld)
+        this.camMovida = now
+      }
+      this.opts.estanciasEl.classList.toggle('vl-est-mov', now - this.camMovida < 220)
       const t = !mueve && !this.tween ? 1 : 0
       this.estOp += (t - this.estOp) * Math.min(1, dt * 6)
       this.opts.estanciasEl.style.opacity = this.estOp.toFixed(3)
