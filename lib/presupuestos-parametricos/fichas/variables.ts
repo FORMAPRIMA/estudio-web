@@ -114,6 +114,9 @@ export const VARIABLES: Variable[] = [
     pregunta: '¿Cuántos huecos se abrirán en muros estructurales?',
     ayuda: 'Solo intervenciones puntuales (cargaderos). Los refuerzos grandes se presupuestan aparte.', defecto: 0 },
 
+  { codigo: 'm2_divisorias_vidrio', nombre: 'Divisorias de vidrio', unidad: 'm²', tipo: 'numero', nivel: 'express',
+    pregunta: '¿Cuántos m² de puertas o paños de vidrio de suelo a techo? (cocina, salón, vestidor…)', defecto: 0 },
+
   // ── Técnico: el arquitecto lo mide en poco tiempo ──────────────────────────
   { codigo: 'altura_libre', nombre: 'Altura libre', unidad: 'm', tipo: 'numero', nivel: 'tecnico',
     pregunta: 'Altura de suelo acabado a cara inferior del forjado',

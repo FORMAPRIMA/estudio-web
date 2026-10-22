@@ -42,6 +42,11 @@ function mamparas(v: Valores): Cantidad {
   }
 }
 
+function divisorias(v: Valores): Cantidad {
+  const m2 = num(v, 'm2_divisorias_vidrio') ?? 0
+  return m2 > 0 ? { cantidad: m2, fuente: 'express', formula: `${n2(m2)} m² de divisorias de vidrio` } : { cantidad: 0, fuente: 'tecnico', formula: 'sin divisorias de vidrio' }
+}
+
 function espejos(v: Valores): Cantidad {
   const p = piezas(v)
   if (!p) return SIN_DATO('programa reformado')
@@ -52,13 +57,14 @@ export const FICHA_CARPINTERIA_EXTERIOR: Ficha = {
   capitulo: 4,
   nombre: 'Carpintería exterior y vidriería',
   dependeDelNivel: true,
-  descripcion: 'Ventanas y balconeras, vidrio, persianas, mamparas y espejos.',
+  descripcion: 'Ventanas y balconeras, vidrio, persianas, divisorias de vidrio, mamparas y espejos.',
   coeficientes: K,
   partes: [
     { codigo: 'cyv_carpinteria', nombre: 'Ventanas y balconeras', unidad: 'm²', criterio: 'Carpintería de madera, aluminio o PVC con herrajes, sin vidrio ni persiana.', subcapitulos: ['4_CYV_01', '4_CYV_02'], variables: ['m2_ventanas_cambiar'], cantidad: ventanas },
     { codigo: 'cyv_vidrio', nombre: 'Vidrio', unidad: 'm²', criterio: 'Doble acristalamiento de las ventanas que se cambian.', subcapitulos: ['4_CYV_01', '4_CYV_02'], variables: ['m2_ventanas_cambiar'], cantidad: ventanas },
     { codigo: 'cyv_persianas', nombre: 'Persianas', unidad: 'ud', criterio: 'Persiana con cajón, guías y accionamiento.', subcapitulos: ['4_CYV_03'], variables: ['n_persianas'], cantidad: persianas },
     { codigo: 'cyv_mamparas', nombre: 'Mamparas', unidad: 'm²', criterio: 'Mamparas de ducha y pantallas de bañera.', subcapitulos: ['4_CYV_04'], variables: ['n_banos_proy', 'n_aseos_proy', 'sup_util', 'm2_bano_principal_proy'], cantidad: mamparas },
+    { codigo: 'cyv_divisorias', nombre: 'Divisorias de vidrio', unidad: 'm²', criterio: 'Puertas y paños de vidrio con perfilería metálica de suelo a techo (correderas, plegables o fijos) que separan estancias.', subcapitulos: ['4_CYV_04'], variables: ['m2_divisorias_vidrio'], cantidad: divisorias },
     { codigo: 'cyv_espejos', nombre: 'Espejos', unidad: 'm²', criterio: 'Espejos de baño y aseo, uno por lavabo.', subcapitulos: ['4_CYV_05'], variables: ['n_banos_proy', 'n_aseos_proy', 'sup_util', 'm2_bano_principal_proy'], cantidad: espejos },
   ],
 }
