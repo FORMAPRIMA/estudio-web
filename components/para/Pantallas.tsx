@@ -289,8 +289,7 @@ export function Ejecucion({ t, num }: { t: Textos; num: number }) {
     <Pantalla id="ejecucion" tema="claro" num={num} rotulo={t.ejecucionRotulo} className="p-ejecucion">
       <div className="p-ejecucion-txt">
         <H>{t.ejecucionTitulo}</H>
-        <p className="p-ejecucion-cifra p-in" style={D('.3s')}><b><Cifra texto={LAMINAS.length} activa={dentro} retraso={0.3} /></b>{t.ejecucionCifra}</p>
-        <p className="p-texto p-in" style={D('.42s')}>{t.ejecucionTexto}</p>
+        <p className="p-acompana p-in" style={D('.3s')}>{t.ejecucionTexto}</p>
       </div>
       <div ref={ref} className="p-cintas p-in" style={D('.2s')}>
         <Cinta laminas={LAMINAS.slice(0, mitad)} sentido={1} activa={dentro} />

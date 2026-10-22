@@ -134,8 +134,7 @@ export const T = {
 
     ejecucionRotulo: 'Proyecto de ejecución',
     ejecucionTitulo: 'Planos que se construyen sin dudas.',
-    ejecucionCifra: 'láminas para una vivienda de 320 m²',
-    ejecucionTexto: 'Cada encuentro, cada carpintería y cada mueble, dibujados antes de construir.',
+    ejecucionTexto: 'Nuestro enfoque: proyectos de ejecución hiperdetallados, para que no haya dudas al presupuestar la obra ni durante su ejecución.',
     ejecucionPie: 'Claudio Coello 38 · Madrid · Proyecto de ejecución',
 
     portalRotulo: 'Portal de cliente',
@@ -311,8 +310,7 @@ export const T = {
 
     ejecucionRotulo: 'Construction documents',
     ejecucionTitulo: 'Drawings that build without guesswork.',
-    ejecucionCifra: 'sheets for a 320 m² home',
-    ejecucionTexto: 'Every junction, every window and every piece of joinery, drawn before it is built.',
+    ejecucionTexto: 'Our approach: highly detailed construction documents, so there are no doubts when pricing the build or during construction.',
     ejecucionPie: 'Claudio Coello 38 · Madrid · Construction documents',
 
     portalRotulo: 'Client portal',
