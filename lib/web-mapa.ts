@@ -67,6 +67,20 @@ export function datosDeTarjeta(p: MapaPunto, locale: 'es' | 'en') {
   }
 }
 
+/**
+ * Para una obra sin foto, la de OTRA obra del estudio, que se pinta desenfocada
+ * detrás del «en desarrollo». Siempre la misma para cada obra —sale de un hash de
+ * su id— para que no cambie al recargar ni al volver a abrir la ficha.
+ */
+export function fotoDeRelleno(p: MapaPunto, todos: MapaPunto[]): string | null {
+  const con = todos.filter((o) => o.id !== p.id && (o.proyecto_hero_url || o.imagen_url))
+  if (!con.length) return null
+  let h = 0
+  for (const c of p.id) h = (h * 31 + c.charCodeAt(0)) >>> 0
+  const o = con[h % con.length]
+  return o.proyecto_hero_url || o.imagen_url
+}
+
 /** Un punto solo se puede pintar si tiene las dos coordenadas. */
 export function tieneCoordenadas(p: MapaPunto): p is MapaPunto & { lat: number; lng: number } {
   return typeof p.lat === 'number' && typeof p.lng === 'number'

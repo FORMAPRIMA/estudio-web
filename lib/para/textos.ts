@@ -54,7 +54,7 @@ export const T = {
     ],
     verMundo: 'Ver el mundo',
     obrasCiudad: 'obras',
-    obraEnCurso: 'Obra en curso',
+    obraEnCurso: 'Proyecto en desarrollo',
     obrasEnMadrid: 'obras en el mapa',
     explorarMapa: 'Explorar el mapa',
     tocaObra: 'Toca una obra para verla',

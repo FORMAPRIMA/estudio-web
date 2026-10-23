@@ -8,7 +8,7 @@ import { useSite, href } from '../SiteProvider'
 import { Img } from '../Img'
 import { pick, type ContentMap } from '@/lib/web-publica'
 import {
-  datosDeTarjeta, tieneCoordenadas, ordenarPorSede, sedesConObra, sedeDe, etiquetaSede,
+  datosDeTarjeta, fotoDeRelleno, tieneCoordenadas, ordenarPorSede, sedesConObra, sedeDe, etiquetaSede,
   SIN_MARGENES, type MapaPunto, type Margenes, type SedeCodigo,
 } from '@/lib/web-mapa'
 
@@ -342,7 +342,7 @@ export function MapaPage({ content, puntos }: { content: ContentMap; puntos: Map
           pantalla nadando durante la órbita, y con 63° de cabeceo los que caen al
           horizonte se empequeñecen. En móvil su sitio es la lámina. */}
       {punto && !esMovil && (
-        <Ficha refCaja={fichaRef} punto={punto} locale={locale} indice={seleccionado!} total={total}
+        <Ficha refCaja={fichaRef} punto={punto} todos={listados} locale={locale} indice={seleccionado!} total={total}
           onMover={mover} onCerrar={() => setSeleccionado(null)} />
       )}
 
@@ -360,7 +360,7 @@ export function MapaPage({ content, puntos }: { content: ContentMap; puntos: Map
         </div>
 
         {punto ? (
-          <FichaCompacta punto={punto} locale={locale} indice={seleccionado!} total={total}
+          <FichaCompacta punto={punto} todos={listados} locale={locale} indice={seleccionado!} total={total}
             onMover={mover} onCerrar={() => setSeleccionado(null)}
             onAbrirLista={() => setDetente('medio')} />
         ) : (
@@ -458,7 +458,7 @@ function Lista({ listados, seleccionado, resaltado, locale, sedes, idPrefijo, on
               <span className="fp-mapa-mini">
                 {imagen
                   ? <Img src={imagen} alt="" contexto="miniaturaMapa" />
-                  : <Wip locale={locale} corto />}
+                  : <Wip locale={locale} fondo={fotoDeRelleno(p, listados)} corto />}
               </span>
               <span className="fp-mapa-txt">
                 <span className="fp-mapa-nombre">{p.nombre}</span>
@@ -499,8 +499,8 @@ function Chevron({ hacia }: { hacia: 'izq' | 'der' }) {
 
 /** Ficha de la lámina: foto grande y chevrones para recorrer las obras sin volver
  *  a la lista. Es el gesto que convierte el mapa en algo que se hojea con el pulgar. */
-function FichaCompacta({ punto, locale, indice, total, onMover, onCerrar, onAbrirLista }: {
-  punto: MapaPunto; locale: 'es' | 'en'; indice: number; total: number
+function FichaCompacta({ punto, todos, locale, indice, total, onMover, onCerrar, onAbrirLista }: {
+  punto: MapaPunto; todos: MapaPunto[]; locale: 'es' | 'en'; indice: number; total: number
   onMover: (paso: 1 | -1) => void; onCerrar: () => void; onAbrirLista: () => void
 }) {
   const { imagen, descriptor, slug } = datosDeTarjeta(punto, locale)
@@ -510,7 +510,7 @@ function FichaCompacta({ punto, locale, indice, total, onMover, onCerrar, onAbri
       <div className="fp-mapa-fc-foto">
         {imagen
           ? <Img src={imagen} alt={punto.nombre} contexto="fichaMapa" />
-          : <Wip locale={locale} />}
+          : <Wip locale={locale} fondo={fotoDeRelleno(punto, todos)} />}
       </div>
       <div className="fp-mapa-fc-txt">
         <p className="fp-mapa-fc-nombre">{punto.nombre}</p>
@@ -538,8 +538,8 @@ function FichaCompacta({ punto, locale, indice, total, onMover, onCerrar, onAbri
  * lienzo tiene tapado por ese lado. Va como prop con nombre propio y no como
  * `ref`: en React 18 `ref` no es una prop y llegaría vacía.
  */
-function Ficha({ punto, locale, indice, total, onMover, onCerrar, refCaja }: {
-  punto: MapaPunto; locale: 'es' | 'en'; indice: number; total: number
+function Ficha({ punto, todos, locale, indice, total, onMover, onCerrar, refCaja }: {
+  punto: MapaPunto; todos: MapaPunto[]; locale: 'es' | 'en'; indice: number; total: number
   onMover: (paso: 1 | -1) => void; onCerrar: () => void
   refCaja: React.RefObject<HTMLDivElement>
 }) {
@@ -550,7 +550,7 @@ function Ficha({ punto, locale, indice, total, onMover, onCerrar, refCaja }: {
       aria-label={locale === 'en' ? 'Selected work' : 'Obra seleccionada'}>
       <button type="button" className="fp-mapa-cerrar" data-cursor="" aria-label={locale === 'en' ? 'Close' : 'Cerrar'} onClick={onCerrar}>×</button>
       <div className="fp-mapa-ficha-foto">
-        {imagen ? <Img src={imagen} alt={punto.nombre} contexto="fichaMapa" /> : <Wip locale={locale} />}
+        {imagen ? <Img src={imagen} alt={punto.nombre} contexto="fichaMapa" /> : <Wip locale={locale} fondo={fotoDeRelleno(punto, todos)} />}
       </div>
       <div className="fp-mapa-ficha-txt">
         <h2 className="fp-mapa-ficha-nombre">{punto.nombre}</h2>
@@ -572,15 +572,26 @@ function Ficha({ punto, locale, indice, total, onMover, onCerrar, refCaja }: {
 }
 
 /**
- * El hueco de una obra sin foto: la trama a 45° con la que un plano marca lo que
- * está en obra, y el rótulo encima. Mejor que un número suelto sobre gris, que se
- * leía como una imagen que no había cargado.
+ * El hueco de una obra sin foto: la foto de otra obra, desenfocada, con un aro de
+ * carga girando y el rótulo. Mejor que un número suelto sobre gris, que se leía
+ * como una imagen que no había cargado; esto se lee como lo que es, algo que viene.
  */
-function Wip({ locale, corto = false }: { locale: 'es' | 'en'; corto?: boolean }) {
-  const texto = locale === 'en' ? 'Work in progress' : 'Obra en curso'
+function Wip({ locale, fondo, corto = false }: { locale: 'es' | 'en'; fondo: string | null; corto?: boolean }) {
+  const texto = locale === 'en' ? 'Work in progress' : 'Proyecto en desarrollo'
   return (
     <span className="fp-mapa-wip" data-corto={corto ? '1' : undefined} role="img" aria-label={texto}>
-      <span>{corto ? 'WIP' : texto}</span>
+      {fondo && (
+        <span className="fp-mapa-wip-fondo" aria-hidden="true">
+          <Img src={fondo} alt="" contexto="miniaturaMapa" />
+        </span>
+      )}
+      <span className="fp-mapa-wip-in">
+        <svg className="fp-mapa-wip-aro" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="10" />
+          <circle cx="12" cy="12" r="10" />
+        </svg>
+        {!corto && <span>{texto}</span>}
+      </span>
     </span>
   )
 }
@@ -830,17 +841,32 @@ html:has(.fp-mapa[data-inmersivo="1"])            { overflow: hidden; overscroll
 }
 .fp-mapa-mini img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .fp-mapa-wip {
+  position: relative; overflow: hidden;
   width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
-  background-color: #ebe9e3;
-  background-image: repeating-linear-gradient(135deg, rgba(20,20,20,.10) 0 1px, transparent 1px 7px);
+  background: #e7e5df;
 }
-.fp-mapa-wip > span {
-  background: ${site.color.cream}; color: ${site.color.ink};
-  padding: 5px 9px; font-size: 9.5px; letter-spacing: ${site.track.normal};
-  text-transform: uppercase; white-space: nowrap;
+/* La foto prestada: muy desenfocada y lavada con el crema del sitio, para que se
+   lea como ambiente y no como la foto de esta obra. */
+.fp-mapa-wip-fondo { position: absolute; inset: -14%; }
+.fp-mapa-wip-fondo img, .fp-mapa-wip-fondo picture {
+  width: 100%; height: 100%; object-fit: cover; display: block; filter: blur(14px) saturate(.85);
 }
-.fp-mapa-wip[data-corto="1"] { background-image: repeating-linear-gradient(135deg, rgba(20,20,20,.10) 0 1px, transparent 1px 5px); }
-.fp-mapa-wip[data-corto="1"] > span { padding: 2px 4px; font-size: 7.5px; letter-spacing: .14em; }
+.fp-mapa-wip-fondo::after { content: ''; position: absolute; inset: 0; background: rgba(244,243,240,.42); }
+.fp-mapa-wip[data-corto="1"] .fp-mapa-wip-fondo img { filter: blur(5px) saturate(.85); }
+.fp-mapa-wip-in {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 11px;
+  color: ${site.color.ink}; font-size: 9.5px; letter-spacing: ${site.track.normal}; text-transform: uppercase;
+  text-align: center;
+}
+/* El aro: un pelo de pista y un arco que da la vuelta acelerando y frenando. */
+.fp-mapa-wip-aro { width: 24px; height: 24px; display: block; animation: fp-wip-gira 1.5s cubic-bezier(.55,.15,.45,.85) infinite; }
+.fp-mapa-wip-aro circle { fill: none; stroke-width: 1.3; }
+.fp-mapa-wip-aro circle:first-child { stroke: rgba(20,20,20,.16); }
+.fp-mapa-wip-aro circle:last-child { stroke: ${site.color.ink}; stroke-linecap: round; stroke-dasharray: 16 48; }
+.fp-mapa-wip[data-corto="1"] .fp-mapa-wip-aro { width: 15px; height: 15px; }
+.fp-mapa-wip[data-corto="1"] .fp-mapa-wip-aro circle { stroke-width: 1.8; }
+@keyframes fp-wip-gira { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .fp-mapa-wip-aro { animation: none; } }
 .fp-mapa-ficha-foto .fp-mapa-wip { aspect-ratio: 16 / 10; }
 .fp-mapa-txt { min-width: 0; }
 .fp-mapa-nombre { font-size: 13px; font-weight: 300; display: block; }
@@ -938,7 +964,7 @@ html:has(.fp-mapa[data-inmersivo="1"])            { overflow: hidden; overscroll
   }
   .fp-mapa-fc-foto img { width: 100%; height: auto; display: block; max-height: 150px; object-fit: contain; }
   .fp-mapa-fc-foto .fp-mapa-wip { min-height: 96px; }
-  .fp-mapa-fc-foto .fp-mapa-wip > span { white-space: normal; text-align: center; max-width: 9ch; line-height: 1.5; }
+  .fp-mapa-fc-foto .fp-mapa-wip-in span { max-width: 11ch; line-height: 1.5; }
   .fp-mapa-fc-txt { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding-right: 22px; }
   .fp-mapa-fc-nombre { font-size: 17px; font-weight: 400; margin: 0; letter-spacing: -0.01em; }
   .fp-mapa-fc-meta { font-size: 10px; letter-spacing: ${site.track.normal}; text-transform: uppercase; opacity: .5; margin: 0; }
