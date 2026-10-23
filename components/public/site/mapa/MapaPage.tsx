@@ -28,10 +28,13 @@ const MapaLienzo = dynamic(() => import('./MapaLienzo'), { ssr: false })
  */
 const DETENTES = {
   peek:  '52px',
-  ficha: '200px',
+  ficha: '154px',
   medio: '57.4%',
   alto:  '100%',
 } as const
+/** Alto de la tira de tarjetas de móvil: la detención `ficha` es esto más el asa
+ *  (26) y el aire de abajo (16). Fijo: la lámina no crece con la foto. */
+const ALTO_TARJETA = 112
 /** Fracción de la lámina que ocupa cada detención, para decidir a cuál se salta al
  *  soltar el arrastre. Mismos valores, en número. */
 const FRACCION = { peek: 0, ficha: 0, medio: 0.574, alto: 1 } as const
@@ -195,16 +198,28 @@ export function MapaPage({ content, puntos }: { content: ContentMap; puntos: Map
   // una ventana que no se puede cerrar con el teclado.
   useEffect(() => {
     if (seleccionado == null) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSeleccionado(null) }
+    // Y las flechas del teclado pasan de obra, como las de la ficha.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSeleccionado(null)
+      else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+        const t = e.target as HTMLElement | null
+        if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return
+        e.preventDefault()
+        setAutoSeleccion(false)
+        setSeleccionado((n) => (n == null || !total ? n : ((n - 1 + (e.key === 'ArrowRight' ? 1 : -1) + total) % total) + 1))
+      }
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [seleccionado])
+  }, [seleccionado, total])
 
   const onFallo = useCallback(() => setFallo(true), [])
   const alternar = useCallback((n: number | null) => {
     setAutoSeleccion(false)
     setSeleccionado((prev) => (prev === n ? null : n))
   }, [])
+  /** Ir a una obra concreta sin alternar: lo que hace deslizar la tira de móvil. */
+  const irA = useCallback((n: number) => { setAutoSeleccion(false); setSeleccionado(n) }, [])
   /** Recorre la lista dando la vuelta al final. */
   const mover = (paso: 1 | -1) => {
     if (seleccionado == null || !total) return
@@ -360,9 +375,8 @@ export function MapaPage({ content, puntos }: { content: ContentMap; puntos: Map
         </div>
 
         {punto ? (
-          <FichaCompacta punto={punto} todos={listados} locale={locale} indice={seleccionado!} total={total}
-            onMover={mover} onCerrar={() => setSeleccionado(null)}
-            onAbrirLista={() => setDetente('medio')} />
+          <Tira listados={listados} seleccionado={seleccionado!} locale={locale}
+            onIr={irA} onCerrar={() => setSeleccionado(null)} />
         ) : (
           <button type="button" className="fp-mapa-hoja-cab"
             onClick={() => setDetente(detente === 'peek' ? 'medio' : 'peek')}>
@@ -497,34 +511,105 @@ function Chevron({ hacia }: { hacia: 'izq' | 'der' }) {
   )
 }
 
-/** Ficha de la lámina: foto grande y chevrones para recorrer las obras sin volver
- *  a la lista. Es el gesto que convierte el mapa en algo que se hojea con el pulgar. */
-function FichaCompacta({ punto, todos, locale, indice, total, onMover, onCerrar, onAbrirLista }: {
-  punto: MapaPunto; todos: MapaPunto[]; locale: 'es' | 'en'; indice: number; total: number
-  onMover: (paso: 1 | -1) => void; onCerrar: () => void; onAbrirLista: () => void
+/**
+ * La foto de una obra dentro de un MARCO FIJO: entera, sin recortar, y el hueco que
+ * sobra se rellena con la misma foto desenfocada. Así la ficha mide siempre lo
+ * mismo: antes tomaba la proporción de cada foto y las flechas de pasar de obra
+ * cambiaban de sitio de una a otra.
+ */
+function FotoFicha({ punto, todos, locale, contexto }: {
+  punto: MapaPunto; todos: MapaPunto[]; locale: 'es' | 'en'; contexto: 'fichaMapa' | 'miniaturaMapa'
 }) {
-  const { imagen, descriptor, slug } = datosDeTarjeta(punto, locale)
-  const meta = [descriptor, punto.anio].filter(Boolean).join(' · ')
+  const { imagen } = datosDeTarjeta(punto, locale)
+  if (!imagen) return <Wip locale={locale} fondo={fotoDeRelleno(punto, todos)} corto={contexto === 'miniaturaMapa'} />
   return (
-    <div className="fp-mapa-fc">
-      <div className="fp-mapa-fc-foto">
-        {imagen
-          ? <Img src={imagen} alt={punto.nombre} contexto="fichaMapa" />
-          : <Wip locale={locale} fondo={fotoDeRelleno(punto, todos)} />}
+    <span className="fp-mapa-marco">
+      <span className="fp-mapa-marco-fondo" aria-hidden="true"><Img src={imagen} alt="" contexto="miniaturaMapa" /></span>
+      <span className="fp-mapa-marco-foto"><Img src={imagen} alt={punto.nombre} contexto={contexto} /></span>
+    </span>
+  )
+}
+
+/**
+ * Móvil: la obra elegida es una tira de tarjetas que se desliza con el dedo, con la
+ * siguiente asomando por el lado para que se entienda el gesto. Al soltar en otra
+ * tarjeta, esa obra pasa a ser la elegida y el mapa vuela hasta ella.
+ *
+ * Sustituye a la ficha con chevrones: la foto tomaba la altura de cada imagen, las
+ * flechas bailaban y una foto vertical subía la lámina tapando el mapa. Aquí todas
+ * las tarjetas miden lo mismo y la lámina no se mueve.
+ */
+function Tira({ listados, seleccionado, locale, onIr, onCerrar }: {
+  listados: MapaPunto[]; seleccionado: number; locale: 'es' | 'en'
+  onIr: (n: number) => void; onCerrar: () => void
+}) {
+  const caja = useRef<HTMLDivElement>(null)
+  /** Desplazamiento puesto por código (al elegir desde el mapa o la lista): mientras
+   *  dura no cuenta como gesto, o la tira «elegiría» las obras por las que pasa. */
+  const porCodigo = useRef(false)
+  const reloj = useRef<number>()
+  const total = listados.length
+
+  const tarjetaDe = (n: number) => caja.current?.children[n - 1] as HTMLElement | undefined
+  // La elegida, centrada. De golpe si viene de lejos; deslizando si es la de al lado.
+  useLayoutEffect(() => {
+    const c = caja.current, t = tarjetaDe(seleccionado)
+    if (!c || !t) return
+    const destino = t.offsetLeft - (c.clientWidth - t.offsetWidth) / 2
+    if (Math.abs(c.scrollLeft - destino) < 2) return
+    const actual = Math.round(c.scrollLeft / t.offsetWidth) + 1
+    porCodigo.current = true
+    c.scrollTo({ left: destino, behavior: Math.abs(actual - seleccionado) > 1 ? 'auto' : 'smooth' })
+    window.clearTimeout(reloj.current)
+    reloj.current = window.setTimeout(() => { porCodigo.current = false }, 450)
+  }, [seleccionado])
+
+  // Al parar de deslizar, la tarjeta más centrada es la elegida.
+  const alDesplazar = () => {
+    window.clearTimeout(reloj.current)
+    reloj.current = window.setTimeout(() => {
+      if (porCodigo.current) { porCodigo.current = false; return }
+      const c = caja.current
+      if (!c) return
+      const centro = c.scrollLeft + c.clientWidth / 2
+      let mejor = seleccionado, dist = Infinity
+      Array.from(c.children).forEach((el, i) => {
+        const e = el as HTMLElement, d = Math.abs(e.offsetLeft + e.offsetWidth / 2 - centro)
+        if (d < dist) { dist = d; mejor = i + 1 }
+      })
+      if (mejor !== seleccionado) onIr(mejor)
+    }, 140)
+  }
+
+  return (
+    <div className="fp-mapa-tira-marco">
+      <div className="fp-mapa-tira" ref={caja} onScroll={alDesplazar}
+        aria-label={locale === 'en' ? 'Selected work' : 'Obra seleccionada'}>
+        {listados.map((p, i) => {
+          const n = i + 1
+          const { descriptor, slug } = datosDeTarjeta(p, locale)
+          // Solo las cercanas cargan foto: 34 tarjetas con dos imágenes cada una
+          // serían 68 descargas para ver tres.
+          const cerca = Math.abs(n - seleccionado) <= 2
+          return (
+            <article key={p.id} className="fp-mapa-tc" data-sel={n === seleccionado ? '1' : undefined}
+              onClick={() => n !== seleccionado && onIr(n)}>
+              <div className="fp-mapa-tc-foto">{cerca && <FotoFicha punto={p} todos={listados} locale={locale} contexto="fichaMapa" />}</div>
+              <div className="fp-mapa-tc-txt">
+                <p className="fp-mapa-tc-nombre">{p.nombre}</p>
+                {(descriptor || p.anio) && <p className="fp-mapa-tc-meta">{[descriptor, p.anio].filter(Boolean).join(' · ')}</p>}
+                <div className="fp-mapa-tc-pie">
+                  {slug
+                    ? <Link href={href(`/proyectos/${slug}`)} className="fp-mapa-tc-link" data-cursor="">{locale === 'en' ? 'View project' : 'Ver proyecto'} →</Link>
+                    : <span />}
+                  <span className="fp-mapa-tc-n">{n} / {total}</span>
+                </div>
+              </div>
+            </article>
+          )
+        })}
       </div>
-      <div className="fp-mapa-fc-txt">
-        <p className="fp-mapa-fc-nombre">{punto.nombre}</p>
-        {meta && <p className="fp-mapa-fc-meta">{meta}</p>}
-        {slug
-          ? <Link href={href(`/proyectos/${slug}`)} className="fp-mapa-fc-link" data-cursor="">{locale === 'en' ? 'View project' : 'Ver proyecto'} →</Link>
-          : <button type="button" className="fp-mapa-fc-link" onClick={onAbrirLista}>{locale === 'en' ? 'All works' : 'Todas las obras'} ↑</button>}
-        <div className="fp-mapa-fc-nav">
-          <button type="button" onClick={() => onMover(-1)} aria-label={locale === 'en' ? 'Previous' : 'Anterior'}><Chevron hacia="izq" /></button>
-          <span>{indice} / {total}</span>
-          <button type="button" onClick={() => onMover(1)} aria-label={locale === 'en' ? 'Next' : 'Siguiente'}><Chevron hacia="der" /></button>
-        </div>
-      </div>
-      <button type="button" className="fp-mapa-fc-x" onClick={onCerrar} aria-label={locale === 'en' ? 'Close' : 'Cerrar'}>×</button>
+      <button type="button" className="fp-mapa-tira-x" onClick={onCerrar} aria-label={locale === 'en' ? 'Close' : 'Cerrar'}>×</button>
     </div>
   )
 }
@@ -550,7 +635,7 @@ function Ficha({ punto, todos, locale, indice, total, onMover, onCerrar, refCaja
       aria-label={locale === 'en' ? 'Selected work' : 'Obra seleccionada'}>
       <button type="button" className="fp-mapa-cerrar" data-cursor="" aria-label={locale === 'en' ? 'Close' : 'Cerrar'} onClick={onCerrar}>×</button>
       <div className="fp-mapa-ficha-foto">
-        {imagen ? <Img src={imagen} alt={punto.nombre} contexto="fichaMapa" /> : <Wip locale={locale} fondo={fotoDeRelleno(punto, todos)} />}
+        <FotoFicha punto={punto} todos={todos} locale={locale} contexto="fichaMapa" />
       </div>
       <div className="fp-mapa-ficha-txt">
         <h2 className="fp-mapa-ficha-nombre">{punto.nombre}</h2>
@@ -769,18 +854,19 @@ html:has(.fp-mapa[data-inmersivo="1"])            { overflow: hidden; overscroll
 }
 @keyframes fp-ventana-entra { from { opacity: 0; transform: translateY(8px); } }
 @keyframes fp-ficha-entra   { from { opacity: 0; transform: translateX(10px); } }
-/* La foto manda su proporción, la ventana se adapta.
-   Antes había un 16/10 fijo con object-fit: cover, y eso recortaba cada foto que no
-   fuera apaisada — un interior en vertical perdía el techo y el suelo. No hace falta
-   medir nada ni esperar al load: <Img> ya emite width/height de la imagen real
-   cuando está en el manifiesto, así que el navegador reserva el hueco exacto y no
-   hay salto de maquetación.
-   El techo de 52vh es solo para que una vertical muy alta no se coma la pantalla;
-   ahí object-fit: contain encaja sin recortar, que es de lo que se trata. */
-.fp-mapa-ficha-foto { position: relative; width: 100%; overflow: hidden; background: #e7e5df; }
-.fp-mapa-ficha-foto img,
-.fp-mapa-ficha-foto picture { width: 100%; height: auto; display: block; max-height: 52vh; object-fit: contain; }
-.fp-mapa-ficha-txt { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 6px; }
+/* Marco FIJO para la foto. Antes la foto mandaba su proporción y la ventana se
+   adaptaba, así que las flechas de pasar de obra cambiaban de sitio en cada una. Ahora
+   la foto entra entera (contain, sin recortar techo ni suelo de un interior vertical)
+   y el hueco lo rellena ella misma desenfocada. */
+.fp-mapa-ficha-foto { position: relative; width: 100%; aspect-ratio: 4 / 3; overflow: hidden; background: #e7e5df; }
+.fp-mapa-marco { position: relative; display: block; width: 100%; height: 100%; overflow: hidden; background: #e7e5df; }
+.fp-mapa-marco-fondo { position: absolute; inset: -12%; }
+.fp-mapa-marco-fondo img, .fp-mapa-marco-fondo picture {
+  width: 100%; height: 100%; object-fit: cover; display: block; filter: blur(16px) saturate(.9) brightness(.92);
+}
+.fp-mapa-marco-foto { position: absolute; inset: 0; display: block; }
+.fp-mapa-marco-foto img, .fp-mapa-marco-foto picture { width: 100%; height: 100%; object-fit: contain; display: block; }
+.fp-mapa-ficha-txt { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 6px; min-height: 178px; }
 .fp-mapa-ficha-nombre { font-size: 15px; font-weight: 400; margin: 0; letter-spacing: -0.01em; }
 .fp-mapa-ficha-meta { font-size: 10px; letter-spacing: ${site.track.normal}; text-transform: uppercase; opacity: .5; margin: 0; }
 .fp-mapa-ficha-dir { font-size: 11.5px; font-weight: 300; opacity: .6; margin: 0; }
@@ -795,7 +881,7 @@ html:has(.fp-mapa[data-inmersivo="1"])            { overflow: hidden; overscroll
   /* Centrado y no pegado al canto izquierdo: es el único mando de la ficha y la
      ventana es estrecha, así que en el canto se leía como un resto de la columna
      de texto y no como el control de hojear que es. */
-  display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 12px;
+  display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: auto;
   padding-top: 11px; border-top: 1px solid rgba(20,20,20,.09);
 }
 .fp-mapa-ficha-nav button {
@@ -867,7 +953,7 @@ html:has(.fp-mapa[data-inmersivo="1"])            { overflow: hidden; overscroll
 .fp-mapa-wip[data-corto="1"] .fp-mapa-wip-aro circle { stroke-width: 1.8; }
 @keyframes fp-wip-gira { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .fp-mapa-wip-aro { animation: none; } }
-.fp-mapa-ficha-foto .fp-mapa-wip { aspect-ratio: 16 / 10; }
+
 .fp-mapa-txt { min-width: 0; }
 .fp-mapa-nombre { font-size: 13px; font-weight: 300; display: block; }
 .fp-mapa-ol button[data-sel] .fp-mapa-nombre { font-weight: 400; }
@@ -950,42 +1036,42 @@ html:has(.fp-mapa[data-inmersivo="1"])            { overflow: hidden; overscroll
   .fp-mapa-hoja-lista .fp-mapa-nombre { font-size: 15px; font-weight: 400; }
   .fp-mapa-hoja-lista .fp-mapa-sub { font-size: 10px; margin-top: 3px; }
 
-  /* ── Ficha dentro de la lámina ───────────────────────────────────────── */
-  .fp-mapa-fc {
-    flex: none; position: relative;
-    display: grid; grid-template-columns: 128px 1fr; gap: 14px;
-    padding: 0 18px 16px;
+  /* ── Tira de tarjetas (la obra elegida, en móvil) ─────────────────────
+     Todas miden lo mismo: la lámina se queda a la altura de la detención \`ficha\`
+     (asa + tarjeta + aire) sea cual sea la foto. Se desliza con el dedo; la
+     siguiente asoma por el lado para que el gesto se entienda solo. */
+  .fp-mapa-tira-marco { position: relative; flex: none; }
+  .fp-mapa-tira {
+    display: flex; gap: 10px; overflow-x: auto; overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory; scrollbar-width: none; -webkit-overflow-scrolling: touch;
+    padding: 0 22px 16px; scroll-padding-inline: 22px;
   }
-  /* Misma regla que en escritorio: la foto trae su proporción y aquí no se recorta.
-     El techo es más bajo porque la ficha comparte los 200 px de la detención. */
-  .fp-mapa-fc-foto {
-    width: 128px; border-radius: 3px; overflow: hidden; background: #e7e5df;
-    display: flex; align-items: center; justify-content: center;
+  .fp-mapa-tira::-webkit-scrollbar { display: none; }
+  .fp-mapa-tc {
+    flex: none; width: calc(100% - 44px); height: ${ALTO_TARJETA}px; scroll-snap-align: center; scroll-snap-stop: always;
+    display: grid; grid-template-columns: ${ALTO_TARJETA}px 1fr; gap: 14px;
+    opacity: .5; transition: opacity .25s ${site.ease};
   }
-  .fp-mapa-fc-foto img { width: 100%; height: auto; display: block; max-height: 150px; object-fit: contain; }
-  .fp-mapa-fc-foto .fp-mapa-wip { min-height: 96px; }
-  .fp-mapa-fc-foto .fp-mapa-wip-in span { max-width: 11ch; line-height: 1.5; }
-  .fp-mapa-fc-txt { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding-right: 22px; }
-  .fp-mapa-fc-nombre { font-size: 17px; font-weight: 400; margin: 0; letter-spacing: -0.01em; }
-  .fp-mapa-fc-meta { font-size: 10px; letter-spacing: ${site.track.normal}; text-transform: uppercase; opacity: .5; margin: 0; }
-  .fp-mapa-fc-link {
-    margin-top: 4px; align-self: flex-start; background: none; border: none; padding: 0 0 2px;
-    font-family: inherit; font-size: 10px; letter-spacing: ${site.track.normal};
-    text-transform: uppercase; color: inherit; text-decoration: none; cursor: pointer;
-    border-bottom: 1px solid rgba(20,20,20,.20);
+  .fp-mapa-tc[data-sel] { opacity: 1; }
+  .fp-mapa-tc-foto { width: ${ALTO_TARJETA}px; height: ${ALTO_TARJETA}px; border-radius: 4px; overflow: hidden; background: #e7e5df; }
+  .fp-mapa-tc-foto .fp-mapa-wip-in span { max-width: 11ch; line-height: 1.5; font-size: 8.5px; }
+  .fp-mapa-tc-txt { min-width: 0; display: flex; flex-direction: column; gap: 4px; padding: 2px 26px 0 0; }
+  .fp-mapa-tc-nombre {
+    font-size: 16px; font-weight: 400; margin: 0; letter-spacing: -0.01em; line-height: 1.25;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
   }
-  .fp-mapa-fc-nav { display: flex; align-items: center; gap: 14px; margin-top: auto; padding-top: 8px; }
-  .fp-mapa-fc-nav button {
-    width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(20,20,20,.10);
-    background: none; color: inherit; cursor: pointer;
-    display: inline-flex; align-items: center; justify-content: center; padding: 0;
+  .fp-mapa-tc-meta { font-size: 10px; letter-spacing: ${site.track.normal}; text-transform: uppercase; opacity: .5; margin: 0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fp-mapa-tc-pie { margin-top: auto; display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .fp-mapa-tc-link {
+    font-size: 10px; letter-spacing: ${site.track.normal}; text-transform: uppercase; color: inherit; text-decoration: none;
+    border-bottom: 1px solid rgba(20,20,20,.20); padding-bottom: 2px; white-space: nowrap;
   }
-  .fp-mapa-fc-nav button svg { width: 13px; height: 13px; }
-  .fp-mapa-fc-nav span { font-size: 10.5px; opacity: .45; font-variant-numeric: tabular-nums; }
-  .fp-mapa-fc-x {
-    position: absolute; top: -4px; right: 12px;
-    background: none; border: none; font-size: 20px; line-height: 1; color: ${site.color.ink};
-    opacity: .4; cursor: pointer; padding: 4px 6px;
+  .fp-mapa-tc-n { font-size: 10.5px; opacity: .4; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .fp-mapa-tira-x {
+    position: absolute; top: -24px; right: 12px;
+    background: none; border: none; font-size: 22px; line-height: 1; color: ${site.color.ink};
+    opacity: .45; cursor: pointer; padding: 4px 8px;
   }
 }
 
