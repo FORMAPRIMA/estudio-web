@@ -145,6 +145,8 @@ export const VARIABLES: Variable[] = [
     pregunta: 'Superficie de ventanas, balconeras y puertas en fachada', ayuda: 'Sale de la maqueta.' },
   { codigo: 'm2_ventanas_cambiar', nombre: 'Ventanas que se cambian', unidad: 'm²', tipo: 'numero', nivel: 'tecnico',
     pregunta: 'Superficie de ventanas y balconeras que se cambian', ayuda: 'Sale de los alzados: ventana a ventana.' },
+  { codigo: 'n_ventanas_cambiar', nombre: 'Ventanas que se cambian', unidad: 'ud', tipo: 'numero', nivel: 'tecnico',
+    pregunta: 'Número de ventanas y balconeras que se cambian', ayuda: 'Sale de los alzados: ventana a ventana.' },
   { codigo: 'n_persianas', nombre: 'Persianas', unidad: 'ud', tipo: 'numero', nivel: 'tecnico',
     pregunta: 'Persianas nuevas', ayuda: 'Sale de los alzados: ventana a ventana.' },
   { codigo: 'n_armarios_demoler', nombre: 'Armarios empotrados a desmontar', unidad: 'ud', tipo: 'numero', nivel: 'tecnico',

@@ -69,6 +69,7 @@ Reglas:
 - Los números van en formato español en el PDF (1.234,56 €): devuélvelos como número (1234.56).
 - Solo cuentan las PARTIDAS: líneas con unidad, cantidad, precio e importe. Las líneas de capítulo y subcapítulo que solo suman no son partidas.
 - Partidas a importe cero: no las incluyas.
+- El IVA no es una partida aunque el constructor lo ponga como línea del capítulo: no lo incluyas.
 - Si una partida aparece partida entre dos páginas, inclúyela una sola vez, en la página donde empieza.
 - No inventes nada: si un dato no aparece, null.`
 

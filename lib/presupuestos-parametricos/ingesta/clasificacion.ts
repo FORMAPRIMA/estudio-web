@@ -17,6 +17,15 @@ import type { PartidaExtraida } from './extraccion'
 export const MODELO_CLASIFICACION = 'claude-opus-5-5'
 
 export const FUERA_FICHA = 'fuera_ficha'
+
+/** Costes de la propiedad: no son obra, pero el propietario los paga y cuentan en la inversión. */
+export const COSTES_PROPIEDAD = {
+  prop_tasas: 'Tasas, licencias e impuestos municipales (ICIO, tasa de licencia o declaración responsable, tasas de ECU)',
+  prop_seguridad_salud: 'Coordinación de seguridad y salud contratada por la propiedad',
+  prop_honorarios: 'Honorarios técnicos (arquitectura, aparejador, ingenierías)',
+  prop_otros: 'Otros pagos directos de la propiedad que no son obra (comunidad, seguros, suministros provisionales)',
+} as const
+export type CodigoPropiedad = keyof typeof COSTES_PROPIEDAD
 export const sinDesglosar = (capitulo: number) => `sin_desglosar:${capitulo}`
 
 export type Reparto = { parte: string; pct: number }
@@ -68,7 +77,9 @@ const SISTEMA = `Eres un técnico de presupuestos de reformas integrales de vivi
 Reglas:
 - Usa SOLO los códigos de parte de la lista, o estos dos especiales:
   · "sin_desglosar:N" (N = número de capítulo) si la partida pertenece claramente al capítulo N pero mezcla varias partes y no se puede repartir con criterio.
-  · "${FUERA_FICHA}" si no corresponde a ninguna parte: amianto, refuerzos estructurales grandes, terraza o exteriores, tasas e impuestos, y partidas que paga directamente la propiedad.
+  · Costes de la propiedad (no son obra, pero el propietario los paga): ${Object.entries(COSTES_PROPIEDAD).map(([k, v]) => `"${k}" = ${v}`).join('; ')}. Úsalos también cuando la partida esté dentro del presupuesto del constructor.
+  · "${FUERA_FICHA}" si no corresponde a nada de lo anterior: amianto, refuerzos estructurales grandes, terraza o exteriores.
+  · Si la seguridad y salud es de obra (protecciones, señalización), va a gg_seguridad; si es el coordinador que paga la propiedad, a prop_seguridad_salud.
 - Clasifica por lo que ES la partida, no por el capítulo donde la puso el constructor (p. ej. «desmontaje de A/C» en demoliciones va a demolición de instalaciones generales; una puerta plegable de vidrio en carpintería metálica va a divisorias de vidrio).
 - Reparte con % solo cuando la partida incluya de verdad trabajos de varias partes (p. ej. «demolición de baño con retirada de escombros»). Si no, 100 % a una parte.
 - Sé honesto con la confianza: 0,9 o más solo si no hay duda.
@@ -117,7 +128,7 @@ export async function clasificarPartidas(partidas: PartidaExtraida[]): Promise<C
     if (a.i < 0 || a.i >= partidas.length || porIndice.has(a.i)) continue
     const capOrigen = capituloPorNombre(partidas[a.i].capitulo)
     let reparto = a.reparto.filter(r => r.pct > 0).map(r => {
-      const valido = CODIGOS.has(r.parte) || r.parte === FUERA_FICHA || /^sin_desglosar:(\d|1[01])$/.test(r.parte)
+      const valido = CODIGOS.has(r.parte) || r.parte === FUERA_FICHA || r.parte in COSTES_PROPIEDAD || /^sin_desglosar:(\d|1[01])$/.test(r.parte)
       if (!valido) avisos.push(`Partida ${a.i}: la IA propuso «${r.parte}», que no existe; va a «sin desglosar».`)
       return valido ? r : { parte: sinDesglosar(capOrigen), pct: r.pct }
     })

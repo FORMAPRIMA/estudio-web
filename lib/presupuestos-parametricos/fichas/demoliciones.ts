@@ -99,6 +99,9 @@ function falsosTechos(v: Valores): Cantidad {
 }
 
 function carpinteriaExterior(v: Valores): Cantidad {
+  // Solo se desmonta lo que se cambia: si se han elegido en los alzados, manda eso.
+  const cambiar = num(v, 'n_ventanas_cambiar')
+  if (cambiar != null) return { cantidad: cambiar, fuente: 'tecnico', formula: `${cambiar} ventanas que se cambian (alzados)` }
   const ventanas = num(v, 'n_ventanas')
   if (ventanas == null) return SIN_DATO('nº de ventanas')
   const grandes = num(v, 'n_ventanas_grandes')
@@ -215,7 +218,7 @@ export const FICHA_DEMOLICIONES: Ficha = {
       codigo: 'dem_carpinteria_exterior', nombre: 'Carpintería exterior', unidad: 'ud',
       criterio: 'Desmontaje de ventanas y balconeras con su vidrio, persiana, cajón y remates de fachada.',
       subcapitulos: ['1_DYT_02'],
-      variables: ['n_ventanas', 'n_ventanas_grandes'],
+      variables: ['n_ventanas', 'n_ventanas_grandes', 'n_ventanas_cambiar'],
       cantidad: carpinteriaExterior,
     },
     {
