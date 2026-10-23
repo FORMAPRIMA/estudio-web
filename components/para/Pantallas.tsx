@@ -153,13 +153,14 @@ export function Estudio({ t, lead, num }: { t: Textos; lead: LeadPara; num: numb
 
 // ── Obra seleccionada ────────────────────────────────────────────────────────
 export function Obra({ t, num }: { t: Textos; num: number }) {
+  const cinta = useCintaEstable<HTMLDivElement>()
   return (
     <Pantalla id="obra" tema="claro" num={num} rotulo={t.obraRotulo} className="p-obrasel">
       <div className="p-cab"><H>{t.obraTitulo}</H></div>
       {/* En móvil, cinta que avanza sola hacia la izquierda, como la del equipo: la
           lista va dos veces y la animación recorre justo la mitad, así que empalma. */}
       <div className="p-obra-cinta">
-        <div className="p-obra-pista">
+        <div className="p-obra-pista" ref={cinta}>
           {[...t.obras, ...t.obras].map((o, i) => {
             const copia = i >= t.obras.length
             return (
@@ -177,7 +178,37 @@ export function Obra({ t, num }: { t: Textos; num: number }) {
 }
 
 // ── Equipo ───────────────────────────────────────────────────────────────────
+/**
+ * Reinicia una cinta animada cuando ya han cargado la fuente y sus fotos.
+ *
+ * Safari compone el elemento animado con el tamaño que tenía al empezar la
+ * animación. Si la fuente o las fotos llegan después y la cinta crece, lo que
+ * sobresale queda recortado —se veían los cargos del equipo partidos por la
+ * mitad—. Quitar la animación un fotograma y volver a ponerla le obliga a medir
+ * de nuevo.
+ */
+function useCintaEstable<T extends HTMLElement>() {
+  const ref = useRef<T>(null)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    let vivo = true
+    const reiniciar = () => {
+      if (!vivo) return
+      el.style.animation = 'none'
+      void el.offsetHeight
+      el.style.animation = ''
+    }
+    const fotos = Array.from(el.querySelectorAll('img')).map((img) =>
+      img.complete ? Promise.resolve() : new Promise<void>((r) => { img.addEventListener('load', () => r(), { once: true }); img.addEventListener('error', () => r(), { once: true }) }))
+    Promise.all([document.fonts?.ready ?? Promise.resolve(), ...fotos]).then(reiniciar)
+    return () => { vivo = false }
+  }, [])
+  return ref
+}
+
 export function Equipo({ t, lead, num }: { t: Textos; lead: LeadPara; num: number }) {
+  const cinta = useCintaEstable<HTMLUListElement>()
   return (
     <Pantalla id="equipo" tema="oscuro" num={num} rotulo={t.equipoRotulo} className="p-equipo">
       <div className="p-equipo-foto p-in">
@@ -186,10 +217,12 @@ export function Equipo({ t, lead, num }: { t: Textos; lead: LeadPara; num: numbe
       <div className="p-cab"><H>{t.equipoTitulo}</H></div>
       <p className="p-texto p-in" style={D('.3s')}>{t.equipoTexto}</p>
       <div className="p-personas p-in" style={D('.3s')}>
-        <ul className="p-personas-pista">
+        <ul className="p-personas-pista" ref={cinta}>
           {[...t.personas, ...t.personas].map((p, i) => (
             <li key={i} className={`${p.nombre === lead.contacto.nombre ? 'contacto' : ''}${i >= t.personas.length ? ' p-copia' : ''}`} aria-hidden={i >= t.personas.length || undefined}>
-              <img src={p.foto} alt={p.nombre} loading="lazy" decoding="async" />
+              {/* El recorte del zoom va SOLO en la foto: con overflow:hidden en la
+                  tarjeta entera, Safari acababa recortando también el cargo. */}
+              <span className="p-persona-foto"><img src={p.foto} alt={p.nombre} decoding="async" /></span>
               <b>{p.nombre}</b><span>{p.cargo}</span>
             </li>
           ))}
@@ -440,10 +473,10 @@ export const CSS_PANTALLAS = CSS_AGENDA + CSS_PORTAL_DEMO + `
 
 /* Obra (p-obra es el punto del mapa: otro nombre) */
 .p-obrasel{justify-content:center;}
-.p-obra-cinta{margin:8px calc(var(--p-gutter) * -1) 0;overflow:hidden;}
+.p-obra-cinta{margin:8px calc(var(--p-gutter) * -1) 0;overflow:hidden;padding-bottom:10px;flex-shrink:0;}
 /* Cinta lenta con transform y no con scrollLeft: en iPhone el scroll-snap del
    dossier devolvía el desplazamiento a su sitio. */
-.p-obra-pista{display:flex;gap:14px;width:max-content;padding:0 0 6px var(--p-gutter);animation:p-cinta-obra 80s linear infinite;}
+.p-obra-pista{display:flex;gap:14px;width:max-content;padding:0 0 6px var(--p-gutter);animation:p-cinta-obra 80s linear infinite;will-change:transform;}
 .p-obra-cinta:active .p-obra-pista{animation-play-state:paused;}
 @keyframes p-cinta-obra{from{transform:translate3d(0,0,0)}to{transform:translate3d(calc(-50% - 7px),0,0)}}
 @media (prefers-reduced-motion:reduce){.p-obra-cinta{overflow-x:auto;}.p-obra-pista{animation:none;}}
@@ -456,15 +489,15 @@ export const CSS_PANTALLAS = CSS_AGENDA + CSS_PORTAL_DEMO + `
 .p-obra-ficha span{font-size:13px;color:rgba(20,20,20,.55);}
 
 /* Equipo */
-.p-equipo-foto{margin:0 calc(var(--p-gutter) * -1) 4px;aspect-ratio:16/10;overflow:hidden;}
+.p-equipo-foto{margin:0 calc(var(--p-gutter) * -1) 4px;aspect-ratio:16/10;overflow:hidden;flex:0 1 auto;min-height:72px;}
 .p-equipo-foto img{width:100%;height:100%;object-fit:cover;filter:grayscale(1);}
-.p-personas{margin:6px calc(var(--p-gutter) * -1) 0;overflow:hidden;}
-.p-personas-pista{list-style:none;margin:0;padding:0 0 0 var(--p-gutter);display:flex;gap:12px;width:max-content;animation:p-cinta-equipo 46s linear infinite;}
+.p-personas{margin:6px calc(var(--p-gutter) * -1) 0;overflow:hidden;padding-bottom:10px;flex-shrink:0;}
+.p-personas-pista{list-style:none;margin:0;padding:0 0 0 var(--p-gutter);display:flex;gap:12px;width:max-content;animation:p-cinta-equipo 46s linear infinite;will-change:transform;}
 .p-personas:active .p-personas-pista,.p-personas:hover .p-personas-pista{animation-play-state:paused;}
 @keyframes p-cinta-equipo{from{transform:translate3d(0,0,0)}to{transform:translate3d(calc(-50% - 6px),0,0)}}
 .p-personas li{flex:none;width:38vw;max-width:220px;display:flex;flex-direction:column;gap:3px;}
-.p-personas img{aspect-ratio:3/4;width:100%;object-fit:cover;filter:grayscale(1);margin-bottom:8px;transform:scale(1.03);transform-origin:50% 0;}
-.p-personas li{overflow:hidden;}
+.p-persona-foto{display:block;overflow:hidden;margin-bottom:8px;}
+.p-personas img{aspect-ratio:3/4;width:100%;object-fit:cover;filter:grayscale(1);display:block;transform:scale(1.03);transform-origin:50% 0;}
 @media (prefers-reduced-motion:reduce){.p-personas{overflow-x:auto;}.p-personas-pista{animation:none;}.p-copia{display:none!important;}}
 /* Producto en móvil: una tipología cada vez */
 .p-tipologias{display:none;position:relative;height:36svh;}
@@ -615,6 +648,13 @@ export const CSS_PANTALLAS = CSS_AGENDA + CSS_PORTAL_DEMO + `
   .p-dossier .p-explorar-grande{min-height:46px;}
   .p-cinta-pista img{height:clamp(120px,20svh,200px);}
   .p-equipo-foto{aspect-ratio:2/1;}
+  /* La pantalla es una columna de altura fija: si el contenido no cabe, el navegador
+     encoge al hijo que puede encogerse. Con overflow:hidden la cinta del equipo podía,
+     y en el iPhone —donde se suman ~59 px de isla arriba y 34 de barra abajo, que en
+     un simulador valen cero— cortaba los cargos con una línea recta. Las cintas ya no
+     encogen (flex-shrink:0); la que cede es la foto de grupo. Y las fotos del
+     portafolio miden el alto que queda descontando las zonas seguras. */
+  .p-obra-img{aspect-ratio:auto;height:clamp(150px,calc(100svh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 340px),calc(min(72vw,320px) * 1.25));}
   /* Los retratos miden por la altura visible y no por el ancho: con la proporción
      4/5 sacada del ancho, en Safari del iPhone los nombres y cargos caían debajo de
      la barra de inicio, o fuera de la pantalla en un SE. */
@@ -629,7 +669,6 @@ export const CSS_PANTALLAS = CSS_AGENDA + CSS_PORTAL_DEMO + `
   .p-tipologias{height:26svh;}
   .p-personas li{width:31vw;}
   .p-personas img{height:21svh;}
-  .p-obra-img{aspect-ratio:auto;height:34svh;}
   .p-movil{height:30svh;}
   .p-dossier .p-texto{font-size:14px;}
   .p-vl-lista p{display:none;}
