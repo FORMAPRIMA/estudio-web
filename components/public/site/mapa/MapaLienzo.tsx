@@ -581,9 +581,11 @@ export default function MapaLienzo({ puntos, locale = 'es', resaltado, seleccion
       selPrevia.current = seleccionado
     }
 
-    // Al deseleccionar se para la órbita pero NO se devuelve la cámara: volver al
-    // encuadre general es otra intención y tiene su propio botón en la lista.
-    if (seleccionado == null) { if (cambio) { destino.current = null; m.stop() } return }
+    // Al deseleccionar NO se devuelve la cámara: volver al encuadre general es otra
+    // intención y tiene su propio botón en la lista. Tampoco se llama a `stop()`: la
+    // órbita ya se para en la limpieza de su efecto, y aquí cortaría el vuelo que
+    // «Ver todas» o el conmutador de sedes acaban de lanzar en este mismo render.
+    if (seleccionado == null) { if (cambio) destino.current = null; return }
 
     // Los márgenes están en las dependencias a propósito: el hueco visible cambia
     // AL elegir la obra —entra la ficha— y ese número llega un render después del
