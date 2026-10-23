@@ -155,14 +155,22 @@ export function Estudio({ t, lead, num }: { t: Textos; lead: LeadPara; num: numb
 export function Obra({ t, num }: { t: Textos; num: number }) {
   return (
     <Pantalla id="obra" tema="claro" num={num} rotulo={t.obraRotulo} className="p-obrasel">
-      <div className="p-cab"><H>{t.obraTitulo}</H><span className="p-desliza p-in" style={D('.4s')}>{t.desliza} →</span></div>
-      <div className="p-obra-pista">
-        {t.obras.map((o, i) => (
-          <figure key={o.nombre} className="p-obra-ficha p-in" style={D(`${0.2 + i * 0.07}s`)}>
-            <div className="p-obra-img"><img src={o.img} alt={o.nombre} loading="lazy" decoding="async" /></div>
-            <figcaption><b>{o.nombre}</b><span>{o.lugar} · {o.tipo}</span></figcaption>
-          </figure>
-        ))}
+      <div className="p-cab"><H>{t.obraTitulo}</H></div>
+      {/* En móvil, cinta que avanza sola hacia la izquierda, como la del equipo: la
+          lista va dos veces y la animación recorre justo la mitad, así que empalma. */}
+      <div className="p-obra-cinta">
+        <div className="p-obra-pista">
+          {[...t.obras, ...t.obras].map((o, i) => {
+            const copia = i >= t.obras.length
+            return (
+              <figure key={i} className={`p-obra-ficha p-in${copia ? ' p-copia' : ''}`} aria-hidden={copia || undefined}
+                style={D(`${0.2 + (i % t.obras.length) * 0.07}s`)}>
+                <div className="p-obra-img"><img src={o.img} alt={copia ? '' : o.nombre} loading="lazy" decoding="async" /></div>
+                <figcaption><b>{o.nombre}</b><span>{o.lugar} · {o.tipo}</span></figcaption>
+              </figure>
+            )
+          })}
+        </div>
       </div>
     </Pantalla>
   )
@@ -432,10 +440,14 @@ export const CSS_PANTALLAS = CSS_AGENDA + CSS_PORTAL_DEMO + `
 
 /* Obra (p-obra es el punto del mapa: otro nombre) */
 .p-obrasel{justify-content:center;}
-.p-obra-pista{display:grid;grid-auto-flow:column;grid-auto-columns:78%;gap:14px;overflow-x:auto;scroll-snap-type:x mandatory;scroll-padding-inline:var(--p-gutter);margin:8px calc(var(--p-gutter) * -1) 0;
-  padding:0 var(--p-gutter) 6px;scrollbar-width:none;-webkit-overflow-scrolling:touch;}
-.p-obra-pista::-webkit-scrollbar{display:none;}
-.p-obra-ficha{margin:0;scroll-snap-align:start;}
+.p-obra-cinta{margin:8px calc(var(--p-gutter) * -1) 0;overflow:hidden;}
+/* Cinta lenta con transform y no con scrollLeft: en iPhone el scroll-snap del
+   dossier devolvía el desplazamiento a su sitio. */
+.p-obra-pista{display:flex;gap:14px;width:max-content;padding:0 0 6px var(--p-gutter);animation:p-cinta-obra 80s linear infinite;}
+.p-obra-cinta:active .p-obra-pista{animation-play-state:paused;}
+@keyframes p-cinta-obra{from{transform:translate3d(0,0,0)}to{transform:translate3d(calc(-50% - 7px),0,0)}}
+@media (prefers-reduced-motion:reduce){.p-obra-cinta{overflow-x:auto;}.p-obra-pista{animation:none;}}
+.p-obra-ficha{margin:0;flex:none;width:min(72vw,320px);}
 .p-obra-img{aspect-ratio:4/5;overflow:hidden;background:#e6e3dc;}
 .p-obra-img img{width:100%;height:100%;object-fit:cover;transition:transform 1.4s var(--p-curva);}
 .p-obra-ficha:hover .p-obra-img img{transform:scale(1.04);}
@@ -603,7 +615,10 @@ export const CSS_PANTALLAS = CSS_AGENDA + CSS_PORTAL_DEMO + `
   .p-dossier .p-explorar-grande{min-height:46px;}
   .p-cinta-pista img{height:clamp(120px,20svh,200px);}
   .p-equipo-foto{aspect-ratio:2/1;}
-  .p-personas img{aspect-ratio:4/5;}
+  /* Los retratos miden por la altura visible y no por el ancho: con la proporción
+     4/5 sacada del ancho, en Safari del iPhone los nombres y cargos caían debajo de
+     la barra de inicio, o fuera de la pantalla en un SE. */
+  .p-personas img{aspect-ratio:auto;height:min(26svh,230px);}
   .p-dossier .p-pie{display:none;}
   .p-hablemos{gap:18px;}
   .p-hablemos .p-raya{display:none;}
@@ -613,6 +628,8 @@ export const CSS_PANTALLAS = CSS_AGENDA + CSS_PORTAL_DEMO + `
 @media (max-width:700px) and (max-height:760px){
   .p-tipologias{height:26svh;}
   .p-personas li{width:31vw;}
+  .p-personas img{height:21svh;}
+  .p-obra-img{aspect-ratio:auto;height:34svh;}
   .p-movil{height:30svh;}
   .p-dossier .p-texto{font-size:14px;}
   .p-vl-lista p{display:none;}
@@ -625,12 +642,20 @@ export const CSS_PANTALLAS = CSS_AGENDA + CSS_PORTAL_DEMO + `
   .p-hablemos .p-hablemos-a>.p-texto{display:none;}
   .p-estudio .p-nucleo{font-size:16px;}
 }
+/* Pantallas muy bajas (iPhone SE con las barras de Safari, ~548 px): el equipo se
+   queda con el titular, la foto de grupo y la cinta; la frase no cabe con los cargos. */
+@media (max-width:700px) and (max-height:600px){
+  .p-equipo .p-texto{display:none;}
+  .p-equipo-foto{aspect-ratio:16/6;}
+}
 @media (min-width:1024px){
   .p-pant{padding:clamp(96px,12vh,140px) var(--p-gutter) clamp(56px,9vh,104px);gap:28px;}
   .p-estudio{display:grid;grid-template-columns:1.2fr 1fr;column-gap:clamp(40px,6vw,120px);align-content:center;}
   .p-estudio .p-pant-rotulo{grid-column:1 / -1;}
   .p-cifras{margin:0;align-self:center;}
-  .p-obra-pista{grid-auto-flow:row;grid-template-columns:repeat(3,1fr);grid-auto-columns:auto;overflow:visible;margin:8px 0 0;padding:0;gap:22px;}
+  .p-obra-cinta{margin:8px 0 0;overflow:visible;}
+  .p-obra-pista{display:grid;grid-template-columns:repeat(3,1fr);width:auto;padding:0;gap:22px;animation:none;}
+  .p-obra-ficha{width:auto;}
   .p-obra-img{aspect-ratio:auto;height:calc((100svh - 500px) / 2);max-height:250px;min-height:110px;}
   .p-desliza{display:none;}
   .p-equipo{display:grid;grid-template-columns:1fr 1fr;column-gap:56px;align-content:center;}
