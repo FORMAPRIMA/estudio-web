@@ -35,6 +35,8 @@ const DETENTES = {
 /** Alto de la tira de tarjetas de móvil: la detención `ficha` es esto más el asa
  *  (26) y el aire de abajo (16). Fijo: la lámina no crece con la foto. */
 const ALTO_TARJETA = 112
+/** La pista de deslizar ya se ha enseñado en este navegador. */
+const CLAVE_PISTA = 'fp.mapa.pista-tira'
 /** Fracción de la lámina que ocupa cada detención, para decidir a cuál se salta al
  *  soltar el arrastre. Mismos valores, en número. */
 const FRACCION = { peek: 0, ficha: 0, medio: 0.574, alto: 1 } as const
@@ -550,6 +552,24 @@ function Tira({ listados, seleccionado, locale, onIr, onCerrar }: {
   const reloj = useRef<number>()
   const total = listados.length
 
+  /**
+   * La pista del gesto: la primera vez que se ve la tira, las tarjetas dan dos
+   * saltitos a la izquierda y vuelven, para que se entienda que se puede deslizar.
+   * Es un `transform` sobre las tarjetas y no un desplazamiento de la tira: así no
+   * elige ninguna obra ni mueve el mapa. Una sola vez por navegador.
+   */
+  const [pista, setPista] = useState(false)
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    let vista = false
+    try { vista = localStorage.getItem(CLAVE_PISTA) === '1' } catch { /* sin almacenamiento: se enseña */ }
+    if (vista) return
+    try { localStorage.setItem(CLAVE_PISTA, '1') } catch { /* ídem */ }
+    setPista(true)
+    const r = window.setTimeout(() => setPista(false), 2600)
+    return () => window.clearTimeout(r)
+  }, [])
+
   const tarjetaDe = (n: number) => caja.current?.children[n - 1] as HTMLElement | undefined
   // La elegida, centrada. De golpe si viene de lejos; deslizando si es la de al lado.
   useLayoutEffect(() => {
@@ -583,7 +603,8 @@ function Tira({ listados, seleccionado, locale, onIr, onCerrar }: {
 
   return (
     <div className="fp-mapa-tira-marco">
-      <div className="fp-mapa-tira" ref={caja} onScroll={alDesplazar}
+      <div className="fp-mapa-tira" ref={caja} onScroll={alDesplazar} data-pista={pista ? '1' : undefined}
+        onPointerDown={() => setPista(false)}
         aria-label={locale === 'en' ? 'Selected work' : 'Obra seleccionada'}>
         {listados.map((p, i) => {
           const n = i + 1
@@ -1053,6 +1074,16 @@ html:has(.fp-mapa[data-inmersivo="1"])            { overflow: hidden; overscroll
     opacity: .5; transition: opacity .25s ${site.ease};
   }
   .fp-mapa-tc[data-sel] { opacity: 1; }
+  /* Dos saltitos laterales, el segundo más corto, y de vuelta a su sitio. */
+  .fp-mapa-tira[data-pista="1"] .fp-mapa-tc { animation: fp-tira-pista 1.7s cubic-bezier(.3,.7,.3,1) .7s both; }
+  @keyframes fp-tira-pista {
+    0%   { transform: translateX(0); }
+    16%  { transform: translateX(-38px); }
+    32%  { transform: translateX(0); }
+    46%  { transform: translateX(-20px); }
+    60%  { transform: translateX(0); }
+    100% { transform: translateX(0); }
+  }
   .fp-mapa-tc-foto { width: ${ALTO_TARJETA}px; height: ${ALTO_TARJETA}px; border-radius: 4px; overflow: hidden; background: #e7e5df; }
   .fp-mapa-tc-foto .fp-mapa-wip-in span { max-width: 11ch; line-height: 1.5; font-size: 8.5px; }
   .fp-mapa-tc-txt { min-width: 0; display: flex; flex-direction: column; gap: 4px; padding: 2px 26px 0 0; }
