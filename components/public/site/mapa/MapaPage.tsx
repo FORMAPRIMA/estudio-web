@@ -294,7 +294,7 @@ export function MapaPage({ content, puntos }: { content: ContentMap; puntos: Map
         // suba por encima de ella. Es requisito de uso: no puede quedar tapada.
         ['--fp-asomo' as string]: `${margenes.bottom}px` }}>
 
-      <MapaLienzo puntos={listados} resaltado={resaltado} seleccionado={seleccionado}
+      <MapaLienzo puntos={listados} locale={locale} resaltado={resaltado} seleccionado={seleccionado}
         onResaltar={setResaltado} onSeleccionar={alternar} onFallo={onFallo}
         margenes={margenes} reencuadre={reencuadre} sedeEncuadre={sede}
         entradaAutomatica={autoSeleccion} />

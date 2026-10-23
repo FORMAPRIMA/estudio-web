@@ -14,7 +14,8 @@ import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { site } from '../theme'
 import {
-  CAMARA, MUNDO, ZOOM_CIUDAD, SIN_MARGENES, KM_SALTO, aGeoJSON, kmEntre, limites, limitesDeSede,
+  CAMARA, MUNDO, ZOOM_CIUDAD, ZOOM_CONTINENTE, SIN_MARGENES, KM_SALTO, aGeoJSON, aGeoJSONContinentes,
+  kmEntre, limites, limitesDeContinente, limitesDeSede,
   tieneCoordenadas, type Caja, type MapaPunto, type Margenes, type SedeCodigo,
 } from '@/lib/web-mapa'
 
@@ -29,6 +30,8 @@ const FUENTE = 'fp-obras'
  * agrupada los ids de los grupos se mezclan con los de las obras.
  */
 const GRUPOS = 'fp-ciudades'
+/** Un disco por continente: lo que se ve con el globo entero en pantalla. */
+const CONTINENTES = 'fp-continentes'
 
 /** El globo en el ancho de pantalla de ahora. */
 function vistaMundo() {
@@ -121,8 +124,10 @@ function soportaMapa() {
   }
 }
 
-export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar, onSeleccionar, margenes = SIN_MARGENES, reencuadre = 0, sedeEncuadre = null, entradaAutomatica = false, onFallo }: {
+export default function MapaLienzo({ puntos, locale = 'es', resaltado, seleccionado, onResaltar, onSeleccionar, margenes = SIN_MARGENES, reencuadre = 0, sedeEncuadre = null, entradaAutomatica = false, onFallo }: {
   puntos: MapaPunto[]
+  /** Para el nombre de los continentes, que se pinta en el propio mapa. */
+  locale?: 'es' | 'en'
   /**
    * DOS estados y no uno, porque son dos intenciones distintas.
    *  · `resaltado` (pasar el ratón, o el foco de teclado) solo enciende el punto.
@@ -297,6 +302,7 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
     if (existente) {
       existente.setData(datos as any)
       ;(m.getSource(GRUPOS) as mapboxgl.GeoJSONSource | undefined)?.setData(datos as any)
+      ;(m.getSource(CONTINENTES) as mapboxgl.GeoJSONSource | undefined)?.setData(aGeoJSONContinentes(puntos, locale) as any)
       return
     }
 
@@ -393,7 +399,7 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
     // mismo zoom en que aparecen las obras sueltas, ni antes ni después.
     m.addSource(GRUPOS, { type: 'geojson', data: datos as any, cluster: true, clusterRadius: 44, clusterMaxZoom: ZOOM_CIUDAD - 1 })
     m.addLayer({
-      id: 'fp-ciudad', type: 'circle', source: GRUPOS, maxzoom: ZOOM_CIUDAD,
+      id: 'fp-ciudad', type: 'circle', source: GRUPOS, minzoom: ZOOM_CONTINENTE, maxzoom: ZOOM_CIUDAD,
       filter: ['has', 'point_count'],
       paint: {
         'circle-color': site.color.ink,
@@ -403,7 +409,7 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
       },
     })
     m.addLayer({
-      id: 'fp-ciudad-n', type: 'symbol', source: GRUPOS, maxzoom: ZOOM_CIUDAD,
+      id: 'fp-ciudad-n', type: 'symbol', source: GRUPOS, minzoom: ZOOM_CONTINENTE, maxzoom: ZOOM_CIUDAD,
       filter: ['has', 'point_count'],
       layout: {
         'text-field': ['to-string', ['get', 'point_count']],
@@ -414,19 +420,20 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
       paint: { 'text-color': site.color.cream },
     })
     // Una obra sola en su ciudad (Samborondón) no es un grupo: se pinta como punto
-    // con su nombre, y el clic la elige directamente.
+    // con su nombre, y el clic la elige directamente. OSCURO como los grupos: en
+    // crema sobre el globo claro no se veía.
     m.addLayer({
-      id: 'fp-ciudad-sola', type: 'circle', source: GRUPOS, maxzoom: ZOOM_CIUDAD,
+      id: 'fp-ciudad-sola', type: 'circle', source: GRUPOS, minzoom: ZOOM_CONTINENTE, maxzoom: ZOOM_CIUDAD,
       filter: ['!', ['has', 'point_count']],
       paint: {
-        'circle-radius': 6,
-        'circle-color': site.color.cream,
-        'circle-stroke-width': 1.6,
-        'circle-stroke-color': site.color.ink,
+        'circle-radius': 7,
+        'circle-color': site.color.ink,
+        'circle-stroke-width': 5,
+        'circle-stroke-color': 'rgba(20,20,20,.14)',
       },
     })
     m.addLayer({
-      id: 'fp-ciudad-sola-nombre', type: 'symbol', source: GRUPOS, maxzoom: ZOOM_CIUDAD,
+      id: 'fp-ciudad-sola-nombre', type: 'symbol', source: GRUPOS, minzoom: ZOOM_CONTINENTE, maxzoom: ZOOM_CIUDAD,
       filter: ['!', ['has', 'point_count']],
       layout: {
         'text-field': ['get', 'nombre'],
@@ -440,7 +447,51 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
       },
       paint: { 'text-color': site.color.ink, 'text-halo-color': site.color.cream, 'text-halo-width': 1.6 },
     })
-    for (const capa of ['fp-ciudad', 'fp-ciudad-sola']) {
+    // ── Continentes (el globo entero) ──
+    m.addSource(CONTINENTES, { type: 'geojson', data: aGeoJSONContinentes(puntos, locale) as any })
+    m.addLayer({
+      id: 'fp-continente', type: 'circle', source: CONTINENTES, maxzoom: ZOOM_CONTINENTE,
+      paint: {
+        'circle-color': site.color.ink,
+        'circle-radius': ['step', ['get', 'n'], 16, 10, 20, 25, 24],
+        'circle-stroke-width': 7,
+        'circle-stroke-color': 'rgba(20,20,20,.14)',
+      },
+    })
+    m.addLayer({
+      id: 'fp-continente-n', type: 'symbol', source: CONTINENTES, maxzoom: ZOOM_CONTINENTE,
+      layout: {
+        'text-field': ['to-string', ['get', 'n']],
+        'text-size': 12,
+        'text-font': ['DIN Pro Medium', 'Arial Unicode MS Regular'],
+        'text-allow-overlap': true,
+      },
+      paint: { 'text-color': site.color.cream },
+    })
+    m.addLayer({
+      id: 'fp-continente-nombre', type: 'symbol', source: CONTINENTES, maxzoom: ZOOM_CONTINENTE,
+      layout: {
+        'text-field': ['get', 'nombre'],
+        'text-size': 10.5,
+        'text-font': ['DIN Pro Medium', 'Arial Unicode MS Regular'],
+        'text-letter-spacing': 0.16,
+        'text-transform': 'uppercase',
+        'text-offset': [0, 2.4],
+        'text-anchor': 'top',
+        'text-allow-overlap': true,
+      },
+      paint: { 'text-color': site.color.ink, 'text-halo-color': site.color.cream, 'text-halo-width': 1.6 },
+    })
+    // Clic en un continente: se baja hasta ver todas sus obras, y ahí ya aparecen
+    // las ciudades.
+    m.on('click', 'fp-continente', (e) => {
+      const codigo = e.features?.[0]?.properties?.codigo
+      if (!codigo) return
+      destino.current = null
+      encuadrarCaja(m, limitesDeContinente(puntos, codigo), margenesRef.current)
+    })
+
+    for (const capa of ['fp-continente', 'fp-ciudad', 'fp-ciudad-sola']) {
       m.on('mouseenter', capa, () => { m.getCanvas().style.cursor = 'pointer' })
       m.on('mouseleave', capa, () => { m.getCanvas().style.cursor = '' })
     }
@@ -481,7 +532,7 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
       const n = e.features?.[0]?.properties?.n
       if (typeof n === 'number') onSeleccionar(n)
     })
-  }, [listo, puntos, onResaltar, onSeleccionar])
+  }, [listo, puntos, locale, onResaltar, onSeleccionar])
 
   // ── Volver al plano general ───────────────────────────────────────────────
   // El botón «Ver todas» (el globo) y el conmutador de sedes (un país). Deseleccionar
@@ -556,10 +607,11 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
     // de Van Wijk y Nuij —se eleva lo justo, recorre, y baja—, que es como el ojo
     // entiende un desplazamiento sobre un territorio.
     //
-    // Dentro de la ciudad, ni el rumbo ni el cabeceo se tocan: son del visitante. Si
-    // se viene desde el globo o desde otra ciudad, sí: se aterriza con la cámara de
-    // la casa, que es la que levanta los edificios. Y el zoom solo sube, nunca baja
-    // — seleccionar una obra jamás aleja la cámara.
+    // Elegir una obra la enseña SIEMPRE en perspectiva: 63° de cabeceo y zoom de
+    // edificios, se venga de donde se venga (antes, desde una ciudad encuadrada en
+    // planta, se aterrizaba plano). El rumbo solo se pone si se viene de lejos;
+    // dentro de la ciudad es del visitante. Y el zoom solo sube, nunca baja —
+    // seleccionar una obra jamás aleja la cámara.
     // El padding viaja CON el vuelo y no se aplica aparte: `setPadding` es un
     // `jumpTo` por dentro y cortaría este mismo vuelo un instante después.
     const lejos = m.getZoom() < 12 || kmEntre(m.getCenter(), p) > KM_SALTO
@@ -567,7 +619,8 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
       center: [p.lng, p.lat] as [number, number],
       zoom: Math.max(m.getZoom(), ZOOM_DETALLE),
       padding: margenesRef.current,
-      ...(lejos ? { bearing: CAMARA.rumbo, pitch: CAMARA.cabeceo } : {}),
+      pitch: CAMARA.cabeceo,
+      ...(lejos ? { bearing: CAMARA.rumbo } : {}),
     }
     destino.current = { lat: p.lat, lng: p.lng }
 

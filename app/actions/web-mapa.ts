@@ -256,7 +256,11 @@ export async function geocodificarPunto(id: string): Promise<{ success: true; la
     // país en la dirección, y con eso basta para que ganen al sesgo.
     const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(consulta)}.json`
       + `?limit=1&language=es&proximity=-3.6883,40.4189&types=address&access_token=${token}`
-    const res = await fetch(url, { cache: 'no-store' })
+    // El Referer del dominio. Hoy `MAPBOX_TOKEN_SERVIDOR` está vacío en Vercel y se
+    // usa el público, que va restringido por URL: sin esta cabecera Mapbox responde
+    // 403 y «Situar» no hacía nada. Con un token de servidor sin restringir, la
+    // cabecera no estorba.
+    const res = await fetch(url, { cache: 'no-store', headers: { Referer: 'https://internal.formaprima.es/' } })
     if (!res.ok) return { error: `Mapbox respondió ${res.status}.` }
     const json = await res.json()
     const f = json?.features?.[0]

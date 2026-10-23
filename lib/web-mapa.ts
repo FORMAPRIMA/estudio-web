@@ -309,6 +309,64 @@ export function kmEntre(a: { lat: number; lng: number }, b: { lat: number; lng: 
   return Math.hypot((a.lat - b.lat) * 111.3, (a.lng - b.lng) * 111.3 * Math.cos((a.lat * Math.PI) / 180))
 }
 
+// ── Continentes ─────────────────────────────────────────────────────────────
+/**
+ * Desde el globo las obras se agrupan por CONTINENTE y no por cercanía en
+ * pantalla. Agrupando por píxeles, Ecuador quedaba suelto lejos de México y Miami,
+ * y lo que se quiere decir desde el espacio es «tanto en América, tanto en Europa».
+ * Por debajo de `ZOOM_CONTINENTE` se pinta un disco por continente; por encima, los
+ * grupos por ciudad de siempre.
+ */
+export const ZOOM_CONTINENTE = 3
+
+export const CONTINENTES = [
+  { codigo: 'america', es: 'América', en: 'Americas' },
+  { codigo: 'europa',  es: 'Europa',  en: 'Europe' },
+] as const
+
+export type ContinenteCodigo = (typeof CONTINENTES)[number]['codigo']
+
+/** De la sede, y para lo que no cae en ninguna, de la longitud: al oeste del
+ *  Atlántico es América. */
+export function continenteDe(p: MapaPunto & { lat: number; lng: number }): ContinenteCodigo {
+  const s = sedeDe(p)
+  if (s === 'es') return 'europa'
+  if (s === 'mx' || s === 'us' || s === 'ec') return 'america'
+  return p.lng < -30 ? 'america' : 'europa'
+}
+
+/** Un punto por continente con obra, en la MEDIA de sus obras (la media y no el
+ *  centro de la caja: el centro de la caja de América cae en el Pacífico). */
+export function aGeoJSONContinentes(puntos: MapaPunto[], locale: 'es' | 'en') {
+  const con = puntos.filter(tieneCoordenadas)
+  return {
+    type: 'FeatureCollection' as const,
+    features: CONTINENTES.flatMap((c) => {
+      const suyas = con.filter((p) => continenteDe(p) === c.codigo)
+      if (!suyas.length) return []
+      const lng = suyas.reduce((a, p) => a + p.lng, 0) / suyas.length
+      const lat = suyas.reduce((a, p) => a + p.lat, 0) / suyas.length
+      return [{
+        type: 'Feature' as const,
+        geometry: { type: 'Point' as const, coordinates: [lng, lat] },
+        properties: { codigo: c.codigo, n: suyas.length, nombre: locale === 'en' ? c.en : c.es },
+      }]
+    }),
+  }
+}
+
+/** Caja de todas las obras de un continente, para bajar hasta él. */
+export function limitesDeContinente(puntos: MapaPunto[], codigo: string): Caja | null {
+  const suyas = puntos.filter(tieneCoordenadas).filter((p) => continenteDe(p) === codigo)
+  if (!suyas.length) return null
+  let oeste = Infinity, sur = Infinity, este = -Infinity, norte = -Infinity
+  for (const p of suyas) {
+    oeste = Math.min(oeste, p.lng); este = Math.max(este, p.lng)
+    sur = Math.min(sur, p.lat);     norte = Math.max(norte, p.lat)
+  }
+  return [[oeste, sur], [este, norte]]
+}
+
 /** GeoJSON para la fuente del mapa. El número es el que se pinta en el punto y el
  *  que aparece en la lista de al lado: son la misma serie. */
 export function aGeoJSON(puntos: MapaPunto[]) {

@@ -249,11 +249,30 @@ export default function MapaObras({ puntos, t, idioma, token: tokenServidor, num
       zoom: Math.max(m.getZoom(), 15.6),
       // La tarjeta tapa el canto de abajo (móvil) o el izquierdo (escritorio).
       padding: vertical() ? { top: 0, bottom: 180, left: 0, right: 0 } : { top: 0, bottom: 0, left: 480, right: 380 },
-      ...(lejos ? { pitch: CAMARA.cabeceo, bearing: CAMARA.rumbo } : {}),
+      // Siempre en perspectiva; el rumbo solo si se viene de lejos.
+      pitch: CAMARA.cabeceo,
+      ...(lejos ? { bearing: CAMARA.rumbo } : {}),
     }
-    if (sinMovimiento()) m.jumpTo(destino)
-    else if (lejos) m.flyTo({ ...destino, curve: 1.42, speed: 1.1, essential: true })
+    if (sinMovimiento()) { m.jumpTo(destino); return }
+
+    // Al aterrizar, la cámara orbita despacio alrededor de la obra hasta que el
+    // visitante toque el mapa o elija otra. Tramos de 90°: `easeTo` normaliza el
+    // rumbo y un giro de 360° lo leería como «no gires».
+    let vivo = true
+    const parar = () => { vivo = false }
+    const girar = () => {
+      if (!vivo) return
+      m.easeTo({ bearing: m.getBearing() + 90, duration: 22500, easing: (x) => x, essential: true })
+      m.once('moveend', (e: any) => { if (!e?.originalEvent) girar() })
+    }
+    m.on('mousedown', parar); m.on('touchstart', parar); m.on('wheel', parar)
+    m.once('moveend', girar)
+    if (lejos) m.flyTo({ ...destino, curve: 1.42, speed: 1.1, essential: true })
     else m.easeTo({ ...destino, duration: 1200, essential: true })
+    return () => {
+      vivo = false
+      m.off('mousedown', parar); m.off('touchstart', parar); m.off('wheel', parar)
+    }
   }, [sel, obras])
 
   const seguir = () => {
