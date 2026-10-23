@@ -419,18 +419,29 @@ export default function MapaLienzo({ puntos, locale = 'es', resaltado, seleccion
       },
       paint: { 'text-color': site.color.cream },
     })
-    // Una obra sola en su ciudad (Samborondón) no es un grupo: se pinta como punto
-    // con su nombre, y el clic la elige directamente. OSCURO como los grupos: en
-    // crema sobre el globo claro no se veía.
+    // Una obra sola en su ciudad (Samborondón) se pinta IGUAL que un grupo —disco
+    // oscuro con su recuento, un «1»— y además con su nombre debajo; el clic la
+    // elige directamente. En crema y sin número sobre el globo claro no se veía.
     m.addLayer({
       id: 'fp-ciudad-sola', type: 'circle', source: GRUPOS, minzoom: ZOOM_CONTINENTE, maxzoom: ZOOM_CIUDAD,
       filter: ['!', ['has', 'point_count']],
       paint: {
-        'circle-radius': 7,
+        'circle-radius': 13,
         'circle-color': site.color.ink,
         'circle-stroke-width': 5,
         'circle-stroke-color': 'rgba(20,20,20,.14)',
       },
+    })
+    m.addLayer({
+      id: 'fp-ciudad-sola-n', type: 'symbol', source: GRUPOS, minzoom: ZOOM_CONTINENTE, maxzoom: ZOOM_CIUDAD,
+      filter: ['!', ['has', 'point_count']],
+      layout: {
+        'text-field': '1',
+        'text-size': 11,
+        'text-font': ['DIN Pro Medium', 'Arial Unicode MS Regular'],
+        'text-allow-overlap': true,
+      },
+      paint: { 'text-color': site.color.cream },
     })
     m.addLayer({
       id: 'fp-ciudad-sola-nombre', type: 'symbol', source: GRUPOS, minzoom: ZOOM_CONTINENTE, maxzoom: ZOOM_CIUDAD,
@@ -441,7 +452,7 @@ export default function MapaLienzo({ puntos, locale = 'es', resaltado, seleccion
         'text-font': ['DIN Pro Medium', 'Arial Unicode MS Regular'],
         'text-letter-spacing': 0.12,
         'text-transform': 'uppercase',
-        'text-offset': [0, 1.2],
+        'text-offset': [0, 1.9],
         'text-anchor': 'top',
         'text-optional': true,
       },
