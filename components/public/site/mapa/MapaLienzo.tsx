@@ -311,8 +311,10 @@ export default function MapaLienzo({ puntos, locale = 'es', resaltado, seleccion
     // fuente entera, y el índice coincide con el número de la lista de al lado.
     m.addSource(FUENTE, { type: 'geojson', data: datos as any, generateId: true })
 
-    // El disco se ancla al SUELO: en tres dimensiones un círculo que flota de cara
-    // a la cámara se despega del edificio al girar.
+    // Bolitas y no discos: de cara a la cámara (`viewport`), redondas desde cualquier
+    // ángulo. Ancladas al suelo, con la cámara a 63° se leían como óvalos tumbados.
+    // Negras con el número en blanco —en crema se perdían sobre el plano claro— y,
+    // al elegir una, se invierte: blanca con el número en negro.
     m.addLayer({
       id: 'fp-obra-halo',
       type: 'circle',
@@ -320,7 +322,7 @@ export default function MapaLienzo({ puntos, locale = 'es', resaltado, seleccion
       // Las obras sueltas, solo a escala de ciudad. Desde el globo se ven agrupadas.
       minzoom: ZOOM_CIUDAD,
       paint: {
-        'circle-pitch-alignment': 'map',
+        'circle-pitch-alignment': 'viewport',
         'circle-radius': ['interpolate', ['linear'], ['zoom'], 11, 10, 16, 24],
         'circle-color': site.color.ink,
         // Tres niveles: en reposo se insinúa, al pasar el ratón se marca, y al
@@ -332,17 +334,34 @@ export default function MapaLienzo({ puntos, locale = 'es', resaltado, seleccion
           0.06],
       },
     })
+    // Sombra difusa un poco por debajo: es lo que hace que el punto se lea como una
+    // bolita apoyada sobre el plano y no como una pegatina.
+    m.addLayer({
+      id: 'fp-obra-sombra',
+      type: 'circle',
+      source: FUENTE,
+      minzoom: ZOOM_CIUDAD,
+      paint: {
+        'circle-pitch-alignment': 'viewport',
+        'circle-radius': ['interpolate', ['linear'], ['zoom'], 11, 8, 16, 14.5],
+        'circle-color': site.color.ink,
+        'circle-opacity': 0.28,
+        'circle-blur': 0.7,
+        'circle-translate': [0, 2.5],
+        'circle-translate-anchor': 'viewport',
+      },
+    })
     m.addLayer({
       id: 'fp-obra-punto',
       type: 'circle',
       source: FUENTE,
       minzoom: ZOOM_CIUDAD,
       paint: {
-        'circle-pitch-alignment': 'map',
-        'circle-radius': ['interpolate', ['linear'], ['zoom'], 11, 5.5, 16, 11],
-        'circle-color': ['case', ['boolean', ['feature-state', 'sel'], false], site.color.ink, site.color.cream],
-        'circle-stroke-width': 1.4,
-        'circle-stroke-color': site.color.ink,
+        'circle-pitch-alignment': 'viewport',
+        'circle-radius': ['interpolate', ['linear'], ['zoom'], 11, 7, 16, 12],
+        'circle-color': ['case', ['boolean', ['feature-state', 'sel'], false], site.color.cream, site.color.ink],
+        'circle-stroke-width': 1.6,
+        'circle-stroke-color': ['case', ['boolean', ['feature-state', 'sel'], false], site.color.ink, site.color.cream],
       },
     })
     // La etiqueta sí se mantiene vertical frente a la cámara: un número tumbado
@@ -361,7 +380,7 @@ export default function MapaLienzo({ puntos, locale = 'es', resaltado, seleccion
         'text-rotation-alignment': 'viewport',
       },
       paint: {
-        'text-color': ['case', ['boolean', ['feature-state', 'sel'], false], site.color.cream, site.color.ink],
+        'text-color': ['case', ['boolean', ['feature-state', 'sel'], false], site.color.ink, site.color.cream],
       },
     })
     m.addLayer({

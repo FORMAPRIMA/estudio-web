@@ -354,7 +354,9 @@ export default function MapaObras({ puntos, t, idioma, token: tokenServidor, num
 
       {obra && tarjeta && (
         <article className="p-tarjeta" key={obra.id}>
-          {tarjeta.imagen && <img src={tarjeta.imagen} alt="" loading="lazy" />}
+          {tarjeta.imagen
+            ? <img src={tarjeta.imagen} alt="" loading="lazy" />
+            : <div className="p-tarjeta-wip" role="img" aria-label={t.obraEnCurso}><span>{t.obraEnCurso}</span></div>}
           <div className="p-tarjeta-txt">
             <p className="p-tarjeta-nombre">{obra.nombre}</p>
             <p className="p-tarjeta-meta">{[tarjeta.descriptor, obra.anio].filter(Boolean).join(' · ')}</p>
@@ -472,6 +474,12 @@ const CSS = `
   animation:p-sube .7s var(--p-curva);}
 @keyframes p-sube{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
 .p-tarjeta img{width:104px;height:100%;min-height:104px;object-fit:cover;}
+/* Obra sin foto: la trama de plano a 45° y el rótulo. Sin esto la tarjeta perdía su
+   primera columna y el texto caía en el hueco de la foto. */
+.p-tarjeta-wip{width:104px;min-height:104px;align-self:stretch;display:flex;align-items:center;justify-content:center;
+  background-color:rgba(251,251,250,.04);background-image:repeating-linear-gradient(135deg,rgba(251,251,250,.16) 0 1px,transparent 1px 7px);}
+.p-tarjeta-wip span{max-width:9ch;text-align:center;line-height:1.5;padding:5px 8px;background:rgba(20,20,20,.92);
+  font-size:10px;letter-spacing:.14em;text-transform:uppercase;font-weight:500;color:rgba(251,251,250,.85);}
 .p-tarjeta-txt{padding:16px 18px;display:flex;flex-direction:column;gap:5px;justify-content:center;min-width:0;}
 .p-tarjeta-nombre{font-size:18px;font-weight:300;letter-spacing:-.01em;}
 .p-tarjeta-meta{font-size:13px;color:rgba(251,251,250,.6);}
@@ -480,7 +488,8 @@ const CSS = `
 @media (min-width:1024px){
   .p-mapa-txt{top:auto;bottom:clamp(48px,9vh,104px);max-width:min(640px,calc(100% - 300px - var(--p-gutter) * 3));}
   .p-tarjeta{right:auto;bottom:clamp(48px,9vh,104px);width:530px;grid-template-columns:240px 1fr auto;}
-  .p-tarjeta img{width:240px;min-height:240px;}
+  .p-tarjeta img,.p-tarjeta-wip{width:240px;min-height:240px;}
+  .p-tarjeta-wip span{max-width:none;white-space:nowrap;}
 
   /* Columna a la derecha, siempre que la pantalla esté a la vista. Tiene que caber
      sin desplazarse: la rueda es de la página. Por eso Madrid va en una fila. */

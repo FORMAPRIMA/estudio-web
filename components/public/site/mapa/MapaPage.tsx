@@ -458,7 +458,7 @@ function Lista({ listados, seleccionado, resaltado, locale, sedes, idPrefijo, on
               <span className="fp-mapa-mini">
                 {imagen
                   ? <Img src={imagen} alt="" contexto="miniaturaMapa" />
-                  : <span className="fp-mapa-mini-n">{String(n).padStart(2, '0')}</span>}
+                  : <Wip locale={locale} corto />}
               </span>
               <span className="fp-mapa-txt">
                 <span className="fp-mapa-nombre">{p.nombre}</span>
@@ -510,7 +510,7 @@ function FichaCompacta({ punto, locale, indice, total, onMover, onCerrar, onAbri
       <div className="fp-mapa-fc-foto">
         {imagen
           ? <Img src={imagen} alt={punto.nombre} contexto="fichaMapa" />
-          : <span className="fp-mapa-fc-sinfoto">{String(indice).padStart(2, '0')}</span>}
+          : <Wip locale={locale} />}
       </div>
       <div className="fp-mapa-fc-txt">
         <p className="fp-mapa-fc-nombre">{punto.nombre}</p>
@@ -549,11 +549,9 @@ function Ficha({ punto, locale, indice, total, onMover, onCerrar, refCaja }: {
     <div ref={refCaja} className="fp-mapa-ficha" data-sinfoto={imagen ? undefined : '1'}
       aria-label={locale === 'en' ? 'Selected work' : 'Obra seleccionada'}>
       <button type="button" className="fp-mapa-cerrar" data-cursor="" aria-label={locale === 'en' ? 'Close' : 'Cerrar'} onClick={onCerrar}>×</button>
-      {imagen && (
-        <div className="fp-mapa-ficha-foto">
-          <Img src={imagen} alt={punto.nombre} contexto="fichaMapa" />
-        </div>
-      )}
+      <div className="fp-mapa-ficha-foto">
+        {imagen ? <Img src={imagen} alt={punto.nombre} contexto="fichaMapa" /> : <Wip locale={locale} />}
+      </div>
       <div className="fp-mapa-ficha-txt">
         <h2 className="fp-mapa-ficha-nombre">{punto.nombre}</h2>
         {meta && <p className="fp-mapa-ficha-meta">{meta}</p>}
@@ -570,6 +568,20 @@ function Ficha({ punto, locale, indice, total, onMover, onCerrar, refCaja }: {
         </div>
       </div>
     </div>
+  )
+}
+
+/**
+ * El hueco de una obra sin foto: la trama a 45° con la que un plano marca lo que
+ * está en obra, y el rótulo encima. Mejor que un número suelto sobre gris, que se
+ * leía como una imagen que no había cargado.
+ */
+function Wip({ locale, corto = false }: { locale: 'es' | 'en'; corto?: boolean }) {
+  const texto = locale === 'en' ? 'Work in progress' : 'Obra en curso'
+  return (
+    <span className="fp-mapa-wip" data-corto={corto ? '1' : undefined} role="img" aria-label={texto}>
+      <span>{corto ? 'WIP' : texto}</span>
+    </span>
   )
 }
 
@@ -817,7 +829,19 @@ html:has(.fp-mapa[data-inmersivo="1"])            { overflow: hidden; overscroll
   display: flex; align-items: center; justify-content: center;
 }
 .fp-mapa-mini img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.fp-mapa-mini-n { font-size: 10px; opacity: .35; font-variant-numeric: tabular-nums; }
+.fp-mapa-wip {
+  width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+  background-color: #ebe9e3;
+  background-image: repeating-linear-gradient(135deg, rgba(20,20,20,.10) 0 1px, transparent 1px 7px);
+}
+.fp-mapa-wip > span {
+  background: ${site.color.cream}; color: ${site.color.ink};
+  padding: 5px 9px; font-size: 9.5px; letter-spacing: ${site.track.normal};
+  text-transform: uppercase; white-space: nowrap;
+}
+.fp-mapa-wip[data-corto="1"] { background-image: repeating-linear-gradient(135deg, rgba(20,20,20,.10) 0 1px, transparent 1px 5px); }
+.fp-mapa-wip[data-corto="1"] > span { padding: 2px 4px; font-size: 7.5px; letter-spacing: .14em; }
+.fp-mapa-ficha-foto .fp-mapa-wip { aspect-ratio: 16 / 10; }
 .fp-mapa-txt { min-width: 0; }
 .fp-mapa-nombre { font-size: 13px; font-weight: 300; display: block; }
 .fp-mapa-ol button[data-sel] .fp-mapa-nombre { font-weight: 400; }
@@ -913,7 +937,8 @@ html:has(.fp-mapa[data-inmersivo="1"])            { overflow: hidden; overscroll
     display: flex; align-items: center; justify-content: center;
   }
   .fp-mapa-fc-foto img { width: 100%; height: auto; display: block; max-height: 150px; object-fit: contain; }
-  .fp-mapa-fc-sinfoto { font-size: 15px; opacity: .3; font-variant-numeric: tabular-nums; }
+  .fp-mapa-fc-foto .fp-mapa-wip { min-height: 96px; }
+  .fp-mapa-fc-foto .fp-mapa-wip > span { white-space: normal; text-align: center; max-width: 9ch; line-height: 1.5; }
   .fp-mapa-fc-txt { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding-right: 22px; }
   .fp-mapa-fc-nombre { font-size: 17px; font-weight: 400; margin: 0; letter-spacing: -0.01em; }
   .fp-mapa-fc-meta { font-size: 10px; letter-spacing: ${site.track.normal}; text-transform: uppercase; opacity: .5; margin: 0; }
