@@ -659,7 +659,7 @@ html:has(.fp-mapa[data-inmersivo="1"])            { overflow: hidden; overscroll
    mismo gutter, así que la alineación no hay que perseguirla. */
 .fp-mapa-indice {
   left: var(--fp-margen);
-  width: clamp(268px, 21vw, 322px);
+  width: clamp(296px, 23vw, 352px);
   max-height: var(--fp-alto-izq);
   display: flex; flex-direction: column;
   animation: fp-ventana-entra .3s cubic-bezier(.22,1,.36,1) both;
@@ -799,7 +799,7 @@ html:has(.fp-mapa[data-inmersivo="1"])            { overflow: hidden; overscroll
 .fp-mapa-ol { list-style: none; margin: 0; padding: 0; }
 .fp-mapa-ol li + li { border-top: 1px solid rgba(20,20,20,.08); }
 .fp-mapa-ol button {
-  display: grid; grid-template-columns: 44px 1fr; gap: 12px; align-items: center;
+  display: grid; grid-template-columns: 70px 1fr; gap: 14px; align-items: center;
   width: 100%; padding: 8px 0; background: none; border: none; cursor: pointer;
   font-family: inherit; color: inherit; text-align: left; opacity: .74;
   transition: opacity .25s ${site.ease};
@@ -813,7 +813,7 @@ html:has(.fp-mapa[data-inmersivo="1"])            { overflow: hidden; overscroll
   padding-left: 10px; margin-left: -10px;
 }
 .fp-mapa-mini {
-  width: 44px; height: 34px; border-radius: 2px; overflow: hidden; background: #e7e5df;
+  width: 70px; height: 54px; border-radius: 2px; overflow: hidden; background: #e7e5df;
   display: flex; align-items: center; justify-content: center;
 }
 .fp-mapa-mini img { width: 100%; height: 100%; object-fit: cover; display: block; }

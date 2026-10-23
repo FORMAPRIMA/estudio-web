@@ -149,8 +149,8 @@ export const SIZES = {
   // de la que necesitaba y la foto se veía blanda.
   fichaMapa: '(min-width: 1496px) 344px, (min-width: 901px) 23vw, 128px',
 
-  /** Miniatura de la lista del mapa en móvil: 56 px de ancho, siempre. */
-  miniaturaMapa: '56px',
+  /** Miniatura de la lista del mapa: 70 px en escritorio, 56 px en móvil. */
+  miniaturaMapa: '(min-width: 901px) 70px, 56px',
 
   /** Fondo a sangre: el único que de verdad ocupa el viewport entero. */
   hero: '100vw',

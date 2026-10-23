@@ -248,7 +248,7 @@ export default function MapaObras({ puntos, t, idioma, token: tokenServidor, num
       center: [o.lng, o.lat] as [number, number],
       zoom: Math.max(m.getZoom(), 15.6),
       // La tarjeta tapa el canto de abajo (móvil) o el izquierdo (escritorio).
-      padding: vertical() ? { top: 0, bottom: 180, left: 0, right: 0 } : { top: 0, bottom: 0, left: 480, right: 380 },
+      padding: vertical() ? { top: 0, bottom: 180, left: 0, right: 0 } : { top: 0, bottom: 0, left: 570, right: 380 },
       // Siempre en perspectiva; el rumbo solo si se viene de lejos.
       pitch: CAMARA.cabeceo,
       ...(lejos ? { bearing: CAMARA.rumbo } : {}),
@@ -479,8 +479,8 @@ const CSS = `
 .p-tarjeta-x{background:none;border:0;color:rgba(251,251,250,.6);font-size:24px;font-weight:200;width:48px;}
 @media (min-width:1024px){
   .p-mapa-txt{top:auto;bottom:clamp(48px,9vh,104px);max-width:min(640px,calc(100% - 300px - var(--p-gutter) * 3));}
-  .p-tarjeta{right:auto;bottom:clamp(48px,9vh,104px);width:440px;grid-template-columns:150px 1fr auto;}
-  .p-tarjeta img{width:150px;min-height:150px;}
+  .p-tarjeta{right:auto;bottom:clamp(48px,9vh,104px);width:530px;grid-template-columns:240px 1fr auto;}
+  .p-tarjeta img{width:240px;min-height:240px;}
 
   /* Columna a la derecha, siempre que la pantalla esté a la vista. Tiene que caber
      sin desplazarse: la rueda es de la página. Por eso Madrid va en una fila. */
