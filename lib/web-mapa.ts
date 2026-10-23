@@ -100,8 +100,29 @@ export const CAMARA = {
   zoomEdificios: 15.2,
   /** Tope de acercamiento: más allá el estilo pierde las extrusiones. */
   zoomMax: 17.6,
-  zoomMin: 10.5,
+  /** Tan bajo como para ver el planeta entero: el mapa abre en el globo. */
+  zoomMin: 0.6,
 } as const
+
+/**
+ * El encuadre de ENTRADA: el globo con todas las sedes a la vista.
+ *
+ * El mapa abría sobre Madrid y las obras de fuera quedaban a un clic en la lista,
+ * que es justo lo que no se quería: la obra internacional es lo que se enseña
+ * primero. Desde aquí se elige una ciudad y la cámara baja hasta ella.
+ *
+ * En vertical el globo tiene que verse más lejos para que quepan las cuatro sedes.
+ */
+export const MUNDO = {
+  centro: [-48, 18] as [number, number],
+  zoom: 1.5,
+  centroMovil: [-56, 14] as [number, number],
+  zoomMovil: 0.75,
+} as const
+
+/** Por debajo de este zoom se ve el planeta y no una ciudad: las obras se agrupan
+ *  por ciudad y la cámara va sin cabeceo. */
+export const ZOOM_CIUDAD = 8
 
 /** Caja como la devuelven `limites` y `limitesDeSede`: [[oeste, sur], [este, norte]]. */
 export type Caja = [[number, number], [number, number]]
@@ -145,6 +166,7 @@ export const SEDES = [
   { codigo: 'es', es: 'España',         en: 'Spain',         caja: [-18.5, 27.4,   4.6, 44.0] },
   { codigo: 'mx', es: 'México',         en: 'Mexico',        caja: [-118.5, 14.3, -86.5, 32.8] },
   { codigo: 'us', es: 'Estados Unidos', en: 'United States', caja: [-125.0, 24.3, -66.9, 49.5] },
+  { codigo: 'ec', es: 'Ecuador',        en: 'Ecuador',       caja: [-92.1, -5.1,  -75.1,  1.7] },
 ] as const
 
 export type SedeCodigo = (typeof SEDES)[number]['codigo'] | 'otras'
@@ -272,13 +294,12 @@ export function obraDeEntrada(puntos: MapaPunto[]): (MapaPunto & { lat: number; 
 }
 
 /**
- * A partir de aquí, ir de una obra a otra deja de ser un vuelo y pasa a ser un
- * salto con fundido.
+ * A partir de aquí, ir de una obra a otra es cambiar de ciudad: el vuelo sube hasta
+ * ver el planeta y vuelve a bajar, con la curva más alta.
  *
  * El umbral es la DISTANCIA y no el cambio de país, a propósito: Madrid → Barcelona
- * son 500 km y sufre exactamente el mismo problema que Madrid → Miami —la cámara no
- * puede elevarse por encima de `zoomMin`, así que cruzaría a zoom de ciudad pidiendo
- * teselas que no llegan—, aunque las dos obras estén en la misma sede.
+ * son 500 km y pide el mismo vuelo alto que Madrid → Miami, aunque las dos obras
+ * estén en la misma sede.
  */
 export const KM_SALTO = 120
 

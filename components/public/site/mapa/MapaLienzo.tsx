@@ -14,12 +14,32 @@ import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { site } from '../theme'
 import {
-  CAMARA, SIN_MARGENES, KM_SALTO, SEDE_CASA, aGeoJSON, centroDe, kmEntre, limites, limitesDeSede,
-  obraDeEntrada,
-  tieneCoordenadas, type MapaPunto, type Margenes, type SedeCodigo,
+  CAMARA, MUNDO, ZOOM_CIUDAD, SIN_MARGENES, KM_SALTO, aGeoJSON, kmEntre, limites, limitesDeSede,
+  tieneCoordenadas, type Caja, type MapaPunto, type Margenes, type SedeCodigo,
 } from '@/lib/web-mapa'
 
 const FUENTE = 'fp-obras'
+/**
+ * La misma serie de obras, AGRUPADA. Es lo que se ve desde el globo: treinta obras
+ * de Madrid en el mismo píxel serían una mancha de números, así que por debajo de
+ * `ZOOM_CIUDAD` se pinta un disco por ciudad con su recuento.
+ *
+ * Fuente aparte y no `cluster: true` sobre la de siempre: la de siempre resalta y
+ * selecciona con `setFeatureState` sobre el índice de cada obra, y en una fuente
+ * agrupada los ids de los grupos se mezclan con los de las obras.
+ */
+const GRUPOS = 'fp-ciudades'
+
+/** El globo en el ancho de pantalla de ahora. */
+function vistaMundo() {
+  const movil = window.matchMedia('(max-width: 900px)').matches
+  return {
+    center: movil ? MUNDO.centroMovil : MUNDO.centro,
+    zoom: movil ? MUNDO.zoomMovil : MUNDO.zoom,
+    pitch: 0,
+    bearing: 0,
+  }
+}
 /** Zoom al que se aterriza sobre una obra si se venía de más lejos. Por encima
  *  del de entrada: elegir una obra siempre acerca, nunca aleja. */
 const ZOOM_DETALLE = 16.1
@@ -44,42 +64,41 @@ const TRAMO_GRADOS = 90
  *  punto quede pegado al canto de una ventana flotante. */
 const RESPIRO = 48
 
-// ── El corte ────────────────────────────────────────────────────────────────
-/** Lo que tarda el velo en cerrarse, y en abrirse. */
-const FUNDIDO = 380
-/**
- * Tope del velo. Es una red de seguridad, no el ritmo previsto: lo normal es que
- * `idle` llegue antes y el velo se retire cuando el destino ya está pintado. Sin
- * este tope, una red que no termina de servir teselas dejaría la pantalla en crema
- * para siempre.
- */
-const TOPE_CORTE = 1600
+/** A partir de esta diagonal la caja es una región y no un barrio: se mira en
+ *  planta. Con 63° de cabeceo, medio México quedaría tumbado contra el horizonte. */
+const KM_REGION = 60
 
 /**
  * El plano general de una caja, dentro del hueco que dejan libre las ventanas.
- * Vive fuera del componente porque lo piden tres sitios —el encuadre de entrada,
- * «Ver todas» y el conmutador de sedes— y entre ellos solo cambian la caja y la
- * duración.
+ * Vive fuera del componente porque lo piden el conmutador de sedes y el clic en
+ * una ciudad del globo, y entre ellos solo cambia la caja.
  *
  * Devuelve si ha podido encuadrar: sin caja no hay nada que enseñar.
  */
-function encuadrarCaja(m: mapboxgl.Map, caja: ReturnType<typeof limites>, mg: Margenes, duracion: number) {
+function encuadrarCaja(m: mapboxgl.Map, caja: Caja | null, mg: Margenes) {
   if (!caja) return false
-  m.fitBounds(caja, {
+  const region = kmEntre({ lng: caja[0][0], lat: caja[0][1] }, { lng: caja[1][0], lat: caja[1][1] }) > KM_REGION
+  const opciones = {
     // El zoom NO es el del estilo (15,25): con puntos de Ferraz a Fuente del Berro
-    // no cabe ni la mitad. Se calcula de los datos conservando rumbo y cabeceo.
+    // no cabe ni la mitad. Se calcula de los datos.
     padding: {
       top:    mg.top    + RESPIRO,
       right:  mg.right  + RESPIRO,
       bottom: mg.bottom + RESPIRO,
       left:   mg.left   + RESPIRO,
     },
-    bearing: CAMARA.rumbo,
-    pitch: CAMARA.cabeceo,
-    duration: duracion,
+    bearing: region ? 0 : CAMARA.rumbo,
+    pitch: region ? 0 : CAMARA.cabeceo,
     maxZoom: 15,
     essential: true,
-  })
+  }
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    m.fitBounds(caja, { ...opciones, duration: 0 })
+    return true
+  }
+  // Desde el globo se BAJA: `fitBounds` sin `linear` usa la curva de vuelo, que
+  // es la que sabe recorrer un océano sin pedir teselas de ciudad por el camino.
+  m.fitBounds(caja, { ...opciones, curve: 1.42, speed: 1.1 })
   return true
 }
 
@@ -102,7 +121,7 @@ function soportaMapa() {
   }
 }
 
-export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar, onSeleccionar, margenes = SIN_MARGENES, reencuadre = 0, sedeEncuadre = SEDE_CASA, entradaAutomatica = false, onFallo }: {
+export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar, onSeleccionar, margenes = SIN_MARGENES, reencuadre = 0, sedeEncuadre = null, entradaAutomatica = false, onFallo }: {
   puntos: MapaPunto[]
   /**
    * DOS estados y no uno, porque son dos intenciones distintas.
@@ -128,8 +147,8 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
    *  todas» y el conmutador de sedes). Un contador y no un booleano: el gesto se
    *  puede repetir. */
   reencuadre?: number
-  /** A qué sede encuadra el contador de arriba. */
-  sedeEncuadre?: SedeCodigo
+  /** A qué sede encuadra el contador de arriba. null = el globo entero. */
+  sedeEncuadre?: SedeCodigo | null
   /**
    * La obra marcada es la de ENTRADA, no una que haya elegido el visitante.
    *
@@ -144,21 +163,6 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
   const contenedor = useRef<HTMLDivElement>(null)
   const mapa = useRef<mapboxgl.Map | null>(null)
   const [listo, setListo] = useState(false)
-  /** El encuadre de entrada ya se ha hecho. Es estado y no ref porque la órbita de
-   *  entrada tiene que esperarlo: un efecto no despierta con una ref. */
-  const [encuadrado, setEncuadrado] = useState(false)
-  /** El velo del salto está echado. El espejo en ref es para leerlo desde efectos
-   *  que no pueden tenerlo en dependencias sin volver a dispararse al destaparse. */
-  const [corte, setCorte] = useState(false)
-  const corteRef = useRef(false)
-  const marcarCorte = (v: boolean) => { corteRef.current = v; setCorte(v) }
-  /**
-   * El visitante ha tomado el mando. A partir de ahí la órbita de entrada no
-   * vuelve: la máquina se aparta en cuanto alguien quiere conducir, y volver a
-   * girarle el mapa debajo sería justo lo contrario.
-   */
-  const intervenido = useRef(false)
-  const relojes = useRef<number[]>([])
   /**
    * A dónde vuela la cámara AHORA MISMO, o null si no hay vuelo vivo.
    *
@@ -169,32 +173,6 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
    */
   const destino = useRef<{ lat: number; lng: number } | null>(null)
 
-  /**
-   * El salto largo: fundir a crema, colocar la cámara de golpe y volver.
-   *
-   * `jumpTo` y no `flyTo` a propósito. Un recorrido de Madrid a Miami pide teselas
-   * de todo lo que sobrevuela, y como `zoomMin` impide elevarse las pide a zoom de
-   * ciudad: miles que no llegan a tiempo, que es exactamente el mapa deshaciéndose
-   * que había que quitar. Un salto no sobrevuela nada.
-   */
-  const conCorte = (m: mapboxgl.Map, aplicar: () => void) => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { aplicar(); return }
-    relojes.current.forEach(clearTimeout)
-    relojes.current = []
-    marcarCorte(true)
-    relojes.current.push(window.setTimeout(() => {
-      aplicar()
-      let hecho = false
-      // El velo NO se retira al saltar, sino cuando el destino está servido. Es el
-      // detalle del que depende que esto se vea bien.
-      const destapar = () => { if (!hecho) { hecho = true; marcarCorte(false) } }
-      m.once('idle', destapar)
-      relojes.current.push(window.setTimeout(destapar, TOPE_CORTE))
-    }, FUNDIDO))
-  }
-
-  useEffect(() => () => { relojes.current.forEach(clearTimeout) }, [])
-
   // ── Montaje ───────────────────────────────────────────────────────────────
   useEffect(() => {
     const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
@@ -204,13 +182,17 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
     mapboxgl.accessToken = token
     let m: mapboxgl.Map
     try {
+      // Abre en el GLOBO: lo primero que se ve es dónde trabaja el estudio, y desde
+      // ahí se baja a la ciudad que se elija.
+      const mundo = vistaMundo()
       m = new mapboxgl.Map({
         container: contenedor.current,
         style: CAMARA.estilo,
-        center: CAMARA.centro,
-        zoom: CAMARA.zoomEdificios,
-        bearing: CAMARA.rumbo,
-        pitch: CAMARA.cabeceo,
+        projection: 'globe',
+        center: mundo.center,
+        zoom: mundo.zoom,
+        bearing: mundo.bearing,
+        pitch: mundo.pitch,
         minZoom: CAMARA.zoomMin,
         maxZoom: CAMARA.zoomMax,
         attributionControl: true,
@@ -233,13 +215,23 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
     m.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), 'bottom-right')
     m.on('error', (e) => console.error('[mapa]', e?.error?.message ?? e))
     m.on('load', () => setListo(true))
+    // El espacio alrededor del globo, en el crema del sitio y sin estrellas: el
+    // isotipo y el menú son negros y van encima. La niebla del estilo está pensada
+    // para la ciudad, no para el planeta.
+    m.on('style.load', () => {
+      m.setFog({
+        color: '#f4f3f0',
+        'high-color': '#e4e1da',
+        'space-color': '#eceae5',
+        'horizon-blend': 0.06,
+        'star-intensity': 0,
+      })
+    })
 
-    // Cualquier gesto sobre el mapa retira la órbita de entrada. `originalEvent`
-    // es lo que distingue al visitante de nuestras propias animaciones de cámara:
-    // sin ese filtro, la órbita se estaría cancelando a sí misma en cada tramo.
+    // Un gesto del visitante deja sin dueño el vuelo en curso. `originalEvent` es
+    // lo que distingue al visitante de nuestras propias animaciones de cámara.
     const alMandar = (e: any) => {
       if (!e?.originalEvent) return
-      intervenido.current = true
       destino.current = null   // el vuelo ya no es de nadie: manda quien conduce
     }
     for (const ev of ['dragstart', 'zoomstart', 'rotatestart', 'pitchstart'] as const) m.on(ev, alMandar)
@@ -302,7 +294,11 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
 
     const datos = aGeoJSON(puntos)
     const existente = m.getSource(FUENTE) as mapboxgl.GeoJSONSource | undefined
-    if (existente) { existente.setData(datos as any); return }
+    if (existente) {
+      existente.setData(datos as any)
+      ;(m.getSource(GRUPOS) as mapboxgl.GeoJSONSource | undefined)?.setData(datos as any)
+      return
+    }
 
     // `generateId` numera las features por su posición en el array. Es lo que
     // hace posible `setFeatureState` para resaltar un punto sin repintar la
@@ -315,6 +311,8 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
       id: 'fp-obra-halo',
       type: 'circle',
       source: FUENTE,
+      // Las obras sueltas, solo a escala de ciudad. Desde el globo se ven agrupadas.
+      minzoom: ZOOM_CIUDAD,
       paint: {
         'circle-pitch-alignment': 'map',
         'circle-radius': ['interpolate', ['linear'], ['zoom'], 11, 10, 16, 24],
@@ -332,6 +330,7 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
       id: 'fp-obra-punto',
       type: 'circle',
       source: FUENTE,
+      minzoom: ZOOM_CIUDAD,
       paint: {
         'circle-pitch-alignment': 'map',
         'circle-radius': ['interpolate', ['linear'], ['zoom'], 11, 5.5, 16, 11],
@@ -346,6 +345,7 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
       id: 'fp-obra-num',
       type: 'symbol',
       source: FUENTE,
+      minzoom: ZOOM_CIUDAD,
       layout: {
         'text-field': ['to-string', ['get', 'n']],
         'text-size': ['interpolate', ['linear'], ['zoom'], 11, 9, 16, 12],
@@ -388,6 +388,86 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
       },
     })
 
+    // ── Ciudades (desde el globo) ──
+    // `clusterMaxZoom` justo por debajo de `ZOOM_CIUDAD`: el grupo se deshace en el
+    // mismo zoom en que aparecen las obras sueltas, ni antes ni después.
+    m.addSource(GRUPOS, { type: 'geojson', data: datos as any, cluster: true, clusterRadius: 44, clusterMaxZoom: ZOOM_CIUDAD - 1 })
+    m.addLayer({
+      id: 'fp-ciudad', type: 'circle', source: GRUPOS, maxzoom: ZOOM_CIUDAD,
+      filter: ['has', 'point_count'],
+      paint: {
+        'circle-color': site.color.ink,
+        'circle-radius': ['step', ['get', 'point_count'], 13, 5, 16, 15, 20],
+        'circle-stroke-width': 5,
+        'circle-stroke-color': 'rgba(20,20,20,.14)',
+      },
+    })
+    m.addLayer({
+      id: 'fp-ciudad-n', type: 'symbol', source: GRUPOS, maxzoom: ZOOM_CIUDAD,
+      filter: ['has', 'point_count'],
+      layout: {
+        'text-field': ['to-string', ['get', 'point_count']],
+        'text-size': 11,
+        'text-font': ['DIN Pro Medium', 'Arial Unicode MS Regular'],
+        'text-allow-overlap': true,
+      },
+      paint: { 'text-color': site.color.cream },
+    })
+    // Una obra sola en su ciudad (Samborondón) no es un grupo: se pinta como punto
+    // con su nombre, y el clic la elige directamente.
+    m.addLayer({
+      id: 'fp-ciudad-sola', type: 'circle', source: GRUPOS, maxzoom: ZOOM_CIUDAD,
+      filter: ['!', ['has', 'point_count']],
+      paint: {
+        'circle-radius': 6,
+        'circle-color': site.color.cream,
+        'circle-stroke-width': 1.6,
+        'circle-stroke-color': site.color.ink,
+      },
+    })
+    m.addLayer({
+      id: 'fp-ciudad-sola-nombre', type: 'symbol', source: GRUPOS, maxzoom: ZOOM_CIUDAD,
+      filter: ['!', ['has', 'point_count']],
+      layout: {
+        'text-field': ['get', 'nombre'],
+        'text-size': 10,
+        'text-font': ['DIN Pro Medium', 'Arial Unicode MS Regular'],
+        'text-letter-spacing': 0.12,
+        'text-transform': 'uppercase',
+        'text-offset': [0, 1.2],
+        'text-anchor': 'top',
+        'text-optional': true,
+      },
+      paint: { 'text-color': site.color.ink, 'text-halo-color': site.color.cream, 'text-halo-width': 1.6 },
+    })
+    for (const capa of ['fp-ciudad', 'fp-ciudad-sola']) {
+      m.on('mouseenter', capa, () => { m.getCanvas().style.cursor = 'pointer' })
+      m.on('mouseleave', capa, () => { m.getCanvas().style.cursor = '' })
+    }
+    // Clic en una ciudad: se baja hasta ver todas sus obras. Se encuadran las HOJAS
+    // del grupo y no su zoom de expansión: así se aterriza ya con la ciudad entera
+    // en pantalla, y no en un paso intermedio que obliga a pinchar otra vez.
+    m.on('click', 'fp-ciudad', (e) => {
+      const f = e.features?.[0]
+      const id = f?.properties?.cluster_id
+      if (id == null) return
+      ;(m.getSource(GRUPOS) as mapboxgl.GeoJSONSource).getClusterLeaves(id, Infinity, 0, (err, hojas) => {
+        if (err || !hojas?.length) return
+        let oeste = Infinity, sur = Infinity, este = -Infinity, norte = -Infinity
+        for (const h of hojas) {
+          const [lng, lat] = (h.geometry as GeoJSON.Point).coordinates
+          oeste = Math.min(oeste, lng); este = Math.max(este, lng)
+          sur = Math.min(sur, lat);     norte = Math.max(norte, lat)
+        }
+        destino.current = null
+        encuadrarCaja(m, [[oeste, sur], [este, norte]], margenesRef.current)
+      })
+    })
+    m.on('click', 'fp-ciudad-sola', (e) => {
+      const n = e.features?.[0]?.properties?.n
+      if (typeof n === 'number') onSeleccionar(n)
+    })
+
     m.on('mouseenter', 'fp-obra-punto', (e) => {
       m.getCanvas().style.cursor = 'pointer'
       const n = e.features?.[0]?.properties?.n
@@ -403,48 +483,11 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
     })
   }, [listo, puntos, onResaltar, onSeleccionar])
 
-  // ── Encuadre inicial ──────────────────────────────────────────────────────
-  // NO es un `fitBounds`. Encuadrar todas las obras las metía a todas en pantalla,
-  // sí, pero a zoom ~13,5 — y por debajo de 15 el basemap Standard pinta la ciudad
-  // PLANA. El mapa abría sin volumen y solo se levantaba al acercarse a una obra,
-  // que es justo lo contrario de lo que esta pantalla quiere enseñar.
-  //
-  // Así que se entra al zoom mínimo con edificios extruidos, sobre la obra por la
-  // que abre el mapa. Se ven menos de una vez, y está bien: verlas todas es un
-  // gesto con su propio botón («Ver todas»), y la lista de al lado no se mueve.
-  //
-  // El centro es una OBRA y no el centro geométrico de todas. La órbita de entrada
-  // gira alrededor de este punto, y el centro geométrico no es ninguna obra: la
-  // cámara se pasaba el minuto y medio de vuelta girando en torno a un tejado
-  // cualquiera del barrio en vez de en torno a algo del estudio.
-  //
-  // Con CERROJO. Es inicial por definición: tiene que ocurrir una vez y no volver.
-  // Sin él, cualquier render que cambie la identidad del array de puntos vuelve a
-  // dispararlo y la cámara salta de golpe — que es exactamente lo que se leía como
-  // «se reinicia el zoom». Memoizar la lista arregla el síntoma de hoy; este
-  // cerrojo impide que vuelva mañana.
-  useEffect(() => {
-    const m = mapa.current
-    if (!m || !listo || encuadrado) return
-    const entrada = obraDeEntrada(puntos)
-    if (!entrada) return
-    // `jumpTo` y no `flyTo`: esto es el estado de partida, no un viaje. El padding
-    // ya está puesto —su efecto está declarado antes que este— así que el centro
-    // cae en el hueco visible y no debajo del índice.
-    m.jumpTo({
-      center: [entrada.lng, entrada.lat],
-      zoom: CAMARA.zoomEdificios,
-      bearing: CAMARA.rumbo,
-      pitch: CAMARA.cabeceo,
-    })
-    setEncuadrado(true)
-  }, [listo, puntos, mTop, mRight, mBottom, mLeft, encuadrado])
-
-  // ── Volver al plano general de una sede ───────────────────────────────────
-  // El botón «Ver todas» y el conmutador de sedes. Deseleccionar y volver a ver la
-  // ciudad entera son dos intenciones distintas —seleccionar una obra jamás aleja
-  // la cámara— así que esta es la única puerta de vuelta, y llega como contador
-  // para poder repetirse.
+  // ── Volver al plano general ───────────────────────────────────────────────
+  // El botón «Ver todas» (el globo) y el conmutador de sedes (un país). Deseleccionar
+  // y volver a ver el conjunto son dos intenciones distintas —seleccionar una obra
+  // jamás aleja la cámara— así que esta es la única puerta de vuelta, y llega como
+  // contador para poder repetirse.
   const reencuadrePrevio = useRef(reencuadre)
   useEffect(() => {
     const m = mapa.current
@@ -453,14 +496,13 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
     destino.current = null   // esto no es el vuelo a una obra
     m.stop()   // por si venía orbitando
     const mg = { top: mTop, right: mRight, bottom: mBottom, left: mLeft }
-    const caja = limitesDeSede(puntos, sedeEncuadre) ?? limites(puntos)
-    if (!caja) return
-    // Cambiar de sede es cruzar un océano: se funde. Dentro de la misma, se vuela.
-    const centro = m.getCenter()
-    const [lngC, latC] = centroDe(caja)
-    const lejos = kmEntre(centro, { lat: latC, lng: lngC }) > KM_SALTO
-    if (lejos) conCorte(m, () => encuadrarCaja(m, caja, mg, 0))
-    else encuadrarCaja(m, caja, mg, 1500)
+    if (sedeEncuadre == null) {
+      const mundo = vistaMundo()
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) m.jumpTo({ ...mundo, padding: mg })
+      else m.flyTo({ ...mundo, padding: mg, curve: 1.42, speed: 1.1, essential: true })
+      return
+    }
+    encuadrarCaja(m, limitesDeSede(puntos, sedeEncuadre) ?? limites(puntos), mg)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reencuadre, listo, puntos, sedeEncuadre, mTop, mRight, mBottom, mLeft])
 
@@ -498,9 +540,7 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
     // los pocos milisegundos de despegar, el nuevo vuelo sale prácticamente del
     // mismo sitio. Lo que no puede pasar es que lo relance un margen que llega
     // cuando ya se ha aterrizado, y de eso se encarga el candado de abajo.
-    // Ni durante el fundido de un salto largo: ahí el vuelo no está en el aire, está
-    // esperando detrás del velo, y relanzarlo reiniciaría el fundido.
-    if (!cambio && (!destino.current || corteRef.current)) return
+    if (!cambio && !destino.current) return
 
     const p = conCoords[seleccionado - 1]
     if (!p) return
@@ -514,28 +554,26 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
     // `flyTo`, no `easeTo`. No son dos maneras de lo mismo: easeTo interpola en
     // línea recta y a zoom alto eso pasa como un borrón. flyTo implementa la curva
     // de Van Wijk y Nuij —se eleva lo justo, recorre, y baja—, que es como el ojo
-    // entiende un desplazamiento sobre un territorio. `curve` baja porque las 27
-    // obras caben en 2 km y no hace falta subir a la estratosfera.
+    // entiende un desplazamiento sobre un territorio.
     //
-    // Ni el rumbo ni el cabeceo se tocan: son del visitante. Y el zoom solo sube,
-    // nunca baja — seleccionar una obra jamás aleja la cámara.
+    // Dentro de la ciudad, ni el rumbo ni el cabeceo se tocan: son del visitante. Si
+    // se viene desde el globo o desde otra ciudad, sí: se aterriza con la cámara de
+    // la casa, que es la que levanta los edificios. Y el zoom solo sube, nunca baja
+    // — seleccionar una obra jamás aleja la cámara.
     // El padding viaja CON el vuelo y no se aplica aparte: `setPadding` es un
     // `jumpTo` por dentro y cortaría este mismo vuelo un instante después.
+    const lejos = m.getZoom() < 12 || kmEntre(m.getCenter(), p) > KM_SALTO
     const meta = {
       center: [p.lng, p.lat] as [number, number],
       zoom: Math.max(m.getZoom(), ZOOM_DETALLE),
       padding: margenesRef.current,
+      ...(lejos ? { bearing: CAMARA.rumbo, pitch: CAMARA.cabeceo } : {}),
     }
     destino.current = { lat: p.lat, lng: p.lng }
 
-    // Más allá de KM_SALTO no se vuela, se salta con fundido. La curva de Van Wijk
-    // es la manera correcta de recorrer un territorio; cruzar un océano no es
-    // recorrer un territorio, y a zoom de ciudad el mapa no llega a dibujarse.
-    if (kmEntre(m.getCenter(), p) > KM_SALTO) {
-      conCorte(m, () => m.jumpTo({ ...meta, bearing: CAMARA.rumbo, pitch: CAMARA.cabeceo }))
-      return
-    }
-
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { m.jumpTo(meta); return }
+    // Cambiar de ciudad es cruzar un océano: la curva sube más, hasta ver el planeta.
+    if (lejos) { m.flyTo({ ...meta, curve: 1.42, speed: 1.1, essential: true }); return }
     m.flyTo({ ...meta, curve: 1.2, speed: 0.85, essential: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seleccionado, listo, puntos, entradaAutomatica, mTop, mRight, mBottom, mLeft])
@@ -552,17 +590,9 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
     const m = mapa.current
     if (!m || !listo) return
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-    // La órbita de ENTRADA es la ciudad girando despacio mientras nadie ha tocado
-    // nada. Que el mapa abra con una obra marcada no la convierte en elegida: esa
-    // obra la ha puesto la página, así que su órbita sigue siendo la de entrada.
-    // Solo puede empezar cuando el encuadre ya está hecho —si no, giraría sobre el
-    // centro de respaldo— y no vuelve nunca después de que el visitante tome el
-    // mando. La de una obra que SÍ ha elegido él vuelve siempre: la ha pedido.
-    const esEntrada = seleccionado == null || entradaAutomatica
-    if (esEntrada && (!encuadrado || intervenido.current)) return
-    // Mientras el velo está echado no se gira: una animación de cámara en marcha
-    // impide que `idle` llegue, y el velo se quedaría hasta el tope.
-    if (corte) return
+    // Solo se orbita alrededor de una obra elegida. Girar el rumbo con el globo en
+    // pantalla no gira el planeta: tuerce el norte, y eso no se lee como nada.
+    if (seleccionado == null || entradaAutomatica) return
 
     // En escritorio los tramos se encadenan; en táctil se da uno y se para. Una
     // órbita continua es un mapa 3D repintándose 60 veces por segundo
@@ -607,12 +637,7 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
     m.on('moveend', alAterrizar)
 
     // Sin vuelo en el aire no hay aterrizaje al que engancharse, así que arranca
-    // ella sola. Es el caso del encuadre de entrada —que ya ocurrió, y con
-    // `duration: 0` su `moveend` se disparó antes de que este efecto existiera— y
-    // también el de la obra de entrada, que se marca sin volar. La condición mira
-    // el VUELO y no la selección: preguntando por `seleccionado == null`, abrir con
-    // una obra puesta dejaba la órbita esperando un aterrizaje que no iba a llegar,
-    // y la ciudad no giraba nunca.
+    // ella sola: la obra se ha elegido con la cámara ya encima.
     if (destino.current == null) {
       girar()
       if (!continua) vivo = false
@@ -623,15 +648,7 @@ export default function MapaLienzo({ puntos, resaltado, seleccionado, onResaltar
       m.off('moveend', alAterrizar)
       m.stop()
     }
-  }, [seleccionado, listo, encuadrado, corte, entradaAutomatica])
+  }, [seleccionado, listo, entradaAutomatica])
 
-  return (
-    <>
-      <div ref={contenedor} className="fp-mapa-lienzo" aria-hidden="true" />
-      {/* El velo del salto. Hermano del lienzo y por encima de él, pero por debajo
-          de las ventanas flotantes: el índice y la ficha no parpadean, lo que cambia
-          es el suelo — que es lo que de verdad está pasando. */}
-      <div className="fp-mapa-corte" data-visible={corte ? '1' : undefined} aria-hidden="true" />
-    </>
-  )
+  return <div ref={contenedor} className="fp-mapa-lienzo" aria-hidden="true" />
 }

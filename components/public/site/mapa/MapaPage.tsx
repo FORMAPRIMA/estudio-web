@@ -9,7 +9,7 @@ import { Img } from '../Img'
 import { pick, type ContentMap } from '@/lib/web-publica'
 import {
   datosDeTarjeta, tieneCoordenadas, ordenarPorSede, sedesConObra, sedeDe, etiquetaSede,
-  SIN_MARGENES, SEDE_CASA, type MapaPunto, type Margenes, type SedeCodigo,
+  SIN_MARGENES, type MapaPunto, type Margenes, type SedeCodigo,
 } from '@/lib/web-mapa'
 
 // mapbox-gl solo se descarga cuando esta página se monta.
@@ -78,32 +78,28 @@ export function MapaPage({ content, puntos }: { content: ContentMap; puntos: Map
   const [resaltado, setResaltado] = useState<number | null>(null)
 
   /**
-   * El mapa ABRE con la primera obra marcada y su ficha abierta.
+   * El mapa ABRE en el globo y sin obra elegida.
    *
-   * Un plano vacío no dice de qué va esta pantalla: hay que pinchar un punto para
-   * descubrir que los puntos son obras con ficha. Abriendo con una puesta, la
-   * pantalla se explica sola. Es la misma obra sobre la que ya estaba encuadrada
-   * la cámara, así que no hay viaje: es un estado compuesto, no una animación
-   * colocándose.
+   * Antes abría sobre Madrid con la primera obra puesta, y las obras de fuera
+   * quedaban al fondo de la lista. Ahora lo primero es dónde trabaja el estudio: el
+   * globo con las ciudades, y la lista al lado para bajar a cualquiera de ellas.
    */
-  const [seleccionado, setSeleccionado] = useState<number | null>(total ? 1 : null)
+  const [seleccionado, setSeleccionado] = useState<number | null>(null)
   /**
-   * Esa primera obra NO la ha elegido nadie. La distinción importa para la órbita:
-   * la de entrada se retira en cuanto el visitante toca el mapa y no vuelve, y la
-   * de una obra elegida a mano sí vuelve — porque esa sí la ha pedido él.
+   * La obra marcada la ha puesto la página y no el visitante. Hoy el mapa abre sin
+   * ninguna, así que solo vale false; el lienzo conserva la distinción por si se
+   * vuelve a abrir con una obra puesta.
    */
-  const [autoSeleccion, setAutoSeleccion] = useState(true)
+  const [autoSeleccion, setAutoSeleccion] = useState(false)
   const [fallo, setFallo] = useState(false)
 
   const [esMovil, setEsMovil] = useState(false)
-  // Arranca en 'ficha' si el mapa abre con obra puesta: si arrancara en 'peek'
-  // la lámina daría un salto de 52 a 200 px nada más pintar.
-  const [detente, setDetente] = useState<Detente>(total ? 'ficha' : 'peek')
+  const [detente, setDetente] = useState<Detente>('peek')
   const [plegado, setPlegado] = useState(false)
   /** Contador: cada incremento pide al lienzo el encuadre general de `sede`. */
   const [reencuadre, setReencuadre] = useState(0)
-  /** La sede que se está mirando. Arranca en casa —España— siempre. */
-  const [sede, setSede] = useState<SedeCodigo>(SEDE_CASA)
+  /** La sede que se está mirando. null = el globo entero, que es como abre. */
+  const [sede, setSede] = useState<SedeCodigo | null>(null)
   /** Durante el arrastre, los píxeles que asoma. Fuera de él, null y manda el CSS. */
   const [arrastre, setArrastre] = useState<number | null>(null)
   const hojaRef = useRef<HTMLDivElement>(null)
@@ -215,9 +211,8 @@ export function MapaPage({ content, puntos }: { content: ContentMap; puntos: Map
     setAutoSeleccion(false)
     setSeleccionado(((seleccionado - 1 + paso + total) % total) + 1)
   }
-  /** «Ver todas»: soltar la obra Y volver al plano general de la sede que se mira.
-   *  Son dos cosas, y la segunda no tenía hasta ahora ninguna puerta. */
-  const verTodas = () => { setAutoSeleccion(false); setSeleccionado(null); setReencuadre((n) => n + 1) }
+  /** «Ver todas»: soltar la obra Y volver al globo, donde se ven todas. */
+  const verTodas = () => { setAutoSeleccion(false); setSeleccionado(null); setSede(null); setReencuadre((n) => n + 1) }
   /** Cambiar de sede mueve la cámara y lleva la lista a su grupo. Las dos cosas: un
    *  conmutador que solo hiciera una de ellas dejaría la mitad de la pantalla
    *  hablando de otro país. */
@@ -402,7 +397,7 @@ export function MapaPage({ content, puntos }: { content: ContentMap; puntos: Map
  * y la pantalla no tiene por qué anunciar una geografía que no existe todavía.
  */
 function Sedes({ sedes, activa, locale, onIr }: {
-  sedes: SedeCodigo[]; activa: SedeCodigo; locale: 'es' | 'en'; onIr: (s: SedeCodigo) => void
+  sedes: SedeCodigo[]; activa: SedeCodigo | null; locale: 'es' | 'en'; onIr: (s: SedeCodigo) => void
 }) {
   if (sedes.length < 2) return null
   return (
@@ -624,20 +619,6 @@ html:has(.fp-mapa[data-inmersivo="1"])            { overflow: hidden; overscroll
 .fp-site:has(.fp-mapa[data-inmersivo="1"]) footer { display: none; }
 
 .fp-mapa-lienzo { position: absolute; inset: 0; z-index: 0; }
-
-/* El velo del salto largo. Tapa el MAPA y nada más: el índice y la ficha se quedan
-   quietos mientras cambia el suelo. Cruzar un océano con la cámara pedía teselas de
-   todo lo sobrevolado y el mapa se veía deshacerse; ahora se funde, se salta y no se
-   destapa hasta que el destino está servido. */
-.fp-mapa-corte {
-  position: absolute; inset: 0; z-index: 2; pointer-events: none;
-  background: ${site.color.cream};
-  opacity: 0; transition: opacity .38s ${site.ease};
-}
-.fp-mapa-corte[data-visible="1"] { opacity: 1; }
-@media (prefers-reduced-motion: reduce) {
-  .fp-mapa-corte { transition: none; }
-}
 
 /* El suelo del header. Sin él, el isotipo negro desaparece cuando debajo pasa
    una manzana en sombra. */

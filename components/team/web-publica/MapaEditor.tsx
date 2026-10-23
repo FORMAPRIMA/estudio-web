@@ -65,7 +65,7 @@ export function MapaEditor({ puntos, proyectos }: { puntos: MapaPunto[]; proyect
       </div>
 
       <p style={{ fontSize: 11.5, color: `${INK}55`, lineHeight: 1.6, margin: '0 0 18px', maxWidth: '86ch' }}>
-        Estas son las obras que salen en el mapa de Madrid. Es un mapa de <strong style={{ fontWeight: 500 }}>trayectoria</strong>:
+        Estas son las obras que salen en el mapa (la web y los dossieres de Salas). Es un mapa de <strong style={{ fontWeight: 500 }}>trayectoria</strong>:
         aquí van todas, tengan o no ficha en la web. Las que sí la tengan, enlázalas en «Proyecto» y en el mapa aparecerá
         el botón para abrirla.
         <br />

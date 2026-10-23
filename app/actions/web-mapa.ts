@@ -250,9 +250,12 @@ export async function geocodificarPunto(id: string): Promise<{ success: true; la
     if (!consulta) return { error: 'El punto no tiene dirección ni nombre.' }
 
     // `proximity` sesga el resultado hacia el centro de Madrid: sin él, «Serrano
-    // 84» puede resolver a una calle Serrano de otra ciudad.
+    // 84» puede resolver a una calle Serrano de otra ciudad. Es un SESGO y no un
+    // filtro: antes iba además `country=es`, y una obra de Querétaro o de Miami
+    // acababa en una calle de La Rioja. Las obras de fuera llevan la ciudad y el
+    // país en la dirección, y con eso basta para que ganen al sesgo.
     const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(consulta)}.json`
-      + `?limit=1&language=es&country=es&proximity=-3.6883,40.4189&types=address&access_token=${token}`
+      + `?limit=1&language=es&proximity=-3.6883,40.4189&types=address&access_token=${token}`
     const res = await fetch(url, { cache: 'no-store' })
     if (!res.ok) return { error: `Mapbox respondió ${res.status}.` }
     const json = await res.json()
