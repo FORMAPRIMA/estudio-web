@@ -12,6 +12,9 @@ import { FICHA_REFUERZOS, FICHA_VARIOS, FICHA_GASTOS_GENERALES } from './cierre'
 export * from './tipos'
 export { VARIABLES, variable } from './variables'
 
+/** Se sube cada vez que cambia una fórmula: los ratios guardados llevan la versión con la que se calcularon. */
+export const VERSION_FICHAS = '2026-10-23'
+
 /** Las 11 fichas, en orden de capítulo (presupuesto_capitulos.numero). */
 export const FICHAS: Ficha[] = [
   FICHA_DEMOLICIONES, FICHA_REFUERZOS, FICHA_ALBANILERIA, FICHA_CARPINTERIA_EXTERIOR, FICHA_CARPINTERIA_MADERA,

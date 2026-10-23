@@ -103,7 +103,10 @@ export type Subcapitulo = { id: string; capitulo_id: string; codigo: string; nom
 export const VIGENCIA_MESES = 12
 export const SEMIVIDA_MESES = 24          // a los 24 meses una obra pesa la mitad
 export const FACTOR_PESO_AJUSTADA = 0.6   // castigo extra por venir de un índice, no de precios reales
-export const SERIE_INDICE = 'ine_icce_edificacion'
+// El ICCE nacional es del Ministerio y no está en la API del INE. Se compone con dos
+// series del INE: mano de obra de la construcción (45 %) y materiales (55 %, media
+// de los materiales de edificación). Lo carga scripts/presupuestos-parametricos/indice-ine.mts.
+export const SERIE_INDICE = 'ine_construccion'
 
 export function mesesEntre(desde: string | Date, hasta: string | Date): number {
   const a = typeof desde === 'string' ? new Date(desde) : desde

@@ -11,7 +11,13 @@ import {
   type Capitulo,
   type TipoReforma,
   type EstadoObra,
+  type ObraMedicion,
+  type NivelCalidad,
+  type AjusteINE,
+  ajusteINE,
 } from '@/lib/presupuestos-parametricos/domain'
+import { calcularRatios, type DocumentoObra, type ResultadoRatios } from '@/lib/presupuestos-parametricos/ingesta/ratios'
+import { calcularInversion, PARAMETROS_INVERSION, type Inversion } from '@/lib/presupuestos-parametricos/inversion'
 
 const PATH = '/team/apps/presupuestos-parametricos'
 
@@ -164,6 +170,101 @@ export async function deleteObra(id: string): Promise<Result> {
     if (error) return { error: error.message }
     if (obra?.pdf_path) await admin.storage.from('pp-presupuestos').remove([obra.pdf_path])
     revalidatePath(PATH)
+    return { success: true }
+  } catch (e) {
+    return { error: (e as Error).message }
+  }
+}
+
+// ── Ficha de una obra ────────────────────────────────────────────────────────
+
+export type DocumentoGuardado = {
+  etiqueta: string; constructor: string | null; fecha: string; total_sin_iva: number | null
+  provisional: boolean; nota: string | null; pdf_path: string | null; paginas: number
+  control: { codigo: string; nombre: string; resumen: number; extraido: number; diferencia: number; cuadra: boolean }[]
+  avisos: string[]
+}
+
+export type ObraDetalle = {
+  obra: ObraReferencia & { maqueta: unknown; version_fichas: string | null }
+  documentos: (DocumentoGuardado & { ajuste: AjusteINE; url: string | null })[]
+  mediciones: ObraMedicion[]
+  capitulos: (Capitulo & { nivel: NivelCalidad | null; nivel_ia: NivelCalidad | null; justificacion: string | null })[]
+  partidas: (DocumentoObra['partidas'][number] & { documento: number; reparto: { parte: string; pct: number; origen: string; confianza: number | null; motivo: string | null }[] })[]
+  ratios: ResultadoRatios
+  inversion: Inversion
+  planoUrl: string | null
+}
+
+export async function getObraDetalle(id: string): Promise<ObraDetalle | null> {
+  await requirePresupuestosAccess()
+  const admin = createAdminClient()
+  const [obraR, medR, capR, nivR, parR, indR] = await Promise.all([
+    admin.from('pp_obras').select('*').eq('id', id).maybeSingle(),
+    admin.from('pp_obra_mediciones').select('*').eq('obra_id', id),
+    admin.from('presupuesto_capitulos').select('id, numero, nombre, orden').eq('activo', true).order('orden'),
+    admin.from('pp_obra_capitulos').select('capitulo_id, nivel_calidad, nivel_propuesto_ia, justificacion_ia').eq('obra_id', id),
+    admin.from('pp_obra_partidas').select('*').eq('obra_id', id).order('orden'),
+    admin.from('pp_indices').select('serie, periodo, valor, provisional').eq('serie', SERIE_INDICE).order('periodo'),
+  ])
+  if (obraR.error) throw new Error(obraR.error.message)
+  if (!obraR.data) return null
+  const obra = obraR.data
+  const partidasDb = parR.data ?? []
+  const ids = partidasDb.map(p => p.id)
+  const repartoDb = ids.length ? (await admin.from('pp_partida_reparto').select('*').in('partida_id', ids)).data ?? [] : []
+  const repartoDe = new Map<string, typeof repartoDb>()
+  for (const r of repartoDb) repartoDe.set(r.partida_id, [...(repartoDe.get(r.partida_id) ?? []), r])
+
+  const firmar = async (path: string | null) =>
+    path ? (await admin.storage.from('pp-presupuestos').createSignedUrl(path, 3600)).data?.signedUrl ?? null : null
+  const indice = (indR.data ?? []) as IndicePunto[]
+  const guardados = ((obra.extraccion as { documentos?: DocumentoGuardado[] } | null)?.documentos ?? [])
+  const documentos = await Promise.all(guardados.map(async d => ({ ...d, ajuste: ajusteINE(d.fecha, indice), url: await firmar(d.pdf_path) })))
+
+  const partidas = partidasDb.map(p => ({
+    codigo: p.codigo_origen, capitulo_codigo: p.capitulo_codigo_origen, capitulo: p.capitulo_origen ?? '', subcapitulo: p.subcapitulo_origen,
+    descripcion: p.descripcion, unidad: p.unidad, medicion: p.medicion == null ? null : Number(p.medicion),
+    precio: p.precio_unitario == null ? null : Number(p.precio_unitario), importe: Number(p.importe), pagina: p.pagina ?? 0, es_margen: !!p.es_margen,
+    documento: p.documento ?? 0,
+    reparto: (repartoDe.get(p.id) ?? []).map(r => ({ parte: r.parte, pct: Number(r.pct), origen: r.origen, confianza: r.confianza == null ? null : Number(r.confianza), motivo: r.motivo })),
+  }))
+
+  const mediciones = (medR.data ?? []) as ObraMedicion[]
+  const valores = Object.fromEntries(mediciones.map(m => [m.variable, m.valor_num ?? m.valor_texto]))
+  const docsCalculo: DocumentoObra[] = (documentos.length ? documentos : [{ etiqueta: obra.nombre, fecha: obra.fecha_presupuesto, ajuste: ajusteINE(obra.fecha_presupuesto, indice), provisional: false }]).map((d, di) => {
+    const propias = partidas.filter(p => p.documento === di)
+    return {
+      etiqueta: d.etiqueta, fecha: d.fecha, factorINE: d.ajuste.factor, provisional: d.provisional,
+      descuentoMargenPct: Number(obra.descuento_margen_pct) || 0,
+      partidas: propias,
+      asignaciones: propias.map((p, i) => ({ i, reparto: p.reparto.map(r => ({ parte: r.parte, pct: r.pct })), confianza: p.reparto[0]?.confianza ?? 0, motivo: null })),
+    }
+  })
+  const ratios = calcularRatios(valores, docsCalculo)
+  const sys = ratios.propiedad.find(p => p.codigo === 'prop_seguridad_salud')?.importe ?? 0
+  const otros = ratios.propiedad.filter(p => p.codigo === 'prop_otros').map(p => ({ concepto: p.nombre, importe: p.importe, conIva: false }))
+  const inversion = calcularInversion(ratios.totales.obra, { ...PARAMETROS_INVERSION, seguridadSalud: sys, otros })
+
+  const niveles = new Map((nivR.data ?? []).map(n => [n.capitulo_id, n]))
+  return {
+    obra: obra as ObraDetalle['obra'],
+    documentos, mediciones, partidas, ratios, inversion,
+    capitulos: ((capR.data ?? []) as Capitulo[]).filter(c => niveles.has(c.id)).map(c => {
+      const n = niveles.get(c.id)!
+      return { ...c, nivel: n.nivel_calidad, nivel_ia: n.nivel_propuesto_ia, justificacion: n.justificacion_ia }
+    }),
+    planoUrl: await firmar(obra.maqueta_imagen_path),
+  }
+}
+
+export async function updateNivelCapitulo(obraId: string, capituloId: string, nivel: NivelCalidad | null): Promise<Result> {
+  try {
+    await requirePresupuestosAccess()
+    const admin = createAdminClient()
+    const { error } = await admin.from('pp_obra_capitulos').update({ nivel_calidad: nivel }).eq('obra_id', obraId).eq('capitulo_id', capituloId)
+    if (error) return { error: error.message }
+    revalidatePath(`${PATH}/obras/${obraId}`)
     return { success: true }
   } catch (e) {
     return { error: (e as Error).message }

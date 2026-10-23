@@ -169,7 +169,7 @@ function ObrasTab({ data }: { data: PanelData }) {
             return (
               <div key={o.id} style={fila}>
                 <div>
-                  <p style={{ fontSize: 13, color: C.ink, fontWeight: 500 }}>{o.nombre}</p>
+                  <Link href={`/team/apps/presupuestos-parametricos/obras/${o.id}`} style={{ fontSize: 13, color: C.ink, fontWeight: 500, textDecoration: 'none' }}>{o.nombre} →</Link>
                   <p style={{ fontSize: 11, color: '#1A1A1A70', marginTop: 2 }}>
                     {[o.constructor, o.tipo_reforma === 'parcial' ? 'Reforma parcial' : 'Reforma integral', `${o.partidas} partidas`].filter(Boolean).join(' · ')}
                   </p>
